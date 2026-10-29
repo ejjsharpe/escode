@@ -7,6 +7,7 @@ export type SavedChat = {
   checkout: string;
   threadId: string | null;
   hasSent?: boolean;
+  removed?: boolean;
   draft: string;
 };
 export class Chats {
@@ -67,7 +68,7 @@ export class Chats {
   update(
     project: string,
     id: string,
-    fields: Partial<Pick<SavedChat, "threadId" | "draft" | "hasSent">>,
+    fields: Partial<Pick<SavedChat, "threadId" | "draft" | "hasSent" | "removed">>,
   ) {
     return this.change((chats) => {
       const chat = chats.find((c) => c.id === id && c.project === project);

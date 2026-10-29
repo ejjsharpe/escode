@@ -226,15 +226,95 @@ test("managed paths inside a project checkout, including symlink aliases, are re
     expect(existsSync(join(root, "managed"))).toBe(false);
   }));
 
-test("a missing registered sibling does not block creation from a healthy checkout", () => fixture(async (dir, root, p) => {
-  const sibling = join(dir, "sibling");
-  git(root, "worktree", "add", "-b", "sibling", sibling);
-  rmSync(sibling, { recursive: true });
-  const options = p.worktreeOptions();
-  expect(options.checkouts).toContain(sibling);
-  const base = options.bases[0];
-  const result = p.createWorktree(join(dir, "managed"), base.ref, base.commit);
-  expect(result.error).toBeNull();
-  expect(readFileSync(join(result.root, "tracked"), "utf8")).toBe("committed");
-  expect(p.checkouts()).toContain(sibling);
+test("a missing registered sibling does not block creation from a healthy checkout", () =>
+  fixture(async (dir, root, p) => {
+    const sibling = join(dir, "sibling");
+    git(root, "worktree", "add", "-b", "sibling", sibling);
+    rmSync(sibling, { recursive: true });
+    const options = p.worktreeOptions();
+    expect(options.checkouts).toContain(sibling);
+    const base = options.bases[0];
+    const result = p.createWorktree(join(dir, "managed"), base.ref, base.commit);
+    expect(result.error).toBeNull();
+    expect(readFileSync(join(result.root, "tracked"), "utf8")).toBe("committed");
+    expect(p.checkouts()).toContain(sibling);
+  }));
+
+test("confirmed removal retains branch and commits and external worktrees are ineligible", () =>
+  fixture(async (dir, root, p) => {
+    const managed = join(dir, "managed");
+    const base = p.worktreeOptions().bases[0];
+    const created = p.createWorktree(managed, base.ref, base.commit);
+    expect(p.managedWorktrees(managed).map((r) => r.root)).toContain(created.root);
+    expect(() => p.removeWorktree(managed, root, base.commit)).toThrow("Only app-created");
+    p.removeWorktree(managed, created.root, base.commit);
+    expect(existsSync(created.root)).toBe(false);
+    expect(git(root, "rev-parse", "refs/heads/" + created.branch)).toBe(base.commit);
+    p.removeWorktree(managed, created.root, base.commit);
+  }));
+test.each(["tracked", "untracked", "ignored"])(
+  "removal blocks %s edits, including changes after inspection, and retries revalidate",
+  (file) =>
+    fixture(async (dir, _root, p) => {
+      const managed = join(dir, "managed");
+      const base = p.worktreeOptions().bases[0];
+      const created = p.createWorktree(managed, base.ref, base.commit);
+      p.removalCheck(managed, created.root);
+      writeFileSync(join(created.root, file), "preserve");
+      expect(() => p.removeWorktree(managed, created.root, base.commit)).toThrow("need preserving");
+      expect(readFileSync(join(created.root, file), "utf8")).toBe("preserve");
+      expect(() => p.removeWorktree(managed, created.root, base.commit)).toThrow();
+    }),
+);
+test("changed branch, hidden index entries and failed checks block removal", () =>
+  fixture(async (dir, _root, p) => {
+    const managed = join(dir, "managed");
+    const base = p.worktreeOptions().bases[0];
+    const created = p.createWorktree(managed, base.ref, base.commit);
+    git(created.root, "update-index", "--assume-unchanged", "tracked");
+    expect(() => p.removeWorktree(managed, created.root, base.commit)).toThrow("Uncertain");
+    git(created.root, "update-index", "--no-assume-unchanged", "tracked");
+    git(created.root, "checkout", "-b", "different");
+    expect(() => p.removeWorktree(managed, created.root, base.commit)).toThrow("branch changed");
+    expect(existsSync(created.root)).toBe(true);
+  }));
+test("a failed removal is visible and retryable without forcing or deleting branches", () =>
+  fixture(async (dir, root, p) => {
+    const managed = join(dir, "managed");
+    const base = p.worktreeOptions().bases[0];
+    const created = p.createWorktree(managed, base.ref, base.commit);
+    git(root, "worktree", "lock", created.root);
+    expect(() => p.removeWorktree(managed, created.root, base.commit)).toThrow();
+    expect(existsSync(created.root)).toBe(true);
+    git(root, "worktree", "unlock", created.root);
+    p.removeWorktree(managed, created.root, base.commit);
+    expect(git(root, "rev-parse", created.branch)).toBe(base.commit);
+  }));
+
+test("retry completes missing-but-registered deletion and retains the branch", () =>
+  fixture(async (dir, root, p) => {
+    const managed = join(dir, "managed");
+    const base = p.worktreeOptions().bases[0];
+    const created = p.createWorktree(managed, base.ref, base.commit);
+    rmSync(created.root, { recursive: true });
+    expect(p.checkouts()).toContain(created.root);
+    p.removeWorktree(managed, created.root, base.commit);
+    expect(p.checkouts()).not.toContain(created.root);
+    expect(git(root, "rev-parse", created.branch)).toBe(base.commit);
+  }));
+
+
+test("VS Code policy: Git can remove an ignored file arriving after the final preservation check", () => fixture(async (dir, _root, p) => {
+  const managed = join(dir, "managed");
+  const base = p.worktreeOptions().bases[0];
+  const created = p.createWorktree(managed, base.ref, base.commit);
+  const check = p.removalCheck.bind(p);
+  vi.spyOn(p, "removalCheck").mockImplementation((...args) => {
+    const result = check(...args);
+    writeFileSync(join(created.root, "ignored"), "arrived after final check");
+    return result;
+  });
+  p.removeWorktree(managed, created.root, base.commit);
+  expect(existsSync(join(created.root, "ignored"))).toBe(false);
+  expect(p.checkouts()).not.toContain(created.root);
 }));

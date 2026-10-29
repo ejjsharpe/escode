@@ -18,6 +18,9 @@ A separate working copy created by escode for a project. It starts from a displa
 in a repository-specific directory under escode's user data outside the source checkout.
 It can host multiple chats and remains available after those chats finish. Reusing an
 existing Git-discovered worktree is an explicit choice; creation never falls back to reuse.
+Explicit removal retains its branch, commits and chat associations. Linked chats become
+unavailable and are never rebound or used to reconstruct the checkout. Removal requires
+confirmed app ownership and successful checks for active work, drafts and local files.
 
 **Save conflict**:
 A difference detected before saving between a file's loaded disk version and its current disk version. The user's edits remain available while they compare, explicitly overwrite, reload from disk, or cancel.

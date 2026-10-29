@@ -1,15 +1,19 @@
 import React, { useState } from "react";
 import { Button } from "@base-ui/react/button";
+import { persist, flush } from "./workspace";
 import type { Project } from "../host/project";
 type Options = ReturnType<Project["worktreeOptions"]>;
 type Created = ReturnType<Project["createWorktree"]>;
 export function WorktreeChoices({
-  checkout,
   createChat,
+  project,
+  onRemoved,
 }: {
-  checkout: string;
+  project: string;
+  onRemoved: () => Promise<unknown>;
   createChat: (root: string) => Promise<void>;
 }) {
+  const [managed, setManaged] = useState<ReturnType<Project["managedWorktrees"]>>([]);
   const [options, setOptions] = useState<Options>();
   const [ref, setRef] = useState("");
   const [reuse, setReuse] = useState("");
@@ -28,8 +32,9 @@ export function WorktreeChoices({
     }
   };
   const refresh = async () => {
-    const value = await window.escode.project("worktree-options", checkout);
+    const value = await window.escode.project("worktree-options", project);
     setOptions(value);
+    setManaged(await window.escode.project("worktree-managed", project));
     setRef(value.defaultRef);
     setReuse("");
   };
@@ -70,7 +75,7 @@ export function WorktreeChoices({
                     const commit = options.bases.find((b) => b.ref === ref)!.commit;
                     const result = await window.escode.project(
                       "worktree-create",
-                      checkout,
+                      project,
                       ref,
                       commit,
                     );
@@ -112,6 +117,31 @@ export function WorktreeChoices({
           </p>
         </fieldset>
       )}
+      {managed.map((item) => (
+        <section key={item.root} aria-label="Managed worktree removal">
+          <p>
+            Managed worktree: <code>{item.root}</code>
+          </p>
+          <p>
+            Retained branch: <code>{item.branch}</code>
+          </p>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await persist();
+                await flush();
+                if (await window.escode.project("worktree-remove", project, item.root)) {
+                  await onRemoved();
+                  setManaged(await window.escode.project("worktree-managed", project));
+                }
+              })
+            }
+          >
+            Remove managed worktree…
+          </Button>
+        </section>
+      ))}
       {created.map((result) => (
         <div key={result.root}>
           <p>{result.error ? "Possible leftovers" : "Created worktree"}</p>

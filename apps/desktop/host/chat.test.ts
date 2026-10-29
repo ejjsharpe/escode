@@ -1,4 +1,4 @@
-import { test, expect } from "vite-plus/test";
+import { test, expect, vi } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,7 +27,8 @@ test("turns, approvals and Stop stay scoped; reconnect invalidates old callbacks
     calls: string[];
     replies: unknown[];
   }[] = [];
-  const service = new ChatService(new Chats(join(dir, "chats.json")), async (_cwd, emit, drop) => {
+  const store = new Chats(join(dir, "chats.json"));
+  const service = new ChatService(store, async (_cwd, emit, drop) => {
     const peer = { emit, drop, calls: [] as string[], replies: [] as unknown[] };
     peers.push(peer);
     return {
@@ -61,6 +62,8 @@ test("turns, approvals and Stop stay scoped; reconnect invalidates old callbacks
     await service.open(dir, a.id);
     await service.open(dir, b.id);
     await service.send(dir, a.id, "hello");
+    expect(service.checkoutActive(dir, a.id)).toBe(true);
+    expect(service.checkoutActive(dir, b.id)).toBe(false);
     await expect(service.send(dir, a.id, "duplicate")).rejects.toThrow("active turn");
     peers[0].emit({
       id: 77,
@@ -85,6 +88,19 @@ test("turns, approvals and Stop stay scoped; reconnect invalidates old callbacks
     await service.open(dir, a.id);
     await expect(service.answer(dir, a.id, stale.token, "accept")).rejects.toThrow("Stale");
     expect(peers[2].calls).not.toContain("turn/start");
+    await service.draft(dir, a.id, "retained draft");
+    await service.markUnavailable(dir, a.id);
+    await expect(service.open(dir, a.id)).rejects.toThrow("Checkout was removed");
+    await expect(service.send(dir, a.id, "no")).rejects.toThrow("Checkout was removed");
+    const failIntent = vi.spyOn(store, "update").mockRejectedValueOnce(Error("disk full"));
+    await expect(service.markUnavailable(dir, b.id)).rejects.toThrow("disk full");
+    expect(service.snapshot(dir, b.id).connected).toBe(false);
+    failIntent.mockRestore();
+    expect((await service.list(dir)).find((c) => c.id === a.id)).toMatchObject({
+      removed: true,
+      draft: "retained draft",
+      checkout: dir,
+    });
   } finally {
     service.close();
     await rm(dir, { recursive: true, force: true });

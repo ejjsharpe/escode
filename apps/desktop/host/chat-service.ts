@@ -89,6 +89,10 @@ export class ChatService {
       let rpc: CodexConnection | undefined;
       try {
         const chat = await this.store.get(project, id);
+        if (chat.removed)
+          throw Error(
+            "Checkout was removed. History and drafts are retained; this chat cannot run.",
+          );
         if (s.epoch !== epoch) throw Error("Project closed while loading saved chat.");
         rpc = await this.connect(
           chat.checkout,
@@ -275,7 +279,8 @@ export class ChatService {
       s.error = p.error?.message ?? "Codex turn failed. Send a new message to continue.";
   }
   async send(project: string, id: string, text: string) {
-    await this.store.get(project, id);
+    const chat = await this.store.get(project, id);
+    if (chat.removed) throw Error("Checkout was removed. This chat cannot run.");
     const s = this.session(project, id);
     if (!s.connected || !s.rpc)
       throw Error("Retry connection before sending. Work was not resent.");
@@ -366,6 +371,17 @@ export class ChatService {
     const s = this.session(project, id);
     if (s.busy || s.opening) throw Error("Stop active work before reconnecting.");
     s.rpc?.close();
+  }
+  checkoutActive(project: string, id: string) {
+    const s = this.sessions.get(id);
+    return !!s && s.project === project && !!(s.busy || s.opening || s.requests.length);
+  }
+  async markUnavailable(project: string, id: string) {
+    const s = this.session(project, id);
+    s.rpc?.close();
+    s.connected = false;
+    s.error = "Checkout removal requested. History and drafts are retained; this chat cannot run.";
+    await this.store.update(project, id, { removed: true });
   }
   active(project?: string) {
     return [...this.sessions.values()].some(

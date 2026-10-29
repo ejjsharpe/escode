@@ -270,11 +270,20 @@ export function ChatView({
           document.getElementById(sidebarId)!,
         )}
       <div className="chat-conversation">
-        <WorktreeChoices checkout={checkout} createChat={createChat} />
+        <WorktreeChoices
+          project={project}
+          createChat={createChat}
+          onRemoved={load}
+        />
         {!selected ? (
           <p>Create or select a saved chat to begin. Choose the current checkout or a worktree.</p>
         ) : (
           <>
+            {chats.find((c) => c.id === selected)?.removed && (
+              <p role="status">
+                Checkout removed. History and drafts are retained; this chat cannot run.
+              </p>
+            )}
             <p className="directory">Checkout: {chats.find((c) => c.id === selected)?.checkout}</p>
             {chats.filter((c) => c.checkout === chats.find((c) => c.id === selected)?.checkout)
               .length > 1 && (

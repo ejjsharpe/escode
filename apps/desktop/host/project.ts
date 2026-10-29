@@ -8,6 +8,11 @@ import {
   mkdirSync,
   mkdtempSync,
   statSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  lstatSync,
+  readdirSync,
 } from "node:fs";
 import { resolve, relative, isAbsolute, dirname, join, basename } from "node:path";
 import { getSystemErrorName } from "node:util";
@@ -238,8 +243,9 @@ export class Project {
     const canonicalRoot = join(ancestor, ...missing);
     for (const checkout of this.checkouts()) {
       let canonicalCheckout: string;
-      try { canonicalCheckout = realpathSync(checkout); }
-      catch (error) {
+      try {
+        canonicalCheckout = realpathSync(checkout);
+      } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
         throw error;
       }
@@ -259,6 +265,17 @@ export class Project {
     try {
       // Git accepts an existing empty path, so reserve it exclusively ourselves.
       mkdirSync(root, { mode: 0o700 });
+      writeFileSync(
+        join(container, "ownership.json"),
+        JSON.stringify({
+          repository: this.repository(),
+          root,
+          branch,
+          dev: statSync(root).dev,
+          ino: statSync(root).ino,
+        }),
+        { flag: "wx", mode: 0o600 },
+      );
       this.validateRepository();
       this.git([
         "--git-dir=" + this.gitDirectory,
@@ -281,6 +298,111 @@ export class Project {
         error: `Creation failed. No chat started. Inspect possible residual branch ${branch} and directory ${container} externally; both are retained. Refresh and retry creates a new destination. ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+  }
+  managedWorktrees(managedRoot: string) {
+    const parent = join(managedRoot, createHash("sha256").update(this.repository()).digest("hex"));
+    if (!existsSync(parent)) return [];
+    return readdirSync(parent).flatMap((name) => {
+      const file = join(parent, name, "ownership.json");
+      if (!existsSync(file)) return [];
+      const record = JSON.parse(readFileSync(file, "utf8")) as {
+        repository: string;
+        root: string;
+        branch: string;
+        dev: number;
+        ino: number;
+      };
+      if (
+        record.repository !== this.repository() ||
+        record.root !== join(parent, name, "checkout") ||
+        typeof record.dev !== "number" ||
+        typeof record.ino !== "number" ||
+        !record.branch.startsWith("escode/") ||
+        realpathSync(dirname(file)) !== dirname(file)
+      )
+        throw Error("Uncertain worktree ownership. Inspect managed files externally.");
+      return [record];
+    });
+  }
+  removalCheck(managedRoot: string, root: string) {
+    this.validateRepository();
+    const record = this.managedWorktrees(managedRoot).find((r) => r.root === root);
+    if (!record) throw Error("Only app-created worktrees are eligible for removal.");
+    const commit = this.git(["rev-parse", "--verify", "refs/heads/" + record.branch + "^{commit}"])
+      .toString()
+      .trim();
+    let present = true;
+    try {
+      lstatSync(root);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      present = false;
+    }
+    const registered = this.checkouts().includes(root);
+    if (!registered) {
+      if (present) throw Error("Unregistered worktree leftovers are retained. Inspect externally.");
+      return { ...record, commit, removed: true };
+    }
+    if (!present) {
+      const records = this.git(["worktree", "list", "--porcelain", "-z"]).toString().split("\0\0");
+      const metadata = records.find((r) => r.split("\0")[0] === "worktree " + root)?.split("\0");
+      if (
+        !metadata?.includes("branch refs/heads/" + record.branch) ||
+        !metadata.includes("HEAD " + commit)
+      )
+        throw Error("Missing checkout has uncertain branch preservation. Removal blocked.");
+      return { ...record, commit, removed: false };
+    }
+    if (
+      realpathSync(root) !== root ||
+      !lstatSync(root).isDirectory() ||
+      statSync(root).dev !== record.dev ||
+      statSync(root).ino !== record.ino
+    )
+      throw Error("Worktree path changed. Removal blocked.");
+    const run = (args: string[]) =>
+      execFileSync(this.executable, ["-C", root, "--work-tree=.", ...args], {
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+    if (
+      realpathSync(resolve(root, run(["rev-parse", "--git-common-dir"]))) !==
+      realpathSync(
+        resolve(this.root, this.git(["rev-parse", "--git-common-dir"]).toString().trim()),
+      )
+    )
+      throw Error("Repository metadata changed. Removal blocked.");
+    if (run(["symbolic-ref", "--short", "HEAD"]) !== record.branch)
+      throw Error("Retained branch changed. Removal blocked.");
+    if (run(["rev-parse", "HEAD"]) !== commit) throw Error("Checkout commit changed.");
+    if (run(["rev-parse", "refs/heads/" + record.branch]) !== commit)
+      throw Error("Branch does not preserve the checkout commit.");
+    if (run(["status", "--porcelain=v1", "--untracked-files=all", "--ignored=matching"]))
+      throw Error("Tracked, untracked or ignored local files need preserving. Removal blocked.");
+    // Sparse/hidden index entries and submodules make a clean status insufficient evidence.
+    if (
+      run(["ls-files", "-v"])
+        .split("\n")
+        .some((line) => line && !line.startsWith("H ")) ||
+      run(["ls-files", "--stage"])
+        .split("\n")
+        .some((line) => line.startsWith("160000 "))
+    )
+      throw Error(
+        "Uncertain preservation checks (hidden index entries or submodules). Removal blocked.",
+      );
+    return { ...record, commit, removed: false };
+  }
+  removeWorktree(managedRoot: string, root: string, commit: string) {
+    const checked = this.removalCheck(managedRoot, root);
+    if (checked.removed) return;
+    if (checked.commit !== commit)
+      throw Error("Checkout changed after confirmation. Retry removal.");
+    // shortcut: match VS Code's Git removal guarantee; an external writer after the
+    // final check can lose ignored files. Upgrade only if that chosen policy changes.
+    this.git(["--git-dir=" + this.gitDirectory, "worktree", "remove", "--", root]);
+    if (existsSync(root) || this.checkouts().includes(root))
+      throw Error("Removal incomplete. Leftovers retained; retry revalidates them.");
   }
   async status() {
     const records = this.git([
@@ -352,6 +474,11 @@ export class Project {
 }
 
 export interface ProjectBridge {
+  (
+    operation: "worktree-managed",
+    checkout: string,
+  ): Promise<ReturnType<Project["managedWorktrees"]>>;
+  (operation: "worktree-remove", checkout: string, root: string): Promise<boolean>;
   (operation: "open"): Promise<Awaited<ReturnType<Project["status"]>> | null>;
   (
     operation: "worktree-options",

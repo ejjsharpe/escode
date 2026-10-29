@@ -79,7 +79,58 @@ test("create from committed state, retain unsaved edits, and explicitly reuse wi
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("unsaved original");
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.screenshot({ path: "test-results/worktree-choices.png" });
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options: any) => {
+        if (options.message === "Remove managed worktree?") {
+          if (
+            !options.detail.includes("Retained branch:") ||
+            !options.detail.includes("Affected chats:")
+          )
+            throw Error("Missing removal context");
+          return { response: 0, checkboxChecked: false };
+        }
+        return { response: 2, checkboxChecked: false };
+      };
+    });
+    const removal = page
+      .getByRole("region", { name: "Managed worktree removal", exact: true })
+      .filter({ hasText: path });
+    // A durable draft in the target checkout blocks removal even while another checkout is selected.
+    const state = await page.evaluate(() => window.escode.lifecycle("load"));
+    state.state.drafts.push({
+      root: path,
+      path: "a.txt",
+      text: "recover me",
+      disk: { text: "committed", version: "baseline" },
+    });
+    await page.evaluate((state) => window.escode.lifecycle("persist", state), state.state);
+    // Exercise the host boundary directly so renderer persistence does not replace the test draft.
+    const blocked = await page.evaluate(
+      async ({ root, path }) => {
+        try {
+          await window.escode.project("worktree-remove", root, path);
+          return "unexpected success";
+        } catch (error) {
+          return String(error);
+        }
+      },
+      { root, path },
+    );
+    expect(blocked).toContain("recovery drafts");
+    state.state.drafts = state.state.drafts.filter((d) => d.root !== path);
+    await page.evaluate((state) => window.escode.lifecycle("persist", state), state.state);
+    await removal.getByRole("button", { name: "Remove managed worktree…" }).click();
+    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await expect(
+      page.getByText("Checkout removed. History and drafts are retained; this chat cannot run.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Message Codex")).toHaveValue("keep this draft");
+    expect(git("worktree", "list", "--porcelain")).not.toContain(path);
+    await page.screenshot({ path: "test-results/worktree-removal.png" });
+    await page.getByRole("button", { name: "Create worktree and chat", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Chat 4", exact: true })).toBeVisible();
   } finally {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async (_window: unknown, options: any) => ({

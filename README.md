@@ -74,4 +74,12 @@ or the app offers Save/Discard/Cancel; active work requires Stop and Close.
 Quit interrupts active turns and terminates app-owned process groups. Restart
 restores tabs, view selections and available drafts; agents do not resume turns.
 Recovery is best effort: see [desktop evidence and limitations](docs/compatibility/desktop.md).
-Worktree removal remains a subsequent slice. This is not the completed v1.
+Managed worktrees offer explicit removal with a confirmation listing the path, retained
+branch and affected chats. Active work, recovery drafts, local files (including ignored
+files) and uncertain checks block removal. Git removal never uses force; branches and
+chat associations remain. External worktrees are ineligible. Ownership records are
+required, so worktrees created by older builds require external management.
+Removal follows VS Code’s Git guarantee: an unrelated process can still create or
+change files after the final check; late ignored files can be deleted. Transactional
+removal and recoverable removal backups are outside this guarantee.
+This is not the completed v1.

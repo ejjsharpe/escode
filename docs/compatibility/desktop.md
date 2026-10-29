@@ -313,3 +313,35 @@ sending another turn.
 The crash/restart smoke now opens two projects and verifies their tab order,
 selected project, recovered file and independent remembered Git diff selections
 through a hard kill and subsequent graceful restart.
+
+Managed worktree removal uses persisted app ownership and checkout directory identity.
+The host confirms the path, retained branch and linked chats, blocks active work and
+recovery drafts, and rechecks Git status including ignored files. Hidden index entries
+and submodules are treated as uncertain and block removal. Git removal never uses
+force. Failures retain ownership records for inspection and retry; no branch or
+uncertain leftover directory is cleaned up automatically. Older worktrees without
+ownership records require external management.
+
+The worktree host regressions cover dirty tracked/untracked/ignored files introduced
+after inspection, changed branches, hidden index entries, locked-worktree failure
+and retry, external-worktree rejection, and branch/commit retention. The Electron
+workflow checks confirmed removal, recovery-draft blocking and unavailable linked
+chats with their message drafts retained. Protocol fixtures check active-chat
+identification and that removed chats cannot reconnect or send.
+
+
+On 2026-10-29 the user chose VS Code's removal policy for the reproduced late-file
+race. VS Code delegates ordinary removal to `git worktree remove`; see its
+[pinned Git implementation](https://github.com/microsoft/vscode/blob/fc8954c90fe6dea1f4c411dd73fdfe5f1913b5ca/extensions/git/src/git.ts#L2327-L2335)
+and [worktree removal documentation](https://code.visualstudio.com/docs/sourcecontrol/branches-worktrees#remove-a-worktree).
+The escode prechecks still block existing ignored files and never offer force.
+They do not make deletion transactional: an unrelated process can write after the
+last check, and Git can delete a late ignored file. A regression injects an ignored
+file immediately after the final check and records this accepted limitation.
+No recoverable removal backup is made.
+
+Review fixes persist every linked chat's unavailable intent before deleting files,
+and disconnect all linked sessions even when storing intent fails (which blocks
+deletion). Retry can finish a missing-but-registered owned checkout after checking
+its retained branch and commit. Creating a new worktree uses the primary project
+checkout even when the selected chat remains attached to a removed checkout.

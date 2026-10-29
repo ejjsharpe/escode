@@ -54,6 +54,7 @@ app.whenReady().then(() => {
   const chats = new ChatService(store);
   const projects = new Map<string, Project>();
   const closingProjects = new Set<string>();
+  const removing = new Set<string>();
   let quitting = false;
   const workspace = new Workspace(join(app.getPath("userData"), "workspace.json"));
   let mayClose = false;
@@ -187,6 +188,51 @@ app.whenReady().then(() => {
       return opened.status();
     }
     const project = await checkout(args.shift());
+    const identity = project.repository();
+    if (removing.has(identity)) throw Error("Worktree removal is in progress. Retry afterward.");
+    const managedRoot = join(app.getPath("userData"), "worktrees");
+    if (operation === "worktree-managed" && !args.length)
+      return project.managedWorktrees(managedRoot);
+    if (operation === "worktree-remove" && args.length === 1 && typeof args[0] === "string") {
+      const root = args[0];
+      removing.add(identity);
+      try {
+        const linked = (await chats.list(identity)).filter((c) => c.checkout === root);
+        const check = async () => {
+          const state = await workspace.read();
+          if (state.drafts.some((d) => d.root === root))
+            throw Error(
+              "Unsaved buffers or recovery drafts need this checkout. Save or discard them first.",
+            );
+          if (linked.some((c) => chats.checkoutActive(identity, c.id)))
+            throw Error("Stop linked agents before removal.");
+          return project.removalCheck(managedRoot, root);
+        };
+        const before = await check();
+        const answer = await dialog.showMessageBox(window, {
+          message: "Remove managed worktree?",
+          detail: `Path: ${root}\nRetained branch: ${before.branch}\nAffected chats: ${linked.map((c) => c.id).join(", ") || "None"}\nBranches, commits and chat history are retained. Linked chats become unavailable.`,
+          buttons: ["Remove worktree", "Cancel"],
+          defaultId: 1,
+          cancelId: 1,
+        });
+        if (answer.response !== 0) return false;
+        await check();
+        // Persist intent for every chat before any destructive operation.
+        await Promise.all(linked.map((c) => chats.markUnavailable(identity, c.id)));
+        await check();
+        project.removeWorktree(managedRoot, root, before.commit);
+        projects.get(root)?.close();
+        projects.delete(root);
+        return true;
+      } catch (error) {
+        throw Error(
+          `Removal did not complete. Inspect ${root}; uncertain leftovers are retained. Retry revalidates all checks. ${String(error)}`,
+        );
+      } finally {
+        removing.delete(identity);
+      }
+    }
     if (operation === "worktree-options" && !args.length) return project.worktreeOptions();
     if (
       operation === "worktree-create" &&
@@ -225,6 +271,7 @@ app.whenReady().then(() => {
     if (typeof root !== "string") throw Error("Invalid project");
     const owner = [...projects.values()].find((p) => p.repository() === root);
     const requireOpen = () => {
+      if (removing.has(root)) throw Error("Worktree removal is in progress. Retry afterward.");
       if (!owner || projects.get(owner.root) !== owner || quitting || closingProjects.has(root))
         throw Error("Open this project first.");
     };
