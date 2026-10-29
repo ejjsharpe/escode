@@ -801,7 +801,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
       try {
         if (project) {
           memory.projects = memory.projects.filter((p) => p.project !== project);
-          memory.selected = memory.projects[0]?.project ?? "agents";
+          if (memory.selected === project) memory.selected = "agents";
           await persist();
         }
         await window.escode.lifecycle("finish", project);
@@ -847,10 +847,20 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
       setProjects((old) =>
         old.some((p) => p.project === value.project)
           ? old.map((p) => (p.project === value.project && p.approvalRequired ? value : p))
-          : [...old, value],
+          : [
+              ...old,
+              {
+                ...value,
+                root:
+                  memory.savedProjects?.find((p) => p.project === value.project)?.root ??
+                  value.root,
+              },
+            ],
       );
-      if (!memory.projects.some((p) => p.project === value.project))
-        memory.projects.push({ project: value.project, root: value.root });
+      if (!memory.projects.some((p) => p.project === value.project)) {
+        const saved = memory.savedProjects?.find((p) => p.project === value.project);
+        memory.projects.push(saved ?? { project: value.project, root: value.root });
+      }
       memory.savedProjects ??= [];
       if (!memory.savedProjects.some((p) => p.project === value.project))
         memory.savedProjects.push({ project: value.project, root: value.root });
@@ -878,7 +888,16 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
           <Button
             key={p.project}
             aria-pressed={selected === p.project}
-            title={p.project}
+            title={`${p.project} · Middle-click or press Delete to close editor`}
+            onAuxClick={(event) => {
+              if (event.button === 1) void close(p.project);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Delete" || event.key === "Backspace") {
+                event.preventDefault();
+                void close(p.project);
+              }
+            }}
             onClick={() => setSelected(p.project)}
           >
             {p.project.split("/").at(-1)}

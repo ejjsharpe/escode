@@ -81,7 +81,7 @@ for (const dirty of [false, true]) {
   });
 }
 
-test("an IPC open delayed in metadata validation cannot reopen a closed project", async () => {
+test("an IPC open delayed in metadata validation survives editor closure without reopening its tab", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-ipc-close-")));
   const root = join(dir, "repo"),
     user = join(dir, "user");
@@ -153,9 +153,12 @@ createInterface({input:process.stdin}).on('line',line=>{
       (globalThis as any).releaseMetadata();
       delete (globalThis as any).releaseMetadata;
     });
-    expect(await page.evaluate(() => (window as any).pendingOpen)).toBe("rejected");
+    expect(await page.evaluate(() => (window as any).pendingOpen)).toBe("connected");
     const { readdir } = await import("node:fs/promises");
-    expect(await readdir(root)).not.toContain("server-pid");
+    expect(await readdir(root)).toContain("server-pid");
+    await expect(
+      page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
+    ).toHaveCount(1);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header")).toContainText(root);
     expect(await page.evaluate((root) => window.escode.chat("list", root), root)).toHaveLength(1);

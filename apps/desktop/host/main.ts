@@ -60,7 +60,6 @@ app.whenReady().then(() => {
   const projects = new Map<string, Project>();
   const projectSessions = new Map<string, object>();
   const unapprovedProjects = new Set<string>();
-  const closingProjects = new Set<string>();
   const removing = new Set<string>();
   let quitting = false;
   let mutationOrigin: string | undefined;
@@ -191,7 +190,7 @@ app.whenReady().then(() => {
     )
       throw Error("Unknown project");
     if (operation === "prepare") {
-      if (!chats.active(project as string | undefined)) return true;
+      if (project !== undefined || !chats.active()) return true;
       return (
         (
           await dialog.showMessageBox(window, {
@@ -205,27 +204,16 @@ app.whenReady().then(() => {
       );
     }
     if (operation === "finish") {
-      if (project === undefined) quitting = true;
-      else closingProjects.add(project as string);
+      // Editor closure retains checkout authority and every live chat session.
+      if (project !== undefined) return;
+      quitting = true;
       try {
-        await chats.shutdown(project as string | undefined);
-        if (project === undefined) {
-          mayClose = true;
-          app.quit();
-        } else {
-          projectSessions.delete(project as string);
-          unapprovedProjects.delete(project as string);
-          for (const [root, p] of projects)
-            if (p.repository() === project) {
-              p.close();
-              projects.delete(root);
-            }
-        }
+        await chats.shutdown();
+        mayClose = true;
+        app.quit();
       } catch (error) {
         quitting = false;
         throw error;
-      } finally {
-        if (typeof project === "string") closingProjects.delete(project);
       }
       return;
     }
@@ -315,10 +303,9 @@ app.whenReady().then(() => {
           if (
             !owner ||
             projectSessions.get(identity) !== owner ||
-            quitting ||
-            closingProjects.has(identity)
+            quitting
           )
-            throw Error("Originating project closed.");
+            throw Error("Originating project unavailable or app quitting.");
           for (const path of [source, ...(kind === "move" ? [destination] : [])]) {
             const absolute = resolve(project.root, path);
             if (
@@ -471,7 +458,7 @@ app.whenReady().then(() => {
     const owner = projectSessions.get(root);
     const requireOpen = () => {
       if (removing.has(root)) throw Error("Worktree removal is in progress. Retry afterward.");
-      if (!owner || projectSessions.get(root) !== owner || quitting || closingProjects.has(root))
+      if (!owner || projectSessions.get(root) !== owner || quitting)
         throw Error("Open this project first. Use Open project… to approve its saved directory.");
     };
     requireOpen();

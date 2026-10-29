@@ -12,7 +12,7 @@ The long-term aim is a daily editor that can replace VS Code. The v1 workflow is
 
 The accepted baseline is [Specification: smallest useful escode v1](https://github.com/ejjsharpe/escode/issues/11), planned through the completed [Define the smallest useful escode](https://github.com/ejjsharpe/escode/issues/1) map.
 
-The completed [Specify the shared Agents view](https://github.com/ejjsharpe/escode/issues/20) map records the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419): a permanent app-wide Agents tab alongside project-local Chats, shared conversations across both views, and No project chats. The amendment reconciles the behaviour and approved layout with the baseline and defines fourteen implementation acceptance scenarios. The existing project-backed chat path is implemented in Agents; draft creation, No project execution and the revised project-close lifecycle remain later slices. [Existing-chat evidence](docs/compatibility/agents-existing-chats.md) records the bounded implementation checks. Child issues retain the decisions and their resolutions.
+The completed [Specify the shared Agents view](https://github.com/ejjsharpe/escode/issues/20) map records the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419): a permanent app-wide Agents tab alongside project-local Chats, shared conversations across both views, and No project chats. The amendment reconciles the behaviour and approved layout with the baseline and defines fourteen implementation acceptance scenarios. The existing project-backed chat path is implemented in Agents; draft creation and No project execution remain later slices. Closing a project editor retains its chats and live requests in Agents; reopening restores its editor context. [Existing-chat evidence](docs/compatibility/agents-existing-chats.md) records the bounded implementation checks. Child issues retain the decisions and their resolutions.
 
 The selected foundation is macOS, Electron, React, TypeScript, and Monaco, using installed Git and Codex directly. T3 Code remains a workflow reference.
 
@@ -72,7 +72,7 @@ Worktrees live under Electron user data, separated by repository identity. Faile
 creation reports possible leftovers and retries always reserve a fresh destination.
 
 Unsaved file buffers are persisted as local recovery drafts. Closing files, projects
-or the app offers Save/Discard/Cancel; active work requires Stop and Close.
+or the app offers Save/Discard/Cancel. Closing a project editor leaves chat work running; quitting with active work requires Stop and Close.
 Quit interrupts active turns and terminates app-owned process groups. Restart
 restores tabs, view selections and available drafts; agents do not resume turns.
 Saved roots from older builds need one approval through **Open project…**; available drafts are retained.

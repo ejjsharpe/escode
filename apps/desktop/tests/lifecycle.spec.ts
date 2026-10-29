@@ -133,7 +133,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
 });
 
 for (const closeProject of [false, true]) {
-  test(`active work: ${closeProject ? "Stop and Close handles dirty files and retains chats/worktrees" : "quit interrupts processes without replay on restart"}`, async () => {
+  test(`active work: ${closeProject ? "editor close retains live work, and quit stops closed-project processes" : "quit interrupts processes without replay on restart"}`, async () => {
     const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-quit-")));
     const root = join(dir, "repo"),
       user = join(dir, "user");
@@ -215,24 +215,31 @@ createInterface({input:process.stdin}).on('line',line=>{
             return result;
           }, root)
         : null;
-      await page.getByRole("button", { name: "Close project", exact: true }).click();
-      await expect(page.getByRole("status")).toHaveText("Running");
-      await expect(page.getByLabel("Message Codex")).toBeEnabled();
       if (closeProject) {
-        // Accept Stop and Close, then cancel the dirty-file prompt. Work must keep running.
         await app.evaluate(({ dialog }) => {
-          dialog.showMessageBox = async (_window: unknown, options?: any) => ({
-            response: options.buttons[0] === "Save" ? 2 : 0,
-            checkboxChecked: false,
-          });
+          dialog.showMessageBox = async () => ({ response: 2, checkboxChecked: false });
         });
         await page.getByRole("button", { name: "Close project", exact: true }).click();
-        await expect(page.getByLabel("Message Codex")).toBeEnabled();
         await expect(page.getByRole("status")).toHaveText("Running");
         expect(await readFile(join(root, "a.txt"), "utf8")).toBe("committed");
         expect(
           JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts[0].text,
         ).toBe("save on close");
+      }
+      if (closeProject) {
+        // A failed save must also cancel app quit before interrupting live work.
+        await rm(join(root, "a.txt"));
+        await app.evaluate(({ dialog, BrowserWindow }) => {
+          dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+          BrowserWindow.getAllWindows()[0].close();
+        });
+        await expect(page.getByRole("status")).toContainText("ENOENT");
+        await expect(page.locator(".monaco-editor:visible")).toContainText("save on close");
+        expect(await readFile(join(root, "interrupts"), "utf8").catch(() => "")).toBe("");
+        for (const pid of pids) process.kill(pid, 0);
+        await writeFile(join(root, "a.txt"), "committed");
+        await page.getByRole("button", { name: /Chats/ }).click();
+        await expect(page.getByRole("status")).toHaveText("Running");
       }
       await app.evaluate(({ dialog }) => {
         dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
@@ -259,7 +266,21 @@ createInterface({input:process.stdin}).on('line',line=>{
         expect(saved.find((chat: any) => chat.checkout === managed!.root).draft).toBe(
           "retained worktree draft",
         );
-      } else await app.close();
+        expect(await readFile(join(root, "turns"), "utf8")).toBe("sent\n");
+        expect(await readFile(join(root, "interrupts"), "utf8").catch(() => "")).toBe("");
+        for (const pid of pids) process.kill(pid, 0);
+        // Quit confirmation still includes work belonging to a closed editor.
+        await app.evaluate(({ dialog, BrowserWindow }) => {
+          dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
+          BrowserWindow.getAllWindows()[0].close();
+        });
+        await expect(page.getByRole("button", { name: "Agents", exact: true })).toBeEnabled();
+        for (const pid of pids) process.kill(pid, 0);
+        await app.evaluate(({ dialog }) => {
+          dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+        });
+      }
+      await app.close();
       expect(await readFile(join(root, "interrupts"), "utf8")).toBe("stopped\n");
       await expect
         .poll(() =>
@@ -273,12 +294,22 @@ createInterface({input:process.stdin}).on('line',line=>{
           }),
         )
         .toBe(false);
+      app = await launch();
+      page = await app.firstWindow();
       if (closeProject) {
+        await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await expect(
+          page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
+        ).toHaveCount(1);
+        await app.evaluate(({ dialog }, root) => {
+          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+          dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+        }, root);
         await page.getByRole("button", { name: "Open project…" }).click();
         await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toBeVisible();
-      } else {
-        app = await launch();
-        page = await app.firstWindow();
       }
       await expect(page.getByRole("status")).toHaveText("Ready");
       expect(await readFile(join(root, "turns"), "utf8")).toBe("sent\n");

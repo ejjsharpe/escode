@@ -58,3 +58,54 @@ test("acknowledged recovery survives a fresh store; discard cannot resurrect it"
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("closed editor membership persists independently of catalogue, checkout memories, recovery and approvals", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-closed-workspace-"));
+  try {
+    const file = join(dir, "workspace.json"),
+      store = new Workspace(file);
+    const project = join(dir, "project"),
+      checkout = join(dir, "worktree");
+    await store.approve(project, project);
+    const state = {
+      projects: [{ project, root: project }],
+      savedProjects: [{ project, root: project }],
+      selected: project,
+      agentsChat: "global-chat",
+      views: {
+        [project]: {
+          mode: "Source Control",
+          checkout,
+          roots: [project, checkout],
+          chat: "local-chat",
+        },
+        [checkout]: {
+          path: "folder/a.ts",
+          directory: "folder",
+          change: { path: "folder/a.ts", area: "unstaged" as const },
+        },
+      },
+      drafts: [
+        {
+          root: checkout,
+          path: "folder/a.ts",
+          text: "recovered",
+          disk: { text: "disk", version: "loaded" },
+        },
+      ],
+    };
+    await store.write(state);
+    const closed = { ...state, projects: [], selected: "agents" };
+    await store.write(closed);
+    const restarted = new Workspace(file);
+    expect(await restarted.read()).toEqual(closed);
+    expect(await restarted.approved()).toEqual(state.savedProjects);
+    // Invalid updates cannot erase an acknowledged closed-project recovery draft.
+    await expect(
+      restarted.write({ ...closed, drafts: [{ ...state.drafts[0], path: "../outside" }] }),
+    ).rejects.toThrow("Invalid recovery draft");
+    expect(await restarted.read()).toEqual(closed);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

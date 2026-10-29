@@ -85,3 +85,75 @@ The initial focused Electron run passed **4 tests**, including the native resize
 Provider behavior in the new workflow is simulated using Codex 0.165.0 protocol fixtures; no new live authenticated Codex turn was consumed. New Agents controls have keyboard automation but no manual VoiceOver certification. Existing v1 VoiceOver evidence does not certify Agents. The approved prototype was used as design authority, without importing its demonstration controls or future features.
 
 All changes are left uncommitted for fresh independent Ponytail review and the subsequent merge agent. The implementation agent does not commit, push, create a PR, close the issue or claim full Agents acceptance.
+
+## Project editor lifetime (#32), reconciled with Files
+
+The #32 implementation is based on approved Files main commit
+`f08183dfac74e805cd51dca64e50dd2675f5a2e6` (initial baseline
+`2e453812759cde9eecab1a73e5eb3c179cc24b83`). Changes remain uncommitted in the
+assigned worktree for fresh independent review.
+
+Project close resolves file Save/Discard/Cancel and removes only editor membership.
+Saved registration, host approval authority, checkout objects, shared conversation
+state and live requests remain available. Selected closure activates Agents;
+background closure preserves selection. A project tab supports middle-click and
+focused Delete/Backspace closure, with the shortcut in its tooltip. Reopening via
+any linked checkout restores the saved original checkout and independent memory.
+Quit still confirms active work and shuts down every app-owned session, including
+closed projects and descendant process groups.
+
+Files reconciliation keeps the existing lifecycle-load composition of recovered
+disk state with derived saved registration. Native file mutations retain sender,
+approved project ownership, quitting, source identity, protected state and idle
+checks; editor closure no longer revokes saved-project authority. No Files recovery
+or mutation implementation was replaced. A combined regression seeds a closed
+project with an interrupted move and recovery draft, verifies path reconciliation
+and closed membership across crash/restart, reopens through a linked worktree and
+checks ordinary save-conflict protection against external edits.
+
+Validation on the reconciled base:
+
+- `bun run typecheck`, `bun run lint`, `bun run test`, `bun run build`,
+  `bun run package`, and `git diff --check` passed.
+- `bun run --cwd apps/desktop smoke -- tests/lifecycle.spec.ts tests/lifecycle-races.spec.ts tests/concurrency.spec.ts tests/navigation.spec.ts tests/worktrees.spec.ts tests/agents.spec.ts tests/agents-files-recovery.spec.ts tests/file-operations.spec.ts tests/retained-project.spec.ts`:
+  18 passed. This includes #30 pending-Send approval/input response guards and
+  #31 order, shared-state, navigation and layout regressions.
+- `ESCODE_PACKAGED=1 bun run --cwd apps/desktop smoke -- tests/packaged.spec.ts tests/lifecycle.spec.ts tests/agents-files-recovery.spec.ts tests/retained-project.spec.ts`:
+  7 passed with the restricted packaged PATH.
+- An additional lifecycle assertion then verified failed dirty-file saving during
+  app quit leaves the editor and live processes intact; all 3 lifecycle tests passed.
+
+The new retained-project regression covers dirty background close cancellation,
+failed save, discard, live approval response through Agents, scoped Stop while
+another project runs, retained-chat worktree removal protections for active work,
+recovery drafts and local files, and reopening the same editor context. Lifecycle
+checks cover saving on close, quit cancellation for closed-project work, descendant
+shutdown, restored closed membership and no turn replay. A host workspace test
+covers independent durable catalogue/membership, selections, recovery baselines,
+approvals and rejected invalid recovery updates.
+
+Provider behavior uses controlled Codex 0.165.0 protocol fixtures with real processes,
+Git repositories and filesystems. No new live Codex turn or manual Finder/VoiceOver
+validation was performed. These results establish this bounded slice, not full
+Agents/No project acceptance. Any later substantive integration fix requires
+combined tests and fresh review again.
+
+Final verification also reran the expanded lifecycle suite in the packaged app:
+3 passed, including the failed-save quit case. Final typecheck, lint and whitespace
+checks passed again.
+
+Exact #32 review files (relative to this worktree):
+
+- `README.md`, `GLOSSARY.md`, `docs/compatibility/agents-existing-chats.md`.
+- `apps/desktop/host/main.ts`, `apps/desktop/host/workspace.test.ts`.
+- `apps/desktop/src/main.tsx`.
+- `apps/desktop/tests/agents-files-recovery.spec.ts`.
+- `apps/desktop/tests/concurrency.spec.ts`.
+- `apps/desktop/tests/lifecycle-races.spec.ts`.
+- `apps/desktop/tests/lifecycle.spec.ts`.
+- `apps/desktop/tests/retained-project.spec.ts` (new).
+
+The pre-Files safety stash is retained at
+`7b4a2120bfc0a749a018d8e0d4639117bcd5ede1`; it is a backup, not the final combined
+patch. The working directory contains the complete reconciled changes. No #32
+commit, push, PR or issue closure was performed.

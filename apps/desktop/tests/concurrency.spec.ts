@@ -126,6 +126,16 @@ createInterface({input:process.stdin}).on('line', line => {
       .getByRole("button", { name: /^alpha/ })
       .click();
     await expect(approval).toBeEnabled();
+    // Close the editor while first Send still awaits acknowledgement. Requests and
+    // shared pending state must remain usable through Agents without another connection.
+    await page.getByRole("button", { name: "Close project", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(approval).toBeEnabled();
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("delayed");
+    await open(a);
     // Delay host reads so responses remain pending across a conversation remount.
     await app.evaluate(() => {
       const fs = process.getBuiltinModule("fs/promises") as any;

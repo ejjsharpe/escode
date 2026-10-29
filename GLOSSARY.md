@@ -2,7 +2,7 @@
 
 A project editor with files, source changes, and Codex conversations.
 
-The Agents and No project concepts below describe the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419); they are not implemented yet.
+The Agents and No project concepts below describe the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419); existing project-backed chats and editor closure are implemented; draft creation and No project execution remain later slices.
 
 ## Language
 
