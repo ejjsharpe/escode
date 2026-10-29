@@ -4,7 +4,7 @@ A project editor with files, source changes, and Codex conversations.
 
 The Agents and No project concepts below describe the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419); project-backed chats, editor closure, saved Current checkout drafts and No project execution are implemented; project drafts also support deferred managed-worktree preparation and explicit discovered-checkout reuse.
 
-Integrated behavior and acceptance boundaries are recorded in [Agents acceptance evidence](docs/compatibility/agents-acceptance.md). New manual VoiceOver validation remains pending; the earlier v1 acceptance does not certify the Agents controls.
+Integrated behavior and acceptance boundaries are recorded in [Agents acceptance evidence](docs/compatibility/agents-acceptance.md). The Agents workflow is accepted, including user-confirmed manual VoiceOver validation on 2026-10-29 at `0347eaf4abe355a598752dff63bb72320e425570`; this is separate from the earlier v1 confirmation.
 
 ## Language
 
