@@ -1,0 +1,1 @@
+{"targetDefaults":{"build":{"cache":true,"outputs":["{projectRoot}/dist"]},"typecheck":{"cache":true},"lint":{"cache":true},"package":{"dependsOn":["build"],"cache":false},"smoke":{"dependsOn":["package"],"cache":false}}}

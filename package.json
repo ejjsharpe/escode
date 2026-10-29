@@ -1,0 +1,28 @@
+{
+  "name": "escode-workspace",
+  "private": true,
+  "packageManager": "bun@1.4.4",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "nx dev desktop",
+    "build": "nx build desktop",
+    "typecheck": "nx typecheck desktop",
+    "lint": "nx lint desktop",
+    "test": "nx test desktop",
+    "package": "nx package desktop",
+    "smoke": "nx smoke desktop",
+    "postinstall": "node apps/desktop/node_modules/electron/install.js"
+  },
+  "trustedDependencies": [
+    "electron",
+    "esbuild",
+    "nx"
+  ],
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "nx": "24.0.2",
+    "typescript": "7.0.2"
+  }
+}

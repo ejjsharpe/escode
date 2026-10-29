@@ -1,0 +1,49 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/host/main.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "vp build && node scripts/host.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "vp lint",
+    "test": "vp test run",
+    "package": "electron-builder --mac dir",
+    "smoke": "playwright test"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.9.0",
+    "@stylexjs/stylex": "0.19.1",
+    "monaco-editor": "0.57.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@stylexjs/unplugin": "0.19.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "45.1.0",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "vite-plus": "1.4.0"
+  },
+  "build": {
+    "appId": "dev.escode.desktop",
+    "productName": "escode",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "identity": null,
+      "target": "dir"
+    }
+  }
+}
