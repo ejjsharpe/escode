@@ -169,9 +169,7 @@ app.whenReady().then(() => {
       };
     }
     if (operation === "persist" && args.length === 1) {
-      if (operations.busy)
-        throw Error("File operation is persisting recovery intent. Retry after completion.");
-      return workspace.write(args[0]);
+      return operations.persist(args[0]);
     }
     if (operation === "dirty" && args.length === 1 && typeof args[0] === "string") {
       return (
@@ -280,7 +278,9 @@ app.whenReady().then(() => {
     }
     const requestedRoot = args.shift();
     if (
-      ["file-operation", "file-operation-ack", "create-entry"].includes(String(operation)) &&
+      ["trash-selection", "file-operation", "file-operation-ack", "create-entry"].includes(
+        String(operation),
+      ) &&
       (typeof requestedRoot !== "string" || !projects.has(requestedRoot))
     )
       throw Error("Open and approve this checkout first.");
@@ -293,7 +293,10 @@ app.whenReady().then(() => {
       throw Error("App state is unavailable through project file operations.");
     const identity = project.repository();
     if (removing.has(identity)) throw Error("Worktree removal is in progress. Retry afterward.");
-    if (operation === "file-operation-ack" && !args.length) return operations.ack(project.root);
+    if (operation === "file-operation-ack" && !args.length) {
+      if (mutationOrigin) throw Error("File operation is still delivering results.");
+      return operations.ack(project.root);
+    }
     if (
       operation === "create-entry" &&
       args.length === 3 &&
@@ -339,6 +342,159 @@ app.whenReady().then(() => {
       operations.assertIdle();
       return project.create(parent, name, kind);
     }
+    if (
+      operation === "trash-selection" &&
+      args.length === 1 &&
+      Array.isArray(args[0]) &&
+      args[0].length > 0 &&
+      args[0].length <= 10000 &&
+      args[0].every((path) => typeof path === "string")
+    ) {
+      if (mutationOrigin) throw Error("Another file operation is pending.");
+      mutationOrigin = project.root;
+      try {
+        operations.beginBatch(project.root);
+        const owner = projectSessions.get(identity);
+        const checkOrigin = () => {
+          if (
+            !owner ||
+            projectSessions.get(identity) !== owner ||
+            quitting ||
+            closingProjects.has(identity) ||
+            projects.get(project.root) !== project
+          )
+            throw Error("Originating project closed.");
+        };
+        // Only validated native identities grant authority; hidden selection is still input.
+        const paths = [...new Set(args[0] as string[])];
+        const entries = paths
+          .map((source) => {
+            try {
+              const absolute = resolve(project.root, source);
+              if (
+                isAppState(absolute) ||
+                stateFiles.some((file) =>
+                  affected(
+                    file.normalize("NFC").toLowerCase(),
+                    absolute.normalize("NFC").toLowerCase(),
+                  ),
+                )
+              )
+                throw Error("Protected app state is inside this operation.");
+              return {
+                source,
+                identity: project.operationIdentity(source),
+                directory: statSync(absolute).isDirectory(),
+                error: "",
+              };
+            } catch (error) {
+              return { source, identity: "", directory: false, error: String(error) };
+            }
+          })
+          .filter(
+            (entry, _, all) =>
+              !all.some(
+                (parent) =>
+                  parent !== entry &&
+                  parent.directory &&
+                  !parent.error &&
+                  affected(entry.source, parent.source),
+              ),
+          );
+        const state = await workspace.read();
+        const dirty = state.drafts.filter(
+          (d) => d.root === project.root && entries.some((entry) => affected(d.path, entry.source)),
+        );
+        const answer = await dialog.showMessageBox(window, {
+          message: `Move ${entries.length} item${entries.length === 1 ? "" : "s"} to macOS Trash?`,
+          detail:
+            entries.map((e) => `${project.root}/${e.source}`).join("\n") +
+            `\nDirty descendants (${dirty.length}): ${dirty.map((d) => project.root + "/" + d.path).join(", ") || "None"}\nDisk files can be recovered in Finder Trash.`,
+          buttons: dirty.length
+            ? ["Save and Move to Trash", "Discard and Move to Trash", "Cancel"]
+            : ["Move to Trash", "Cancel"],
+          defaultId: dirty.length ? 2 : 1,
+          cancelId: dirty.length ? 2 : 1,
+        });
+        if (answer.response !== 0 && !(dirty.length && answer.response === 1))
+          return {
+            results: [],
+            saves: [],
+            requiresAck: false,
+            message: "Cancelled; edits retained.",
+          };
+        const results: import("./file-operations").TrashResult[] = [];
+        const saves: import("./file-operations").SavedFile[] = [];
+        for (const entry of entries) {
+          const { source } = entry;
+          try {
+            checkOrigin();
+            if (entry.error) throw Error(entry.error);
+            const check = () => {
+              checkOrigin();
+              if (project.operationIdentity(source) !== entry.identity)
+                throw Error("Source changed after confirmation. Refresh and inspect actual paths.");
+            };
+            check();
+            if (dirty.length && answer.response === 0) {
+              let conflicted = false;
+              for (const d of dirty.filter((d) => affected(d.path, source))) {
+                check();
+                const saved = await operations.save(project, d.path, d.text, d.disk.version, check);
+                if (saved.kind !== "saved") {
+                  results.push({
+                    source,
+                    applied: false,
+                    message: `Save conflict: ${d.path}. Edits retained; resolve the conflict before retrying Trash.`,
+                    conflict: { path: d.path, disk: saved.disk },
+                  });
+                  conflicted = true;
+                  break;
+                }
+                saves.push({ path: d.path, disk: saved.disk });
+                if (saved.persistencePending) {
+                  results.push({
+                    source,
+                    applied: false,
+                    persistencePending: true,
+                    message: saved.message!,
+                  });
+                  conflicted = true;
+                  break;
+                }
+                if (d.path === source) entry.identity = project.operationIdentity(source);
+              }
+              if (conflicted) continue;
+            }
+            const result = await operations.run(project, "trash", source, "", check);
+            // A fully persisted item can release the shared journal for the next item.
+            if (!result.persistencePending) {
+              try {
+                await operations.ack();
+              } catch (error) {
+                result.persistencePending = true;
+                result.message += ` Recovery journal needs retry: ${String(error)}`;
+              }
+            }
+            results.push({ source, ...result });
+          } catch (error) {
+            results.push({ source, applied: false, message: String(error) });
+          }
+        }
+        return {
+          results,
+          saves,
+          requiresAck: operations.hasBatchFacts(project.root),
+          message: [
+            ...saves.map((saved) => `${project.root}/${saved.path}: Saved.`),
+            ...results.map((r) => `${project.root}/${r.source}: ${r.message}`),
+          ].join("\n"),
+        };
+      } finally {
+        operations.releaseEmptyBatch();
+        mutationOrigin = undefined;
+      }
+    }
     if (operation === "save") {
       if (mutationOrigin) throw Error("File operation awaiting confirmation.");
       operations.assertIdle();
@@ -347,18 +503,18 @@ app.whenReady().then(() => {
       operation === "file-operation" &&
       args.length === 3 &&
       args.every((a) => typeof a === "string") &&
-      ["move", "rename", "trash"].includes(args[0] as string)
+      ["move", "rename"].includes(args[0] as string)
     ) {
       if (mutationOrigin) throw Error("Another file operation is pending.");
       mutationOrigin = project.root;
       try {
-        const [action, source, target] = args as ["move" | "rename" | "trash", string, string];
+        const [action, source, target] = args as ["move" | "rename", string, string];
         const kind = action === "rename" ? "move" : action;
         const destination =
           action === "rename" ? project.renameDestination(source, target) : target;
         operations.assertIdle();
         const owner = projectSessions.get(identity);
-        let originalIdentity = project.operationIdentity(source);
+        const originalIdentity = project.operationIdentity(source);
         const check = () => {
           if (
             !owner ||
@@ -381,36 +537,6 @@ app.whenReady().then(() => {
             );
         };
         check();
-        if (kind === "trash") {
-          const state = await workspace.read();
-          const dirty = state.drafts.filter(
-            (d) => d.root === project.root && affected(d.path, source),
-          );
-          const answer = await dialog.showMessageBox(window, {
-            message: "Move 1 item to macOS Trash?",
-            detail: `${project.root}/${source}\nDirty descendants (${dirty.length}): ${dirty.map((d) => d.path).join(", ") || "None"}\nDisk files can be recovered in Finder Trash.`,
-            buttons: dirty.length
-              ? ["Save and Move to Trash", "Discard and Move to Trash", "Cancel"]
-              : ["Move to Trash", "Cancel"],
-            defaultId: dirty.length ? 2 : 1,
-            cancelId: dirty.length ? 2 : 1,
-          });
-          if (answer.response === (dirty.length ? 2 : 1))
-            return { applied: false, message: "Cancelled; edits retained." };
-          if (dirty.length && answer.response === 0) {
-            for (const d of dirty) {
-              check();
-              const saved = await project.save(d.path, d.text, d.disk.version);
-              if (saved.kind !== "saved")
-                throw Error(
-                  `Save conflict: ${d.path}. Trash cancelled; edits retained. Open the file to resolve its save conflict.`,
-                );
-              // Explicit save atomically replaces a file's inode; folders keep their identity.
-              if (d.path === source) originalIdentity = project.operationIdentity(source);
-            }
-          }
-          check();
-        }
         return await operations.run(project, kind, source, destination, check);
       } finally {
         mutationOrigin = undefined;

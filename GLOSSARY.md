@@ -64,9 +64,15 @@ is separate from the active document. Refresh reloads visible directory state. T
 supports empty file/folder creation and basename-only inline Rename through the narrow
 rename/move and macOS Trash preservation gate. Rename/move retains available unsaved
 descendant edits and save-conflict baselines at their new paths. Earlier text undo
-history resets with disclosure; subsequent text undo works.
+history resets with disclosure; subsequent text undo works. Batch Trash confirms the
+actual paths and affected dirty descendants, prunes selected descendants of selected
+folders, and removes available buffers/drafts only for successful native Trash items.
+Failed items retain their available work and report individual outcomes.
 
 **File-operation intent**:
 A durable record of an originating checkout and source/destination object identities,
-retained across a rename/move or Trash filesystem/persistence handoff. Restart reconciles
-available drafts with actual paths; uncertain outcomes retain work and block mutations.
+retained across a rename/move, Trash or Save-before-Trash filesystem/persistence handoff.
+Completed saves carry their disk baseline independently of deletion outcomes, preserving
+available draft text. Completed batch facts protect workspace snapshots until the renderer
+reconciles and durably acknowledges them. Restart reconciles available drafts with actual
+paths and saved baselines; uncertain outcomes retain work and block mutations.

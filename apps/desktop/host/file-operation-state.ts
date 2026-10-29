@@ -1,11 +1,19 @@
 import type { WorkspaceState } from "./workspace";
-import type { Intent } from "./file-operations";
+import type { Intent, SavedFile } from "./file-operations";
 export const affected = (path: string, source: string) =>
   path === source || path.startsWith(source + "/");
 export const moved = (path: string, source: string, destination: string) =>
   affected(path, source) ? destination + path.slice(source.length) : path;
+export function reconcileSave(state: WorkspaceState, root: string, saved: SavedFile) {
+  for (const draft of state.drafts)
+    if (draft.root === root && draft.path === saved.path) draft.disk = saved.disk;
+}
 export function reconcile(state: WorkspaceState, intent: Intent) {
   const { root, source, destination, kind } = intent;
+  if (kind === "save") {
+    if (intent.savedDisk) reconcileSave(state, root, { path: source, disk: intent.savedDisk });
+    return;
+  }
   state.drafts = state.drafts.flatMap((d) =>
     d.root !== root || !affected(d.path, source)
       ? [d]
