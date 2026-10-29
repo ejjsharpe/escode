@@ -2,7 +2,7 @@
 
 Validation on 2026-10-29 for [Complete the v1 acceptance gates](https://github.com/ejjsharpe/escode/issues/19), against [the v1 specification](https://github.com/ejjsharpe/escode/issues/11). The starting revision was `5c00a67b336d765037556f97de51ba054734ca81`.
 
-The twelve functional scenarios below have integrated service and desktop coverage. **VoiceOver validation was deferred at the user's explicit request.** Keyboard automation and native accessibility-tree inspection are evidence of their own checks, not a completed VoiceOver pass. The manual checklist below is the remaining user validation.
+The twelve functional scenarios below have integrated service and desktop coverage. **The user confirmed manual VoiceOver validation passed on 2026-10-29**, completing the previously deferred accessibility gate. This is user-reported manual evidence; the agent's keyboard automation and native accessibility-tree inspection remain separate checks.
 
 Validation passed: all **68 host tests** (including live Codex settings and four-chat concurrency), **19 desktop workflows**, TypeScript and lint. The complete desktop run includes Nx build/package, the StyleX development check and the restricted-PATH packaged workflows. An observed crash-recovery sample acknowledged its draft **425 ms** after typing began.
 
@@ -63,13 +63,13 @@ Host integration tests allow 15 seconds per case for real Git/filesystem subproc
 - The unavailable-state fixture tried to quit after disk replacement but before Save had finished its persistence/status work. The app correctly prevented closing during that operation, leaving the test waiting for an exit. The fixture now waits for completed Save UI before teardown, and resolves close prompts consistently with the other smoke workflows.
 - Project-opening fixtures continued after clicking Open project before asynchronous approval and selection completed. They now wait for the selected project header before issuing IPC, editing another project's file, or restarting; the affected workflows passed three consecutive repetitions.
 
-## Accessibility evidence and remaining manual validation
+## Accessibility evidence and user-confirmed manual validation
 
 `tests/accessibility.spec.ts` navigates two project tabs and sidebar modes using Tab/Enter, edits and saves a file, leaves Monaco using Ctrl+Shift+M, opens its read-only diff, reads the accessible diff viewer with F7 and Escape, retains focus across polling, sends a chat message and answers its exactly scoped input request using the keyboard.
 
-Native macOS accessibility inspection of the packaged app exposed project/view/file toggle states and an `a.txt editor` with its text value. The mechanical rendered UI detector returned no findings. Attempts to access VoiceOver itself returned `Computer Use server error -10005: timeoutReached`; the user then explicitly requested skipping further VoiceOver checks and will validate it separately. No VoiceOver speech/output pass is claimed.
+Native macOS accessibility inspection of the packaged app exposed project/view/file toggle states and an `a.txt editor` with its text value. The mechanical rendered UI detector returned no findings. Attempts to access VoiceOver itself returned `Computer Use server error -10005: timeoutReached`; the user then requested skipping further agent VoiceOver checks and validating it separately. After receiving the checklist below, the user confirmed, “Voice over is fine,” on 2026-10-29 and requested the GitHub issues be updated. This closes the manual acceptance gate on the user's report, without claiming an automated VoiceOver pass or more detailed observations than the user supplied.
 
-With VoiceOver enabled, validate:
+The manual checklist supplied for that validation was:
 
 1. Project and Files / Source Control / Chats navigation announce the correct names, selected state and checkout context without unexpected focus changes.
 2. File text is read and editable; Cmd+S saves; Ctrl+Shift+M allows Tab to leave Monaco and continue through app controls.
@@ -83,4 +83,4 @@ Saved roots without a host approval record remain visible with their available r
 
 ## Limits
 
-This evidence covers one arm64 macOS host and the stated installed tools. Signing, notarization, Gatekeeper distribution, Intel macOS and other OS releases are unverified. Crash recovery before IPC delivery/acknowledgement, machine power loss and arbitrary storage failure have no durability guarantee. Deliberately daemonized descendants outside the owned process group are outside the shutdown guarantee. The previously agreed save/removal race limits remain in force. Historical slice evidence in [desktop.md](desktop.md) retains its original scope; this integrated record supersedes those slices' remaining implementation deferrals, with VoiceOver explicitly left to the user.
+This evidence covers one arm64 macOS host and the stated installed tools. Signing, notarization, Gatekeeper distribution, Intel macOS and other OS releases are unverified. Crash recovery before IPC delivery/acknowledgement, machine power loss and arbitrary storage failure have no durability guarantee. Deliberately daemonized descendants outside the owned process group are outside the shutdown guarantee. The previously agreed save/removal race limits remain in force. Historical slice evidence in [desktop.md](desktop.md) retains its original scope; this integrated record supersedes those slices' remaining implementation deferrals, with the final manual VoiceOver gate completed by the user's confirmation.
