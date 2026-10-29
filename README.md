@@ -10,7 +10,7 @@ The long-term aim is a daily editor that can replace VS Code. The current effort
 
 The canonical scope and decision map are [Define the smallest useful escode](https://github.com/ejjsharpe/escode/issues/1). Child issues hold individual decisions and their resolutions. Native issue dependencies show what can be worked on next.
 
-Monaco is a candidate for editing and diff views. T3 Code is a reference for the Codex workflow; its reuse boundary remains a research question. The application framework and first supported platform are not yet selected.
+The platform, editor, reuse boundary, and local-service architecture are recorded in [Choose the desktop foundation](https://github.com/ejjsharpe/escode/issues/4#issuecomment-6484074577). The decision map indexes supporting research and the remaining behaviour, interaction, and specification decisions.
 
 See [GLOSSARY.md](GLOSSARY.md) for product terminology and [the tracker conventions](docs/agents/issue-tracker.md) for the planning workflow.
 
