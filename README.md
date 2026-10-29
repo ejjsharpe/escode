@@ -20,7 +20,8 @@ See [GLOSSARY.md](GLOSSARY.md) for product terminology and [the tracker conventi
 
 ## Run the desktop slice
 
-`bun install --frozen-lockfile`, then `bun run dev`.
+Install Apple's Command Line Tools (`xcode-select --install`) for the bundled
+filesystem helper, then `bun install --frozen-lockfile` and `bun run dev`.
 
 The desktop app opens one local Git checkout, browses UTF-8 text files in Monaco,
 saves explicitly with Cmd+S and displays read-only staged, unstaged and untracked
@@ -28,6 +29,10 @@ diffs. Dirty buffers remain in memory while navigating. External disk changes
 prompt Compare, Overwrite, Reload or Cancel. Files/diffs are limited to 2 MiB;
 binary files and symbolic links have unavailable states. Git status and selected
 diffs refresh every two seconds.
+
+Saving follows VS Code's practical check-before-save guarantee, using content
+hashes. An unrelated process can still change the file between the last check and
+replacement; cross-process transactional saving is outside this guarantee.
 
 Run `bun run typecheck`, `bun run lint`, `bun run test`, then `bun run build`,
 `bun run package` and `bun run smoke` for Electron checks. See

@@ -1,23 +1,101 @@
-import { test, expect, vi } from "vite-plus/test";
+import { test, expect, vi, afterEach } from "vite-plus/test";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import * as child from "node:child_process";
 import { Project } from "./project";
 import * as fs from "node:fs";
-vi.mock("node:fs", async (original) => ({ ...await original<typeof import("node:fs")>() }));
+vi.mock("node:child_process", async (original) => ({
+  ...(await original<typeof import("node:child_process")>()),
+}));
+const projects: Project[] = [];
+async function openProject(root: string) {
+  const project = await Project.open(root);
+  projects.push(project);
+  return project;
+}
+afterEach(() => {
+  for (const project of projects) project.close();
+  projects.length = 0;
+});
+
+test("the agreed check-before-save policy permits an unrelated write after the final check", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-final-race-"));
+  try {
+    execFileSync("git", ["init", root]);
+    await writeFile(join(root, "a"), "loaded");
+    const project = await openProject(root);
+    const loaded = await project.read("a");
+    const execute = child.execFileSync;
+    let injected = false;
+    vi.spyOn(child, "execFileSync").mockImplementation((...args) => {
+      if (Array.isArray(args[1]) && args[1][0] === "replace") {
+        injected = true;
+        execute(process.execPath, [
+          "-e",
+          "require('node:fs').writeFileSync(process.argv[1], 'external at replacement')",
+          join(root, "a"),
+        ]);
+      }
+      return execute(...args);
+    });
+    const result = await project.save("a", "my buffer", loaded.version);
+    expect(injected).toBe(true);
+    expect(result.kind).toBe("saved");
+    expect(await readFile(join(root, "a"), "utf8")).toBe("my buffer");
+  } finally {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a parent symlink introduced at replacement cannot redirect the save outside the checkout", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-scope-race-"));
+  const outside = await mkdtemp(join(tmpdir(), "escode-outside-"));
+  try {
+    execFileSync("git", ["init", root]);
+    fs.mkdirSync(join(root, "dir"));
+    await writeFile(join(root, "dir/a"), "loaded");
+    await writeFile(join(outside, "a"), "outside");
+    const project = await openProject(root);
+    const loaded = await project.read("dir/a");
+    const execute = child.execFileSync;
+    vi.spyOn(child, "execFileSync").mockImplementation((...args) => {
+      if (Array.isArray(args[1]) && args[1][0] === "replace") {
+        fs.renameSync(join(root, "dir"), join(root, "original"));
+        fs.symlinkSync(outside, join(root, "dir"));
+        const temp = args[1][2].split("/").at(-1)!;
+        fs.renameSync(join(root, "original", temp), join(outside, temp));
+      }
+      return execute(...args);
+    });
+    await expect(project.save("dir/a", "my buffer", loaded.version)).rejects.toThrow();
+    expect(await readFile(join(outside, "a"), "utf8")).toBe("outside");
+  } finally {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
 
 test("an external write during save staging returns a conflict and removes temporary files", async () => {
   const root = await mkdtemp(join(tmpdir(), "escode-race-"));
   try {
     execFileSync("git", ["init", root]);
     await writeFile(join(root, "a"), "loaded");
-    const project = await Project.open(root);
+    const project = await openProject(root);
     const loaded = await project.read("a");
-    const write = fs.writeFileSync;
-    vi.spyOn(fs, "writeFileSync").mockImplementationOnce((...args) => {
-      write(...args);
-      write(join(root, "a"), "external during staging");
+    const execute = child.execFileSync;
+    vi.spyOn(child, "execFileSync").mockImplementation((...args) => {
+      const result = execute(...args);
+      if (Array.isArray(args[1]) && args[1][0] === "stage")
+        execute(process.execPath, [
+          "-e",
+          "require('node:fs').writeFileSync(process.argv[1], 'external during staging')",
+          join(root, "a"),
+        ]);
+      return result;
     });
     const result = await project.save("a", "my buffer", loaded.version);
     expect(result).toEqual({ kind: "conflict", disk: await project.read("a") });
@@ -29,12 +107,174 @@ test("an external write during save staging returns a conflict and removes tempo
   }
 });
 
+test("replacement failures preserve disk and remove the staged file", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-replace-error-"));
+  try {
+    execFileSync("git", ["init", root]);
+    await writeFile(join(root, "a"), "loaded");
+    const project = await openProject(root);
+    const loaded = await project.read("a");
+    const execute = child.execFileSync;
+    vi.spyOn(child, "execFileSync").mockImplementation((...args) => {
+      if (Array.isArray(args[1]) && args[1][0] === "replace") fs.unlinkSync(join(root, args[1][2]));
+      return execute(...args);
+    });
+    await expect(project.save("a", "mine", loaded.version)).rejects.toThrow("ENOENT");
+    expect(await project.read("a")).toEqual(loaded);
+    expect(await project.files()).toEqual([{ path: "a", directory: false }]);
+  } finally {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a staging-name collision preserves the pre-existing file", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-collision-"));
+  try {
+    execFileSync("git", ["init", root]);
+    await writeFile(join(root, "a"), "loaded");
+    const project = await openProject(root);
+    const loaded = await project.read("a");
+    const execute = child.execFileSync;
+    let collision = "";
+    vi.spyOn(child, "execFileSync").mockImplementation((...args) => {
+      if (Array.isArray(args[1]) && args[1][0] === "stage") {
+        collision = join(root, args[1][2]);
+        fs.writeFileSync(collision, "external file");
+      }
+      return execute(...args);
+    });
+    await expect(project.save("a", "mine", loaded.version)).rejects.toThrow("EEXIST");
+    expect(collision).not.toBe("");
+    expect(await readFile(collision, "utf8")).toBe("external file");
+    expect(await project.read("a")).toEqual(loaded);
+  } finally {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a partial staging failure removes its own temporary file and preserves disk", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-stage-error-"));
+  try {
+    execFileSync("git", ["init", root]);
+    await writeFile(join(root, "a"), "loaded");
+    const project = await openProject(root);
+    const loaded = await project.read("a");
+    const execute = child.execFileSync;
+    vi.spyOn(child, "execFileSync").mockImplementation((...args) => {
+      if (Array.isArray(args[1]) && args[1][0] === "stage")
+        return execute(args[0], args[1], { ...args[2], input: "x".repeat(2 * 1024 * 1024 + 1) });
+      return execute(...args);
+    });
+    await expect(project.save("a", "mine", loaded.version)).rejects.toThrow("2 MiB");
+    expect(await project.read("a")).toEqual(loaded);
+    expect(await project.files()).toEqual([{ path: "a", directory: false }]);
+  } finally {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("saves preserve mode and extended attributes and refuse hard-linked files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-metadata-"));
+  try {
+    execFileSync("git", ["init", root]);
+    const path = join(root, "a");
+    await writeFile(path, "loaded");
+    fs.chmodSync(path, 0o751);
+    execFileSync("/usr/bin/xattr", ["-w", "com.escode.test", "retained", path]);
+    const project = await openProject(root);
+    const loaded = await project.read("a");
+    expect((await project.save("a", "mine", loaded.version)).kind).toBe("saved");
+    expect(fs.statSync(path).mode & 0o777).toBe(0o751);
+    expect(
+      execFileSync("/usr/bin/xattr", ["-p", "com.escode.test", path], { encoding: "utf8" }).trim(),
+    ).toBe("retained");
+    fs.linkSync(path, join(root, "alias"));
+    const current = await project.read("a");
+    await expect(project.save("a", "break links", current.version)).rejects.toThrow("hard links");
+    expect(await readFile(path, "utf8")).toBe("mine");
+    expect(fs.statSync(path).ino).toBe(fs.statSync(join(root, "alias")).ino);
+    expect((await project.files()).map((file) => file.path)).toEqual(["a", "alias"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("reads and browsing reject symlinks and special files and preserve literal names", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-read-scope-"));
+  const outside = await mkdtemp(join(tmpdir(), "escode-read-outside-"));
+  try {
+    execFileSync("git", ["init", root]);
+    await writeFile(join(outside, "secret"), "outside");
+    fs.symlinkSync(outside, join(root, "link"));
+    execFileSync("/usr/bin/mkfifo", [join(root, "pipe")]);
+    const name = "literal\n\tfile";
+    await writeFile(join(root, name), "text");
+    const project = await openProject(root);
+    await expect(project.read("link/secret")).rejects.toThrow();
+    await expect(project.files("link")).rejects.toThrow();
+    await expect(project.read("pipe")).rejects.toThrow("not a regular file");
+    await expect(project.read(".GIT/config")).rejects.toThrow("Invalid project path");
+    expect(await project.files()).toEqual([{ path: name, directory: false }]);
+    expect((await project.read(name)).text).toBe("text");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("a replaced checkout is unavailable for file and Git operations", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-root-"));
+  const moved = root + "-moved";
+  try {
+    execFileSync("git", ["init", root]);
+    await writeFile(join(root, "a"), "loaded");
+    const project = await openProject(root);
+    const loaded = await project.read("a");
+    fs.renameSync(root, moved);
+    fs.mkdirSync(root);
+    await writeFile(join(root, "a"), "replacement checkout");
+    for (const operation of [
+      () => project.files(),
+      () => project.read("a"),
+      () => project.save("a", "mine", loaded.version),
+      () => project.status(),
+    ])
+      await expect(operation()).rejects.toThrow("Checkout directory was replaced");
+    expect(await readFile(join(root, "a"), "utf8")).toBe("replacement checkout");
+    expect(await readFile(join(moved, "a"), "utf8")).toBe("loaded");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(moved, { recursive: true, force: true });
+  }
+});
+
+test("Git stays in the opened checkout when external configuration changes its work tree", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-git-scope-"));
+  const outside = await mkdtemp(join(tmpdir(), "escode-git-outside-"));
+  try {
+    execFileSync("git", ["init", root]);
+    await writeFile(join(root, "inside"), "checkout");
+    await writeFile(join(outside, "outside"), "other directory");
+    fs.mkdirSync(join(root, "subdir"));
+    await expect(Project.open(join(root, "subdir"))).rejects.toThrow("checkout root");
+    const project = await openProject(root);
+    execFileSync("git", ["-C", root, "config", "core.worktree", outside]);
+    expect((await project.status()).changes).toEqual([{ path: "inside", area: "untracked" }]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
 test("invalid binary editor content fails before modifying disk", async () => {
   const root = await mkdtemp(join(tmpdir(), "escode-invalid-"));
   try {
     execFileSync("git", ["init", root]);
     await writeFile(join(root, "a"), "original");
-    const project = await Project.open(root);
+    const project = await openProject(root);
     const loaded = await project.read("a");
     await expect(project.save("a", "contains\0nul", loaded.version)).rejects.toThrow("binary");
     expect(await project.read("a")).toEqual(loaded);
@@ -47,7 +287,7 @@ test("save detects external changes, preserves disk, and requires the compared v
   try {
     execFileSync("git", ["init", root]);
     await writeFile(join(root, "a.txt"), "one");
-    const project = await Project.open(root);
+    const project = await openProject(root);
     const loaded = await project.read("a.txt");
     await writeFile(join(root, "a.txt"), "external");
     const conflict = await project.save("a.txt", "mine", loaded.version);
@@ -78,7 +318,7 @@ test("Git diffs use HEAD, index and disk and refresh after external changes", as
     git("add", ".");
     await writeFile(join(root, "a.txt"), "disk\n");
     await writeFile(join(root, "new.txt"), "new\n");
-    const project = await Project.open(root);
+    const project = await openProject(root);
     expect((await project.status()).changes).toEqual(
       expect.arrayContaining([
         { path: "a.txt", area: "staged" },
@@ -117,7 +357,7 @@ test("unborn HEAD and literal wildcard filenames have correct baselines", async 
     await writeFile(join(root, "a*.txt"), "literal");
     await writeFile(join(root, "ab.txt"), "other");
     execFileSync("git", ["-C", root, "add", "."]);
-    const project = await Project.open(root);
+    const project = await openProject(root);
     expect(await project.diff({ path: "a*.txt", area: "staged" })).toEqual({
       original: "",
       modified: "literal",
@@ -136,7 +376,7 @@ test("concurrent saves recheck versions and failed saves retain the last disk co
   try {
     execFileSync("git", ["init", root]);
     await writeFile(join(root, "a"), "start");
-    const project = await Project.open(root);
+    const project = await openProject(root);
     const loaded = await project.read("a");
     const results = await Promise.all([
       project.save("a", "first", loaded.version),

@@ -48,6 +48,7 @@ app.whenReady().then(() => {
     return toolStatus();
   });
   let project: Project | undefined;
+  app.once("will-quit", () => project?.close());
   ipcMain.handle("project", async (event, operation: unknown, ...args: unknown[]) => {
     if (
       event.sender !== window.webContents ||
@@ -59,7 +60,10 @@ app.whenReady().then(() => {
       const result = await dialog.showOpenDialog(window, { properties: ["openDirectory"] });
       if (result.canceled) return null;
       if (project) throw Error("One project is supported in this slice. Restart to open another.");
-      project = await Project.open(result.filePaths[0]);
+      project = await Project.open(
+        result.filePaths[0],
+        join(app.isPackaged ? process.resourcesPath : __dirname, "filesystem"),
+      );
       return project.status();
     }
     if (!project) throw Error("Open a project first.");

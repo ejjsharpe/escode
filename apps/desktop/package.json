@@ -9,7 +9,7 @@
     "build": "vp build && node scripts/host.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "vp lint",
-    "test": "vp test run",
+    "test": "node scripts/filesystem.mjs && vp test run",
     "package": "electron-builder --mac dir",
     "smoke": "playwright test"
   },
@@ -39,7 +39,14 @@
     },
     "files": [
       "dist/**/*",
+      "!dist/host/filesystem",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/host/filesystem",
+        "to": "filesystem"
+      }
     ],
     "mac": {
       "identity": null,

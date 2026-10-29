@@ -15,3 +15,6 @@ The checkout through which a project was opened, shown by Files and Source Contr
 
 **Managed worktree**:
 A separate working copy created by escode for a project. It can host multiple chats and remains available after those chats finish.
+
+**Save conflict**:
+A difference detected before saving between a file's loaded disk version and its current disk version. The user's edits remain available while they compare, explicitly overwrite, reload from disk, or cancel.

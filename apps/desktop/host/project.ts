@@ -1,61 +1,101 @@
 import { execFileSync } from "node:child_process";
-import {
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  lstatSync,
-  writeFileSync,
-  renameSync,
-  unlinkSync,
-  statSync,
-} from "node:fs";
+import { realpathSync, openSync, closeSync, fstatSync, constants } from "node:fs";
 import { resolve, relative, isAbsolute, dirname, join } from "node:path";
+import { getSystemErrorName } from "node:util";
 import { findExecutable } from "./tools";
 import { createHash, randomUUID } from "node:crypto";
+// macOS O_NOFOLLOW_ANY rejects symlinks in every path component.
+const directoryFlags = constants.O_RDONLY | constants.O_DIRECTORY | 0x20000000;
 export const limit = 2 * 1024 * 1024;
 export type Document = { text: string; version: string };
 export type Change = { path: string; area: "staged" | "unstaged" | "untracked" };
 export type SaveResult = { kind: "saved"; disk: Document } | { kind: "conflict"; disk: Document };
 export class Project {
+  private directory: number | undefined;
   private constructor(
     readonly root: string,
     private readonly executable: string,
-  ) {}
-  static async open(path: string) {
+    private readonly helper: string,
+    private readonly identity: { dev: number; ino: number },
+    directory: number,
+  ) {
+    this.directory = directory;
+  }
+  static async open(path: string, helper = resolve("dist/host/filesystem")) {
     const root = realpathSync(path);
     const executable = await findExecutable("git");
-    const top = execFileSync(executable, ["-C", root, "rev-parse", "--show-toplevel"], {
-      encoding: "utf8",
-    }).trim();
-    if (realpathSync(top) !== root) throw Error("Choose the repository checkout root.");
-    return new Project(root, executable);
+    const fd = openSync(root, directoryFlags);
+    try {
+      const project = new Project(root, executable, helper, fstatSync(fd), fd);
+      const top = project
+        .io(["git", executable, "rev-parse", "--show-toplevel"])
+        .toString("utf8")
+        .trim();
+      if (realpathSync(top) !== root) throw Error("Choose the repository checkout root.");
+      return project;
+    } catch (error) {
+      closeSync(fd);
+      throw error;
+    }
+  }
+  close() {
+    if (this.directory !== undefined) closeSync(this.directory);
+    this.directory = undefined;
+  }
+  private io(args: string[], input?: string) {
+    if (this.directory === undefined) throw Error("Project is closed.");
+    const fd = openSync(this.root, directoryFlags);
+    try {
+      const identity = fstatSync(fd);
+      if (identity.dev !== this.identity.dev || identity.ino !== this.identity.ino)
+        throw Error("Checkout directory was replaced. Reopen the project.");
+      try {
+        return execFileSync(this.helper, args, {
+          input,
+          maxBuffer: 16 * 1024 * 1024,
+          stdio: ["pipe", "pipe", "pipe", this.directory],
+        });
+      } catch (error) {
+        const stderr = (error as { stderr?: Buffer }).stderr?.toString();
+        if (!stderr || args[0] === "git") throw error;
+        const number = Number(stderr.split(":", 1)[0]);
+        const code = number > 0 ? getSystemErrorName(-number) : undefined;
+        throw Object.assign(
+          Error((code ? code + ": " : "") + stderr.slice(stderr.indexOf(":") + 1).trim()),
+          { code },
+        );
+      }
+    } finally {
+      closeSync(fd);
+    }
   }
   private git(args: string[]) {
-    return execFileSync(this.executable, ["--literal-pathspecs", "-C", this.root, ...args], {
-      maxBuffer: 16 * 1024 * 1024,
-    });
+    return this.io(["git", this.executable, "--literal-pathspecs", "--work-tree=.", ...args]);
   }
   private path(path: string) {
     if (
       typeof path !== "string" ||
       !path ||
       isAbsolute(path) ||
-      path.split(/[\\/]/).includes(".git")
+      path.includes("\0") ||
+      path.split("/").some((part) => part === ".." || part.toLowerCase() === ".git")
     )
       throw Error("Invalid project path");
     const full = resolve(this.root, path);
     const rel = relative(this.root, full);
     if (rel.startsWith("../") || isAbsolute(rel) || !rel) throw Error("Path outside checkout");
-    const real = realpathSync(full);
-    if (real !== full || lstatSync(full).isSymbolicLink())
-      throw Error("Symbolic links are unavailable");
-    return full;
+    return rel;
   }
   async files(path = ""): Promise<{ path: string; directory: boolean }[]> {
-    const full = path ? this.path(path) : this.root;
-    return readdirSync(full, { withFileTypes: true })
-      .filter((e) => e.name !== ".git" && !e.isSymbolicLink())
-      .map((e) => ({ path: path ? path + "/" + e.name : e.name, directory: e.isDirectory() }))
+    const scoped = path ? this.path(path) : ".";
+    return this.io(["list", scoped])
+      .toString("utf8")
+      .split("\0")
+      .filter(Boolean)
+      .map((entry) => ({
+        path: path ? path + "/" + entry.slice(1) : entry.slice(1),
+        directory: entry[0] === "d",
+      }))
       .sort((a, b) => Number(b.directory) - Number(a.directory) || a.path.localeCompare(b.path));
   }
   private document(bytes: Buffer): Document {
@@ -65,9 +105,7 @@ export class Project {
     return { text, version: createHash("sha256").update(bytes).digest("hex") };
   }
   private readDisk(path: string) {
-    const full = this.path(path);
-    if (statSync(full).size > limit) throw Error("Text unavailable: file exceeds 2 MiB.");
-    return this.document(readFileSync(full));
+    return this.document(this.io(["read", this.path(path)]));
   }
   async read(path: string) {
     return this.readDisk(path);
@@ -76,24 +114,22 @@ export class Project {
     if (typeof text !== "string" || Buffer.byteLength(text) > limit || typeof version !== "string")
       throw Error("Invalid save");
     const saved = this.document(Buffer.from(text));
-    const full = this.path(path);
+    const scoped = this.path(path);
     const disk = this.readDisk(path);
     if (disk.version !== version) return { kind: "conflict", disk };
-    const temp = join(dirname(full), ".escode-" + randomUUID());
+    const temp = join(dirname(scoped), ".escode-" + randomUUID());
+    let staged = false;
     try {
-      writeFileSync(temp, text, { flag: "wx", mode: statSync(full).mode });
+      this.io(["stage", scoped, temp], text);
+      staged = true;
       const current = this.readDisk(path);
       if (current.version !== version) return { kind: "conflict", disk: current };
-      // shortcut: portable filesystems lack compare-and-swap rename; an external writer
-      // can still race the final check/rename. Revisit with platform coordination.
-      renameSync(temp, full);
+      // shortcut: VS Code's check-before-save guarantee accepts an unrelated writer
+      // between this check and replacement; upgrade only if the save policy changes.
+      this.io(["replace", scoped, temp]);
       return { kind: "saved", disk: saved };
     } finally {
-      try {
-        unlinkSync(temp);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
+      if (staged) this.io(["remove", temp]);
     }
   }
   async status() {
@@ -128,8 +164,7 @@ export class Project {
     if (!["staged", "unstaged", "untracked"].includes(change.area))
       throw Error("Invalid diff area");
     // Validate lexical scope even when a deleted path no longer exists.
-    if (isAbsolute(change.path) || change.path.split("/").some((p) => p === ".." || p === ".git"))
-      throw Error("Invalid diff path");
+    this.path(change.path);
     const blob = (ref: string) => {
       try {
         this.git(["rev-parse", "--verify", ref]);

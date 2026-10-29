@@ -5,6 +5,9 @@ This is the implementation slice for [Prove packaged desktop launch and installe
 ## Run
 
 Use Bun 1.4.4 and Node 26.13.0 (the tested tooling runtime).
+Apple's Command Line Tools (`xcode-select --install`) are needed to compile the
+small macOS filesystem helper. The packaged app includes that helper and does
+not need a compiler or shell-installed Node to save files.
 
 - `bun install --frozen-lockfile`
 - `bun run dev`
@@ -64,11 +67,39 @@ operations currently run synchronously in the host; very large repository status
 may pause the UI. Dirty buffers are retained only for the process lifetime;
 crash recovery and close/quit prompts belong to later v1 slices.
 
-Saving stages a sibling file, rechecks disk contents, then renames atomically.
-Concurrent app saves cannot interleave the final synchronous check/rename.
-Portable Node filesystem APIs do not provide compare-and-swap replacement:
-an unrelated external process can still write between that final check and rename.
-This residual race is not claimed as solved; issue 13 must remain open until its
-required filesystem race guarantee is settled. Rename also replaces inode metadata
-other than mode; hard-link relationships and extended attributes are not preserved.
+Saving stages and flushes a sibling file, rechecks disk content hashes, then
+renames atomically. Concurrent app saves are serialized. The agreed save policy
+for issue 13 follows VS Code's practical check-before-save guarantee: detected
+external changes require Compare, explicit Overwrite, Reload or Cancel. Another
+process can still write between the final check and replacement. This interval
+is explicitly accepted; no cross-process transaction or retained disk-version
+history is promised. A deterministic test places a separate process's write in
+that interval and documents the accepted outcome. The earlier staging race test
+continues to require a conflict and preserve external disk contents.
+
+This policy was explicitly chosen on 2026-10-29 after reviewing VS Code's
+[separate validation and write](https://github.com/microsoft/vscode/blob/a48dd23e2ac513740bd36066ae4de756337bba20/src/vs/platform/files/common/fileService.ts#L383-L536)
+and [temporary-file replacement](https://github.com/microsoft/vscode/blob/a48dd23e2ac513740bd36066ae4de756337bba20/src/vs/platform/files/node/diskFileSystemProvider.ts#L291-L324).
+The content-hash check detects same-length edits as well.
+
+The host retains the opened checkout's directory descriptor and rejects a
+replaced root. The bundled helper uses macOS `openat`, `renameatx_np` and
+`unlinkat` with kernel-enforced no-symlink and beneath-checkout resolution.
+Git starts from that same directory descriptor with an explicit work-tree scope,
+so an external `core.worktree` configuration change cannot redirect it.
+A last-moment parent symlink
+cannot redirect reads, staging, replacement or cleanup outside the checkout.
+Mode, ACLs and extended attributes are copied to staged files; saving hard-linked
+files is refused with an explanation. Service tests cover mode/xattr preservation,
+hard-link refusal, root replacement, symlinks, special files, bounded reads,
+replacement errors, temporary-name collisions, partial staging failures and cleanup.
+Native APIs are verified on the test host above;
+other macOS releases remain unverified and unsupported operations fail closed.
 No VoiceOver/manual accessibility certification is claimed.
+
+Latest validation: TypeScript, lint, all 16 host tests, native compiler warnings
+and static analysis, production build, macOS packaging, packaged tool discovery,
+and both packaged/unpackaged editor workflows passed. The packaged workflows
+run with `PATH=/usr/bin:/bin`. The aggregate `bun run smoke` also attempted the
+development hot-reload check, which could not bind port 5173 because an existing
+development server was using it; that server was left running.
