@@ -12,7 +12,7 @@ The long-term aim is a daily editor that can replace VS Code. The v1 workflow is
 
 The accepted baseline is [Specification: smallest useful escode v1](https://github.com/ejjsharpe/escode/issues/11), planned through the completed [Define the smallest useful escode](https://github.com/ejjsharpe/escode/issues/1) map.
 
-The completed [Specify the shared Agents view](https://github.com/ejjsharpe/escode/issues/20) map records the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419): a permanent app-wide Agents tab alongside project-local Chats, shared conversations across both views, and No project chats. The amendment reconciles the behaviour and approved layout with the baseline and defines fourteen implementation acceptance scenarios. Project-backed chats and saved context-editable Current checkout drafts are implemented in Agents. First Send binds the draft; No project chats allocate distinct persistent scratch folders on first Send. Deferred worktree preparation remains a later slice. Closing a project editor retains its chats and live requests in Agents; reopening restores its editor context. [Existing-chat evidence](docs/compatibility/agents-existing-chats.md) and [project-draft evidence](docs/compatibility/project-drafts.md) and [scratch-chat evidence](docs/compatibility/scratch-chats.md) record the bounded implementation checks. Child issues retain the decisions and their resolutions.
+The completed [Specify the shared Agents view](https://github.com/ejjsharpe/escode/issues/20) map records the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419): a permanent app-wide Agents tab alongside project-local Chats, shared conversations across both views, and No project chats. The amendment reconciles the behaviour and approved layout with the baseline and defines fourteen implementation acceptance scenarios. Project-backed chats and saved context-editable Current checkout drafts are implemented in Agents. First Send binds the draft; No project chats allocate distinct persistent scratch folders on first Send. Project drafts can also retain a displayed local base for deferred managed-worktree creation or explicitly reuse a discovered checkout; first Send prepares resources before provider startup. Closing a project editor retains its chats and live requests in Agents; reopening restores its editor context. [Existing-chat evidence](docs/compatibility/agents-existing-chats.md) and [project-draft evidence](docs/compatibility/project-drafts.md) and [scratch-chat evidence](docs/compatibility/scratch-chats.md) and [deferred-worktree evidence](docs/compatibility/worktree-drafts.md) record the bounded implementation checks. Child issues retain the decisions and their resolutions.
 
 The selected foundation is macOS, Electron, React, TypeScript, and Monaco, using installed Git and Codex directly. T3 Code remains a workflow reference.
 
@@ -69,7 +69,10 @@ of a Git-discovered project worktree. Creation shows a resolved local base commi
 uses committed files only and preserves original local/unsaved edits. Branches and
 absolute paths can be copied; setup, commits and integration stay external.
 Worktrees live under Electron user data, separated by repository identity. Failed
-creation reports possible leftovers and retries always reserve a fresh destination.
+creation reports possible leftovers. Project drafts durably reserve their branch/path
+before Git creation; incomplete reservations remain attached and are never silently
+replaced on Retry. The older immediate-creation action reserves a fresh destination
+for each explicit attempt.
 
 Unsaved file buffers are persisted as local recovery drafts. Closing files, projects
 or the app offers Save/Discard/Cancel. Closing a project editor leaves chat work running; quitting with active work requires Stop and Close.

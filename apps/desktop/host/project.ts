@@ -297,7 +297,7 @@ export class Project {
     if (!bases.some((b) => b.ref === defaultRef)) defaultRef = "HEAD";
     return { bases, defaultRef, checkouts };
   }
-  createWorktree(managedRoot: string, ref: string, commit: string) {
+  reserveWorktree(managedRoot: string, ref: string, commit: string) {
     const base = this.worktreeOptions().bases.find((b) => b.ref === ref);
     if (!base || base.commit !== commit)
       throw Error(
@@ -337,7 +337,19 @@ export class Project {
     const container = mkdtempSync(join(parent, "worktree-"));
     const root = join(container, "checkout");
     const branch = "escode/" + randomUUID().slice(0, 12);
+    return { root, branch, commit };
+  }
+  createWorktree(
+    managedRoot: string,
+    ref: string,
+    commit: string,
+    reservation = this.reserveWorktree(managedRoot, ref, commit),
+  ) {
+    const { root, branch } = reservation;
+    const container = dirname(root);
     try {
+      const base = this.worktreeOptions().bases.find((b) => b.ref === ref);
+      if (!base || base.commit !== commit) throw Error("Base is missing or changed. Choose again.");
       // Git accepts an existing empty path, so reserve it exclusively ourselves.
       mkdirSync(root, { mode: 0o700 });
       writeFileSync(

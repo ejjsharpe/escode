@@ -511,6 +511,32 @@ app.whenReady().then(() => {
         target === null ? "" : await currentTarget(target),
       );
     }
+    if (
+      root !== null &&
+      operation === "execution" &&
+      args.length === 4 &&
+      args.every((a) => typeof a === "string")
+    ) {
+      const [id, mode, value, commit] = args as string[];
+      const saved = await store.get(root, id);
+      const source = saved.worktree?.source ?? saved.checkout;
+      const project = await checkout(source);
+      requireOpen();
+      const options = project.worktreeOptions();
+      if (project.repository() !== root) throw Error("Wrong project checkout.");
+      if (mode === "new") {
+        if (!options.bases.some((b) => b.ref === value && b.commit === commit))
+          throw Error("Base is missing or changed. Refresh and choose again.");
+        return chats.context(root, id, root, source, { source, ref: value, commit });
+      }
+      if (mode === "reuse" && options.checkouts.includes(value)) {
+        const target = await checkout(value);
+        requireOpen();
+        if (target.repository() !== root) throw Error("Wrong project checkout.");
+        return chats.context(root, id, root, target.root);
+      }
+      throw Error("Choose a Git-discovered worktree explicitly.");
+    }
     if (root !== null && operation === "create" && args.length === 1) {
       const target = await checkout(args[0]);
       requireOpen();
@@ -534,18 +560,44 @@ app.whenReady().then(() => {
     if (args.length === 2 && typeof value === "string" && value.length <= 100000) {
       if (operation === "draft") return chats.draft(root, id, value);
       if (operation === "send")
-        return chats.send(root, id, value, async (chat) => {
-          if (chat.project === null) {
+        return chats.send(
+          root,
+          id,
+          value,
+          async (chat) => {
+            if (chat.project === null) {
+              requireOpen();
+              return;
+            }
+            const target = await checkout(chat.checkout);
             requireOpen();
-            return;
-          }
-          const target = await checkout(chat.checkout);
-          requireOpen();
-          if (target.repository() !== root || !target.validateRepository().includes(target.root))
-            throw Error(
-              "Saved checkout is unavailable or no longer belongs to this project. Prompt retained; restore this exact path and Retry.",
+            if (target.repository() !== root || !target.validateRepository().includes(target.root))
+              throw Error(
+                "Saved checkout is unavailable or no longer belongs to this project. Prompt retained; restore this exact path and Retry.",
+              );
+          },
+          async (chat) => {
+            if (!chat.worktree) return chat;
+            if (chat.worktree.reservation) {
+              store.validateWorktree(chat);
+              return chat;
+            }
+            const source = await checkout(chat.worktree.source);
+            requireOpen();
+            if (source.repository() !== root) throw Error("Wrong project checkout.");
+            const prepared = await store.prepareWorktree(
+              chat,
+              source,
+              join(app.getPath("userData"), "worktrees"),
             );
-        });
+            requireOpen();
+            const target = await checkout(prepared.checkout);
+            requireOpen();
+            if (target.repository() !== root || !target.validateRepository().includes(target.root))
+              throw Error("Prepared checkout is no longer registered with this project.");
+            return prepared;
+          },
+        );
     }
     if (
       operation === "answer" &&

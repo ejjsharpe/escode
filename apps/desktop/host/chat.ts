@@ -1,11 +1,25 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { accessSync, constants, lstatSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { Project } from "./project";
 import { randomUUID } from "node:crypto";
 export type SavedChat = {
   id: string;
   project: string | null;
   checkout: string;
+  worktree?: {
+    ref: string;
+    commit: string;
+    source: string;
+    reservation?: {
+      root: string;
+      branch: string;
+      commit: string;
+      dev?: number;
+      ino?: number;
+      error?: string | null;
+    };
+  };
   scratch?: { path: string; dev?: number; ino?: number };
   threadId: string | null;
   hasSent?: boolean;
@@ -82,6 +96,7 @@ export class Chats {
           c.project === project &&
           c.checkout === checkout &&
           !c.draft &&
+          !c.worktree &&
           !c.initialSend,
       );
       if (empty) return empty;
@@ -100,14 +115,85 @@ export class Chats {
       return chat;
     });
   }
-  context(project: string | null, id: string, target: string | null, checkout: string) {
+  context(
+    project: string | null,
+    id: string,
+    target: string | null,
+    checkout: string,
+    worktree?: SavedChat["worktree"],
+  ) {
     return this.change((chats) => {
       const chat = chats.find((c) => c.id === id && c.project === project);
-      if (!chat || chat.phase !== "draft" || chat.scratch)
+      if (!chat || chat.phase !== "draft" || chat.scratch || chat.worktree?.reservation)
         throw Error("Only an unsent draft without prepared resources can change context.");
-      Object.assign(chat, { project: target, checkout, initialSend: undefined });
+      Object.assign(chat, { project: target, checkout, worktree, initialSend: undefined });
       return chat;
     });
+  }
+  async prepareWorktree(chat: Readonly<SavedChat>, project: Project, managedRoot: string) {
+    const choice = chat.worktree;
+    if (!choice || choice.reservation) {
+      this.validateWorktree(chat);
+      return chat;
+    }
+    const reservation = project.reserveWorktree(managedRoot, choice.ref, choice.commit);
+    try {
+      // Persist before Git mutation: an interrupted preparation is never silently repeated.
+      await this.update(chat.project, chat.id, {
+        checkout: reservation.root,
+        worktree: { ...choice, reservation },
+      });
+      const result = project.createWorktree(managedRoot, choice.ref, choice.commit, reservation);
+      const identity = result.error
+        ? undefined
+        : project
+            .managedWorktrees(managedRoot)
+            .find((record) => record.root === result.root && record.branch === result.branch);
+      if (!result.error && !identity) throw Error("Managed ownership record is missing.");
+      await this.update(chat.project, chat.id, {
+        worktree: {
+          ...choice,
+          reservation: {
+            ...result,
+            dev: identity?.dev,
+            ino: identity?.ino,
+          },
+        },
+      });
+    } catch (error) {
+      throw Error(
+        `Worktree preparation incomplete at ${reservation.root}; possible retained branch ${reservation.branch}. Resources were not replaced. ${String(error)}`,
+      );
+    }
+    const prepared = await this.get(chat.project, chat.id);
+    this.validateWorktree(prepared);
+    return Object.freeze(prepared);
+  }
+  validateWorktree(chat: Readonly<SavedChat>) {
+    const reserved = chat.worktree?.reservation;
+    if (!reserved) {
+      if (chat.worktree)
+        throw Error(
+          "The selected managed worktree has not been prepared. No provider can start in its source checkout.",
+        );
+      return;
+    }
+    try {
+      const identity = lstatSync(reserved.root);
+      if (
+        reserved.error ||
+        chat.checkout !== reserved.root ||
+        !identity.isDirectory() ||
+        identity.dev !== reserved.dev ||
+        identity.ino !== reserved.ino ||
+        realpathSync(reserved.root) !== reserved.root
+      )
+        throw Error("Incomplete or changed directory");
+    } catch {
+      throw Error(
+        `Worktree preparation unavailable at ${reserved.root}; retained branch ${reserved.branch}. ${reserved.error ?? "Preparation or directory identity is uncertain."} Restore and inspect the original resources externally; Retry never replaces or reconstructs them.`,
+      );
+    }
   }
   validateScratch(chat: Readonly<SavedChat>) {
     if (chat.project !== null) return;
@@ -181,6 +267,7 @@ export class Chats {
         | "initialSend"
         | "checkout"
         | "scratch"
+        | "worktree"
       >
     >,
   ) {

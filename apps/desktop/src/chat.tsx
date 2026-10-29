@@ -1,3 +1,4 @@
+import { DraftWorktreeChoices, CheckoutBranch } from "./worktrees";
 import { useProjectChats } from "./chat-state";
 import { memory, persist } from "./workspace";
 import { compareChats } from "./chat-order";
@@ -15,6 +16,14 @@ export interface ChatBridge {
     project: string | null,
     id: string,
     target: string | null,
+  ): Promise<SavedChat>;
+  (
+    operation: "execution",
+    project: string,
+    id: string,
+    mode: "new" | "reuse",
+    value: string,
+    commit: string,
   ): Promise<SavedChat>;
   (operation: "list", project: string | null): Promise<SavedChat[]>;
   (operation: "create", project: string, checkout: string): Promise<SavedChat>;
@@ -232,12 +241,21 @@ export function ChatView({
               <p>{project?.split("/").at(-1) ?? "No project"}</p>
             </div>
             <p className="directory">
-              {project === null ? "Scratch folder: " : "Checkout: "}
+              {project === null
+                ? "Scratch folder: "
+                : record?.worktree && !record.worktree.reservation
+                  ? "Source checkout: "
+                  : "Checkout: "}
               {record?.checkout || "Allocated on first Send"}
             </p>
             {record?.checkout && chats.filter((c) => c.checkout === record.checkout).length > 1 && (
               <p>These chats share files in this checkout. Their edits can interact.</p>
             )}
+            {project !== null &&
+              record?.checkout &&
+              (!record.worktree || record.worktree.reservation) && (
+                <CheckoutBranch root={record.checkout} />
+              )}
             <div className="chat-actions">
               <Button
                 disabled={working || snapshot?.busy}
@@ -326,7 +344,7 @@ export function ChatView({
                 void store.send(selected);
               }}
             >
-              {unsent && !record?.scratch && (
+              {unsent && !record?.scratch && !record?.worktree?.reservation && (
                 <label>
                   Project context
                   <select
@@ -354,6 +372,60 @@ export function ChatView({
                     </Button>
                   )}
                 </label>
+              )}
+              {record && project !== null && unsent && !record.worktree?.reservation && (
+                <DraftWorktreeChoices
+                  key={record.id + record.checkout}
+                  chat={record}
+                  busy={working}
+                  choose={(mode, value, commit) =>
+                    run(async () => {
+                      await window.escode.chat("execution", project, selected, mode, value, commit);
+                      await store.load();
+                    })
+                  }
+                />
+              )}
+              {record?.worktree && !record.worktree.reservation && (
+                <p>
+                  Local base: {record.worktree.ref} · <code>{record.worktree.commit}</code>
+                  {!record.worktree.reservation &&
+                    " · New managed branch and path allocated on first Send"}
+                </p>
+              )}
+              {record?.worktree?.reservation && (
+                <details open={!!record.worktree.reservation.error}>
+                  <summary>Prepared worktree details</summary>
+                  <p>
+                    Local base: {record.worktree.ref} · <code>{record.worktree.commit}</code>
+                  </p>
+                  <p>
+                    Retained branch: <code>{record.worktree.reservation.branch}</code>
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        void run(() =>
+                          navigator.clipboard.writeText(record.worktree!.reservation!.branch),
+                        )
+                      }
+                    >
+                      Copy branch
+                    </Button>
+                  </p>
+                  {record.worktree.reservation.error && (
+                    <p role="alert">{record.worktree.reservation.error}</p>
+                  )}
+                </details>
+              )}
+              {record?.checkout && record.worktree && !record.worktree.reservation && (
+                <Button
+                  type="button"
+                  onClick={() => void run(() => navigator.clipboard.writeText(record.checkout))}
+                >
+                  {record.worktree && !record.worktree.reservation
+                    ? "Copy source checkout path"
+                    : "Copy execution path"}
+                </Button>
               )}
               <label htmlFor={sidebarId + "-message"}>Message Codex</label>
               <textarea

@@ -2,7 +2,7 @@
 
 A project editor with files, source changes, and Codex conversations.
 
-The Agents and No project concepts below describe the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419); project-backed chats, editor closure, saved Current checkout drafts and No project execution are implemented; deferred worktree preparation remains a later slice.
+The Agents and No project concepts below describe the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419); project-backed chats, editor closure, saved Current checkout drafts and No project execution are implemented; project drafts also support deferred managed-worktree preparation and explicit discovered-checkout reuse.
 
 ## Language
 
@@ -28,7 +28,7 @@ A chat associated with one project and attached to one of its checkout directori
 A chat with no user-project association, attached to its own persistent scratch folder. It appears in Agents without a project tab.
 
 **Chat draft**:
-A locally saved, unsent conversation whose context can change before first Send. Project drafts retain a resolved Current checkout path until explicitly changed. First Send prepares and binds the conversation while preserving its identity and creation time. Failed or uncertain sends retain the prompt and known provider identity; Retry reconnects without resending.
+A locally saved, unsent conversation whose context can change before first Send. Project drafts retain a resolved Current checkout path, explicitly selected discovered checkout, or displayed local base for a new managed worktree until explicitly changed. First Send prepares and binds the conversation while preserving its identity and creation time. Prepared worktrees retain their reserved branch, absolute path and directory identity, including on partial failure. Failed or uncertain sends retain the prompt and known provider identity; Retry reconnects without resending or replacing reserved resources.
 
 **Scratch folder**:
 A persistent working folder owned by one No project chat. It is allocated only on first Send, starts without Git and is retained independently of the chat's running state. Host ownership and directory identity are persisted; missing, replaced or incompletely recorded folders are never reconstructed or rebound.

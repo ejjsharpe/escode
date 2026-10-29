@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@base-ui/react/button";
 import { persist, flush } from "./workspace";
 import type { Project } from "../host/project";
@@ -172,5 +172,174 @@ export function WorktreeChoices({
       {busy && <p role="status">Preparing checkout…</p>}
       {error && <p role="alert">{error}</p>}
     </section>
+  );
+}
+
+export function DraftWorktreeChoices({
+  chat,
+  busy,
+  choose,
+}: {
+  chat: import("../host/chat").SavedChat;
+  busy: boolean;
+  choose: (mode: "new" | "reuse", value: string, commit: string) => Promise<unknown>;
+}) {
+  const [options, setOptions] = useState<Options>();
+  const [ref, setRef] = useState(chat.worktree?.ref ?? "");
+  const [reuse, setReuse] = useState("");
+  const [error, setError] = useState("");
+  const refresh = async () => {
+    try {
+      const value = await window.escode.project(
+        "worktree-options",
+        chat.worktree?.source ?? chat.checkout,
+      );
+      setOptions(value);
+      setRef((previous) => previous || value.defaultRef);
+      setError("");
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+  useEffect(() => {
+    void refresh();
+  }, [chat.id]);
+  return (
+    <details className="worktree-choices">
+      <summary>Execution checkout choices</summary>
+      <fieldset disabled={busy}>
+        <legend>
+          {chat.worktree ? "New managed worktree selected" : "Existing checkout selected"}
+        </legend>
+        <p>
+          New worktrees use committed files only. Staged, unstaged, untracked, ignored and unsaved
+          edits stay in the original checkout. No fetch or setup runs.
+        </p>
+        {options && (
+          <>
+            <label>
+              Local base
+              <select
+                aria-label="Draft local base"
+                value={ref}
+                onChange={(e) => setRef(e.target.value)}
+              >
+                {!options.bases.some((b) => b.ref === ref) && (
+                  <option value={ref}>{ref || "No committed base available"}</option>
+                )}
+                {options.bases.map((b) => (
+                  <option key={b.ref} value={b.ref}>
+                    {b.ref}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p>
+              Resolved commit:{" "}
+              <code>
+                {options.bases.find((b) => b.ref === ref)?.commit ??
+                  "Unavailable; choose another base"}
+              </code>
+            </p>
+            <Button
+              type="button"
+              disabled={!options.bases.some((b) => b.ref === ref)}
+              onClick={() =>
+                void choose("new", ref, options.bases.find((b) => b.ref === ref)!.commit)
+              }
+            >
+              Use new managed worktree on first Send
+            </Button>
+            <label>
+              Existing project worktree
+              <select
+                aria-label="Draft existing worktree"
+                value={reuse}
+                onChange={(e) => setReuse(e.target.value)}
+              >
+                <option value="">Choose explicitly…</option>
+                {options.checkouts.map((root) => (
+                  <option key={root} value={root}>
+                    {root}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button type="button" disabled={!reuse} onClick={() => void choose("reuse", reuse, "")}>
+              Use discovered worktree
+            </Button>
+            <p>
+              Chats sharing a checkout share files; their edits can interact. Branches and worktrees
+              are retained.
+            </p>
+          </>
+        )}
+        <Button type="button" onClick={() => void refresh()}>
+          Refresh available bases and worktrees
+        </Button>
+        {error && <p role="alert">{error}</p>}
+      </fieldset>
+    </details>
+  );
+}
+
+export function CheckoutBranch({ root }: { root: string }) {
+  const [branch, setBranch] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      window.escode.project("status", root).then(
+        (status) => {
+          if (live) {
+            setBranch(status.branch);
+            setError("");
+          }
+        },
+        (e) => {
+          if (live) {
+            setBranch("");
+            setError(String(e));
+          }
+        },
+      );
+    void load();
+    const timer = setInterval(() => void load(), 2000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [root]);
+  return (
+    <details className="checkout-branch">
+      <summary>
+        {branch ? (
+          <>
+            Branch: <code>{branch}</code>
+          </>
+        ) : (
+          "Branch unavailable"
+        )}
+      </summary>
+      {branch && (
+        <Button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard.writeText(branch).catch((e) => setError(String(e)));
+          }}
+        >
+          Copy checkout branch
+        </Button>
+      )}
+      <Button
+        type="button"
+        onClick={() => {
+          void navigator.clipboard.writeText(root).catch((e) => setError(String(e)));
+        }}
+      >
+        Copy execution path
+      </Button>
+      {error && <p role="status">{error}</p>}
+    </details>
   );
 }

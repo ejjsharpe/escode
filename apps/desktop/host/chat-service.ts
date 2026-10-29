@@ -112,9 +112,15 @@ export class ChatService {
       throw Error(s.error);
     }
   }
-  context(project: string | null, id: string, target: string | null, checkout: string) {
+  context(
+    project: string | null,
+    id: string,
+    target: string | null,
+    checkout: string,
+    worktree?: SavedChat["worktree"],
+  ) {
     return this.inContext(project, id, async () => {
-      const chat = await this.store.context(project, id, target, checkout);
+      const chat = await this.store.context(project, id, target, checkout, worktree);
       const previous = this.sessions.get(id);
       if (previous) {
         previous.epoch = randomUUID();
@@ -156,10 +162,12 @@ export class ChatService {
           );
         if (s.epoch !== epoch) throw Error("Project closed while loading saved chat.");
         if (chat.phase === "draft" && !authorizedDraft) {
-          if (chat.project !== null) this.validateCheckout(s, chat.checkout);
+          if (chat.project !== null && !chat.worktree) this.validateCheckout(s, chat.checkout);
+          else if (chat.worktree?.reservation) this.store.validateWorktree(chat);
           else if (chat.scratch) this.store.validateScratch(chat);
           return;
         }
+        this.store.validateWorktree(chat);
         this.store.validateScratch(chat);
         this.validateCheckout(s, chat.checkout);
         rpc = await this.connect(
@@ -190,6 +198,7 @@ export class ChatService {
           );
         // A known provider identity is never replaced, including older unsent records.
         const resume = Boolean(chat.threadId);
+        this.store.validateWorktree(chat);
         this.store.validateScratch(chat);
         this.validateCheckout(s, chat.checkout);
         if (chat.phase === "draft")
@@ -258,6 +267,7 @@ export class ChatService {
           s.items = items;
         }
         if (s.epoch !== epoch) throw Error("Codex disconnected during setup. Retry connection.");
+        this.store.validateWorktree(chat);
         this.store.validateScratch(chat);
         this.validateCheckout(s, chat.checkout);
         s.connected = true;
@@ -381,14 +391,18 @@ export class ChatService {
     id: string,
     text: string,
     authorize: (chat: Readonly<SavedChat>) => Promise<void> = async () => {},
+    prepare: (chat: Readonly<SavedChat>) => Promise<Readonly<SavedChat>> = async (chat) => chat,
   ) {
-    return this.inContext(project, id, () => this.sendInContext(project, id, text, authorize));
+    return this.inContext(project, id, () =>
+      this.sendInContext(project, id, text, authorize, prepare),
+    );
   }
   private async sendInContext(
     project: string | null,
     id: string,
     text: string,
     authorize: (chat: Readonly<SavedChat>) => Promise<void>,
+    prepare: (chat: Readonly<SavedChat>) => Promise<Readonly<SavedChat>>,
   ) {
     const s = this.session(project, id);
     if (s.sending || s.busy) throw Error("This chat already has an active turn.");
@@ -407,6 +421,7 @@ export class ChatService {
       if (this.sessions.get(id) !== s || s.epoch !== epoch)
         throw Error("Chat disconnected during authorization. Work was not submitted.");
       if (chat.project === null) chat = await this.store.prepareScratch(chat);
+      else chat = await prepare(chat);
       if (this.sessions.get(id) !== s || s.epoch !== epoch)
         throw Error("Chat disconnected during authorization. Work was not submitted.");
       if (chat.phase === "draft") {
@@ -417,6 +432,7 @@ export class ChatService {
       }
       if (!s.connected || !s.rpc)
         throw Error("Retry connection before sending. Work was not resent.");
+      this.store.validateWorktree(chat);
       this.store.validateScratch(chat);
       this.validateCheckout(s, chat.checkout);
       s.busy = true;
@@ -427,6 +443,7 @@ export class ChatService {
         ...(chat.phase ? { initialSend: "uncertain" as const } : {}),
       });
       sendIntent = true;
+      this.store.validateWorktree(chat);
       this.store.validateScratch(chat);
       this.validateCheckout(s, chat.checkout);
       launched = true;
@@ -523,6 +540,7 @@ export class ChatService {
           ? { permissions: answer === "accept" ? request.params.permissions : {}, scope: "turn" }
           : { decision: answer };
     }
+    this.store.validateWorktree(chat);
     this.store.validateScratch(chat);
     this.validateCheckout(s, chat.checkout);
     s.rpc!.respond(wireId, result);
