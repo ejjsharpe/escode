@@ -294,3 +294,22 @@ Validation on 2026-10-29: typecheck, lint, full host suite, build and packaging
 passed. Electron smoke checks passed with the StyleX development test excluded;
 its required port 5173 was already occupied. The live Codex smoke remains opt-in
 and was not run for this slice; protocol fixtures exercise real child processes.
+
+Lifecycle race regressions additionally delay saved-chat metadata reads before
+connection setup. The host rejects requests whose project closed during IPC
+validation, and ChatService registers an opening before reading its saved
+association so shutdown can invalidate and await it before any process starts.
+File close locks editing and duplicate close actions until draft invalidation
+finishes; `tests/lifecycle-races.spec.ts` delays the actual filesystem replacement
+and attempts input during clean close and Discard, then checks that no draft is
+resurrected. Failed close unlocks the editor and retains its draft.
+
+The active-project smoke also confirms Stop and Close with dirty files: cancellation
+at the dirty prompt leaves work running; confirmation saves the file, interrupts
+and terminates processes, and retains saved chats, a managed worktree and its
+branch. Reopening the project restores the saved chat and worktree draft without
+sending another turn.
+
+The crash/restart smoke now opens two projects and verifies their tab order,
+selected project, recovered file and independent remembered Git diff selections
+through a hard kill and subsequent graceful restart.

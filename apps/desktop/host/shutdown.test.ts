@@ -187,3 +187,65 @@ createInterface({input:process.stdin}).on('line',line=>{
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("shutdown cancels an open still reading saved-chat metadata before any process starts", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-metadata-close-")));
+  let service: ChatService | undefined;
+  let release!: () => void;
+  try {
+    const executable = join(dir, "codex");
+    await writeFile(
+      executable,
+      `#!/usr/bin/env node
+const {createInterface}=require('node:readline');
+const {writeFileSync}=require('node:fs');
+if(process.argv.includes('--version')) { console.log('codex-cli 0.165.0'); process.exit(); }
+writeFileSync('server-pid',String(process.pid));
+createInterface({input:process.stdin}).on('line',line=>{
+ const m=JSON.parse(line); if(!m.id || !m.method)return;
+ let result={};
+ if(m.method==='initialize')result={userAgent:'codex/0.165.0'};
+ if(m.method==='account/read')result={account:{}};
+ if(m.method==='thread/start')result={thread:{id:'thread'},cwd:process.cwd(),model:'fixture',sandbox:{type:'readOnly'},approvalPolicy:'on-request'};
+ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');
+});
+`,
+      { mode: 0o700 },
+    );
+    const store = new Chats(join(dir, "chats.json"));
+    const chat = await store.create(dir);
+    let reading!: () => void;
+    const started = new Promise<void>((resolve) => {
+      reading = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const get = store.get.bind(store);
+    store.get = async (project, id) => {
+      reading();
+      await gate;
+      return get(project, id);
+    };
+    service = new ChatService(store, (cwd, receive, disconnected) =>
+      connectCodex(cwd, receive, disconnected, executable),
+    );
+    const opening = service.open(dir, chat.id).then(
+      () => "connected",
+      () => "cancelled",
+    );
+    await started;
+    const activeBeforeShutdown = service.active(dir);
+    const shutdown = service.shutdown(dir);
+    release();
+    await shutdown;
+    expect(await opening).toBe("cancelled");
+    expect(activeBeforeShutdown).toBe(true);
+    const { readdir } = await import("node:fs/promises");
+    expect(await readdir(dir)).not.toContain("server-pid");
+  } finally {
+    release?.();
+    await service?.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

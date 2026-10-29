@@ -11,6 +11,9 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     user = join(dir, "user");
   execFileSync("git", ["init", root]);
   await writeFile(join(root, "a.txt"), "original");
+  const other = join(dir, "other");
+  execFileSync("git", ["init", other]);
+  await writeFile(join(other, "b.txt"), "secondary project");
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ESCODE_DEV_URL;
@@ -37,12 +40,36 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
           JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts[0]?.text,
       )
       .toBe("recover these edits");
+    await app.evaluate(({ dialog }, other) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [other] });
+    }, other);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await page.getByRole("button", { name: "b.txt", exact: true }).click();
+    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "b.txt", exact: true }).click();
+    await expect(page.locator(".monaco-diff-editor:visible")).toContainText("secondary project");
+    const tabs = page
+      .getByRole("navigation", { name: "Projects", exact: true })
+      .getByRole("button");
+    await expect(tabs).toHaveText(["repo", "other"]);
+    await page
+      .getByRole("navigation", { name: "Projects", exact: true })
+      .getByRole("button", { name: "repo", exact: true })
+      .click();
+    await expect(page.locator(".monaco-editor:visible")).toContainText("recover these edits");
+    await expect
+      .poll(async () => JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).selected)
+      .toBe(root);
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
     await writeFile(join(root, "a.txt"), "external");
     app = await launch();
     page = await app.firstWindow();
+    await expect(
+      page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
+    ).toHaveText(["repo", "other"]);
+    await expect(page.locator("header")).toContainText(root);
     await expect(page.locator(".monaco-editor:visible")).toContainText("recover these edits");
     await page.getByRole("button", { name: "Save ⌘S" }).click();
     await expect(page.locator(".conflict")).toBeVisible();
@@ -88,20 +115,49 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       "aria-pressed",
       "true",
     );
+    await expect(page.locator(".monaco-diff-editor:visible")).toContainText("external");
+    await expect(
+      page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
+    ).toHaveText(["repo", "other"]);
+    await page
+      .getByRole("navigation", { name: "Projects", exact: true })
+      .getByRole("button", { name: "other", exact: true })
+      .click();
+    await expect(page.getByRole("button", { name: "Source Control", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.locator(".monaco-diff-editor:visible")).toContainText("secondary project");
   } finally {
     app.process().kill("SIGKILL");
     await rm(dir, { recursive: true, force: true });
   }
 });
 
-test("active work can cancel close, then quit interrupts and stops owned processes without replay on restart", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-quit-")));
-  const root = join(dir, "repo"),
-    user = join(dir, "user");
-  execFileSync("git", ["init", root]);
-  await writeFile(
-    join(dir, "codex"),
-    `#!/usr/bin/env node
+for (const closeProject of [false, true]) {
+  test(`active work: ${closeProject ? "Stop and Close handles dirty files and retains chats/worktrees" : "quit interrupts processes without replay on restart"}`, async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-quit-")));
+    const root = join(dir, "repo"),
+      user = join(dir, "user");
+    execFileSync("git", ["init", root]);
+    if (closeProject) {
+      await writeFile(join(root, "a.txt"), "committed");
+      execFileSync("git", ["-C", root, "add", "."]);
+      execFileSync("git", [
+        "-C",
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "initial",
+      ]);
+    }
+    await writeFile(
+      join(dir, "codex"),
+      `#!/usr/bin/env node
 const {createInterface}=require('node:readline');
 const {spawn}=require('node:child_process');
 const {writeFileSync,appendFileSync}=require('node:fs');
@@ -121,63 +177,128 @@ createInterface({input:process.stdin}).on('line',line=>{
  send({id:m.id,result});
 });
 `,
-    { mode: 0o700 },
-  );
-  const env = { ...process.env, PATH: dir + ":" + process.env.PATH };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.ESCODE_DEV_URL;
-  const launch = () =>
-    _electron.launch({
-      executablePath: electron as unknown as string,
-      args: [".", `--user-data-dir=${user}`],
-      env,
-    });
-  let app = await launch();
-  try {
-    let page = await app.firstWindow();
-    await app.evaluate(({ dialog }, root) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
-      dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
-    }, root);
-    await page.getByRole("button", { name: "Open project…" }).click();
-    await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: "New chat on current checkout" }).click();
-    await expect(page.getByRole("status")).toHaveText("Ready");
-    await page.getByLabel("Message Codex").fill("start");
-    await page.getByRole("button", { name: "Send message", exact: true }).click();
-    await expect(page.getByRole("status")).toHaveText("Running");
-    const pids: number[] = JSON.parse(await readFile(join(root, "pids"), "utf8"));
-    await page.getByRole("button", { name: "Close project", exact: true }).click();
-    await expect(page.getByRole("status")).toHaveText("Running");
-    await expect(page.getByLabel("Message Codex")).toBeEnabled();
-    await app.evaluate(({ dialog }) => {
-      dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
-    });
-    await app.close();
-    expect(await readFile(join(root, "interrupts"), "utf8")).toBe("stopped\n");
-    await expect
-      .poll(() =>
-        pids.some((pid) => {
-          try {
-            process.kill(pid, 0);
-            return true;
-          } catch {
-            return false;
-          }
-        }),
-      )
-      .toBe(false);
-    app = await launch();
-    page = await app.firstWindow();
-    await expect(page.getByRole("status")).toHaveText("Ready");
-    expect(await readFile(join(root, "turns"), "utf8")).toBe("sent\n");
-    await app.close();
-  } finally {
+      { mode: 0o700 },
+    );
+    const env = { ...process.env, PATH: dir + ":" + process.env.PATH };
+    delete env.ELECTRON_RUN_AS_NODE;
+    delete env.ESCODE_DEV_URL;
+    const launch = () =>
+      _electron.launch({
+        executablePath: electron as unknown as string,
+        args: [".", `--user-data-dir=${user}`],
+        env,
+      });
+    let app = await launch();
     try {
-      app.process().kill("SIGKILL");
-    } catch {
-      /* Already closed by the workflow. */
+      let page = await app.firstWindow();
+      await app.evaluate(({ dialog }, root) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+        dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
+      }, root);
+      await page.getByRole("button", { name: "Open project…" }).click();
+      if (closeProject) {
+        await page.getByRole("button", { name: "a.txt", exact: true }).click();
+        await page.locator(".monaco-editor:visible").click();
+        await page.keyboard.press("Meta+a");
+        await page.keyboard.type("save on close");
+      }
+      await page.getByRole("button", { name: "Chats", exact: true }).click();
+      await page.getByRole("button", { name: "New chat on current checkout" }).click();
+      await expect(page.getByRole("status")).toHaveText("Ready");
+      await page.getByLabel("Message Codex").fill("start");
+      await page.getByRole("button", { name: "Send message", exact: true }).click();
+      await expect(page.getByRole("status")).toHaveText("Running");
+      const pids: number[] = JSON.parse(await readFile(join(root, "pids"), "utf8"));
+      const managed = closeProject
+        ? await page.evaluate(async (root) => {
+            const options = await window.escode.project("worktree-options", root);
+            const base = options.bases.find((b) => b.ref === options.defaultRef)!;
+            const result = await window.escode.project(
+              "worktree-create",
+              root,
+              base.ref,
+              base.commit,
+            );
+            if (result.error) throw Error(result.error);
+            const chat = await window.escode.chat("create", root, result.root);
+            await window.escode.chat("draft", root, chat.id, "retained worktree draft");
+            return result;
+          }, root)
+        : null;
+      await page.getByRole("button", { name: "Close project", exact: true }).click();
+      await expect(page.getByRole("status")).toHaveText("Running");
+      await expect(page.getByLabel("Message Codex")).toBeEnabled();
+      if (closeProject) {
+        // Accept Stop and Close, then cancel the dirty-file prompt. Work must keep running.
+        await app.evaluate(({ dialog }) => {
+          dialog.showMessageBox = async (_window: unknown, options: any) => ({
+            response: options.buttons[0] === "Save" ? 2 : 0,
+            checkboxChecked: false,
+          });
+        });
+        await page.getByRole("button", { name: "Close project", exact: true }).click();
+        await expect(page.getByLabel("Message Codex")).toBeEnabled();
+        await expect(page.getByRole("status")).toHaveText("Running");
+        expect(await readFile(join(root, "a.txt"), "utf8")).toBe("committed");
+        expect(
+          JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts[0].text,
+        ).toBe("save on close");
+      }
+      await app.evaluate(({ dialog }) => {
+        dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+      });
+      if (closeProject) {
+        await page.getByRole("button", { name: "Close project", exact: true }).click();
+        await expect(page.getByText("Open a local Git checkout to begin.")).toBeVisible();
+        expect(await readFile(join(root, "a.txt"), "utf8")).toBe("save on close");
+        expect(await readFile(join(managed!.root, "a.txt"), "utf8")).toBe("committed");
+        expect(
+          execFileSync("git", ["-C", root, "worktree", "list", "--porcelain"]).toString(),
+        ).toContain(managed!.root);
+        expect(
+          execFileSync("git", ["-C", root, "branch", "--list", managed!.branch]).toString(),
+        ).toContain(managed!.branch);
+        const saved = JSON.parse(await readFile(join(user, "chats.json"), "utf8"));
+        expect(saved).toHaveLength(2);
+        expect(saved.find((chat: any) => chat.checkout === managed!.root).draft).toBe(
+          "retained worktree draft",
+        );
+      } else await app.close();
+      expect(await readFile(join(root, "interrupts"), "utf8")).toBe("stopped\n");
+      await expect
+        .poll(() =>
+          pids.some((pid) => {
+            try {
+              process.kill(pid, 0);
+              return true;
+            } catch {
+              return false;
+            }
+          }),
+        )
+        .toBe(false);
+      if (closeProject) {
+        await page.getByRole("button", { name: "Open project…" }).click();
+        await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toBeVisible();
+      } else {
+        app = await launch();
+        page = await app.firstWindow();
+      }
+      await expect(page.getByRole("status")).toHaveText("Ready");
+      expect(await readFile(join(root, "turns"), "utf8")).toBe("sent\n");
+      if (closeProject) {
+        await page.getByRole("button", { name: "Chat 2", exact: true }).click();
+        await expect(page.getByLabel("Message Codex")).toHaveValue("retained worktree draft");
+        await expect(page.getByRole("status")).toHaveText("Ready");
+      }
+      await app.close();
+    } finally {
+      try {
+        app.process().kill("SIGKILL");
+      } catch {
+        /* Already closed by the workflow. */
+      }
+      await rm(dir, { recursive: true, force: true });
     }
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+  });
+}

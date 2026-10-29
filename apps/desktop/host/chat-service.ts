@@ -76,8 +76,7 @@ export class ChatService {
     });
   }
   async open(project: string, id: string) {
-    const chat = await this.store.get(project, id),
-      s = this.session(project, id);
+    const s = this.session(project, id);
     if (s.opening) {
       await s.opening;
       return this.snapshot(project, id);
@@ -89,6 +88,8 @@ export class ChatService {
       s.error = null;
       let rpc: CodexConnection | undefined;
       try {
+        const chat = await this.store.get(project, id);
+        if (s.epoch !== epoch) throw Error("Project closed while loading saved chat.");
         rpc = await this.connect(
           chat.checkout,
           (event) => {

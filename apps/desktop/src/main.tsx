@@ -67,7 +67,12 @@ function CheckoutView({
   const [bufferRevision, setBufferRevision] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  useEffect(() => onBlocked(root, !!conflict || saving), [conflict, saving, root, onBlocked]);
+  const [fileClosing, setFileClosing] = useState(false);
+  const closeInFlight = useRef(false);
+  useEffect(
+    () => onBlocked(root, !!conflict || saving || fileClosing),
+    [conflict, saving, fileClosing, root, onBlocked],
+  );
   const saveInFlight = useRef(false);
   const saveAction = useRef<() => void>(() => {});
   const report = (error: unknown) =>
@@ -236,7 +241,9 @@ function CheckoutView({
       setSaving(false);
     }
   }
-  saveAction.current = () => void save();
+  saveAction.current = () => {
+    if (!closeInFlight.current) void save();
+  };
   async function reload() {
     if (!conflict) return;
     try {
@@ -272,39 +279,51 @@ function CheckoutView({
   }
   async function closeFile(file: string, dispose = true) {
     const b = buffers.current.get(file);
-    if (!b || saveInFlight.current) return false;
-    if (b.model.getValue() !== b.disk.text) {
-      const choice = await window.escode.lifecycle("dirty", root + "/" + file);
-      if (choice === 2) return false;
-      if (choice === 0 && !(await save(undefined, file))) {
-        setPath(file);
-        window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
+    if (!b || saveInFlight.current || closeInFlight.current) return false;
+    closeInFlight.current = true;
+    setFileClosing(true);
+    editor.current?.updateOptions({ readOnly: true });
+    try {
+      if (b.model.getValue() !== b.disk.text) {
+        const choice = await window.escode.lifecycle("dirty", root + "/" + file);
+        if (choice === 2) return false;
+        if (choice === 0 && !(await save(undefined, file))) {
+          setPath(file);
+          window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
+          return false;
+        }
+      }
+      // Remove the durable draft before disposing the only in-memory copy.
+      const drafts = memory.drafts;
+      memory.drafts = drafts.filter((d) => d.root !== root || d.path !== file);
+      try {
+        await persist();
+      } catch (error) {
+        memory.drafts = [
+          ...memory.drafts.filter((d) => d.root !== root || d.path !== file),
+          ...drafts.filter((d) => d.root === root && d.path === file),
+        ];
+        report(error);
         return false;
       }
-    }
-    // Remove the durable draft before disposing the only in-memory copy.
-    const drafts = memory.drafts;
-    memory.drafts = drafts.filter((d) => d.root !== root || d.path !== file);
-    try {
-      await persist();
-    } catch (error) {
-      memory.drafts = drafts;
-      report(error);
-      return false;
-    }
-    if (!dispose) {
-      b.model.setValue(b.disk.text);
+      if (!dispose) {
+        b.model.setValue(b.disk.text);
+        return true;
+      }
+      buffers.current.delete(file);
+      b.model.dispose();
+      if (path === file) {
+        setPath("");
+        setDiff(null);
+        setConflict(null);
+        setDirty(false);
+      }
       return true;
+    } finally {
+      closeInFlight.current = false;
+      setFileClosing(false);
+      editor.current?.updateOptions({ readOnly: false });
     }
-    buffers.current.delete(file);
-    b.model.dispose();
-    if (path === file) {
-      setPath("");
-      setDiff(null);
-      setConflict(null);
-      setDirty(false);
-    }
-    return true;
   }
   closers.set(root, {
     project,
@@ -315,7 +334,7 @@ function CheckoutView({
     },
   });
   return (
-    <div className="workspace" hidden={!active || mode === "Chats"}>
+    <div className="workspace" hidden={!active || mode === "Chats"} inert={fileClosing}>
       <aside>
         <p className="directory">
           {status?.branch} · {root}
@@ -381,7 +400,7 @@ function CheckoutView({
               )}
             </div>
             {path && mode === "Files" && (
-              <Button disabled={saving} onClick={() => void closeFile(path)}>
+              <Button disabled={saving || fileClosing} onClick={() => void closeFile(path)}>
                 Close file
               </Button>
             )}

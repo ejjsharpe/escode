@@ -53,6 +53,8 @@ app.whenReady().then(() => {
   const store = new Chats(join(app.getPath("userData"), "chats.json"));
   const chats = new ChatService(store);
   const projects = new Map<string, Project>();
+  const closingProjects = new Set<string>();
+  let quitting = false;
   const workspace = new Workspace(join(app.getPath("userData"), "workspace.json"));
   let mayClose = false;
   window.on("close", (event) => {
@@ -125,16 +127,25 @@ app.whenReady().then(() => {
       );
     }
     if (operation === "finish") {
-      await chats.shutdown(project as string | undefined);
-      if (project === undefined) {
-        mayClose = true;
-        app.quit();
-      } else {
-        for (const [root, p] of projects)
-          if (p.repository() === project) {
-            p.close();
-            projects.delete(root);
-          }
+      if (project === undefined) quitting = true;
+      else closingProjects.add(project as string);
+      try {
+        await chats.shutdown(project as string | undefined);
+        if (project === undefined) {
+          mayClose = true;
+          app.quit();
+        } else {
+          for (const [root, p] of projects)
+            if (p.repository() === project) {
+              p.close();
+              projects.delete(root);
+            }
+        }
+      } catch (error) {
+        quitting = false;
+        throw error;
+      } finally {
+        if (typeof project === "string") closingProjects.delete(project);
       }
       return;
     }
@@ -211,11 +222,17 @@ app.whenReady().then(() => {
     )
       throw Error("Invalid sender");
     const root = args.shift();
-    if (typeof root !== "string" || ![...projects.values()].some((p) => p.repository() === root))
-      throw Error("Open this project first.");
+    if (typeof root !== "string") throw Error("Invalid project");
+    const owner = [...projects.values()].find((p) => p.repository() === root);
+    const requireOpen = () => {
+      if (!owner || projects.get(owner.root) !== owner || quitting || closingProjects.has(root))
+        throw Error("Open this project first.");
+    };
+    requireOpen();
     if (operation === "list" && !args.length) return chats.list(root);
     if (operation === "create" && args.length === 1) {
       const target = await checkout(args[0]);
+      requireOpen();
       if (!target.validateRepository().includes(target.root))
         throw Error("Checkout is no longer registered with Git.");
       if (target.repository() !== root) throw Error("Checkout belongs to another project.");
@@ -226,6 +243,7 @@ app.whenReady().then(() => {
     await chats.list(root).then((list) => {
       if (!list.some((c) => c.id === id)) throw Error("Unknown project/chat");
     });
+    requireOpen();
     if (args.length === 1) {
       if (operation === "open") return chats.open(root, id);
       if (operation === "snapshot") return chats.snapshot(root, id);
