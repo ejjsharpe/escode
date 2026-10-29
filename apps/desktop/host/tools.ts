@@ -6,7 +6,34 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { createInterface } from "node:readline";
 const execute = promisify(execFile);
-export const supportedCodexVersion = "0.165.0";
+export const minimumCodexVersion = "0.163.0";
+export const testedCodexVersion = "0.165.0";
+export function codexVersionProblem(output: string): string | null {
+  const match = /^codex-cli (\d+)\.(\d+)\.(\d+)$/.exec(output);
+  if (!match)
+    return "Unrecognized or prerelease Codex version. Install a stable release and retry.";
+  const actual = match.slice(1).map(Number);
+  if (!actual.every(Number.isSafeInteger))
+    return "Invalid Codex version. Install a stable release and retry.";
+  const minimum = minimumCodexVersion.split(".").map(Number);
+  for (let i = 0; i < minimum.length; i++) {
+    if (actual[i] > minimum[i]) return null;
+    if (actual[i] < minimum[i])
+      return `Codex is too old. Install ${minimumCodexVersion} or newer and retry.`;
+  }
+  return null;
+}
+async function inspectCodex(path: string) {
+  const command = await codexCommand(path, ["--version"]);
+  const version = (
+    await execute(command.executable, command.args, { env: command.env, timeout: 5000 })
+  ).stdout.trim();
+  return { path, version, problem: codexVersionProblem(version) };
+}
+export function codexDiagnostic(path: string, version: string | undefined, message: string) {
+  if (message.startsWith(`Codex at ${path} (`)) return message;
+  return `Codex at ${path} (${version ? version.slice(0, 160) : "version unavailable"}): ${message}`;
+}
 export async function findExecutable(
   name: "git" | "codex",
   paths = (process.env.PATH ?? "").split(":"),
@@ -31,7 +58,7 @@ export async function findExecutable(
   throw new Error(
     name === "git"
       ? "Install Git with xcode-select --install, then retry."
-      : `Install Codex externally, run codex login, then retry. Supported build: ${supportedCodexVersion}.`,
+      : `Install Codex externally, run codex login, then retry. Requires ${minimumCodexVersion} or newer; tested baseline ${testedCodexVersion}.`,
   );
 }
 export async function codexCommand(path: string, args: string[]) {
@@ -59,6 +86,7 @@ export type WireMessage = {
   error?: { message: string };
 };
 export interface CodexConnection {
+  installation?: { path: string; version: string };
   request(method: string, params: unknown): Promise<any>;
   respond(id: number | string, result: unknown): void;
   close(): void;
@@ -70,15 +98,16 @@ export async function connectCodex(
   providedPath?: string,
 ): Promise<CodexConnection> {
   const path = providedPath ?? (await findExecutable("codex"));
-  const version = await codexCommand(path, ["--version"]);
-  const output = await execute(version.executable, version.args, {
-    env: version.env,
-    timeout: 5000,
-  });
-  if (output.stdout.trim() !== `codex-cli ${supportedCodexVersion}`)
+  let version = "";
+  try {
+    const inspected = await inspectCodex(path);
+    version = inspected.version;
+    if (inspected.problem) throw Error(inspected.problem);
+  } catch (error) {
     throw Error(
-      `Install supported Codex ${supportedCodexVersion} externally, then Retry connection.`,
+      codexDiagnostic(path, version, error instanceof Error ? error.message : String(error)),
     );
+  }
   const command = await codexCommand(path, ["app-server", "--listen", "stdio://"]);
   const child = spawn(command.executable, command.args, {
     cwd,
@@ -100,6 +129,7 @@ export async function connectCodex(
   const fail = (error: Error) => {
     if (closed) return;
     closed = true;
+    error = Error(codexDiagnostic(path, version, error.message));
     for (const entry of pending.values()) {
       clearTimeout(entry.timer);
       entry.reject(error);
@@ -135,7 +165,8 @@ export async function connectCodex(
         if (!entry) return;
         pending.delete(message.id);
         clearTimeout(entry.timer);
-        if (message.error) entry.reject(Error(message.error.message));
+        if (message.error)
+          entry.reject(Error(codexDiagnostic(path, version, message.error.message)));
         else entry.resolve(message.result);
       }
     } catch {
@@ -143,6 +174,7 @@ export async function connectCodex(
     }
   });
   const rpc: CodexConnection = {
+    installation: { path, version },
     request(method, params) {
       return new Promise((resolve, reject) => {
         const id = ++sequence;
@@ -168,15 +200,19 @@ export async function connectCodex(
     },
   };
   try {
-    await rpc.request("initialize", {
+    const initialized = await rpc.request("initialize", {
       clientInfo: { name: "escode", version: "0.1.0" },
       capabilities: {},
     });
+    if (typeof initialized?.userAgent !== "string")
+      throw Error("Incompatible Codex initialize response. Update Codex or escode and retry.");
     write({ method: "initialized" });
     return rpc;
   } catch (error) {
     rpc.close();
-    throw error;
+    throw Error(
+      codexDiagnostic(path, version, error instanceof Error ? error.message : String(error)),
+    );
   }
 }
 
@@ -218,22 +254,21 @@ export async function toolStatus() {
     }
   })();
   const codex = await (async () => {
+    let path: string | undefined;
+    let version: string | undefined;
     try {
-      const path = await findExecutable("codex");
-      const command = await codexCommand(path, ["--version"]);
-      const version = (
-        await execute(command.executable, command.args, { timeout: 5000, env: command.env })
-      ).stdout.trim();
-      if (version !== `codex-cli ${supportedCodexVersion}`)
-        return {
-          path,
-          version,
-          guidance: `Unsupported Codex build. Install tested version ${supportedCodexVersion} externally, then retry.`,
-        };
+      path = await findExecutable("codex");
+      const inspected = await inspectCodex(path);
+      version = inspected.version;
+      if (inspected.problem)
+        return { path, version, guidance: codexDiagnostic(path, version, inspected.problem) };
       return { path, version, ...(await probeCodex(path)) };
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       return {
-        guidance: `Codex unavailable. Install version ${supportedCodexVersion}, run codex login and check configuration externally, then retry.`,
+        path,
+        version,
+        guidance: path ? codexDiagnostic(path, version, message) : message,
       };
     }
   })();

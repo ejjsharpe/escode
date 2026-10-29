@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Chats } from "./chat";
-import { connectCodex, type CodexConnection, type WireMessage } from "./tools";
+import { codexDiagnostic, connectCodex, type CodexConnection, type WireMessage } from "./tools";
 export type ChatItem = { id: string; turnId: string; type: string; text: string };
 export type LiveRequest = { token: string; method: string; params: any };
 export type ChatSnapshot = {
@@ -163,8 +163,11 @@ export class ChatService {
       } catch (error) {
         rpc?.close();
         s.connected = false;
-        s.error = error instanceof Error ? error.message : String(error);
-        throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        s.error = rpc?.installation
+          ? codexDiagnostic(rpc.installation.path, rpc.installation.version, message)
+          : message;
+        throw Error(s.error);
       }
     })();
     try {

@@ -19,6 +19,8 @@ test("saved Codex chat streams and reopens via a fresh connection", async () => 
   delete env.ESCODE_DEV_URL;
   const packaged = process.env.ESCODE_PACKAGED_CHAT === "1";
   if (packaged) env.PATH = "/usr/bin:/bin";
+  else if (process.env.ESCODE_TEST_CODEX_DIR)
+    env.PATH = process.env.ESCODE_TEST_CODEX_DIR + ":" + env.PATH;
   const app = await _electron.launch({
     executablePath: packaged
       ? resolve("release/mac-arm64/escode.app/Contents/MacOS/escode")
@@ -31,6 +33,10 @@ test("saved Codex chat streams and reopens via a fresh connection", async () => 
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, root);
     const page = await app.firstWindow();
+    const tools = (await page.evaluate(() => window.escode.toolStatus())) as {
+      codex: { path?: string; version?: string };
+    };
+    console.log("Codex under test:", tools.codex.path, tools.codex.version);
     await page.getByRole("button", { name: "Open project…" }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
@@ -43,7 +49,12 @@ test("saved Codex chat streams and reopens via a fresh connection", async () => 
       timeout: 90000,
     });
     await expect(page.getByRole("status")).toHaveText("Ready", { timeout: 90000 });
-    await expect(page.getByLabel("Conversation history").locator("article")).toHaveCount(2);
+    await expect(
+      page.getByLabel("Conversation history").getByRole("heading", { name: "You", exact: true }),
+    ).toHaveCount(1);
+    await expect(
+      page.getByLabel("Conversation history").getByRole("heading", { name: "Codex", exact: true }),
+    ).toHaveCount(1);
     await page.getByRole("button", { name: "Retry connection / reload history" }).click();
     await expect(page.getByRole("status")).toHaveText("Ready", { timeout: 45000 });
     await page.getByLabel("Message Codex").fill("retained draft");
@@ -52,7 +63,12 @@ test("saved Codex chat streams and reopens via a fresh connection", async () => 
     await expect(page.getByLabel("Message Codex")).toHaveValue("retained draft");
     await page.getByRole("button", { name: "Retry connection / reload history" }).click();
     await expect(page.getByRole("status")).toHaveText("Ready", { timeout: 45000 });
-    await expect(page.getByLabel("Conversation history").locator("article")).toHaveCount(2);
+    await expect(
+      page.getByLabel("Conversation history").getByRole("heading", { name: "You", exact: true }),
+    ).toHaveCount(1);
+    await expect(
+      page.getByLabel("Conversation history").getByRole("heading", { name: "Codex", exact: true }),
+    ).toHaveCount(1);
     await expect(page.getByLabel("Conversation history")).toContainText("ESCODE_UI_OK");
     await expect(page.getByLabel("Message Codex")).toHaveValue("retained draft");
     await page.screenshot({

@@ -27,7 +27,15 @@ Tools are discovered through the inherited PATH followed by conventional user Bu
 
 ## Codex support policy
 
-Only codex-cli **0.165.0** is admitted. Other versions return setup guidance without starting app-server. Expanding support requires rerunning these checks and reviewing that version's generated schema. The probe uses newline-delimited stdio JSON-RPC: initialize/initialized, account/read (refreshToken false), and config/read (includeLayers false). It sends no turns, changes no configuration and starts no provider thread.
+Stable codex-cli **0.163.0 or newer** is admitted; **0.165.0** remains the tested
+baseline. Versions below the minimum and unrecognized/prerelease version strings
+return setup guidance without starting app-server. A newer version must still pass
+protocol initialization and the existing account/configuration/thread response
+checks. Admission is not a claim that every future release is compatible. Failures
+identify the selected executable and detected version; tool status retains these
+diagnostics even when its protocol probe fails. Discovery continues to respect PATH
+before fallback locations, so multiple installations do not silently switch after a
+failed connection. The probe uses newline-delimited stdio JSON-RPC: initialize/initialized, account/read (refreshToken false), and config/read (includeLayers false). It sends no turns, changes no configuration and starts no provider thread.
 
 Only authentication presence and model, reasoning effort, approval policy and sandbox mode are returned to the renderer. Tokens, account details, raw configuration and configuration layers are excluded. Errors have bounded guidance; the probe times out and terminates its child.
 
@@ -217,3 +225,25 @@ is sent by this test. Typecheck, lint, host tests, build and the targeted Electr
 workflow passed. Full restart restoration, protected worktree removal, manual
 VoiceOver checks and a live agent turn on a newly managed checkout remain outside
 this ticket's runtime evidence.
+
+
+## Codex version ranges (2026-10-29)
+
+The exact 0.165.0 lock has been replaced by a stable-version minimum, keeping the
+tested baseline separate. Controlled subprocess tests cover minimum/newer versions,
+numeric ordering, old/unknown/prerelease rejection before startup, malformed
+initialization, and diagnostics after a failed probe. Existing chat validation still
+checks checkout, effective settings and resumed thread identity; version admission
+never bypasses those checks.
+
+The demo failure selected `/opt/homebrew/bin/codex` (0.163.0), while the shell used
+`~/.bun/bin/codex` (0.165.0). Both are retained; escode does not install/update Codex
+or change PATH. The implementation keeps the existing installed-tool architecture.
+
+Live Electron checks passed on both installed 0.163.0 and 0.165.0: create, send,
+stream, complete, reconnect, reload saved history and preserve an unsent draft.
+These checks consumed bounded text-only turns. The test checks user/assistant
+message counts rather than assuming there can be no additional activity items.
+Select an installation for this check with `ESCODE_TEST_CODEX_DIR=/opt/homebrew/bin`
+and `ESCODE_LIVE_CHAT=1` when running `bun run --cwd apps/desktop smoke -- tests/chat.spec.ts`.
+Future releases are admitted by version and checked at runtime, not pre-certified.

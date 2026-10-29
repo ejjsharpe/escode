@@ -213,6 +213,7 @@ setInterval(() => {}, 1000);
 createInterface({input: process.stdin}).on("line", line => {
  const m=JSON.parse(line); if (!m.id) return;
  let result={};
+ if(m.method==="initialize") result={userAgent:"codex/0.165.0"};
  if(m.method==="account/read") result={account:{type:"chatgpt"}};
  if(m.method==="thread/start") result={thread:{id:"pipe-thread"},cwd:m.params.cwd,model:"actual",approvalPolicy:"on-request",sandbox:{type:"readOnly"}};
  if(m.method==="turn/start") {result={turn:{id:"pipe-turn"}}; setTimeout(()=>process.stdout.end(),20);}

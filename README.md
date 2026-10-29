@@ -39,7 +39,7 @@ Run `bun run typecheck`, `bun run lint`, `bun run test`, then `bun run build`,
 [desktop evidence and limitations](docs/compatibility/desktop.md).
 
 The Chats view creates saved chats on the current checkout using installed,
-authenticated Codex **0.165.0**. Each connected chat owns an app-server process.
+authenticated Codex **0.163.0 or newer** (tested baseline **0.165.0**). Each connected chat owns an app-server process.
 It streams messages/activity, displays effective settings, handles live permission
 and input requests, and supports Stop and fresh-connection history reload. Drafts
 and project/chat/checkout/thread associations live in Electron user data; Codex

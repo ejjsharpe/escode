@@ -21,6 +21,7 @@ createInterface({input:process.stdin}).on('line', line => {
  const m=JSON.parse(line); if(!m.id) return;
  if(!m.method) { send({method:'item/agentMessage/delta',params:{threadId,turnId,itemId:'reply',delta:'Answered by '+process.pid}}); return; }
  let result={};
+ if(m.method==='initialize') result={userAgent:'codex/0.165.0'};
  if(m.method==='account/read') result={account:{}};
  if(m.method==='thread/start') result={thread:{id:threadId},cwd:process.cwd(),model:'fixture',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
  if(m.method==='turn/start') {
