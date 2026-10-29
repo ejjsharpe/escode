@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { dirname, join } from "node:path";
 import { Project } from "./project";
 import { Workspace } from "./workspace";
 export type Intent = {
@@ -5,9 +7,11 @@ export type Intent = {
   checkoutIdentity: string;
   source: string;
   destination: string;
-  kind: "move" | "trash" | "save";
+  kind: "move" | "trash" | "save" | "copy";
   identity: string;
   completed?: boolean;
+  temporary?: string;
+  copies?: import("./workspace").WorkspaceState["drafts"];
   saveText?: string;
   savedDisk?: import("./project").Document;
 };
@@ -76,16 +80,16 @@ export class FileOperations {
         reconcile(state, record);
         await this.workspace.write(state);
         await this.ack();
-        return `Recovered ${record.kind}: ${record.root}/${record.source} → ${record.destination || "macOS Trash"}. Earlier text undo history was reset.`;
+        return `Recovered ${record.kind}: ${record.root}/${record.source} → ${record.destination || "macOS Trash"}. ${record.kind === "copy" ? "Available copied drafts restored; source retained." : "Earlier text undo history was reset."}`;
       }
-      if (source === record.identity && destination !== record.identity) {
+      if (record.kind !== "copy" && source === record.identity && destination !== record.identity) {
         await this.ack();
         return "Interrupted operation did not move its source; drafts retained.";
       }
     } catch {
       /* Unavailable or replaced checkout: retain journal and drafts. */
     }
-    return `Uncertain file operation: inspect ${record.root}/${record.source} and ${record.kind === "save" ? "its last saved disk contents" : record.destination || "Finder Trash"}. Available drafts retained; file mutations are blocked until the original paths can be reconciled on restart.`;
+    return `Uncertain file operation: inspect ${record.root}/${record.source} and ${record.kind === "save" ? "its last saved disk contents" : record.destination || "Finder Trash"}${record.temporary ? ` (staging: ${record.temporary})` : ""}. Available drafts retained; file mutations are blocked until the original paths can be reconciled on restart.`;
   }
   beginBatch(root: string) {
     this.assertIdle();
@@ -98,7 +102,7 @@ export class FileOperations {
     if (!this.handoff?.facts.length) this.handoff = undefined;
   }
   persist(state: unknown) {
-    if (this.busy)
+    if (this.busy && this.pending?.kind !== "copy")
       throw Error("File operation is persisting recovery intent. Retry after completion.");
     // Apply facts inside the storage queue, including writes queued before a fact completed.
     return this.workspace.write(state, (snapshot) => {
@@ -116,7 +120,7 @@ export class FileOperations {
   }
   async run(
     p: Project,
-    kind: "move" | "trash",
+    kind: "move" | "trash" | "copy",
     source: string,
     destination: string,
     validateOrigin: () => void = () => {},
@@ -124,7 +128,7 @@ export class FileOperations {
     this.assertIdle(p.root);
     this.busy = true;
     try {
-      if (kind === "move") p.validateMove(source, destination);
+      if (kind !== "trash") p.validateMove(source, destination);
       const intent: Intent = {
         root: p.root,
         checkoutIdentity: p.checkoutIdentity(),
@@ -133,7 +137,7 @@ export class FileOperations {
         destination,
         identity: p.operationIdentity(source),
       };
-      if (kind === "move") {
+      if (kind !== "trash") {
         const state = await this.workspace.read();
         if (
           state.drafts.some(
@@ -148,11 +152,19 @@ export class FileOperations {
         )
           throw Error("Destination recovery drafts need preserving. Choose a free destination.");
       }
+      if (kind === "copy") {
+        intent.temporary = join(dirname(destination), ".escode-copy-" + randomUUID());
+        const state = await this.workspace.read();
+        intent.copies = state.drafts
+          .filter((d) => d.root === p.root && affected(d.path, source))
+          .map((d) => ({ ...d, path: destination + d.path.slice(source.length) }));
+      }
       await this.journal.writeIntent(intent);
       this.pending = intent;
       try {
         validateOrigin();
-        if (kind === "move") p.move(source, destination, intent.identity);
+        if (kind === "copy") await p.copy(source, destination, intent.identity, intent.temporary!);
+        else if (kind === "move") p.move(source, destination, intent.identity);
         else p.trash(source, intent.identity);
       } catch (error) {
         // Only a still-identical source proves a failed mutation. Otherwise retain intent.
@@ -167,8 +179,18 @@ export class FileOperations {
           throw error;
         }
         throw Error(
-          `Uncertain ${kind}: inspect ${p.root}/${source} and ${destination || "Finder Trash"}. Available edits and intent retained; restart to reconcile actual paths. ${String(error)}`,
+          `Uncertain ${kind}: inspect ${p.root}/${source} and ${destination || "Finder Trash"}${intent.temporary ? ` (staging: ${intent.temporary})` : ""}. Available edits and intent retained; restart to reconcile actual paths. ${String(error)}`,
         );
+      }
+      if (kind === "copy") {
+        // Native success is a fact even if the destination changes before baseline reading.
+        for (const draft of intent.copies ?? []) {
+          try {
+            draft.disk = await p.read(draft.path);
+          } catch {
+            /* Retain the available source baseline; ordinary Save will revalidate it. */
+          }
+        }
       }
       intent.completed = true;
       this.remember(intent);
@@ -182,16 +204,18 @@ export class FileOperations {
           applied: true,
           persistencePending: true,
           intent,
-          message: `${kind === "trash" ? "Moved to macOS Trash" : "Moved"}; recovery persistence needs retry: ${String(error)}`,
+          message: `${kind === "trash" ? "Moved to macOS Trash" : kind === "copy" ? "Copied" : "Moved"}; recovery persistence needs retry: ${String(error)}`,
         };
       }
       return {
         applied: true,
         intent,
         message:
-          kind === "move"
-            ? "Moved. Earlier text undo history was reset; new edits support undo."
-            : "Moved to macOS Trash.",
+          kind === "copy"
+            ? "Copied; source edits remain unsaved."
+            : kind === "move"
+              ? "Moved. Earlier text undo history was reset; new edits support undo."
+              : "Moved to macOS Trash.",
       };
     } finally {
       this.busy = false;

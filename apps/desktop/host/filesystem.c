@@ -25,7 +25,11 @@ static void fail(const char *message) {
 
 static int scoped_open(int dir, const char *path, int flags) {
   int fd = openat(dir, path, flags | SCOPED, 0600);
-  if (fd < 0) fail("Open checkout path");
+  if (fd < 0) {
+    char message[PATH_MAX + 32];
+    snprintf(message, sizeof(message), "Open checkout path %s", path);
+    fail(message);
+  }
   return fd;
 }
 
@@ -108,6 +112,68 @@ static void safe_tree(int fd) {
     errno = 0;
   }
   if (errno) fail("Inspect operation folder");
+  closedir(dir);
+}
+
+static int same_name(const char *a, const char *b) {
+  CFStringRef left = CFStringCreateWithCString(NULL, a, kCFStringEncodingUTF8);
+  CFStringRef right = CFStringCreateWithCString(NULL, b, kCFStringEncodingUTF8);
+  if (!left || !right) { errno = EINVAL; fail("Invalid UTF-8 destination name"); }
+  int same = CFStringCompare(left, right, kCFCompareCaseInsensitive | kCFCompareNonliteral) == kCFCompareEqualTo;
+  CFRelease(left); CFRelease(right);
+  return same;
+}
+
+static void free_case_name(const char *path, const char *excluded) {
+  char parent[PATH_MAX];
+  snprintf(parent, sizeof(parent), "%s", path);
+  char *name = strrchr(parent, '/');
+  const char *leaf = path;
+  if (name) { *name = 0; leaf = strrchr(path, '/') + 1; }
+  else strcpy(parent, ".");
+  int fd = scoped_open(3, parent, O_RDONLY | O_DIRECTORY);
+  DIR *dir = fdopendir(fd);
+  if (!dir) fail("Inspect destination names");
+  struct dirent *entry;
+  while ((entry = readdir(dir))) {
+    char candidate[PATH_MAX];
+    if (!strcmp(parent, ".")) snprintf(candidate, sizeof(candidate), "%s", entry->d_name);
+    else snprintf(candidate, sizeof(candidate), "%s/%s", parent, entry->d_name);
+    if (excluded && !strcmp(candidate, excluded)) continue;
+    if (same_name(entry->d_name, leaf)) { errno = EEXIST; fail("Destination case variant occupied"); }
+  }
+  closedir(dir);
+}
+
+static void copy_tree(int from, int to) {
+  struct stat info;
+  if (fstat(from, &info)) fail("Inspect copy source");
+  if (S_ISREG(info.st_mode)) {
+    if (info.st_nlink != 1) { errno = ENOTSUP; fail("Hard-linked copy source"); }
+    if (fcopyfile(from, to, NULL, COPYFILE_DATA) || fchmod(to, info.st_mode & 0777) || fsync(to))
+      fail("Copy file bytes");
+    return;
+  }
+  if (!S_ISDIR(info.st_mode)) { errno = ENOTSUP; fail("Unsupported copy source"); }
+  if (lseek(from, 0, SEEK_SET) < 0) fail("Rewind copy folder");
+  DIR *dir = fdopendir(dup(from));
+  if (!dir) fail("Browse copy source");
+  struct dirent *entry;
+  errno = 0;
+  while ((entry = readdir(dir))) {
+    if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+    if (!strcasecmp(entry->d_name, ".git")) { errno = EPERM; fail("Protected metadata"); }
+    int child = scoped_open(from, entry->d_name, O_RDONLY);
+    struct stat actual;
+    if (fstat(child, &actual)) fail("Inspect copy child");
+    if (!S_ISDIR(actual.st_mode) && !S_ISREG(actual.st_mode)) { errno = ENOTSUP; fail("Unsupported copy child"); }
+    if (S_ISDIR(actual.st_mode) && mkdirat(to, entry->d_name, 0700)) fail("Create copy folder");
+    int target = scoped_open(to, entry->d_name, S_ISDIR(actual.st_mode) ? O_RDONLY | O_DIRECTORY : O_WRONLY | O_CREAT | O_EXCL);
+    copy_tree(child, target);
+    close(child); close(target);
+    errno = 0;
+  }
+  if (errno) fail("Browse copy source");
   closedir(dir);
 }
 
@@ -195,6 +261,7 @@ int main(int argc, char **argv) {
     // upgrade if cross-process transactional file operations become a requirement.
     revalidate_source(argv[2], &info);
     if (!strcmp(operation, "move")) {
+      free_case_name(argv[3], argv[2]);
       if (renameatx_np(3, argv[2], 3, argv[3], RENAME_EXCL | RENAME_NOFOLLOW_ANY | RENAME_RESOLVE_BENEATH))
         fail("Move source (destination must be free)");
       return 0;
@@ -220,6 +287,53 @@ int main(int argc, char **argv) {
     if (status) { fprintf(stderr, "5:Native Trash failed (%d); no permanent deletion attempted\n", (int)status); return 1; }
     if (!FSRefMakePath(&target, (UInt8 *)path, sizeof(path))) printf("%s", path);
 #pragma clang diagnostic pop
+    return 0;
+  }
+
+  if (!strcmp(operation, "copy")) {
+    if (argc != 7) { errno = EINVAL; fail("Invalid copy request"); }
+    int source = scoped_open(3, argv[2], O_RDONLY);
+    struct stat info;
+    if (fstat(source, &info)) fail("Inspect copy source");
+    char identity[100];
+    snprintf(identity, sizeof(identity), "%llu:%llu", (unsigned long long)info.st_dev, (unsigned long long)info.st_ino);
+    if (strcmp(identity, argv[4])) { errno = ESTALE; fail("Copy source replaced"); }
+    safe_tree(source);
+    revalidate_source(argv[2], &info);
+    char parent_path[PATH_MAX];
+    snprintf(parent_path, sizeof(parent_path), "%s", argv[3]);
+    char *slash = strrchr(parent_path, '/');
+    if (slash) *slash = 0; else strcpy(parent_path, ".");
+    int parent = scoped_open(3, parent_path, O_RDONLY | O_DIRECTORY);
+    struct stat parent_info;
+    if (fstat(parent, &parent_info)) fail("Inspect copy destination parent");
+    snprintf(identity, sizeof(identity), "%llu:%llu", (unsigned long long)parent_info.st_dev, (unsigned long long)parent_info.st_ino);
+    if (strcmp(identity, argv[6])) { errno = ESTALE; fail("Copy destination parent replaced"); }
+    free_case_name(argv[3], NULL);
+    // Build under an exclusive sibling; failed staging is retained for inspection.
+    if (S_ISDIR(info.st_mode) && mkdirat(3, argv[5], 0700)) fail("Stage copy folder");
+    int target = scoped_open(3, argv[5], S_ISDIR(info.st_mode) ? O_RDONLY | O_DIRECTORY : O_WRONLY | O_CREAT | O_EXCL);
+    struct stat staging_info;
+    if (fstat(target, &staging_info)) fail("Inspect open copy staging object");
+    // The marker records that staging exists; its pathname never grants identity or cleanup authority.
+    printf("staged:%llu:%llu\n", (unsigned long long)staging_info.st_dev, (unsigned long long)staging_info.st_ino);
+    if (fflush(stdout)) fail("Report copy staging object");
+    copy_tree(source, target);
+#ifdef ESCODE_TEST_COPY_STAGE
+    // Only the separate staging-race test build pauses before final publication checks.
+    char resume;
+    if (write(4, "staged", 6) != 6 || read(5, &resume, 1) != 1) {
+      errno = EIO; fail("Synchronize copy staging test");
+    }
+#endif
+    revalidate_source(argv[2], &info);
+    revalidate_source(parent_path, &parent_info);
+    free_case_name(argv[3], NULL);
+    // shortcut: scoped identity checking is not atomic with rename; upgrade if cross-process transactional publication is required.
+    revalidate_source(argv[5], &staging_info);
+    if (renameatx_np(3, argv[5], 3, argv[3], RENAME_EXCL | RENAME_NOFOLLOW_ANY | RENAME_RESOLVE_BENEATH))
+      fail("Publish copy (destination must be free)");
+    close(target);
     return 0;
   }
 

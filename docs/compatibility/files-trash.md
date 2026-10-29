@@ -57,7 +57,7 @@ During R1 development, test assertions were corrected for the newly visible conf
 
 ## Human acceptance and limits
 
-The new batch controls and native batch confirmation have **not** received human VoiceOver acceptance, Finder Put Back verification or a manual process restart in this slice. Prior first-gate Put Back/VoiceOver and tree/inline VoiceOver approvals do not certify these new controls. Automated dialog responses establish application choice handling, not native dialog reading/focus behavior under VoiceOver. The parent owns those new manual acceptance checks after fresh review.
+The user confirmed batch VoiceOver controls after editing `batch-a.txt` unsaved, selecting `batch-a.txt` and `batch-b.txt`, invoking Cmd+Backspace, reviewing actual paths/dirty choices, cancelling, then choosing Discard and Move to Trash. The bounded check covered dialog announcements, results and returned tree focus. The user also confirmed Finder Bin → Put Back restored **both original paths and original disk contents**, followed by explicit Refresh. See [the recorded batch-specific acceptance](https://github.com/ejjsharpe/escode/issues/42#issuecomment-6506637165). This does not claim a manual process restart, transfer VoiceOver acceptance, live-provider concurrency or full-parent acceptance. The accepted #42 implementation is baseline `812b1c547a2401984c9b9f2fc425eede76fa15e8`; integration remains outside this worktree.
 
 Tests use isolated temporary repositories and app profiles. No live authenticated Codex turn was run. The protected first-slice/tree/inline snapshots, Desktop fixture, ports 5173–5175, other checkouts and newer main were untouched. No staging, commits, merge, push, PR, tracker write or issue closure occurred.
 

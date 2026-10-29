@@ -19,24 +19,31 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 const base = realpathSync(mkdtempSync(join(tmpdir(), "escode-native-races-")));
 const helper = join(base, "filesystem");
+const stagingHelper = join(base, "filesystem-staging");
 beforeAll(() => {
   // The shipped helper is compiled without this define and has no pause protocol.
-  execFileSync("clang", [
-    "-std=c11",
-    "-Wall",
-    "-Wextra",
-    "-Werror",
-    "-O2",
-    "-DESCODE_TEST_PREFLIGHT",
-    "host/filesystem.c",
-    "-framework",
-    "CoreServices",
-    "-o",
-    helper,
-  ]);
+  for (const [binary, define] of [
+    [helper, "ESCODE_TEST_PREFLIGHT"],
+    [stagingHelper, "ESCODE_TEST_COPY_STAGE"],
+  ])
+    execFileSync("clang", [
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-O2",
+      "-D" + define,
+      "host/filesystem.c",
+      "-framework",
+      "CoreServices",
+      "-o",
+      binary,
+    ]);
 });
 afterAll(() => rmSync(base, { recursive: true, force: true }));
 for (const [kind, replacement] of [
+  ["copy", true],
+  ["copy", false],
   ["move", true],
   ["trash", false],
   ["trash", true],
@@ -53,7 +60,13 @@ for (const [kind, replacement] of [
     const rootFd = openSync(root, constants.O_RDONLY | constants.O_DIRECTORY | 0x20000000);
     const child = spawn(
       helper,
-      [kind, "source", kind === "move" ? "destination" : "-", `${original.dev}:${original.ino}`],
+      [
+        kind,
+        "source",
+        kind !== "trash" ? "destination" : "-",
+        `${original.dev}:${original.ino}`,
+        ...(kind === "copy" ? [".copy-stage", `${statSync(root).dev}:${statSync(root).ino}`] : []),
+      ],
       { stdio: ["ignore", "pipe", "pipe", rootFd, "pipe", "pipe"] },
     );
     closeSync(rootFd);
@@ -99,6 +112,127 @@ for (const [kind, replacement] of [
       await closed;
       // A failing pre-fix run may actually Trash this test-owned object.
       if (stdout.includes("/.Trash/")) rmSync(stdout, { recursive: true, force: true });
+    }
+  });
+}
+
+test("copy rejects destination-parent replacement during native recursive preflight", async () => {
+  const fixture = mkdtempSync(join(base, "destination-")),
+    root = join(fixture, "repo");
+  execFileSync("git", ["init", root]);
+  mkdirSync(join(root, "source"));
+  mkdirSync(join(root, "target"));
+  writeFileSync(join(root, "source/file.bin"), Buffer.alloc(1024, 173));
+  const source = statSync(join(root, "source")),
+    target = statSync(join(root, "target"));
+  const fd = openSync(root, constants.O_RDONLY | constants.O_DIRECTORY | 0x20000000);
+  const child = spawn(
+    helper,
+    [
+      "copy",
+      "source",
+      "target/copy",
+      `${source.dev}:${source.ino}`,
+      "target/.stage",
+      `${target.dev}:${target.ino}`,
+    ],
+    { stdio: ["ignore", "pipe", "pipe", fd, "pipe", "pipe"] },
+  );
+  closeSync(fd);
+  const closed = once(child, "close");
+  let error = "";
+  child.stderr!.on("data", (bytes) => {
+    error += bytes;
+  });
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      once(child.stdio[4]!, "data"),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(Error("No preflight")), 3000);
+      }),
+    ]);
+    renameSync(join(root, "target"), join(fixture, "original-target"));
+    mkdirSync(join(root, "target"));
+    (child.stdio.at(5) as import("node:stream").Writable).end("continue");
+    expect((await closed)[0]).not.toBe(0);
+    expect(error).toContain("Copy destination parent replaced");
+    expect(existsSync(join(root, "target/copy"))).toBe(false);
+    expect(existsSync(join(fixture, "original-target/copy"))).toBe(false);
+  } finally {
+    clearTimeout(timeout);
+    child.kill("SIGKILL");
+    await closed;
+  }
+});
+
+for (const kind of ["folder", "file"] as const) {
+  test(`copy rejects replacement of its open ${kind} staging object without publishing or cleaning the replacement`, async () => {
+    const root = mkdtempSync(join(base, "staging-"));
+    if (kind === "folder") {
+      mkdirSync(join(root, "source"));
+      for (let i = 0; i < 2000; i++) writeFileSync(join(root, `source/${i}.txt`), `correct ${i}`);
+    } else writeFileSync(join(root, "source"), Buffer.alloc(4 * 1024 * 1024, 173));
+    const source = statSync(join(root, "source")),
+      parent = statSync(root);
+    const fd = openSync(root, constants.O_RDONLY | constants.O_DIRECTORY | 0x20000000);
+    const child = spawn(
+      stagingHelper,
+      [
+        "copy",
+        "source",
+        "destination",
+        `${source.dev}:${source.ino}`,
+        ".stage",
+        `${parent.dev}:${parent.ino}`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe", fd, "pipe", "pipe"] },
+    );
+    closeSync(fd);
+    const closed = once(child, "close");
+    let error = "",
+      output = "";
+    child.stderr!.on("data", (bytes) => {
+      error += bytes;
+    });
+    child.stdout!.on("data", (bytes) => {
+      output += bytes;
+    });
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const ready = await Promise.race([
+        once(child.stdio[4]!, "data"),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(Error("No staging pause")), 10000);
+        }),
+      ]);
+      expect(String(ready[0])).toBe("staged");
+      const original = statSync(join(root, ".stage"));
+      renameSync(join(root, ".stage"), join(root, "retained-stage"));
+      if (kind === "folder") {
+        mkdirSync(join(root, ".stage"));
+        writeFileSync(join(root, ".stage/WRONG"), "replacement bytes");
+      } else writeFileSync(join(root, ".stage"), "replacement bytes");
+      (child.stdio.at(5) as import("node:stream").Writable).end("continue");
+      expect((await closed)[0]).not.toBe(0);
+      expect(error).toContain("Source changed after preflight");
+      expect(output).toBe(`staged:${original.dev}:${original.ino}\n`);
+      expect(existsSync(join(root, "destination"))).toBe(false);
+      expect(readFileSync(join(root, kind === "folder" ? ".stage/WRONG" : ".stage"), "utf8")).toBe(
+        "replacement bytes",
+      );
+      expect(statSync(join(root, "retained-stage")).ino).toBe(original.ino);
+      if (kind === "folder")
+        for (let i = 0; i < 2000; i++)
+          expect(readFileSync(join(root, `retained-stage/${i}.txt`), "utf8")).toBe(`correct ${i}`);
+      else
+        expect(
+          readFileSync(join(root, "retained-stage")).equals(Buffer.alloc(4 * 1024 * 1024, 173)),
+        ).toBe(true);
+    } finally {
+      clearTimeout(timeout);
+      child.kill("SIGKILL");
+      await closed;
     }
   });
 }

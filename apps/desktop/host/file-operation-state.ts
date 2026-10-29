@@ -14,6 +14,13 @@ export function reconcile(state: WorkspaceState, intent: Intent) {
     if (intent.savedDisk) reconcileSave(state, root, { path: source, disk: intent.savedDisk });
     return;
   }
+  if (kind === "copy") {
+    for (const draft of intent.copies ?? []) {
+      if (!state.drafts.some((d) => d.root === root && d.path === draft.path))
+        state.drafts.push({ ...draft });
+    }
+    return;
+  }
   state.drafts = state.drafts.flatMap((d) =>
     d.root !== root || !affected(d.path, source)
       ? [d]

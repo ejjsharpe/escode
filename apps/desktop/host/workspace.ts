@@ -202,7 +202,7 @@ export class Workspace {
       if (
         !v ||
         !isAbsolute(v.root) ||
-        !["move", "trash", "save"].includes(v.kind) ||
+        !["move", "trash", "save", "copy"].includes(v.kind) ||
         typeof v.checkoutIdentity !== "string" ||
         typeof v.identity !== "string" ||
         typeof v.source !== "string" ||
@@ -210,12 +210,26 @@ export class Workspace {
         isAbsolute(v.source) ||
         v.source.split("/").some((p: string) => p === ".." || p.toLowerCase() === ".git") ||
         typeof v.destination !== "string" ||
-        (v.kind === "move" &&
+        (["move", "copy"].includes(v.kind) &&
           (!v.destination ||
             isAbsolute(v.destination) ||
             v.destination
               .split("/")
               .some((p: string) => p === ".." || p.toLowerCase() === ".git"))) ||
+        (v.kind === "copy" &&
+          (!Array.isArray(v.copies) ||
+            v.copies.some(
+              (d: any) =>
+                !d ||
+                d.root !== v.root ||
+                typeof d.path !== "string" ||
+                isAbsolute(d.path) ||
+                !(d.path === v.destination || d.path.startsWith(v.destination + "/")) ||
+                d.path.split("/").some((p: string) => p === ".." || p.toLowerCase() === ".git") ||
+                typeof d.text !== "string" ||
+                typeof d.disk?.text !== "string" ||
+                typeof d.disk?.version !== "string",
+            ))) ||
         (v.completed !== undefined && typeof v.completed !== "boolean") ||
         (v.kind === "save" &&
           (typeof v.saveText !== "string" ||

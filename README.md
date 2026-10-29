@@ -99,4 +99,10 @@ or occupied names retain their input. See [create/rename evidence](docs/compatib
 Batch Trash is available from the context menu, Trash action and tree-focused
 Cmd+Backspace/Delete, with explicit dirty-file choices and per-item results. See
 [batch Trash evidence](docs/compatibility/files-trash.md).
-Transfers and automatic external-change watching remain later slices.
+Duplicate and checkout-scoped Copy/Cut/Paste are available through the Files context menu
+and tree-focused Cmd+C/X/V. Copies carry available unsaved source text into destination
+drafts over copied disk contents; moves use the existing preservation gate. Collisions
+require explicit choices; dirty destinations block replacement. Bulk copying uses the
+native helper asynchronously, independently of text-editor size/encoding limits.
+See [transfer evidence and limitations](docs/compatibility/files-transfer.md).
+Automatic external-change watching remains a later slice.
