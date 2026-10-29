@@ -14,7 +14,10 @@ A saved Codex conversation belonging to one project and attached to one checkout
 The checkout through which a project was opened, shown by Files and Source Control before a chat is selected.
 
 **Managed worktree**:
-A separate working copy created by escode for a project. It can host multiple chats and remains available after those chats finish.
+A separate working copy created by escode for a project. It starts from a displayed committed local base on a unique `escode/<short-id>` branch,
+in a repository-specific directory under escode's user data outside the source checkout.
+It can host multiple chats and remains available after those chats finish. Reusing an
+existing Git-discovered worktree is an explicit choice; creation never falls back to reuse.
 
 **Save conflict**:
 A difference detected before saving between a file's loaded disk version and its current disk version. The user's edits remain available while they compare, explicitly overwrite, reload from disk, or cancel.

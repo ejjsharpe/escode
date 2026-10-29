@@ -229,3 +229,24 @@ h2 {
   height: calc(100vh - 152px);
   min-height: 300px;
 }
+
+.worktree-choices {
+  margin-bottom: 16px;
+}
+.worktree-choices fieldset {
+  margin: 12px 0;
+  padding: 12px;
+}
+.worktree-choices label {
+  display: block;
+  margin: 12px 0 6px;
+}
+.worktree-choices input,
+.worktree-choices select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+.worktree-choices code {
+  overflow-wrap: anywhere;
+}

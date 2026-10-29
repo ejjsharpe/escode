@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@base-ui/react/button";
+import { WorktreeChoices } from "./worktrees";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
@@ -213,6 +214,15 @@ export function ChatView({
       setPending((old) => ({ ...old, [id]: false }));
     }
   };
+  const createChat = async (root: string) => {
+    const generation = navigation.current;
+    const c = await window.escode.chat("create", project, root);
+    await load();
+    if (navigation.current !== generation) return;
+    onCheckout(c.checkout);
+    drafts.current[c.id] = c.draft;
+    await select(c.id);
+  };
   const snapshot = snapshots[selected];
   return (
     <div className="chat-view">
@@ -223,13 +233,7 @@ export function ChatView({
               disabled={working}
               onClick={() =>
                 void run(async () => {
-                  const generation = navigation.current;
-                  const c = await window.escode.chat("create", project, checkout);
-                  await load();
-                  if (navigation.current !== generation) return;
-                  onCheckout(c.checkout);
-                  drafts.current[c.id] = c.draft;
-                  await select(c.id);
+                  await createChat(checkout);
                 })
               }
             >
@@ -253,8 +257,9 @@ export function ChatView({
           document.getElementById(sidebarId)!,
         )}
       <div className="chat-conversation">
+        <WorktreeChoices checkout={checkout} createChat={createChat} />
         {!selected ? (
-          <p>Create or select a saved chat to begin. Chats use the current checkout.</p>
+          <p>Create or select a saved chat to begin. Choose the current checkout or a worktree.</p>
         ) : (
           <>
             <p className="directory">Checkout: {chats.find((c) => c.id === selected)?.checkout}</p>

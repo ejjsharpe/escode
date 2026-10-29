@@ -62,6 +62,12 @@ requests in the UI. `ESCODE_LIVE_CHAT=1 bun run --cwd apps/desktop test --
 host/chat.test.ts` additionally checks four real Codex chats across shared and
 separate checkouts and projects (consumes turns).
 
-Managed-worktree creation/reuse controls, recovery and close/quit protection remain
-subsequent slices. Project tabs and view memory currently last for the app session;
+Chat creation offers the current checkout, a new managed worktree or explicit reuse
+of a Git-discovered project worktree. Creation shows a resolved local base commit,
+uses committed files only and preserves original local/unsaved edits. Branches and
+absolute paths can be copied; setup, commits and integration stay external.
+Worktrees live under Electron user data, separated by repository identity. Failed
+creation reports possible leftovers and retries always reserve a fresh destination.
+
+Recovery, worktree removal and close/quit protection remain subsequent slices. Project tabs and view memory currently last for the app session;
 restart restoration remains lifecycle work. This is not the completed v1.

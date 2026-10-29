@@ -88,6 +88,17 @@ app.whenReady().then(() => {
       return opened.status();
     }
     const project = await checkout(args.shift());
+    if (operation === "worktree-options" && !args.length) return project.worktreeOptions();
+    if (
+      operation === "worktree-create" &&
+      args.length === 2 &&
+      args.every((a) => typeof a === "string")
+    )
+      return project.createWorktree(
+        join(app.getPath("userData"), "worktrees"),
+        args[0] as string,
+        args[1] as string,
+      );
     if (operation === "status" && !args.length) return project.status();
     if (operation === "files" && args.length === 1 && typeof args[0] === "string")
       return project.files(args[0]);
@@ -117,6 +128,8 @@ app.whenReady().then(() => {
     if (operation === "list" && !args.length) return chats.list(root);
     if (operation === "create" && args.length === 1) {
       const target = await checkout(args[0]);
+      if (!target.validateRepository().includes(target.root))
+        throw Error("Checkout is no longer registered with Git.");
       if (target.repository() !== root) throw Error("Checkout belongs to another project.");
       return chats.create(root, target.root);
     }

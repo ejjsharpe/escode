@@ -179,3 +179,41 @@ worktree association migration preserves saved IDs, threads and drafts. Making
 one checkout unavailable does not block another project's chat controls.
 The aggregate smoke command still fails its development hot-reload check because
 port 5173 is occupied by an existing server; that server was left running.
+
+
+## Worktree creation and explicit reuse (2026-10-29)
+
+Chat creation offers current-checkout use, a new managed worktree and explicit reuse
+of a project checkout discovered by `git worktree list --porcelain -z`. Bases are
+local branches, HEAD and a locally recorded origin default when available. No
+network lookup occurs. The origin default's local branch is preferred; HEAD is the
+fallback without usable default metadata. The displayed commit is checked again
+before creation; a moved or missing base requires refreshing and choosing again.
+Empty repositories require an external first commit.
+
+Managed paths use the canonical repository identity's SHA-256 hash and an exclusive
+random container under Electron user data. Git creates a unique escode branch at the
+chosen commit, with Git hooks disabled for this operation. No files are copied from
+the original checkout, no setup runs and no chat is created before Git succeeds.
+Failures preserve and report possible branch/directory leftovers. Retrying reserves
+a fresh container; there is no automatic cleanup or branch deletion. Existing
+worktrees are never silently substituted. Creation results remain visible and
+copyable, including when subsequent chat connection fails.
+
+Real-repository host tests cover staged/unstaged/untracked/ignored preservation,
+resolved commits, missing/moved bases, empty repositories, same-name repositories,
+separate-process concurrent creation, occupied empty/nonempty destinations and a lost
+result after successful Git creation. Changed Git-directory pointers are rejected
+before allocation; mutation uses the validated Git directory explicitly. Canonical
+managed paths inside any registered project checkout, including symlink aliases,
+are rejected with external user-data-directory guidance. An externally deleted sibling
+worktree does not block creation from a healthy checkout or prune its registration. Creation errors and
+copyable leftover identities remain visible across retries until dismissed. The Electron workflow creates a worktree from dirty disk, preserves an
+unsaved Monaco buffer in the original checkout, reuses the new checkout explicitly,
+shows the shared-files notice and retains an existing message draft. A required
+Git checkout filter forces a real partial failure; a successful retry retains the
+earlier result and recovery instructions and never starts a chat for the failed attempt. No Codex turn
+is sent by this test. Typecheck, lint, host tests, build and the targeted Electron
+workflow passed. Full restart restoration, protected worktree removal, manual
+VoiceOver checks and a live agent turn on a newly managed checkout remain outside
+this ticket's runtime evidence.

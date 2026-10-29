@@ -1,6 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { realpathSync, openSync, closeSync, fstatSync, constants } from "node:fs";
-import { resolve, relative, isAbsolute, dirname, join } from "node:path";
+import {
+  realpathSync,
+  openSync,
+  closeSync,
+  fstatSync,
+  constants,
+  mkdirSync,
+  mkdtempSync,
+  statSync,
+} from "node:fs";
+import { resolve, relative, isAbsolute, dirname, join, basename } from "node:path";
 import { getSystemErrorName } from "node:util";
 import { findExecutable } from "./tools";
 import { createHash, randomUUID } from "node:crypto";
@@ -12,6 +21,8 @@ export type Change = { path: string; area: "staged" | "unstaged" | "untracked" }
 export type SaveResult = { kind: "saved"; disk: Document } | { kind: "conflict"; disk: Document };
 export class Project {
   private directory: number | undefined;
+  private gitDirectory = "";
+  private gitIdentity?: { dev: number; ino: number };
   private constructor(
     readonly root: string,
     private readonly executable: string,
@@ -32,6 +43,11 @@ export class Project {
         .toString("utf8")
         .trim();
       if (realpathSync(top) !== root) throw Error("Choose the repository checkout root.");
+      project.gitDirectory = realpathSync(
+        project.git(["rev-parse", "--absolute-git-dir"]).toString().trim(),
+      );
+      project.gitIdentity = statSync(project.gitDirectory);
+      project.repository();
       return project;
     } catch (error) {
       closeSync(fd);
@@ -148,6 +164,124 @@ export class Project {
     }
     return this.repositoryIdentity;
   }
+  validateRepository() {
+    const liveDirectory = realpathSync(
+      this.git(["rev-parse", "--absolute-git-dir"]).toString().trim(),
+    );
+    const identity = statSync(liveDirectory);
+    const checkouts = this.checkouts();
+    if (
+      liveDirectory !== this.gitDirectory ||
+      identity.dev !== this.gitIdentity?.dev ||
+      identity.ino !== this.gitIdentity?.ino ||
+      !checkouts.includes(this.root) ||
+      !checkouts[0] ||
+      realpathSync(checkouts[0]) !== this.repository()
+    )
+      throw Error(
+        "Repository metadata changed. Reopen the project before creating or reusing worktrees.",
+      );
+    return checkouts;
+  }
+  worktreeOptions() {
+    const checkouts = this.validateRepository();
+    const branches = this.git(["for-each-ref", "--format=%(refname)", "refs/heads/"])
+      .toString()
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+    const resolveBase = (ref: string) => {
+      try {
+        return this.git(["rev-parse", "--verify", "--end-of-options", ref + "^{commit}"])
+          .toString()
+          .trim();
+      } catch {
+        return null;
+      }
+    };
+    const bases = [...branches, "HEAD"].flatMap((ref) => {
+      const commit = resolveBase(ref);
+      return commit ? [{ ref, commit }] : [];
+    });
+    let defaultRef = "HEAD";
+    try {
+      const remote = this.git(["symbolic-ref", "refs/remotes/origin/HEAD"]).toString().trim();
+      const local = "refs/heads/" + remote.slice("refs/remotes/origin/".length);
+      defaultRef = bases.some((b) => b.ref === local) ? local : remote;
+      const commit = resolveBase(defaultRef);
+      if (commit && !bases.some((b) => b.ref === defaultRef))
+        bases.push({ ref: defaultRef, commit });
+    } catch {
+      // Without local default-branch metadata, HEAD is the only reliable fallback.
+    }
+    if (!bases.some((b) => b.ref === defaultRef)) defaultRef = "HEAD";
+    return { bases, defaultRef, checkouts };
+  }
+  createWorktree(managedRoot: string, ref: string, commit: string) {
+    const base = this.worktreeOptions().bases.find((b) => b.ref === ref);
+    if (!base || base.commit !== commit)
+      throw Error(
+        "Base is missing or changed. Refresh bases and choose again. Empty repositories need a first commit.",
+      );
+    let ancestor = resolve(managedRoot);
+    const missing: string[] = [];
+    while (true) {
+      try {
+        ancestor = realpathSync(ancestor);
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        missing.unshift(basename(ancestor));
+        ancestor = dirname(ancestor);
+      }
+    }
+    const canonicalRoot = join(ancestor, ...missing);
+    for (const checkout of this.checkouts()) {
+      let canonicalCheckout: string;
+      try { canonicalCheckout = realpathSync(checkout); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      const rel = relative(canonicalCheckout, canonicalRoot);
+      if (!rel || (rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel)))
+        throw Error(
+          "Managed worktrees must be outside project checkouts. Relaunch escode with --user-data-dir pointing outside this repository.",
+        );
+    }
+    const repository = createHash("sha256").update(this.repository()).digest("hex");
+    const parent = join(canonicalRoot, repository);
+    mkdirSync(parent, { recursive: true, mode: 0o700 });
+    // Reserve a unique container; Git gets a never-before-used child path.
+    const container = mkdtempSync(join(parent, "worktree-"));
+    const root = join(container, "checkout");
+    const branch = "escode/" + randomUUID().slice(0, 12);
+    try {
+      // Git accepts an existing empty path, so reserve it exclusively ourselves.
+      mkdirSync(root, { mode: 0o700 });
+      this.validateRepository();
+      this.git([
+        "--git-dir=" + this.gitDirectory,
+        "-c",
+        "core.hooksPath=/dev/null",
+        "worktree",
+        "add",
+        "-b",
+        branch,
+        root,
+        commit,
+      ]);
+      return { root, branch, commit, error: null };
+    } catch (error) {
+      // Preserve all leftovers: even an empty directory may now belong to another writer.
+      return {
+        root,
+        branch,
+        commit,
+        error: `Creation failed. No chat started. Inspect possible residual branch ${branch} and directory ${container} externally; both are retained. Refresh and retry creates a new destination. ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
   async status() {
     const records = this.git([
       "status",
@@ -219,6 +353,16 @@ export class Project {
 
 export interface ProjectBridge {
   (operation: "open"): Promise<Awaited<ReturnType<Project["status"]>> | null>;
+  (
+    operation: "worktree-options",
+    checkout: string,
+  ): Promise<ReturnType<Project["worktreeOptions"]>>;
+  (
+    operation: "worktree-create",
+    checkout: string,
+    ref: string,
+    commit: string,
+  ): Promise<ReturnType<Project["createWorktree"]>>;
   (operation: "status", checkout: string): ReturnType<Project["status"]>;
   (operation: "files", checkout: string, path: string): ReturnType<Project["files"]>;
   (operation: "read", checkout: string, path: string): ReturnType<Project["read"]>;
