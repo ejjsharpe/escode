@@ -111,3 +111,8 @@ Internal tree dragging moves entries; Option-drag copies. The destination is hig
 hovering expands folders, and drag moves require confirmation of their captured sources
 and destination. Transfers use the same preservation and collision handling as paste.
 See [internal drag evidence and limits](docs/compatibility/files-drag.md).
+
+Finder files/folders can be copied in by drop or Files-scoped file paste. Imports use native
+file references, retain originals, and share transfer conflicts and per-item results. Binary
+and large regular files copy without editor decoding; unsupported recursive contents are
+rejected before staging. See [native import evidence and manual limits](docs/compatibility/files-import.md).

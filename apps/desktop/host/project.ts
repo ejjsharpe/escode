@@ -216,8 +216,39 @@ export class Project {
       });
     }
   }
-  async copy(source: string, destination: string, identity: string, temporary: string) {
-    this.validateMove(source, destination);
+  async preflightImport(native: import("./native-import").NativeImport) {
+    native.validate();
+    const fd = this.checkedDirectory();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(this.helper, ["import-check", native.path, native.parents], {
+          stdio: ["ignore", "ignore", "pipe", fd, native.fd],
+        });
+        let error = "";
+        child.stderr!.on("data", (chunk) => {
+          error += chunk;
+        });
+        child.on("error", reject);
+        child.on("close", (code) => (code === 0 ? resolve() : reject(Error(error))));
+      });
+      native.validate();
+    } finally {
+      closeSync(fd);
+    }
+  }
+  async copy(
+    source: string,
+    destination: string,
+    identity: string,
+    temporary: string,
+    native?: import("./native-import").NativeImport,
+  ) {
+    if (native) {
+      this.path(destination);
+      native.validate();
+      if (native.containsDirectory(resolve(this.root, dirname(destination))))
+        throw Error("Choose a destination outside the source folder.");
+    } else this.validateMove(source, destination);
     const parent = dirname(destination);
     const parentIdentity =
       parent === "." ? this.checkoutIdentity() : this.operationIdentity(parent);
@@ -227,9 +258,17 @@ export class Project {
       await new Promise<void>((resolve, reject) => {
         const child = spawn(
           this.helper,
-          ["copy", source, destination, identity, temporary, parentIdentity],
+          [
+            native ? "import" : "copy",
+            source,
+            destination,
+            identity,
+            temporary,
+            parentIdentity,
+            ...(native ? [native.path, native.parents, this.root] : []),
+          ],
           {
-            stdio: ["ignore", "pipe", "pipe", fd],
+            stdio: ["ignore", "pipe", "pipe", fd, ...(native ? [native.fd] : [])],
           },
         );
         child.stdout!.on("data", (chunk) => {
@@ -670,7 +709,7 @@ export interface ProjectBridge {
   (
     operation: "transfer",
     checkout: string,
-    kind: "paste" | "duplicate" | "drag-move" | "drag-copy",
+    kind: "paste" | "duplicate" | "drag-move" | "drag-copy" | "import",
     parent: string,
     paths: string[],
   ): Promise<{

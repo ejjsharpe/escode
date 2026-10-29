@@ -236,3 +236,120 @@ for (const kind of ["folder", "file"] as const) {
     }
   });
 }
+
+for (const swap of ["source", "ancestor", "parent", "root", "stage"] as const) {
+  test(`native import rejects ${swap} replacement before publish and retains staging without cleanup`, async () => {
+    const { NativeImport } = await import("./native-import");
+    const fixture = mkdtempSync(join(base, "import-"));
+    const root = join(fixture, "repo"),
+      external = join(fixture, "external");
+    mkdirSync(root);
+    mkdirSync(external);
+    mkdirSync(join(root, "target"));
+    writeFileSync(join(external, "source"), Buffer.alloc(4096, 173));
+    const source = new NativeImport(join(external, "source"), () => {});
+    const parent = statSync(join(root, "target"));
+    const fd = openSync(root, constants.O_RDONLY | constants.O_DIRECTORY | 0x20000000);
+    const child = spawn(
+      stagingHelper,
+      [
+        "import",
+        source.source,
+        "target/result",
+        source.identity,
+        "target/.stage",
+        `${parent.dev}:${parent.ino}`,
+        source.path,
+        source.parents,
+        root,
+      ],
+      { stdio: ["ignore", "pipe", "pipe", fd, source.fd, "pipe", "pipe"] },
+    );
+    closeSync(fd);
+    const closed = once(child, "close");
+    let error = "";
+    child.stderr!.on("data", (bytes) => {
+      error += bytes;
+    });
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        once(child.stdio.at(5)!, "data"),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(Error("No import staging pause")), 5000);
+        }),
+      ]);
+      if (swap === "source") {
+        renameSync(source.path, source.path + "-old");
+        writeFileSync(source.path, "replacement");
+      }
+      if (swap === "ancestor") {
+        renameSync(external, external + "-old");
+        mkdirSync(external);
+        renameSync(join(external + "-old", "source"), source.path);
+      }
+      if (swap === "parent") {
+        renameSync(join(root, "target"), join(root, "old-target"));
+        mkdirSync(join(root, "target"));
+      }
+      if (swap === "root") {
+        renameSync(root, root + "-old");
+        mkdirSync(root);
+        mkdirSync(join(root, "target"));
+      }
+      if (swap === "stage") {
+        renameSync(join(root, "target/.stage"), join(root, "target/old-stage"));
+        writeFileSync(join(root, "target/.stage"), "replacement stage");
+      }
+      (child.stdio.at(6) as import("node:stream").Writable).end("continue");
+      expect((await closed)[0]).not.toBe(0);
+      expect(error).toMatch(/replaced|changed/);
+      expect(existsSync(join(root, "target/result"))).toBe(false);
+      expect(existsSync(join(root + "-old", "target/result"))).toBe(false);
+      expect(existsSync(join(root, "old-target/result"))).toBe(false);
+      if (swap === "stage")
+        expect(readFileSync(join(root, "target/.stage"), "utf8")).toBe("replacement stage");
+    } finally {
+      clearTimeout(timeout);
+      child.kill("SIGKILL");
+      await closed;
+      source.close();
+    }
+  });
+}
+
+test("native helper rejects destination ancestry before any staging even without the host preflight", async () => {
+  const { NativeImport } = await import("./native-import");
+  const root = mkdtempSync(join(base, "import-descendant-"));
+  mkdirSync(join(root, "source"));
+  mkdirSync(join(root, "source/child"));
+  writeFileSync(join(root, "source/child/original"), "original bytes");
+  const source = new NativeImport(join(root, "source"), () => {});
+  const parent = statSync(join(root, "source/child"));
+  const fd = openSync(root, constants.O_RDONLY | constants.O_DIRECTORY | 0x20000000);
+  try {
+    expect(() =>
+      execFileSync(
+        stagingHelper,
+        [
+          "import",
+          "source",
+          "source/child/result",
+          source.identity,
+          "source/child/.stage",
+          `${parent.dev}:${parent.ino}`,
+          source.path,
+          source.parents,
+          root,
+        ],
+        { stdio: ["ignore", "pipe", "pipe", fd, source.fd], timeout: 2000 },
+      ),
+    ).toThrow(/outside the source folder/);
+    expect(existsSync(join(root, "source/child/.stage"))).toBe(false);
+    expect(existsSync(join(root, "source/child/result"))).toBe(false);
+    expect(readFileSync(join(root, "source/child/original"), "utf8")).toBe("original bytes");
+  } finally {
+    closeSync(fd);
+    source.close();
+  }
+});

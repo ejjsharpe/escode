@@ -67,3 +67,12 @@ R2 directly changes only `apps/desktop/host/main.ts`, `apps/desktop/tests/files-
 All work remains unstaged/uncommitted at `4b71d4208aa0843c019b9b01a3a89a7b7fcc8c93`; main's separately reported #43 integration is neither imported nor merged here.
 
 Ready for a **new fresh independent full Ponytail R2 review**. No R2 review approval, integration, signing or new manual acceptance is claimed.
+
+## Later manual status supplied by the parent for the #45 handoff
+
+The user confirmed the exact #44 drag move/copy, unsaved-text preservation, Cancel,
+hover, and VoiceOver confirmation/focus checks PASS; the parent posted the #44 record.
+This supersedes the earlier “new drag ... unobserved” statement for those bounded checks.
+No manual process restart was confirmed. The earlier bounded #43 transfer VoiceOver pass
+also remains accepted. These are supplied user observations, not new manual checks by the
+#45 implementer, and do not establish Finder import or native-import VoiceOver acceptance.
