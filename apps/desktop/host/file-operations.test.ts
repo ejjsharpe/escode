@@ -57,6 +57,12 @@ test("real folder move preserves descendant drafts and conflict baseline through
     const state = await new Workspace(join(base, "workspace.json")).read();
     expect(state.drafts.map((d) => d.path)).toEqual(["renamed/a.ts", "renamed/b.ts"]);
     expect(state.drafts[0].text).toBe("a unsaved");
+    expect(state.views[p.root].files).toEqual({
+      expanded: ["renamed"],
+      selected: ["renamed/a.ts"],
+      focus: "renamed/a.ts",
+      scroll: 0,
+    });
     expect(readFileSync(join(p.root, "renamed/a.ts"), "utf8")).toBe("disk");
     writeFileSync(join(p.root, "renamed/a.ts"), "external");
     expect((await p.save("renamed/a.ts", "a unsaved", state.drafts[0].disk.version)).kind).toBe(
@@ -80,6 +86,12 @@ test("restart reconciles a crash immediately after native rename, before complet
     const fresh = new FileOperations(new Workspace(join(base, "workspace.json")), file);
     expect(await fresh.recover(async () => p)).toContain("Recovered move");
     expect((await store.read()).drafts[1].path).toBe("moved/b.ts");
+    expect((await store.read()).views[p.root].files).toEqual({
+      expanded: ["moved"],
+      selected: ["moved/a.ts"],
+      focus: "moved/a.ts",
+      scroll: 0,
+    });
     expect(await journal.readIntent()).toBe(null);
   }));
 test("persistence failure after mutation returns the actual outcome and restart recovers edits", async () =>
@@ -208,3 +220,52 @@ test("case-only dirty folder move maps descendants without mistaking them for de
     await new FileOperations(store, join(base, "intent.json")).run(p, "move", "folder", "FOLDER");
     expect((await store.read()).drafts.map((d) => d.path)).toEqual(["FOLDER/a.ts", "FOLDER/b.ts"]);
   }));
+
+test("create is exclusive, basename-only and protects roots, metadata and missing parents", async () =>
+  fixture(async (p) => {
+    expect(p.create("folder", "new.txt", "file")).toBe("folder/new.txt");
+    expect(await p.read("folder/new.txt")).toMatchObject({ text: "" });
+    expect(p.create("", "empty", "folder")).toBe("empty");
+    expect(await p.files("empty")).toEqual([]);
+    for (const name of [
+      "",
+      " ",
+      ".",
+      "..",
+      "../escape",
+      "/absolute",
+      "a/b",
+      "a\\b",
+      ".GIT",
+      "a\0b",
+    ])
+      expect(() => p.create("", name, "file")).toThrow();
+    expect(() => p.renameDestination("folder/a.ts", "../escape")).toThrow();
+    expect(() => p.create("folder", "a.ts", "file")).toThrow();
+    expect(() => p.create("", "folder", "folder")).toThrow();
+    expect(() => p.create("missing", "a", "file")).toThrow();
+    expect(() => p.create(".git", "a", "file")).toThrow();
+    expect(readFileSync(join(p.root, "folder/a.ts"), "utf8")).toBe("disk");
+    renameSync(p.root, p.root + "-old");
+    mkdirSync(p.root);
+    expect(() => p.create("", "a", "file")).toThrow("replaced");
+  }));
+
+for (const replacement of ["directory", "symlink"])
+  test(`create rejects ${replacement} parent swaps at native execution`, async () =>
+    fixture(async (p, _store, base) => {
+      const outside = join(base, "outside");
+      mkdirSync(outside);
+      const execute = child.execFileSync;
+      vi.spyOn(child, "execFileSync").mockImplementation((...args) => {
+        if (Array.isArray(args[1]) && args[1][0] === "create") {
+          renameSync(join(p.root, "folder"), join(p.root, "original"));
+          if (replacement === "symlink") symlinkSync(outside, join(p.root, "folder"));
+          else mkdirSync(join(p.root, "folder"));
+        }
+        return execute(...args);
+      });
+      expect(() => p.create("folder", "new", "file")).toThrow();
+      expect(existsSync(join(outside, "new"))).toBe(false);
+      expect(existsSync(join(p.root, "original/new"))).toBe(false);
+    }));

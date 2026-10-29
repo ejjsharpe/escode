@@ -23,7 +23,7 @@ test("approved projects reopen across repeated restarts without choosing directo
       }, root);
       await page.getByRole("button", { name: "Open project…" }).click();
       await expect(page.locator("header")).toContainText(root);
-      await page.getByRole("button", { name: "a.txt", exact: true }).click();
+      await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
       await expect(page.locator(".monaco-editor:visible")).toContainText(root);
     }
     for (let restart = 0; restart < 2; restart++) {
@@ -73,7 +73,7 @@ test("renderer state cannot grant file access or overwrite approvals; native reo
       await page.getByRole("button", { name: "Open project…" }).click();
     };
     await open();
-    await expect(page.getByRole("button", { name: "a.txt", exact: true })).toBeVisible();
+    await expect(page.getByRole("treeitem", { name: "a.txt", exact: true })).toBeVisible();
     const original = await page.evaluate(async (root) => {
       const { state } = await window.escode.lifecycle("load");
       state.views[root] = { mode: "Files", checkout: root, roots: [root], path: "a.txt" };
@@ -163,7 +163,7 @@ test("renderer state cannot grant file access or overwrite approvals; native reo
     await expect(
       page.getByRole("alert").filter({ hasText: "Use Open project to approve" }),
     ).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "a.txt •", exact: true })).toBeVisible();
+    await expect(page.getByRole("treeitem", { name: "a.txt, unsaved", exact: true })).toBeVisible();
     await expect(page.locator(".monaco-editor:visible")).toContainText("legacy recovered edits");
     await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
     await expect(page.getByRole("status").filter({ hasText: "Saved a.txt" })).toBeVisible();
@@ -208,7 +208,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
       await expect(page.locator("header")).toContainText(path);
     };
     await open(root);
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("recovery edits");
@@ -254,7 +254,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
       .getByRole("navigation", { name: "Projects" })
       .getByRole("button", { name: "other", exact: true })
       .click();
-    await page.getByRole("button", { name: "b.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "b.txt", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("other project");
     await rename(root + "-away", root);
     await page
@@ -306,7 +306,7 @@ test("a saved secondary checkout can recover and save its buffer after restartin
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await expect(page.getByRole("button", { name: "a.txt", exact: true })).toBeVisible();
+    await expect(page.getByRole("treeitem", { name: "a.txt", exact: true })).toBeVisible();
     // Seed an acknowledged recovery draft through the public persistence contract.
     await page.evaluate(
       async ({ root, secondary }) => {
@@ -329,7 +329,7 @@ test("a saved secondary checkout can recover and save its buffer after restartin
     page = await app.firstWindow();
     await expect(page.locator(".view-nav:visible")).toContainText(secondary);
     await expect(page.locator(".monaco-editor:visible")).toContainText("secondary recovered edits");
-    await expect(page.getByRole("button", { name: "a.txt •", exact: true })).toBeVisible();
+    await expect(page.getByRole("treeitem", { name: "a.txt, unsaved", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
     await expect(page.getByRole("status").filter({ hasText: "Saved a.txt" })).toBeVisible();
     expect(await readFile(join(secondary, "a.txt"), "utf8")).toBe("secondary recovered edits");
@@ -418,7 +418,7 @@ createInterface({input:process.stdin}).on('line', line=>{
     await expect(page.getByRole("alert")).toContainText("codex login");
     await expect(page.getByLabel("Conversation history")).toContainText("retained history");
     await page.getByRole("button", { name: "Files", exact: true }).click();
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await writeFile(join(bin, "git"), "#!/bin/sh\nexit 127\n", { mode: 0o700 });
     await expect(page.getByRole("button", { name: "Retry Git", exact: true })).toBeVisible({
       timeout: 8000,
@@ -434,7 +434,7 @@ createInterface({input:process.stdin}).on('line', line=>{
     page = await app.firstWindow();
     status = page.locator(".chat-actions [role=status]");
     retry = page.getByRole("button", { name: "Retry connection / reload history" });
-    await expect(page.getByRole("button", { name: "a.txt", exact: true })).toBeVisible();
+    await expect(page.getByRole("treeitem", { name: "a.txt", exact: true })).toBeVisible();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("saved after restarting without Git");

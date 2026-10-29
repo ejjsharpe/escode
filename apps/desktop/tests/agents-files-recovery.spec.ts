@@ -83,7 +83,11 @@ test("legacy saved-project migration and interrupted move recovery survive toget
       const durable: WorkspaceState = JSON.parse(
         await readFile(join(user, "workspace.json"), "utf8"),
       );
-      expect(durable.views[root]).toMatchObject({ path: "moved/a.ts", directory: "moved" });
+      expect(durable.views[root]).toMatchObject({
+        path: "moved/a.ts",
+        directory: "moved",
+        files: { expanded: ["moved"], selected: ["moved/a.ts"], focus: "moved/a.ts", scroll: 0 },
+      });
       expect(durable.drafts).toEqual([
         { root, path: "moved/a.ts", text: "unsaved recovered text", disk },
       ]);
@@ -214,6 +218,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
         checkout: root,
         path: "moved/a.ts",
         directory: "moved",
+        files: { expanded: ["moved"], selected: ["moved/a.ts"], focus: "moved/a.ts", scroll: 0 },
       });
       expect(state.drafts).toEqual([
         { root, path: "moved/a.ts", text: "retained closed edits", disk },
@@ -234,6 +239,14 @@ test("closed editor retains recovered move mappings and drafts through restart a
     await expect(page.locator(".view-nav:visible")).toContainText(root);
     await expect(page.locator(".toolbar:visible")).toContainText("moved/a.ts");
     await expect(page.locator(".monaco-editor:visible")).toContainText("retained closed edits");
+    await expect(page.getByRole("treeitem", { name: "moved", exact: true })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await expect(page.getByRole("treeitem", { name: "a.ts, unsaved", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(await readFile(join(root, "moved/a.ts"), "utf8")).toBe("baseline");
     // Ordinary conflict protection still uses the pre-move loaded baseline.
     await writeFile(join(root, "moved/a.ts"), "external change");

@@ -74,7 +74,7 @@ send({id:m.id,result});});`,
     await page.setViewportSize({ width: 728, height: 600 });
     await message().scrollIntoViewIfNeeded();
     await expect(message()).toBeInViewport();
-    await page.screenshot({ path: "/tmp/escode-33-draft.png" });
+    await page.screenshot({ path: "test-results/escode-33-draft.png" });
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     await page.getByRole("combobox", { name: "New chat project", exact: true }).selectOption(beta);
@@ -128,7 +128,7 @@ send({id:m.id,result});});`,
       (await readFile(join(dir, "calls"), "utf8")).split("\n").filter((x) => x === "turn/start"),
     ).toHaveLength(1);
     expect((await records())[1].draft).toBe("Another nonempty draft");
-    await page.screenshot({ path: "/tmp/escode-33-bound.png" });
+    await page.screenshot({ path: "test-results/escode-33-bound.png" });
     await app.evaluate(({ dialog }, root) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, beta);

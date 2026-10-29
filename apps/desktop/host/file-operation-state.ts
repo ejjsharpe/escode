@@ -19,6 +19,20 @@ export function reconcile(state: WorkspaceState, intent: Intent) {
       if (view[field] && affected(view[field], source))
         view[field] = kind === "trash" ? "" : moved(view[field], source, destination);
     }
+    if (view.files) {
+      const map = (paths: string[]) =>
+        paths.flatMap((p) =>
+          kind === "trash" && affected(p, source)
+            ? []
+            : [kind === "move" ? moved(p, source, destination) : p],
+        );
+      view.files = {
+        ...view.files,
+        expanded: map(view.files.expanded),
+        selected: map(view.files.selected),
+        focus: map([view.files.focus])[0] ?? source.split("/").slice(0, -1).join("/"),
+      };
+    }
     if (view.change && affected(view.change.path, source)) view.change = undefined;
   }
 }

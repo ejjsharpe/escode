@@ -31,7 +31,7 @@ test("packaged app loads CSS, Monaco and tools without a development PATH", asyn
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await page.getByRole("button", { name: "fixture.json", exact: true }).click();
+    await page.getByRole("treeitem", { name: "fixture.json", exact: true }).click();
     await expect(page.locator(".squiggly-error")).toBeVisible();
     expect(errors).toEqual([]);
     await page.screenshot({ path: "test-results/packaged.png" });

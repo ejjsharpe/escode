@@ -22,7 +22,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     const recoveryStarted = Date.now();
@@ -42,7 +42,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [other] });
     }, other);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await page.getByRole("button", { name: "b.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "b.txt", exact: true }).click();
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
     await page.getByRole("button", { name: "b.txt", exact: true }).click();
     await expect(page.locator(".monaco-diff-editor:visible")).toContainText("secondary project");
@@ -84,7 +84,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
     });
     await page.getByRole("button", { name: "Close file", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("ENOENT");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("ENOENT");
     await expect(page.locator(".monaco-editor:visible")).toContainText("recover these edits");
     await writeFile(join(root, "a.txt"), "external");
     await app.evaluate(({ dialog }) => {
@@ -100,8 +100,8 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     await app.close();
     app = await launch();
     page = await app.firstWindow();
-    await expect(page.getByRole("button", { name: "a.txt", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await expect(page.getByRole("treeitem", { name: "a.txt", exact: true })).toBeVisible();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("external");
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
     await page.getByRole("button", { name: "a.txt", exact: true }).click();
@@ -187,7 +187,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       }, root);
       await page.getByRole("button", { name: "Open project…" }).click();
       if (closeProject) {
-        await page.getByRole("button", { name: "a.txt", exact: true }).click();
+        await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
         await page.locator(".monaco-editor:visible").click();
         await page.keyboard.press("Meta+a");
         await page.keyboard.type("save on close");
@@ -233,7 +233,7 @@ createInterface({input:process.stdin}).on('line',line=>{
           dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
           BrowserWindow.getAllWindows()[0].close();
         });
-        await expect(page.getByRole("status")).toContainText("ENOENT");
+        await expect(page.locator(".content:visible > [role=status]")).toContainText("ENOENT");
         await expect(page.locator(".monaco-editor:visible")).toContainText("save on close");
         expect(await readFile(join(root, "interrupts"), "utf8").catch(() => "")).toBe("");
         for (const pid of pids) process.kill(pid, 0);

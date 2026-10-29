@@ -73,7 +73,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
   let app = await launchDesktop(user, dir);
   try {
     let page = await app.firstWindow();
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("dirty alpha");
@@ -528,7 +528,7 @@ test("global creation keeps newest-first rows before the next catalogue poll", a
       .getByRole("combobox", { name: "New chat project", exact: true })
       .selectOption(roots[3]);
     await expect(rows).toHaveText(["Delta", "Gamma", "Beta", "Alpha"]);
-    await page.screenshot({ path: "/tmp/escode-33-creation-order.png" });
+    await page.screenshot({ path: "test-results/agents-creation-order.png" });
   } finally {
     await app.close();
     await rm(dir, { recursive: true, force: true });

@@ -37,7 +37,7 @@ send({id:m.id,result});});`,
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await expect(page.getByRole("button", { name: "a.txt", exact: true })).toBeVisible();
+    await expect(page.getByRole("treeitem", { name: "a.txt", exact: true })).toBeVisible();
     const ids = await page.evaluate(async (root) => {
       const a = await window.escode.chat("create", root, root);
       await window.escode.chat("open", root, a.id);
@@ -57,7 +57,7 @@ send({id:m.id,result});});`,
     await expect(page.getByRole("alert")).toBeInViewport();
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
-    await page.screenshot({ path: "/tmp/escode-36-unavailable.png" });
+    await page.screenshot({ path: "test-results/escode-36-unavailable.png" });
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect
       .poll(() =>

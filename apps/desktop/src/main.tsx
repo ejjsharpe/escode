@@ -10,6 +10,7 @@ import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
 import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import type { Change, Document, SaveResult, ProjectBridge } from "../host/project";
 import { affected, moved, reconcile } from "../host/file-operation-state";
+import { FilesTree } from "./files";
 import { AgentsView } from "./agents";
 import { ChatView } from "./chat";
 import { useProjectChats } from "./chat-state";
@@ -82,8 +83,7 @@ function CheckoutView({
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [checkoutError, setCheckoutError] = useState("");
-  const [files, setFiles] = useState<{ path: string; directory: boolean }[]>([]);
-  const [directory, setDirectory] = useMemory(root, "directory", "");
+  const [filesRevision, setFilesRevision] = useState(0);
   const [path, setPath] = useMemory(root, "path", "");
   const [message, setMessage] = useState("Open a local Git checkout to begin.");
   const [conflict, setConflict] = useState<{ path: string; disk: Document } | null>(null);
@@ -97,7 +97,6 @@ function CheckoutView({
   const [saving, setSaving] = useState(false);
   const [fileClosing, setFileClosing] = useState(false);
   const closeInFlight = useRef(false);
-  const [operation, setOperation] = useState<{ source: string; destination: string } | null>(null);
   useEffect(
     () => onBlocked(root, !!conflict || saving || fileClosing),
     [conflict, saving, fileClosing, root, onBlocked],
@@ -169,7 +168,6 @@ function CheckoutView({
   );
   useEffect(() => {
     void refresh().catch(report);
-    void browse(directory);
   }, []);
   useLayoutEffect(() => {
     presentation.current++;
@@ -234,14 +232,6 @@ function CheckoutView({
       modified.dispose();
     };
   }, [diff]);
-  async function browse(dir: string) {
-    try {
-      setFiles(await projectCall("files", root, dir));
-      setDirectory(dir);
-    } catch (e) {
-      report(e);
-    }
-  }
   async function select(file: string, present = true) {
     const generation = present ? ++presentation.current : presentation.current;
     try {
@@ -385,8 +375,16 @@ function CheckoutView({
       editor.current?.updateOptions({ readOnly: false });
     }
   }
-  async function fileOperation(kind: "move" | "trash", source: string, destination = "") {
-    if (closeInFlight.current || saveInFlight.current || conflict) return;
+  async function fileOperation(
+    kind: "move" | "trash",
+    source: string,
+    destination = "",
+    inline = false,
+  ) {
+    if (closeInFlight.current || saveInFlight.current || conflict) {
+      if (inline) throw Error("Finish the pending file action first.");
+      return;
+    }
     closeInFlight.current = true;
     setFileClosing(true);
     editor.current?.updateOptions({ readOnly: true });
@@ -409,9 +407,16 @@ function CheckoutView({
         )
       )
         throw Error("Destination has open buffers. Close them or choose another path.");
-      const result = await projectCall("file-operation", root, kind, source, destination);
+      const result = await projectCall(
+        "file-operation",
+        root,
+        inline ? "rename" : kind,
+        source,
+        inline ? destination.split("/").at(-1)! : destination,
+      );
       if (!result.applied || !result.intent) {
         setMessage(result.message);
+        if (inline) throw Error(result.message);
         return;
       }
       // The originating CheckoutView owns this completion even if navigation changed.
@@ -431,24 +436,17 @@ function CheckoutView({
       setPath(
         kind === "move" ? moved(path, source, destination) : affected(path, source) ? "" : path,
       );
-      const nextDirectory =
-        kind === "move"
-          ? moved(directory, source, destination)
-          : affected(directory, source)
-            ? ""
-            : directory;
-      setDirectory(nextDirectory);
       setDiff(null);
       selectedChange.current = null;
       setBufferRevision((n) => n + 1);
       await persist();
       await projectCall("file-operation-ack", root);
-      setOperation(null);
-      await browse(nextDirectory);
+      setFilesRevision((n) => n + 1);
       await refresh();
       setMessage(result.message);
     } catch (error) {
       report(error);
+      if (inline) throw error;
     } finally {
       closeInFlight.current = false;
       setFileClosing(false);
@@ -476,7 +474,7 @@ function CheckoutView({
               onClick={() =>
                 void (async () => {
                   await refresh();
-                  await browse(directory);
+                  setFilesRevision((n) => n + 1);
                   if (path) await select(path, false);
                 })().catch(report)
               }
@@ -491,69 +489,46 @@ function CheckoutView({
         )}
         {status && mode === "Files" && (
           <>
-            <p className="directory">{directory || "Project files"}</p>
-            {directory && (
-              <Button onClick={() => void browse(directory.split("/").slice(0, -1).join("/"))}>
-                ↑ Parent folder
-              </Button>
-            )}
-            {operation && (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void fileOperation("move", operation.source, operation.destination);
-                }}
-              >
-                <p>
-                  Rename/move {operation.source}. Earlier text undo history resets; unsaved text and
-                  cursor/scroll are preserved.
-                </p>
-                <label>
-                  Checkout-relative destination
-                  <input
-                    aria-label="Checkout-relative destination"
-                    value={operation.destination}
-                    onChange={(e) => setOperation({ ...operation, destination: e.target.value })}
-                  />
-                </label>
-                <Button type="submit">Apply move</Button>
-                <Button type="button" onClick={() => setOperation(null)}>
-                  Cancel move
-                </Button>
-              </form>
-            )}
-            <ul>
-              {files.map((file) => (
-                <li key={file.path}>
-                  <Button
-                    aria-pressed={file.directory ? undefined : file.path === path}
-                    disabled={!!conflict || saving}
-                    onClick={() => void (file.directory ? browse(file.path) : select(file.path))}
-                  >
-                    {file.directory ? "▸ " : ""}
-                    {file.path.split("/").at(-1)}
-                    {buffers.current.get(file.path)?.model.getValue() !==
-                    buffers.current.get(file.path)?.disk.text
-                      ? " •"
-                      : ""}
-                  </Button>
-                  <Button
-                    aria-label={"Rename/move " + file.path}
-                    disabled={saving || !!conflict}
-                    onClick={() => setOperation({ source: file.path, destination: file.path })}
-                  >
-                    Rename/move
-                  </Button>
-                  <Button
-                    aria-label={"Move to Trash " + file.path}
-                    disabled={saving || !!conflict}
-                    onClick={() => void fileOperation("trash", file.path)}
-                  >
-                    Trash
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <FilesTree
+              key={root}
+              root={root}
+              active={active}
+              activePath={path}
+              disabled={!!conflict || saving}
+              revision={filesRevision}
+              dirty={(file) => {
+                const b = buffers.current.get(file);
+                return !!b && b.model.getValue() !== b.disk.text;
+              }}
+              open={async (file, focusEditor) => {
+                await select(file);
+                if (focusEditor)
+                  requestAnimationFrame(() => {
+                    if (
+                      container.current?.getClientRects().length &&
+                      editor.current?.getModel() === buffers.current.get(file)?.model
+                    )
+                      editor.current?.focus();
+                  });
+              }}
+              rename={(source, destination) => fileOperation("move", source, destination, true)}
+              create={async (parent, name, kind) => {
+                const destination = (parent ? parent + "/" : "") + name;
+                if (
+                  Array.from(buffers.current.keys()).some(
+                    (file) =>
+                      file.normalize("NFC").toLowerCase() ===
+                      destination.normalize("NFC").toLowerCase(),
+                  )
+                )
+                  throw Error("Destination has an open buffer. Close it or choose a free name.");
+                const file = await projectCall("create-entry", root, parent, name, kind);
+                setFilesRevision((n) => n + 1);
+                if (kind === "file") await select(file);
+                return file;
+              }}
+              trash={(source) => void fileOperation("trash", source)}
+            />
           </>
         )}
         {status && mode === "Source Control" && (

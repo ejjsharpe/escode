@@ -284,7 +284,7 @@ app.whenReady().then(() => {
     }
     const requestedRoot = args.shift();
     if (
-      ["file-operation", "file-operation-ack"].includes(String(operation)) &&
+      ["file-operation", "file-operation-ack", "create-entry"].includes(String(operation)) &&
       (typeof requestedRoot !== "string" || !projects.has(requestedRoot))
     )
       throw Error("Open and approve this checkout first.");
@@ -298,6 +298,49 @@ app.whenReady().then(() => {
     const identity = project.repository();
     if (removing.has(identity)) throw Error("Worktree removal is in progress. Retry afterward.");
     if (operation === "file-operation-ack" && !args.length) return operations.ack(project.root);
+    if (
+      operation === "create-entry" &&
+      args.length === 3 &&
+      args.every((a) => typeof a === "string")
+    ) {
+      if (mutationOrigin || quitting) throw Error("File operation unavailable.");
+      operations.assertIdle();
+      const [parent, name, kind] = args as [string, string, "file" | "folder"];
+      project.validateName(name);
+      const absolute = resolve(project.root, parent, name);
+      if (
+        isAppState(absolute) ||
+        stateFiles.some((file) =>
+          [absolute, ...(parent ? [resolve(project.root, parent)] : [])].some((path) =>
+            affected(file.normalize("NFC").toLowerCase(), path.normalize("NFC").toLowerCase()),
+          ),
+        )
+      )
+        throw Error("Protected app state is inside this operation.");
+      const owner = projectSessions.get(identity);
+      const state = await workspace.read();
+      if (
+        state.drafts.some(
+          (d) =>
+            d.root === project.root &&
+            affected(
+              d.path.normalize("NFC").toLowerCase(),
+              (parent ? parent + "/" + name : name).normalize("NFC").toLowerCase(),
+            ),
+        )
+      )
+        throw Error("Destination recovery drafts need preserving. Choose a free name.");
+      if (
+        mutationOrigin ||
+        quitting ||
+        !projects.has(project.root) ||
+        !owner ||
+        projectSessions.get(identity) !== owner
+      )
+        throw Error("Originating project closed or operation pending.");
+      operations.assertIdle();
+      return project.create(parent, name, kind);
+    }
     if (operation === "save") {
       if (mutationOrigin) throw Error("File operation awaiting confirmation.");
       operations.assertIdle();
@@ -306,12 +349,15 @@ app.whenReady().then(() => {
       operation === "file-operation" &&
       args.length === 3 &&
       args.every((a) => typeof a === "string") &&
-      ["move", "trash"].includes(args[0] as string)
+      ["move", "rename", "trash"].includes(args[0] as string)
     ) {
       if (mutationOrigin) throw Error("Another file operation is pending.");
       mutationOrigin = project.root;
       try {
-        const [kind, source, destination] = args as ["move" | "trash", string, string];
+        const [action, source, target] = args as ["move" | "rename" | "trash", string, string];
+        const kind = action === "rename" ? "move" : action;
+        const destination =
+          action === "rename" ? project.renameDestination(source, target) : target;
         operations.assertIdle();
         const owner = projectSessions.get(identity);
         let originalIdentity = project.operationIdentity(source);
@@ -422,8 +468,14 @@ app.whenReady().then(() => {
         args[1] as string,
       );
     if (operation === "status" && !args.length) return project.status();
-    if (operation === "files" && args.length === 1 && typeof args[0] === "string")
-      return project.files(args[0]);
+    if (operation === "files" && args.length === 1 && typeof args[0] === "string") {
+      const protectedPath = (path: string) => {
+        const absolute = resolve(project.root, path);
+        return isAppState(absolute) || stateFiles.some((file) => file.startsWith(absolute + "/"));
+      };
+      if (args[0] && protectedPath(args[0])) throw Error("App state is unavailable in Files.");
+      return (await project.files(args[0])).filter((entry) => !protectedPath(entry.path));
+    }
     if (operation === "read" && args.length === 1 && typeof args[0] === "string")
       return project.read(args[0]);
     if (operation === "save" && args.length === 3 && args.every((a) => typeof a === "string"))

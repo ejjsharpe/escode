@@ -23,21 +23,27 @@ test("dirty descendants move through Monaco and bridge, undo, save conflict and 
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await page.getByRole("button", { name: "▸ folder", exact: true }).click();
-    await page.getByRole("button", { name: /^b.txt/ }).click();
+    await page.getByRole("treeitem", { name: "folder", exact: true }).click();
+    await page.getByRole("treeitem", { name: /^b.txt/ }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("dirty b");
-    await page.getByRole("button", { name: "a.ts", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.ts", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+End");
     await page.keyboard.type("dirty a");
-    await page.getByRole("button", { name: "↑ Parent folder" }).click();
-    await page.getByRole("button", { name: "Rename/move folder", exact: true }).click();
+    await page
+      .getByRole("treeitem", { name: "folder", exact: true })
+      .locator(":scope > .tree-row")
+      .click({ button: "right" });
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Rename folder", exact: true }).click();
     await expect(page.getByText(/Earlier text undo history resets/)).toBeVisible();
-    await page.getByRole("textbox", { name: "Checkout-relative destination" }).fill("moved");
-    await page.getByRole("button", { name: "Apply move", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("Earlier text undo history was reset");
+    await page.getByRole("textbox", { name: "Rename folder" }).fill("moved");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText(
+      "Earlier text undo history was reset",
+    );
     await expect(page.locator(".toolbar")).toContainText("moved/a.ts");
     await expect(page.locator(".monaco-editor:visible")).toContainText("dirty a");
     await expect(page.locator(".editor:visible")).toHaveAttribute("data-language", "typescript");
@@ -77,16 +83,23 @@ test("dirty descendants move through Monaco and bridge, undo, save conflict and 
     page = await app.firstWindow();
     await expect(page.locator(".monaco-editor:visible")).toContainText("dirty a");
     await expect(page.locator(".toolbar")).toContainText("moved/a.ts");
-    await page.getByRole("button", { name: "▸ moved", exact: true }).click();
-    await page.getByRole("button", { name: /^b.txt/ }).click();
+    await expect(page.getByRole("treeitem", { name: "moved", exact: true })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await page.getByRole("treeitem", { name: /^b.txt/ }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("dirty b");
     await page.getByRole("button", { name: "Save ⌘S" }).click();
     await expect.poll(() => readFile(join(root, "moved/b.txt"), "utf8")).toBe("dirty b");
-    await page.getByRole("button", { name: "Rename/move moved/a.ts", exact: true }).click();
-    await page.getByRole("textbox", { name: "Checkout-relative destination" }).fill("moved/a.json");
-    await page.getByRole("button", { name: "Apply move", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("Earlier text undo history was reset");
-    await page.getByRole("button", { name: /^a.json/ }).click();
+    await page.getByRole("treeitem", { name: /^a.ts/ }).click({ button: "right" });
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Rename moved/a.ts", exact: true }).click();
+    await page.getByRole("textbox", { name: "Rename moved/a.ts" }).fill("a.json");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText(
+      "Earlier text undo history was reset",
+    );
+    await page.getByRole("treeitem", { name: /^a.json/ }).click();
     await expect(page.locator(".editor:visible")).toHaveAttribute("data-language", "json");
     await expect(page.locator(".editor:visible")).toHaveAttribute(
       "data-model-uri",
@@ -120,7 +133,7 @@ test("Trash cancellation, conflict and native failure retain dirty drafts; pendi
       await expect(page.locator("header")).toContainText(root);
     }
     await page.getByRole("button", { name: "one", exact: true }).click();
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("unsaved");
@@ -131,7 +144,7 @@ test("Trash cancellation, conflict and native failure retain dirty drafts; pendi
       };
     });
     await page.getByRole("button", { name: "Move to Trash a.txt", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("Cancelled");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Cancelled");
     expect((await app.evaluate(() => (globalThis as any).confirmation)).detail).toContain(
       "Dirty descendants (1)",
     );
@@ -140,7 +153,7 @@ test("Trash cancellation, conflict and native failure retain dirty drafts; pendi
       dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
     });
     await page.getByRole("button", { name: "Move to Trash a.txt", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("Save conflict");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Save conflict");
     expect(JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts[0].text).toBe(
       "unsaved",
     );
@@ -167,7 +180,9 @@ test("Trash cancellation, conflict and native failure retain dirty drafts; pendi
       (globalThis as any).confirmTrash();
     });
     await page.getByRole("button", { name: "one", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("injected native Trash failure");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText(
+      "injected native Trash failure",
+    );
     expect(await readFile(join(roots[0], "a.txt"), "utf8")).toBe("external");
     expect(await readFile(join(roots[1], "a.txt"), "utf8")).toBe("disk");
     expect(JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts[0].text).toBe(
@@ -186,10 +201,12 @@ test("Trash cancellation, conflict and native failure retain dirty drafts; pendi
       dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
     });
     await page.getByRole("button", { name: "Move to Trash a.txt", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("Moved to macOS Trash");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText(
+      "Moved to macOS Trash",
+    );
     expect(JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts).toEqual([]);
     await page.getByRole("button", { name: "two", exact: true }).click();
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("save before trash");
@@ -197,7 +214,9 @@ test("Trash cancellation, conflict and native failure retain dirty drafts; pendi
       dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
     });
     await page.getByRole("button", { name: "Move to Trash a.txt", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("Moved to macOS Trash");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText(
+      "Moved to macOS Trash",
+    );
     const trashFiles = await app.evaluate(() => (globalThis as any).trashFixtures as string[]);
     expect(trashFiles).toHaveLength(2);
     expect(await readFile(trashFiles[0], "utf8")).toBe("external");
@@ -226,6 +245,50 @@ test("mutation IPC rejects other senders, unopened checkouts and protected app s
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header")).toContainText(root);
+    await expect(page.getByRole("treeitem", { name: "app-state", exact: true })).toHaveCount(0);
+    for (const operation of ["files", "read", "save"] as const) {
+      const error = await page.evaluate(
+        async ({ root, operation }) => {
+          try {
+            if (operation === "files") await window.escode.project("files", root, "app-state");
+            else if (operation === "read")
+              await window.escode.project("read", root, "app-state/workspace.json");
+            else
+              await window.escode.project(
+                "save",
+                root,
+                "app-state/workspace.json",
+                "overwrite",
+                "bad",
+              );
+            return "accepted";
+          } catch (error) {
+            return String(error);
+          }
+        },
+        { root, operation },
+      );
+      expect(error).toContain("App state is unavailable");
+    }
+    for (const [parent, name] of [
+      ["app-state", "new"],
+      ["", "app-state"],
+      [".git", "new"],
+      ["", "../escape"],
+    ]) {
+      const error = await page.evaluate(
+        async ({ root, parent, name }) => {
+          try {
+            await window.escode.project("create-entry", root, parent, name, "file");
+            return "accepted";
+          } catch (error) {
+            return String(error);
+          }
+        },
+        { root, parent, name },
+      );
+      expect(error).not.toBe("accepted");
+    }
     for (const path of [".", "../repo/a.txt", ".git", "app-state"]) {
       const error = await page.evaluate(
         async ({ root, path }) => {

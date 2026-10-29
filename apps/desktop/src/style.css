@@ -412,3 +412,96 @@ main[data-agents="true"] > .project-tabs button[aria-pressed="true"] {
   outline: 2px solid #b9acf6;
   outline-offset: 2px;
 }
+
+.files-tools,
+.files-operation-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.files-tools button,
+.files-operation-actions button {
+  font-size: 12px;
+  padding: 5px 8px;
+}
+.files-tree {
+  overflow: auto;
+  max-height: calc(100vh - 320px);
+  min-height: 80px;
+  outline-offset: -2px;
+}
+.files-tree:focus-visible {
+  outline: 2px solid #92c5ff;
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 6px;
+  cursor: default;
+  font-size: 13px;
+}
+.tree-row span {
+  overflow-wrap: anywhere;
+}
+.tree-row svg {
+  flex-shrink: 0;
+}
+.tree-row:hover {
+  background: #263345;
+}
+[role="treeitem"][aria-selected="true"] > .tree-row {
+  background: #354f70;
+}
+[role="treeitem"][aria-current="true"] > .tree-row span:first-of-type {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.files-tree:focus .tree-focus {
+  outline: 1px solid #92c5ff;
+  outline-offset: -1px;
+}
+.tree-message {
+  color: #b9c8dd;
+  font-size: 12px;
+}
+.files-menu {
+  position: fixed;
+  z-index: 20;
+  left: 20px;
+  top: 170px;
+  max-width: 220px;
+  padding: 10px;
+  background: #263345;
+  border: 1px solid #92c5ff;
+  box-shadow: 0 8px 20px #0006;
+}
+.files-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+.files-menu p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.tree-edit {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+}
+.tree-edit input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.tree-edit-help {
+  white-space: normal;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.tree-edit [role="alert"] {
+  color: #ffb4ab;
+}

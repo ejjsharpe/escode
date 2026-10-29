@@ -61,7 +61,7 @@ send({id:m.id,result});});`,
         };
       }, response);
     await open(a);
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("dirty alpha");

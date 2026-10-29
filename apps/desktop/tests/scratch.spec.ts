@@ -71,7 +71,7 @@ send({id:m.id,result});});`,
     await page.setViewportSize({ width: 728, height: 600 });
     await message().scrollIntoViewIfNeeded();
     await expect(message()).toBeInViewport();
-    await page.screenshot({ path: "/tmp/escode-34-draft.png" });
+    await page.screenshot({ path: "test-results/escode-34-draft.png" });
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeEnabled();
@@ -99,7 +99,7 @@ send({id:m.id,result});});`,
     await page.getByRole("button", { name: "Allow once", exact: true }).click();
     await message().fill("unsent followup");
     await expect.poll(async () => (await records())[0].draft).toBe("unsent followup");
-    await page.screenshot({ path: "/tmp/escode-34-running.png" });
+    await page.screenshot({ path: "test-results/escode-34-running.png" });
     // Quit includes the remaining active scratch turn.
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
