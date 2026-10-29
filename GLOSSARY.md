@@ -50,6 +50,9 @@ Explicit removal retains its branch, commits and chat associations. Linked chats
 unavailable and are never rebound or used to reconstruct the checkout. Removal requires
 confirmed app ownership and successful checks for active work, drafts and local files.
 
+**Diff view**:
+A comparison with a read-only old side and an editable new side sharing the Files buffer. Staged comparisons use HEAD as the baseline and show the working copy on the new side. Saving writes the working file without changing the Git index. Unavailable working files retain a read-only comparison.
+
 **Save conflict**:
 A difference detected before saving between a file's loaded disk version and its current disk version. The user's edits remain available while they compare, explicitly overwrite, reload from disk, or cancel.
 

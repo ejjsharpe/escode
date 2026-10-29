@@ -523,7 +523,7 @@ export function FilesTree({
     pendingScroll.current = file;
     if (explicit) {
       setHiddenReveal("");
-      setRevealMessage("Revealed " + file);
+      setRevealMessage("");
     }
   }
   useEffect(() => {
@@ -899,29 +899,35 @@ export function FilesTree({
     <>
       <div className="files-tools" aria-label="Files actions">
         <button
+          aria-label="New File"
           title="New File (Cmd+Option+N)"
           aria-keyshortcuts="Meta+Alt+N"
           disabled={disabled || !!edit}
           onClick={() => beginEdit("file")}
         >
-          New File
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z M14 2v6h6 M12 12v6 M9 15h6" /></svg>
         </button>
         <button
+          aria-label="New Folder"
           title="New Folder (Cmd+Option+Shift+N)"
           aria-keyshortcuts="Meta+Alt+Shift+N"
           disabled={disabled || !!edit}
           onClick={() => beginEdit("folder")}
         >
-          New Folder
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z M12 11v6 M9 14h6" /></svg>
         </button>
         <button
           ref={revealButton}
+          aria-label="Reveal Active File"
+          title="Reveal Active File"
           disabled={!activePath || disabled || !!edit}
           onClick={() => void reveal(true)}
         >
-          Reveal Active File
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2" /><path d="M12 2v3 M12 19v3 M2 12h3 M19 12h3" /></svg>
         </button>
         <button
+          aria-label="Hide Git-ignored files"
+          title="Hide Git-ignored files"
           aria-pressed={!!state.hideIgnored}
           onClick={() => {
             update({ hideIgnored: !state.hideIgnored });
@@ -929,17 +935,19 @@ export function FilesTree({
             setRevealMessage("");
           }}
         >
-          Hide Git-ignored files
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16l-6 7v7l-4 2v-9L4 4Z" /></svg>
         </button>
-        <button onClick={refresh}>Refresh</button>
+        <button aria-label="Refresh" title="Refresh" onClick={refresh}><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 7v5h-5 M4 17v-5h5 M6 6a8 8 0 0 1 13 3 M18 18A8 8 0 0 1 5 15" /></svg></button>
         <button
+          aria-label="Collapse All"
+          title="Collapse All"
           onClick={() => {
             revealSequence.current++;
             pendingScroll.current = "";
             update({ expanded: [], focus: state.focus.split("/")[0] || "" });
           }}
         >
-          Collapse All
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="7" y="7" width="14" height="14" rx="2" /><path d="M17 3H5a2 2 0 0 0-2 2v12 M11 14h6" /></svg>
         </button>
       </div>
       {watchError && (
@@ -952,9 +960,11 @@ export function FilesTree({
           {filterError}
         </div>
       )}
-      <div role="status" className="tree-edit-help">
-        {revealMessage}
-      </div>
+      {revealMessage && !revealMessage.startsWith("Revealed ") && (
+        <div role="status" className="tree-edit-help">
+          {revealMessage}
+        </div>
+      )}
       {hiddenReveal === activePath && hiddenReveal && (
         <button onClick={() => void reveal(true, true)}>Show ignored files</button>
       )}
@@ -963,11 +973,11 @@ export function FilesTree({
           {actionError}
         </div>
       )}
-      <div role="status" className="tree-edit-help tree-drop-status">
-        {dropTarget
-          ? `${dropTarget.copy ? "Copy" : "Move"} to ${dropTarget.parent || "checkout root"}${!dropTarget.copy ? " · confirmation before moving" : ""}`
-          : "Drag to move · Option-drag to copy"}
-      </div>
+      {dropTarget && (
+        <div role="status" className="tree-edit-help tree-drop-status">
+          {`${dropTarget.copy ? "Copy" : "Move"} to ${dropTarget.parent || "checkout root"}${!dropTarget.copy ? " · confirmation before moving" : ""}`}
+        </div>
+      )}
       <div
         ref={tree}
         role="tree"
@@ -1106,10 +1116,11 @@ export function FilesTree({
       <div className="files-operation-actions">
         <button
           disabled={disabled || !!edit || state.selected.length !== 1}
+          title="Rename selected entry"
           aria-label={"Rename " + state.selected[0]}
           onClick={() => beginEdit("rename", state.selected[0])}
         >
-          Rename
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4 M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15v5Z" /></svg>
         </button>
         <button
           disabled={disabled || !!edit || !state.selected.length}
@@ -1119,10 +1130,11 @@ export function FilesTree({
               ? state.selected[0]
               : state.selected.length + " selected items")
           }
+          title="Move selected entries to Trash (Cmd+Delete)"
           aria-keyshortcuts="Meta+Backspace Meta+Delete"
           onClick={() => void moveToTrash()}
         >
-          Trash
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7" /></svg>
         </button>
       </div>
     </>

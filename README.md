@@ -26,8 +26,11 @@ Install Apple's Command Line Tools (`xcode-select --install`) for the bundled
 filesystem helper, then `bun install --frozen-lockfile` and `bun run dev`.
 
 The desktop app opens one local Git checkout, browses UTF-8 text files in Monaco,
-saves explicitly with Cmd+S and displays read-only staged, unstaged and untracked
-diffs. Dirty buffers remain in memory while navigating. External disk changes
+saves explicitly with Cmd+S and displays staged, unstaged and untracked
+diffs. The new side edits the shared working-file buffer; the old side stays read-only.
+Staged comparisons show HEAD against the editable working copy, including unstaged
+edits; saving writes the file without staging it. Unavailable working files retain a
+read-only comparison. Dirty buffers remain in memory while navigating. External disk changes
 prompt Compare, Overwrite, Reload or Cancel. Files/diffs are limited to 2 MiB;
 binary files and symbolic links have unavailable states. Git status and selected
 diffs refresh every two seconds.

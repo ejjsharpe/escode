@@ -152,7 +152,7 @@ send({id:m.id,result});});`,
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, beta);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await page.getByRole("button", { name: "Close project", exact: true }).click();
+    await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
     await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",

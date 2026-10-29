@@ -54,12 +54,28 @@ window.MonacoEnvironment = {
     return new EditorWorker();
   },
 };
+monaco.editor.defineTheme("escode", {
+  base: "vs-dark",
+  inherit: true,
+  rules: [],
+  colors: {
+    "editor.background": "#131416",
+    "editor.foreground": "#dedee5",
+    "editorLineNumber.foreground": "#777582",
+    "editorLineNumber.activeForeground": "#c5bddf",
+    "editor.lineHighlightBackground": "#1e1f23",
+    "editor.selectionBackground": "#48405f",
+    "editorCursor.foreground": "#b7aaf5",
+    "editorWidget.background": "#24252b",
+    "editorWidget.border": "#484351",
+  },
+});
 const styles = stylex.create({
   page: {
-    color: "#e5e7eb",
-    backgroundColor: "#18202b",
+    color: "#dedee5",
+    backgroundColor: "#131416",
     minHeight: "100vh",
-    fontFamily: "system-ui",
+    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
   },
 });
 function CheckoutView({
@@ -92,7 +108,7 @@ function CheckoutView({
   const [conflict, setConflict] = useState<{ path: string; disk: Document } | null>(null);
   const selectedChange = useRef<Change | null>(memory.views[root]?.change ?? null);
   const presentation = useRef(0);
-  const [diff, setDiff] = useState<{ original: string; modified: string; title: string } | null>(
+  const [diff, setDiff] = useState<{ original: string; modified: string; title: string; file?: string } | null>(
     null,
   );
   const [bufferRevision, setBufferRevision] = useState(0);
@@ -190,7 +206,11 @@ function CheckoutView({
       model: b.model,
       readOnly: closeInFlight.current || saveInFlight.current,
       automaticLayout: true,
-      theme: "vs-dark",
+      theme: "escode",
+      minimap: { enabled: false },
+      fontSize: 13,
+      fontFamily: "SFMono-Regular, Menlo, Consolas, monospace",
+      padding: { top: 16, bottom: 16 },
       accessibilitySupport: "on",
       editContext: false,
       ariaLabel: path + " editor",
@@ -213,27 +233,44 @@ function CheckoutView({
   useEffect(() => {
     if (!diff || !container.current) return;
     const original = monaco.editor.createModel(diff.original, "plaintext");
-    const modified = monaco.editor.createModel(diff.modified, "plaintext");
+    const buffer = diff.file ? buffers.current.get(diff.file) : undefined;
+    const modified = buffer?.model ?? monaco.editor.createModel(diff.modified, "plaintext");
     const instance = monaco.editor.createDiffEditor(container.current, {
-      readOnly: true,
+      readOnly: !buffer || closeInFlight.current || saveInFlight.current,
       originalEditable: false,
       automaticLayout: true,
-      theme: "vs-dark",
+      theme: "escode",
+      minimap: { enabled: false },
+      fontSize: 13,
+      fontFamily: "SFMono-Regular, Menlo, Consolas, monospace",
+      padding: { top: 16, bottom: 16 },
       renderSideBySide: false,
       accessibilitySupport: "on",
       editContext: false,
-      domReadOnly: true,
+      domReadOnly: !buffer,
       originalAriaLabel: diff.title + " original",
       modifiedAriaLabel: diff.title + " modified",
     });
     instance.setModel({ original, modified });
     // Monaco's initial diff option pass clears the side labels.
-    instance.getOriginalEditor().updateOptions({ ariaLabel: diff.title + " original" });
-    instance.getModifiedEditor().updateOptions({ ariaLabel: diff.title + " modified" });
+    instance.getOriginalEditor().updateOptions({
+      ariaLabel: diff.title + " original",
+      readOnly: true,
+      domReadOnly: true,
+    });
+    const modifiedEditor = instance.getModifiedEditor();
+    modifiedEditor.updateOptions({ ariaLabel: diff.title + " modified" });
+    if (buffer) editor.current = modifiedEditor;
+    modifiedEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveAction.current());
+    const update = () => setDirty(!!buffer && modified.getValue() !== buffer.disk.text);
+    update();
+    const listener = modified.onDidChangeContent(update);
     return () => {
+      listener.dispose();
+      if (editor.current === modifiedEditor) editor.current = null;
       instance.dispose();
       original.dispose();
-      modified.dispose();
+      if (!buffer) modified.dispose();
     };
   }, [diff]);
   async function select(file: string, present = true) {
@@ -291,7 +328,7 @@ function CheckoutView({
     }
   }
   saveAction.current = () => {
-    if (!closeInFlight.current) void save();
+    if (!closeInFlight.current && (!diff || diff.file)) void save(undefined, diff?.file ?? path);
   };
   async function reload() {
     if (!conflict) return;
@@ -318,13 +355,36 @@ function CheckoutView({
       void persist();
       const value = await projectCall("diff", root, change.path, change.area);
       if (generation !== presentation.current || modeRef.current !== "Source Control") return;
-      const title = change.area + " · " + change.path;
+      let file: string | undefined;
+      let unavailable = "";
+      try {
+        const buffer = buffers.current.get(change.path);
+        if (!buffer || buffer.model.getValue() === buffer.disk.text) {
+          const disk = await projectCall("read", root, change.path);
+          if (!buffers.current.has(change.path)) addBuffer(change.path, disk);
+          else if (buffer && buffer.model.getValue() === buffer.disk.text) {
+            buffer.disk = disk;
+            if (buffer.model.getValue() !== disk.text) buffer.model.setValue(disk.text);
+          }
+        }
+        file = change.path;
+      } catch (error) {
+        unavailable = "Working file unavailable; comparison is read-only. " + String(error);
+      }
+      if (generation !== presentation.current || modeRef.current !== "Source Control") return;
+      if (file) setPath(file);
+      const title =
+        change.area + " · " + change.path +
+        (file && change.area === "staged" ? " · working copy" : "");
       setDiff((old) =>
-        old?.title === title && old.original === value.original && old.modified === value.modified
+        old?.title === title &&
+        old.original === value.original &&
+        old.modified === value.modified &&
+        old.file === file
           ? old
-          : { ...value, title },
+          : { ...value, title, file },
       );
-      setMessage("Read-only Git diff · unsaved edits excluded.");
+      setMessage(unavailable || "Edit the new side · Cmd+S to save the working file.");
     } catch (e) {
       if (generation !== presentation.current) return;
       setDiff(null);
@@ -679,19 +739,19 @@ function CheckoutView({
             <div className="toolbar">
               <span>
                 {diff?.title || path || "No file selected"}
-                {dirty && path ? " • Unsaved" : ""}
+                {dirty && path && (!diff || diff.file) ? " • Unsaved" : ""}
               </span>
-              {path && mode === "Files" && (
-                <Button disabled={saving} onClick={() => void save()}>
+              {path && (mode === "Files" || diff?.file) && (
+                <Button disabled={saving} onClick={() => void save(undefined, diff?.file ?? path)}>
                   Save ⌘S
                 </Button>
               )}
+              {path && mode === "Files" && (
+                <Button disabled={saving || fileClosing} onClick={() => void closeFile(path)}>
+                  Close file
+                </Button>
+              )}
             </div>
-            {path && mode === "Files" && (
-              <Button disabled={saving || fileClosing} onClick={() => void closeFile(path)}>
-                Close file
-              </Button>
-            )}
             {conflict && (
               <div role="alert" className="conflict">
                 <p>{conflict.path} changed on disk. Your edits are retained.</p>
@@ -701,6 +761,7 @@ function CheckoutView({
                       original: conflict.disk.text,
                       modified: buffers.current.get(conflict.path)!.model.getValue(),
                       title: "Disk versus your edits",
+                      file: conflict.path,
                     })
                   }
                 >
@@ -737,10 +798,6 @@ function CheckoutView({
               {message}
             </p>
             <div className="editor" ref={container} />
-            <p className="directory">
-              Ctrl+Shift+M toggles whether Tab leaves the editor. F7 / Shift+F7 reads the next /
-              previous diff change; Escape returns to the diff.
-            </p>
           </>
         )}
       </section>
@@ -984,19 +1041,18 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
     <main {...stylex.props(styles.page)} data-agents={selected === "agents"} inert={closing}>
       <header>
         <strong>escode</strong>
-        <Button onClick={() => void open()}>Open project…</Button>
         <span>{selected}</span>
-        {selected !== "agents" && selected && (
-          <Button onClick={() => void close(selected)}>Close project</Button>
-        )}
       </header>
       <nav className="project-tabs" aria-label="Projects">
         <Button aria-pressed={selected === "agents"} onClick={() => setSelected("agents")}>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z" /></svg>
           Agents
         </Button>
         {projects.map((p) => (
+          <div className="project-tab" key={p.project} data-active={selected === p.project}>
           <Button
             key={p.project}
+            aria-label={p.project.split("/").at(-1) + (activity[p.project] ? " · " + activity[p.project] : "")}
             aria-pressed={selected === p.project}
             title={`${p.project} · Middle-click or press Delete to close editor`}
             onAuxClick={(event) => {
@@ -1010,10 +1066,18 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
             }}
             onClick={() => setSelected(p.project)}
           >
-            {p.project.split("/").at(-1)}
-            {activity[p.project] ? " · " + activity[p.project] : ""}
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m12 3 9 5v8l-9 5-9-5V8Z M3 8l9 5 9-5 M12 13v8" /></svg>
+            <span className="project-tab-name">{p.project.split("/").at(-1)}</span>
+            {activity[p.project] && <span className="project-tab-activity" title={activity[p.project]} aria-label={activity[p.project]} />}
           </Button>
+          <Button className="project-tab-close" aria-label={`Close ${p.project.split("/").at(-1)} project`} title="Close project editor" onClick={() => void close(p.project)}>
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m4 4 8 8 M12 4l-8 8" /></svg>
+          </Button>
+          </div>
         ))}
+        <Button className="project-tab-open" aria-label="Open project…" title="Open project…" onClick={() => void open()}>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 5v14 M5 12h14" /></svg>
+        </Button>
       </nav>
       {error && <p role="alert">{error}</p>}
       {selected === "agents" && <AgentsView />}

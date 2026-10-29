@@ -203,7 +203,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
         "true",
       );
       await expect(
-        page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
+        page.getByRole("navigation", { name: "Projects", exact: true }).locator("button[aria-pressed]"),
       ).toHaveCount(1);
       await expect
         .poll(

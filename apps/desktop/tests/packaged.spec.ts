@@ -15,7 +15,7 @@ test("packaged app loads CSS, Monaco and tools without a development PATH", asyn
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await expect(page.getByRole("button", { name: "Open project…" })).toBeVisible();
-    await expect(page.locator("main")).toHaveCSS("background-color", "rgb(24, 32, 43)");
+    await expect(page.locator("main")).toHaveCSS("background-color", "rgb(19, 20, 22)");
     expect(await page.evaluate(() => typeof (window as any).require)).toBe("undefined");
     expect(await page.evaluate(() => Object.keys((window as any).escode))).toEqual([
       "watchFiles",
