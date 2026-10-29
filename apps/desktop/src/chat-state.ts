@@ -16,7 +16,7 @@ class ProjectChats {
   private opening = new Map<string, Promise<void>>();
   private polling = false;
   private timer?: ReturnType<typeof setInterval>;
-  constructor(private project: string) {}
+  constructor(private project: string | null) {}
   subscribe = (listener: () => void) => {
     if (!this.listeners.size) void this.load().catch((e) => this.report("", e));
     this.listeners.add(listener);
@@ -112,6 +112,15 @@ class ProjectChats {
       void this.refresh();
     }
   }
+  async stop(id: string) {
+    try {
+      await window.escode.chat("stop", this.project, id);
+    } catch (e) {
+      this.report(id, e);
+    } finally {
+      void this.refresh();
+    }
+  }
   edit(id: string, text: string) {
     this.update({ drafts: { ...this.state.drafts, [id]: text } });
     void window.escode.chat("draft", this.project, id, text).catch((e) => this.report(id, e));
@@ -125,8 +134,8 @@ class ProjectChats {
     });
   }
 }
-const projects = new Map<string, ProjectChats>();
-export function useProjectChats(project: string) {
+const projects = new Map<string | null, ProjectChats>();
+export function useProjectChats(project: string | null) {
   let store = projects.get(project);
   if (!store) {
     store = new ProjectChats(project);

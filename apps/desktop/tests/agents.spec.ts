@@ -314,7 +314,7 @@ test("Agents keeps an unavailable remembered selection and validates catalogue a
       page.getByText("Saved conversation missing-chat is unavailable. Its selection is retained."),
     ).toBeVisible();
     await expect(
-      page.getByText("No saved chats. Open a project and use Chats to start a conversation."),
+      page.getByText("No saved chats. Start without a project or open a project."),
     ).toBeVisible();
     expect(
       await page.evaluate(async () => {

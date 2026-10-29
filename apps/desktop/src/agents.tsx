@@ -38,7 +38,7 @@ function ChatRow({
             chats.findIndex((c) => c.id === chat.id),
           ) + 1}
         </strong>
-        <span>{chat.project.split("/").at(-1)}</span>
+        <span>{chat.project?.split("/").at(-1) ?? "No project"}</span>
         <small>{status}</small>
       </Button>
     </li>
@@ -48,14 +48,15 @@ export function AgentsView() {
   const [chats, setChats] = useState<SavedChat[] | null>(null);
   const [selected, setSelected] = useState(memory.agentsChat ?? "");
   const [error, setError] = useState("");
-  const [targets, setTargets] = useState<{ project: string; checkout: string }[]>([]);
+  const [targets, setTargets] = useState<{ project: string | null; checkout: string }[]>([]);
   const [picking, setPicking] = useState(false);
-  const create = async (project: string) => {
+  const create = async (project: string | null) => {
     try {
       const draft = await window.escode.chat("createDraft", project);
       setChats((await window.escode.chat("catalogue")).sort(compareChats));
       memory.agentsChat = draft.id;
       await persist();
+      setTargets(await window.escode.chat("targets"));
       setSelected(draft.id);
       setPicking(false);
     } catch (e) {
@@ -102,15 +103,19 @@ export function AgentsView() {
           <Button
             disabled={!targets.length}
             onClick={() => {
-              if (targets.length === 1) void create(chat?.project ?? targets[0].project);
+              if (targets.length === 1) void create(chat ? chat.project : targets[0].project);
               else setPicking(!picking);
             }}
           >
             New chat
           </Button>
+          <Button onClick={() => void create(null)}>No project</Button>
+          {!targets.length && (
+            <Button onClick={() => void create(null)}>Start without a project</Button>
+          )}
           {targets.length > 1 && chat && (
             <Button onClick={() => void create(chat.project)}>
-              New chat in {chat.project.split("/").at(-1)}
+              New chat in {chat.project?.split("/").at(-1) ?? "No project"}
             </Button>
           )}
           {picking && (
@@ -120,25 +125,26 @@ export function AgentsView() {
                 aria-label="New chat project"
                 defaultValue=""
                 onChange={(e) => {
-                  if (e.target.value) void create(e.target.value);
+                  void create(e.target.value === "no-project" ? null : e.target.value);
                 }}
               >
                 <option value="" disabled>
                   Select a saved project
                 </option>
-                {targets.map((t) => (
-                  <option key={t.project} value={t.project}>
-                    {t.project.split("/").at(-1)} · {t.project}
-                  </option>
-                ))}
+                <option value="no-project">No project</option>
+                {targets
+                  .filter((t) => t.project !== null)
+                  .map((t) => (
+                    <option key={t.project!} value={t.project!}>
+                      {t.project?.split("/").at(-1)} · {t.project}
+                    </option>
+                  ))}
               </select>
             </label>
           )}
           <h2>Saved chats</h2>
           {chats === null && <p role="status">Loading chats…</p>}
-          {chats?.length === 0 && (
-            <p>No saved chats. Open a project and use Chats to start a conversation.</p>
-          )}
+          {chats?.length === 0 && <p>No saved chats. Start without a project or open a project.</p>}
           <ul>
             {chats?.map((c) => (
               <ChatRow
@@ -159,7 +165,7 @@ export function AgentsView() {
           <div className="chat-conversation">
             {chat ? (
               <ChatView
-                key={chat.project}
+                key={chat.project ?? "no-project"}
                 global
                 project={chat.project}
                 checkout={chat.checkout}

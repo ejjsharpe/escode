@@ -117,7 +117,9 @@ app.whenReady().then(() => {
       const approved = await workspace.approved();
       // Saved registration survives editor closure. Approvals are host-owned authority.
       state.savedProjects ??= [...state.projects];
-      const historical = (await store.all()).map((c) => ({ project: c.project, root: c.project }));
+      const historical = (await store.all())
+        .filter((c) => c.project !== null)
+        .map((c) => ({ project: c.project!, root: c.project! }));
       for (const item of [...approved, ...historical])
         if (!state.savedProjects.some((p) => p.project === item.project))
           state.savedProjects.push(item);
@@ -227,7 +229,7 @@ app.whenReady().then(() => {
     const associations = await Promise.all([...projectSessions.keys()].map((id) => store.list(id)));
     const saved = associations.flat().find((c) => c.checkout === root && !c.removed);
     const candidate = saved
-      ? await Project.restore(root, saved.project, helper)
+      ? await Project.restore(root, saved.project!, helper)
       : await Project.open(root, helper);
     if (!projectSessions.has(candidate.repository())) {
       candidate.close();
@@ -300,11 +302,7 @@ app.whenReady().then(() => {
         const owner = projectSessions.get(identity);
         let originalIdentity = project.operationIdentity(source);
         const check = () => {
-          if (
-            !owner ||
-            projectSessions.get(identity) !== owner ||
-            quitting
-          )
+          if (!owner || projectSessions.get(identity) !== owner || quitting)
             throw Error("Originating project unavailable or app quitting.");
           for (const path of [source, ...(kind === "move" ? [destination] : [])]) {
             const absolute = resolve(project.root, path);
@@ -439,7 +437,9 @@ app.whenReady().then(() => {
       for (const item of saved)
         if (approved.some((p) => p.project === item.project && p.root === item.root))
           projectSessions.set(item.project, projectSessions.get(item.project) ?? {});
-      return (await store.all()).filter((c) => saved.some((p) => p.project === c.project));
+      return (await store.all()).filter(
+        (c) => c.project === null || saved.some((p) => p.project === c.project),
+      );
     }
     if (operation === "targets" && !args.length) {
       const state = await workspace.read();
@@ -449,10 +449,13 @@ app.whenReady().then(() => {
       for (const p of unique)
         if (approved.some((a) => a.project === p.project))
           projectSessions.set(p.project, projectSessions.get(p.project) ?? {});
-      return unique.map((p) => ({
+      const targets: { project: string | null; checkout: string }[] = unique.map((p) => ({
         project: p.project,
         checkout: state.views[p.project]?.checkout ?? p.root,
       }));
+      if ((await store.all()).some((c) => c.project === null))
+        targets.push({ project: null, checkout: "" });
+      return targets;
     }
     const currentTarget = async (identity: string) => {
       const state = await workspace.read();
@@ -466,7 +469,8 @@ app.whenReady().then(() => {
       return state.views[identity]?.checkout ?? p.root;
     };
     const root = args.shift();
-    if (typeof root !== "string") throw Error("Invalid project");
+    if (root !== null && typeof root !== "string") throw Error("Invalid project");
+    if (root === null && operation === "list" && !args.length) return chats.list(null);
     if (operation === "list" && !args.length) {
       const state = await workspace.read();
       const approved = await workspace.approved();
@@ -474,13 +478,15 @@ app.whenReady().then(() => {
         ![...state.projects, ...(state.savedProjects ?? []), ...approved].some(
           (p) => p.project === root,
         ) &&
-        !projectSessions.has(root)
+        !(root !== null && projectSessions.has(root))
       )
         throw Error("Unknown saved project");
       return chats.list(root);
     }
-    const owner = projectSessions.get(root);
+    const owner = root === null ? undefined : projectSessions.get(root);
     const requireOpen = () => {
+      if (quitting) throw Error("App is quitting.");
+      if (root === null) return;
       if (removing.has(root)) throw Error("Worktree removal is in progress. Retry afterward.");
       if (!owner || projectSessions.get(root) !== owner || quitting)
         throw Error("Open this project first. Use Open project… to approve its saved directory.");
@@ -488,19 +494,24 @@ app.whenReady().then(() => {
     requireOpen();
     if (operation === "list" && !args.length) return chats.list(root);
     if (operation === "createDraft" && !args.length)
-      return store.createDraft(root, await currentTarget(root));
+      return store.createDraft(root, root === null ? "" : await currentTarget(root));
     if (
       operation === "context" &&
       args.length === 2 &&
       typeof args[0] === "string" &&
-      typeof args[1] === "string"
+      (args[1] === null || typeof args[1] === "string")
     ) {
       const target = args[1];
-      if (!projectSessions.has(target))
+      if (target !== null && !projectSessions.has(target))
         throw Error("Approve the target using Open project… first.");
-      return chats.context(root, args[0], target, await currentTarget(target));
+      return chats.context(
+        root,
+        args[0],
+        target,
+        target === null ? "" : await currentTarget(target),
+      );
     }
-    if (operation === "create" && args.length === 1) {
+    if (root !== null && operation === "create" && args.length === 1) {
       const target = await checkout(args[0]);
       requireOpen();
       if (!target.validateRepository().includes(target.root))
@@ -524,6 +535,10 @@ app.whenReady().then(() => {
       if (operation === "draft") return chats.draft(root, id, value);
       if (operation === "send")
         return chats.send(root, id, value, async (chat) => {
+          if (chat.project === null) {
+            requireOpen();
+            return;
+          }
           const target = await checkout(chat.checkout);
           requireOpen();
           if (target.repository() !== root || !target.validateRepository().includes(target.root))

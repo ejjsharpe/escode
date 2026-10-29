@@ -5,7 +5,7 @@ import { codexDiagnostic, connectCodex, type CodexConnection, type WireMessage }
 export type ChatItem = { id: string; turnId: string; type: string; text: string };
 export type LiveRequest = { token: string; method: string; params: any };
 export type ChatSnapshot = {
-  project: string;
+  project: string | null;
   chatId: string;
   threadId: string | null;
   connected: boolean;
@@ -27,9 +27,9 @@ type Session = ChatSnapshot & {
 };
 export class ChatService {
   private sessions = new Map<string, Session>();
-  private transitions = new Map<string, string>();
+  private transitions = new Map<string, string | null>();
   // Hold identity stable from host authorization through binding; live responses stay independent.
-  private async inContext<T>(project: string, id: string, action: () => Promise<T>) {
+  private async inContext<T>(project: string | null, id: string, action: () => Promise<T>) {
     if (this.transitions.has(id))
       throw Error("This chat already has an active turn or context change in progress.");
     this.transitions.set(id, project);
@@ -43,16 +43,16 @@ export class ChatService {
     private store: Chats,
     private connect = connectCodex,
   ) {}
-  list(project: string) {
+  list(project: string | null) {
     return this.store.list(project);
   }
   create(project: string, checkout = project) {
     return this.store.create(project, checkout);
   }
-  draft(project: string, id: string, text: string) {
+  draft(project: string | null, id: string, text: string) {
     return this.store.draft(project, id, text);
   }
-  private session(project: string, id: string, retain = true) {
+  private session(project: string | null, id: string, retain = true) {
     let s = this.sessions.get(id);
     if (s && s.project !== project) throw Error("Unknown project/chat.");
     if (!s) {
@@ -75,7 +75,7 @@ export class ChatService {
     }
     return s;
   }
-  snapshot(project: string, id: string): ChatSnapshot {
+  snapshot(project: string | null, id: string): ChatSnapshot {
     const s = this.session(project, id, false);
     return structuredClone({
       project,
@@ -112,7 +112,7 @@ export class ChatService {
       throw Error(s.error);
     }
   }
-  context(project: string, id: string, target: string, checkout: string) {
+  context(project: string | null, id: string, target: string | null, checkout: string) {
     return this.inContext(project, id, async () => {
       const chat = await this.store.context(project, id, target, checkout);
       const previous = this.sessions.get(id);
@@ -124,10 +124,14 @@ export class ChatService {
       return chat;
     });
   }
-  open(project: string, id: string) {
+  open(project: string | null, id: string) {
     return this.inContext(project, id, () => this.connectSession(project, id));
   }
-  private async connectSession(project: string, id: string, authorizedDraft?: Readonly<SavedChat>) {
+  private async connectSession(
+    project: string | null,
+    id: string,
+    authorizedDraft?: Readonly<SavedChat>,
+  ) {
     const s = this.session(project, id);
     if (s.opening) {
       await s.opening;
@@ -151,8 +155,13 @@ export class ChatService {
             "Checkout was removed. History and drafts are retained; this chat cannot run.",
           );
         if (s.epoch !== epoch) throw Error("Project closed while loading saved chat.");
+        if (chat.phase === "draft" && !authorizedDraft) {
+          if (chat.project !== null) this.validateCheckout(s, chat.checkout);
+          else if (chat.scratch) this.store.validateScratch(chat);
+          return;
+        }
+        this.store.validateScratch(chat);
         this.validateCheckout(s, chat.checkout);
-        if (chat.phase === "draft" && !authorizedDraft) return;
         rpc = await this.connect(
           chat.checkout,
           (event) => {
@@ -181,6 +190,7 @@ export class ChatService {
           );
         // A known provider identity is never replaced, including older unsent records.
         const resume = Boolean(chat.threadId);
+        this.store.validateScratch(chat);
         this.validateCheckout(s, chat.checkout);
         if (chat.phase === "draft")
           await this.store.update(project, id, { phase: "bound", initialSend: "creating" });
@@ -248,6 +258,7 @@ export class ChatService {
           s.items = items;
         }
         if (s.epoch !== epoch) throw Error("Codex disconnected during setup. Retry connection.");
+        this.store.validateScratch(chat);
         this.validateCheckout(s, chat.checkout);
         s.connected = true;
       } catch (error) {
@@ -366,7 +377,7 @@ export class ChatService {
       s.error = p.error?.message ?? "Codex turn failed. Send a new message to continue.";
   }
   send(
-    project: string,
+    project: string | null,
     id: string,
     text: string,
     authorize: (chat: Readonly<SavedChat>) => Promise<void> = async () => {},
@@ -374,7 +385,7 @@ export class ChatService {
     return this.inContext(project, id, () => this.sendInContext(project, id, text, authorize));
   }
   private async sendInContext(
-    project: string,
+    project: string | null,
     id: string,
     text: string,
     authorize: (chat: Readonly<SavedChat>) => Promise<void>,
@@ -391,8 +402,11 @@ export class ChatService {
       const epoch = s.epoch;
       chat = Object.freeze(await this.store.get(project, id));
       if (chat.removed) throw Error("Checkout was removed. This chat cannot run.");
-      await authorize(chat);
       await this.store.draft(project, id, text);
+      await authorize(chat);
+      if (this.sessions.get(id) !== s || s.epoch !== epoch)
+        throw Error("Chat disconnected during authorization. Work was not submitted.");
+      if (chat.project === null) chat = await this.store.prepareScratch(chat);
       if (this.sessions.get(id) !== s || s.epoch !== epoch)
         throw Error("Chat disconnected during authorization. Work was not submitted.");
       if (chat.phase === "draft") {
@@ -403,6 +417,7 @@ export class ChatService {
       }
       if (!s.connected || !s.rpc)
         throw Error("Retry connection before sending. Work was not resent.");
+      this.store.validateScratch(chat);
       this.validateCheckout(s, chat.checkout);
       s.busy = true;
       s.stopping = false;
@@ -412,6 +427,7 @@ export class ChatService {
         ...(chat.phase ? { initialSend: "uncertain" as const } : {}),
       });
       sendIntent = true;
+      this.store.validateScratch(chat);
       this.validateCheckout(s, chat.checkout);
       launched = true;
       const result = await s.rpc.request("turn/start", {
@@ -449,7 +465,7 @@ export class ChatService {
     }
     return this.snapshot(project, id);
   }
-  async stop(project: string, id: string) {
+  async stop(project: string | null, id: string) {
     await this.store.get(project, id);
     const s = this.session(project, id, false);
     if (!s.connected || !s.busy || !s.turnId) throw Error("No interruptible active turn.");
@@ -458,7 +474,7 @@ export class ChatService {
     s.requestIds.clear();
     await s.rpc!.request("turn/interrupt", { threadId: s.threadId, turnId: s.turnId });
   }
-  async answer(project: string, id: string, token: string, answer: unknown) {
+  async answer(project: string | null, id: string, token: string, answer: unknown) {
     const chat = await this.store.get(project, id);
     const s = this.session(project, id, false);
     const request = s.requests.find((r) => r.token === token),
@@ -507,25 +523,26 @@ export class ChatService {
           ? { permissions: answer === "accept" ? request.params.permissions : {}, scope: "turn" }
           : { decision: answer };
     }
+    this.store.validateScratch(chat);
     this.validateCheckout(s, chat.checkout);
     s.rpc!.respond(wireId, result);
     s.requestIds.delete(token);
     s.requests = s.requests.filter((r) => r.token !== token);
   }
-  disconnect(project: string, id: string) {
+  disconnect(project: string | null, id: string) {
     const s = this.session(project, id, false);
     if (this.transitions.has(id) || s.busy || s.opening || s.sending)
       throw Error("Stop active work before reconnecting.");
     s.rpc?.close();
   }
-  checkoutActive(project: string, id: string) {
+  checkoutActive(project: string | null, id: string) {
     const s = this.sessions.get(id);
     return (
       this.transitions.has(id) ||
       (!!s && s.project === project && !!(s.busy || s.opening || s.sending || s.requests.length))
     );
   }
-  async markUnavailable(project: string, id: string) {
+  async markUnavailable(project: string | null, id: string) {
     return this.inContext(project, id, async () => {
       await this.store.get(project, id);
       const s = this.session(project, id);
@@ -536,18 +553,20 @@ export class ChatService {
       await this.store.update(project, id, { removed: true });
     });
   }
-  active(project?: string) {
+  active(project?: string | null) {
     return (
-      [...this.transitions.values()].some((p) => !project || p === project) ||
+      [...this.transitions.values()].some((p) => project === undefined || p === project) ||
       [...this.sessions.values()].some(
         (s) =>
-          (!project || s.project === project) &&
+          (project === undefined || s.project === project) &&
           (s.busy || s.opening || s.sending || s.requests.length),
       )
     );
   }
-  async shutdown(project?: string) {
-    const sessions = [...this.sessions.values()].filter((s) => !project || s.project === project);
+  async shutdown(project?: string | null) {
+    const sessions = [...this.sessions.values()].filter(
+      (s) => project === undefined || s.project === project,
+    );
     await Promise.all(
       sessions.map(async (s) => {
         if (s.busy && s.turnId && s.rpc) {

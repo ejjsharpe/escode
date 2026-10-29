@@ -2,7 +2,7 @@
 
 A project editor with files, source changes, and Codex conversations.
 
-The Agents and No project concepts below describe the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419); project-backed chats, editor closure and saved Current checkout drafts are implemented; No project execution and deferred worktree preparation remain later slices.
+The Agents and No project concepts below describe the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419); project-backed chats, editor closure, saved Current checkout drafts and No project execution are implemented; deferred worktree preparation remains a later slice.
 
 ## Language
 
@@ -31,7 +31,7 @@ A chat with no user-project association, attached to its own persistent scratch 
 A locally saved, unsent conversation whose context can change before first Send. Project drafts retain a resolved Current checkout path until explicitly changed. First Send prepares and binds the conversation while preserving its identity and creation time. Failed or uncertain sends retain the prompt and known provider identity; Retry reconnects without resending.
 
 **Scratch folder**:
-A persistent working folder owned by one No project chat. It starts without Git and is retained independently of the chat's running state.
+A persistent working folder owned by one No project chat. It is allocated only on first Send, starts without Git and is retained independently of the chat's running state. Host ownership and directory identity are persisted; missing, replaced or incompletely recorded folders are never reconstructed or rebound.
 
 **Original checkout**:
 The checkout through which a project was opened, shown by Files and Source Control before a chat is selected.

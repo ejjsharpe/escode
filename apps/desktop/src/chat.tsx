@@ -8,15 +8,26 @@ import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
   (operation: "catalogue"): Promise<SavedChat[]>;
-  (operation: "targets"): Promise<{ project: string; checkout: string }[]>;
-  (operation: "createDraft", project: string): Promise<SavedChat>;
-  (operation: "context", project: string, id: string, target: string): Promise<SavedChat>;
-  (operation: "list", project: string): Promise<SavedChat[]>;
+  (operation: "targets"): Promise<{ project: string | null; checkout: string }[]>;
+  (operation: "createDraft", project: string | null): Promise<SavedChat>;
+  (
+    operation: "context",
+    project: string | null,
+    id: string,
+    target: string | null,
+  ): Promise<SavedChat>;
+  (operation: "list", project: string | null): Promise<SavedChat[]>;
   (operation: "create", project: string, checkout: string): Promise<SavedChat>;
-  (operation: "open" | "snapshot", project: string, id: string): Promise<ChatSnapshot>;
-  (operation: "send" | "draft", project: string, id: string, text: string): Promise<unknown>;
-  (operation: "stop" | "disconnect", project: string, id: string): Promise<void>;
-  (operation: "answer", project: string, id: string, token: string, answer: unknown): Promise<void>;
+  (operation: "open" | "snapshot", project: string | null, id: string): Promise<ChatSnapshot>;
+  (operation: "send" | "draft", project: string | null, id: string, text: string): Promise<unknown>;
+  (operation: "stop" | "disconnect", project: string | null, id: string): Promise<void>;
+  (
+    operation: "answer",
+    project: string | null,
+    id: string,
+    token: string,
+    answer: unknown,
+  ): Promise<void>;
 }
 function Request({
   request,
@@ -138,7 +149,7 @@ export function ChatView({
   createChat,
   global = false,
 }: {
-  project: string;
+  project: string | null;
   checkout: string;
   sidebarId: string;
   selected: string;
@@ -148,7 +159,7 @@ export function ChatView({
 }) {
   const [store, { chats, snapshots, drafts, pending, responding, errors }] =
     useProjectChats(project);
-  const [targets, setTargets] = useState<{ project: string; checkout: string }[]>([]);
+  const [targets, setTargets] = useState<{ project: string | null; checkout: string }[]>([]);
   useEffect(() => {
     void window.escode.chat("targets").then(setTargets);
   }, []);
@@ -162,7 +173,7 @@ export function ChatView({
   }, [store, selected]);
   const run = (action: () => Promise<unknown>) => store.run(selected, action);
   const snapshot = snapshots[selected];
-  const changeContext = (target: string) =>
+  const changeContext = (target: string | null) =>
     run(async () => {
       const moved = await window.escode.chat("context", project, selected, target);
       await store.load();
@@ -218,11 +229,13 @@ export function ChatView({
             )}
             <div className="conversation-heading">
               <h2>Chat {chats.findIndex((c) => c.id === selected) + 1}</h2>
-              <p>{project.split("/").at(-1)}</p>
+              <p>{project?.split("/").at(-1) ?? "No project"}</p>
             </div>
-            <p className="directory">Checkout: {chats.find((c) => c.id === selected)?.checkout}</p>
-            {chats.filter((c) => c.checkout === chats.find((c) => c.id === selected)?.checkout)
-              .length > 1 && (
+            <p className="directory">
+              {project === null ? "Scratch folder: " : "Checkout: "}
+              {record?.checkout || "Allocated on first Send"}
+            </p>
+            {record?.checkout && chats.filter((c) => c.checkout === record.checkout).length > 1 && (
               <p>These chats share files in this checkout. Their edits can interact.</p>
             )}
             <div className="chat-actions">
@@ -239,8 +252,8 @@ export function ChatView({
                 Retry connection / reload history
               </Button>
               <Button
-                disabled={working || !snapshot?.busy || !snapshot.turnId}
-                onClick={() => void run(() => window.escode.chat("stop", project, selected))}
+                disabled={!snapshot?.busy || !snapshot.turnId}
+                onClick={() => void store.stop(selected)}
               >
                 Stop
               </Button>
@@ -313,28 +326,33 @@ export function ChatView({
                 void store.send(selected);
               }}
             >
-              {unsent && (
+              {unsent && !record?.scratch && (
                 <label>
                   Project context
                   <select
                     aria-label="Project context"
-                    value={project}
+                    value={project ?? ""}
                     disabled={working}
-                    onChange={(e) => void changeContext(e.target.value)}
+                    onChange={(e) => void changeContext(e.target.value || null)}
                   >
-                    {targets.map((t) => (
-                      <option key={t.project} value={t.project}>
-                        {t.project.split("/").at(-1)} · {t.project}
-                      </option>
-                    ))}
+                    <option value="">No project</option>
+                    {targets
+                      .filter((t) => t.project !== null)
+                      .map((t) => (
+                        <option key={t.project!} value={t.project!}>
+                          {t.project?.split("/").at(-1) ?? "No project"} · {t.project}
+                        </option>
+                      ))}
                   </select>
-                  <Button
-                    type="button"
-                    disabled={working}
-                    onClick={() => void changeContext(project)}
-                  >
-                    Use current checkout
-                  </Button>
+                  {project !== null && (
+                    <Button
+                      type="button"
+                      disabled={working}
+                      onClick={() => void changeContext(project)}
+                    >
+                      Use current checkout
+                    </Button>
+                  )}
                 </label>
               )}
               <label htmlFor={sidebarId + "-message"}>Message Codex</label>
@@ -350,7 +368,11 @@ export function ChatView({
               <Button
                 type="submit"
                 disabled={
-                  working || (!unsent && !snapshot?.connected) || snapshot?.busy || !draft.trim()
+                  working ||
+                  (!!record?.scratch && !!(error || snapshot?.error)) ||
+                  (!unsent && !snapshot?.connected) ||
+                  snapshot?.busy ||
+                  !draft.trim()
                 }
               >
                 Send message
