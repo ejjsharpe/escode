@@ -57,7 +57,8 @@ During R1 development, test assertions were corrected for the newly visible conf
 
 ## Human acceptance and limits
 
-After original Files R3 approval, the user confirmed batch VoiceOver controls and Finder Put Back of both fixtures with their original paths and contents in [the bounded manual acceptance record](https://github.com/ejjsharpe/escode/issues/42#issuecomment-6506637165). This is original Files 42 evidence, not a new combined-integration manual check. No manual process restart, live-provider or full-parent acceptance is claimed. Automated dialog responses establish application choice handling; they do not establish native VoiceOver behavior.
+After original Files R3 approval, the user confirmed batch VoiceOver controls after editing `batch-a.txt` unsaved, selecting it with `batch-b.txt`, invoking Cmd+Backspace, reviewing paths/dirty choices, cancelling, then choosing Discard and Move to Trash. The bounded check covered dialog announcements, results and returned tree focus. Finder Bin → Put Back restored **both original paths and original disk contents**, followed by explicit Refresh. See [the bounded manual acceptance record](https://github.com/ejjsharpe/escode/issues/42#issuecomment-6506637165). This is original Files 42 evidence, not a new combined-integration manual check. This batch record does not certify transfers. The separate [bounded transfer VoiceOver pass](https://github.com/ejjsharpe/escode/issues/43#issuecomment-6507567050) covers Copy/Paste, copied unsaved text, Keep Both and Duplicate. No manual Cut/move, process restart, live-provider concurrency or full-parent acceptance is claimed. Automated dialog responses establish application choice handling; they do not establish native VoiceOver behavior. The subsequent Files 42 integration and its exact tested bases remain recorded below.
+
 
 Original Files-slice tests used isolated temporary repositories and app profiles. No live authenticated Codex turn was run. The protected first-slice/tree/inline snapshots, Desktop fixture, ports 5173–5175, other checkouts and newer main were untouched. That slice did not perform integration or tracker closure; its later approved commit and the pending combined reconciliation are recorded separately.
 
@@ -235,3 +236,7 @@ The original bounded Files 42 user pass linked above remains the manual evidence
 Existing final-syscall races, explicit-save conflict policy, best-effort recovery
 and nontransactional batch limits are unchanged. Other checkouts, reserved manual
 snapshots/ports and Desktop fixtures were not used.
+
+## Current Files 43 integration context
+
+Files 42 is already integrated in actual main at `e0b66346ed8e7464011c08bfac78319adc0609e1`, including the accepted Agents evidence and all Files 42 delivery/acknowledgement fixes. The pending Files 42 merge descriptions above are historical records of that completed integration, not its current status. Files 43 is now being reconciled against that exact main commit in a dedicated checkout; see [transfer integration evidence](files-transfer.md#integration-with-accepted-agents-and-files-42). The original batch manual evidence remains bounded to the journey above; this reconciliation adds no new batch manual acceptance.

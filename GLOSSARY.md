@@ -73,8 +73,19 @@ Failed items retain their available work and report individual outcomes.
 
 **File-operation intent**:
 A durable record of an originating checkout and source/destination object identities,
-retained across a rename/move, Trash or Save-before-Trash filesystem/persistence handoff.
+retained across a rename/move, copy, Trash or Save-before-Trash filesystem/persistence handoff.
+Copy intents additionally retain staging paths and available destination draft text.
 Completed saves carry their disk baseline independently of deletion outcomes, preserving
 available draft text. Completed batch facts protect workspace snapshots until the renderer
 reconciles and durably acknowledges them. Restart reconciles available drafts with actual
 paths and saved baselines; uncertain outcomes retain work and block mutations.
+
+**Files clipboard reference**:
+A host-captured selection of checkout-relative entries and native source identities,
+bound to one checkout and a random system-clipboard token. Paste revalidates the captured
+identities; clipboard payloads alone grant no path authority. Successful cut moves leave
+the reference selection; failed items remain retryable. Duplicate and same-folder Copy
+choose a free sibling name. Copies retain source edits and carry available unsaved text
+to destination drafts over copied disk baselines. Clean-file Replace explicitly moves
+the former destination to macOS Trash; folder/type collisions never merge trees.
+Copy intents retain staging paths and available draft text through uncertain handoffs.

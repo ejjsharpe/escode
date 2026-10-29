@@ -16,6 +16,7 @@ export function FilesTree({
   rename,
   create,
   trash,
+  transfer,
 }: {
   root: string;
   active: boolean;
@@ -27,6 +28,11 @@ export function FilesTree({
   rename: (path: string, destination: string) => Promise<void>;
   create: (parent: string, name: string, kind: "file" | "folder") => Promise<string>;
   trash: (paths: string[]) => Promise<void>;
+  transfer: (
+    kind: "copy" | "cut" | "paste" | "duplicate",
+    paths: string[],
+    parent: string,
+  ) => Promise<void>;
 }) {
   const [state, setState] = useMemory(root, "files", {
     expanded: [],
@@ -358,6 +364,26 @@ export function FilesTree({
     await trash(paths);
     if (active) restoreFocus();
   }
+  async function transferSelection(kind: "copy" | "cut" | "paste" | "duplicate") {
+    const paths = [...latest.current.selected];
+    const target = menu ?? latest.current.focus;
+    dismiss();
+    setActionError("");
+    try {
+      let parent = "";
+      if (kind === "paste" && target) {
+        const container = target.split("/").slice(0, -1).join("/");
+        const listing = cache[container] ?? (await load(container));
+        const entry = listing.entries?.find((e) => e.path === target);
+        if (!entry) throw Error(listing.error || "Destination missing. Refresh and select again.");
+        parent = entry.directory ? target : container;
+      }
+      await transfer(kind, paths, parent);
+    } catch (error) {
+      setActionError(String(error));
+    }
+    if (active) restoreFocus();
+  }
   function key(event: KeyboardEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget || disabled || edit) return;
     if (event.key === "Escape" && menu !== null) {
@@ -368,6 +394,17 @@ export function FilesTree({
     if (event.metaKey && ["Backspace", "Delete"].includes(event.key)) {
       event.preventDefault();
       void moveToTrash();
+      return;
+    }
+    if (event.metaKey && ["c", "x", "v"].includes(event.key.toLowerCase())) {
+      event.preventDefault();
+      void transferSelection(
+        event.key.toLowerCase() === "c"
+          ? "copy"
+          : event.key.toLowerCase() === "x"
+            ? "cut"
+            : "paste",
+      );
       return;
     }
     const row = focused;
@@ -663,6 +700,16 @@ export function FilesTree({
           >
             Move to Trash
           </button>
+          {(["copy", "cut", "paste", "duplicate"] as const).map((kind) => (
+            <button
+              key={kind}
+              role="menuitem"
+              disabled={disabled || !!edit || (kind !== "paste" && !state.selected.length)}
+              onClick={() => void transferSelection(kind)}
+            >
+              {kind[0].toUpperCase() + kind.slice(1)}
+            </button>
+          ))}
           {state.selected.length > 1 && <p>Choose one entry for Rename.</p>}
           <button role="menuitem" onClick={dismiss}>
             Dismiss menu

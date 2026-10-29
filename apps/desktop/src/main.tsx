@@ -84,6 +84,7 @@ function CheckoutView({
   const [status, setStatus] = useState<Status | null>(null);
   const [checkoutError, setCheckoutError] = useState("");
   const [filesRevision, setFilesRevision] = useState(0);
+  const [transferProgress, setTransferProgress] = useState(false);
   const [path, setPath] = useMemory(root, "path", "");
   const [message, setMessage] = useState("Open a local Git checkout to begin.");
   const [conflict, setConflict] = useState<{ path: string; disk: Document } | null>(null);
@@ -185,6 +186,7 @@ function CheckoutView({
     if (!b) return;
     const instance = monaco.editor.create(container.current, {
       model: b.model,
+      readOnly: closeInFlight.current || saveInFlight.current,
       automaticLayout: true,
       theme: "vs-dark",
       accessibilitySupport: "on",
@@ -376,19 +378,27 @@ function CheckoutView({
     }
   }
   async function fileOperation(
-    kind: "move" | "trash",
+    kind: "move" | "trash" | "paste" | "duplicate",
     source: string | string[],
     destination = "",
     inline = false,
   ) {
     if (closeInFlight.current || saveInFlight.current || conflict) {
-      if (inline) throw Error("Finish the pending file action first.");
+      if (inline || kind === "paste" || kind === "duplicate")
+        throw Error("Finish the pending file action first.");
       return;
     }
+    const transferring = kind === "paste" || kind === "duplicate";
     const sources = typeof source === "string" ? [source] : [...source];
     const single = sources[0];
     closeInFlight.current = true;
-    setFileClosing(true);
+    setFileClosing(!transferring);
+    setTransferProgress(transferring);
+    setMessage(
+      transferring
+        ? "Transferring files… Navigation and chat Stop remain available. Earlier move undo history resets."
+        : "Applying file operation…",
+    );
     editor.current?.updateOptions({ readOnly: true });
     try {
       for (const [file, b] of buffers.current) {
@@ -409,7 +419,12 @@ function CheckoutView({
         )
       )
         throw Error("Destination has open buffers. Close them or choose another path.");
-      const batch = kind === "trash" ? await projectCall("trash-selection", root, sources) : null;
+      const batch =
+        kind === "trash"
+          ? await projectCall("trash-selection", root, sources)
+          : transferring
+            ? await projectCall("transfer", root, kind, destination, sources)
+            : null;
       const results = batch
         ? batch.results
         : [
@@ -424,30 +439,66 @@ function CheckoutView({
               )),
             },
           ];
-      for (const saved of batch?.saves ?? []) {
+      for (const saved of batch && "saves" in batch ? batch.saves : []) {
         const b = buffers.current.get(saved.path);
         if (b) b.disk = saved.disk;
         reconcileSave(memory, root, saved);
       }
-      let nextPath = path;
+      let nextPath = memory.views[root]?.path ?? path;
+      const reconciliationNotes: string[] = [];
       for (const result of results) {
         if (!result.applied || !result.intent) continue;
         const source = result.intent.source;
+        const target = result.intent.destination;
+        const operationKind = result.intent.kind;
+        if (operationKind === "copy") {
+          for (const draft of result.intent.copies ?? []) {
+            const existing = buffers.current.get(draft.path);
+            if (!existing) addBuffer(draft.path, draft.disk, draft.text);
+            else {
+              const text = existing.model.getValue();
+              const clean = text === existing.disk.text;
+              const current = editor.current?.getModel() === existing.model;
+              const view = current ? editor.current?.saveViewState() : existing.view;
+              existing.disk = draft.disk;
+              if (clean || text === draft.text) {
+                if (text !== draft.text) {
+                  existing.model.pushStackElement();
+                  existing.model.pushEditOperations(
+                    [],
+                    [{ range: existing.model.getFullModelRange(), text: draft.text }],
+                    () => null,
+                  );
+                  existing.model.pushStackElement();
+                }
+                if (current && view) editor.current?.restoreViewState(view);
+              } else {
+                reconciliationNotes.push(
+                  `Destination ${root}/${draft.path} changed while copying. Its current text was retained; source edits remain available at ${root}/${moved(draft.path, target, source)}. Review both before saving.`,
+                );
+              }
+              // Match the recovery draft to the visible model, including any newer destination edits.
+              void record(draft.path, existing);
+            }
+          }
+          reconcile(memory, result.intent);
+          continue;
+        }
         const current = editor.current?.getModel();
         for (const [file, b] of Array.from(buffers.current)) {
           if (!affected(file, source)) continue;
           if (current === b.model) b.view = editor.current?.saveViewState();
           buffers.current.delete(file);
-          if (kind === "move") {
-            const next = addBuffer(moved(file, source, destination), b.disk, b.model.getValue());
+          if (operationKind === "move") {
+            const next = addBuffer(moved(file, source, target), b.disk, b.model.getValue());
             next.view = b.view;
           }
           b.model.dispose();
         }
         reconcile(memory, result.intent);
         nextPath =
-          kind === "move"
-            ? moved(nextPath, source, destination)
+          operationKind === "move"
+            ? moved(nextPath, source, target)
             : affected(nextPath, source)
               ? ""
               : nextPath;
@@ -477,12 +528,16 @@ function CheckoutView({
       } catch (error) {
         refreshError = `\nRefresh failed: ${String(error)}`;
       }
-      const failed = batch?.results.find((r) => r.conflict);
+      if (batch && "open" in batch) for (const file of batch.open) await select(file);
+      const failed = batch && "saves" in batch ? batch.results.find((r) => r.conflict) : undefined;
       if (failed?.conflict) {
         await select(failed.conflict.path);
         setConflict(failed.conflict);
       }
-      const message = (batch?.message ?? results[0].message) + completionError + refreshError;
+      const message =
+        [batch?.message ?? results[0].message, ...reconciliationNotes].join("\n") +
+        completionError +
+        refreshError;
       setMessage(message);
       if (inline && !results[0].applied) throw Error(message);
     } catch (error) {
@@ -491,6 +546,7 @@ function CheckoutView({
     } finally {
       closeInFlight.current = false;
       setFileClosing(false);
+      setTransferProgress(false);
       editor.current?.updateOptions({ readOnly: false });
     }
   }
@@ -505,6 +561,11 @@ function CheckoutView({
   return (
     <div className="workspace" hidden={!active || mode === "Chats"} inert={fileClosing}>
       <aside aria-label={mode + " sidebar"}>
+        {transferProgress && (
+          <p role="status">
+            Transferring captured files… Navigation and chat Stop remain available.
+          </p>
+        )}
         <p className="directory">
           {status?.branch} · {root}
         </p>
@@ -567,6 +628,11 @@ function CheckoutView({
                 setFilesRevision((n) => n + 1);
                 if (kind === "file") await select(file);
                 return file;
+              }}
+              transfer={async (kind, sources, parent) => {
+                if (kind === "copy" || kind === "cut") {
+                  setMessage(await projectCall("clipboard-capture", root, kind, sources));
+                } else await fileOperation(kind, sources, parent);
               }}
               trash={async (sources) => {
                 await fileOperation("trash", sources);

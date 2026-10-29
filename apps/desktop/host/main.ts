@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, session, dialog } from "electron";
-import { join, resolve } from "node:path";
+import { app, BrowserWindow, ipcMain, session, dialog, clipboard, ClipboardItem } from "electron";
+import { join, resolve, dirname, basename, extname } from "node:path";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, realpathSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { toolStatus } from "./tools";
@@ -94,6 +95,16 @@ app.whenReady().then(() => {
       return false;
     }
   };
+  const clipboardFormat = "web application/x.escode-files";
+  let fileClipboard:
+    | {
+        token: string;
+        root: string;
+        checkout: string;
+        cut: boolean;
+        entries: { source: string; identity: string; directory: boolean }[];
+      }
+    | undefined;
   let mayClose = false;
   window.on("close", (event) => {
     if (mayClose) return;
@@ -282,9 +293,14 @@ app.whenReady().then(() => {
     }
     const requestedRoot = args.shift();
     if (
-      ["trash-selection", "file-operation", "file-operation-ack", "create-entry"].includes(
-        String(operation),
-      ) &&
+      [
+        "clipboard-capture",
+        "transfer",
+        "trash-selection",
+        "file-operation",
+        "file-operation-ack",
+        "create-entry",
+      ].includes(String(operation)) &&
       (typeof requestedRoot !== "string" || !projects.has(requestedRoot))
     )
       throw Error("Open and approve this checkout first.");
@@ -300,6 +316,242 @@ app.whenReady().then(() => {
     if (operation === "file-operation-ack" && !args.length) {
       if (mutationOrigin) throw Error("File operation is still delivering results.");
       return operations.ack(project.root);
+    }
+    const protect = (path: string) => {
+      const absolute = resolve(project.root, path);
+      if (
+        isAppState(absolute) ||
+        stateFiles.some((file) =>
+          affected(file.normalize("NFC").toLowerCase(), absolute.normalize("NFC").toLowerCase()),
+        )
+      )
+        throw Error("Protected app state is inside this operation.");
+    };
+    const capture = (paths: string[]) => {
+      if (!paths.length || paths.length > 10000 || paths.some((p) => typeof p !== "string"))
+        throw Error("Select entries first.");
+      const entries = [...new Set(paths)].map((source) => {
+        protect(source);
+        return {
+          source,
+          identity: project.operationIdentity(source),
+          directory: statSync(resolve(project.root, source)).isDirectory(),
+        };
+      });
+      return entries.filter(
+        (e) =>
+          !entries.some(
+            (parent) => parent !== e && parent.directory && affected(e.source, parent.source),
+          ),
+      );
+    };
+    if (
+      operation === "clipboard-capture" &&
+      args.length === 2 &&
+      ["copy", "cut"].includes(String(args[0])) &&
+      Array.isArray(args[1])
+    ) {
+      operations.assertIdle();
+      fileClipboard = {
+        token: randomUUID(),
+        root: project.root,
+        checkout: project.checkoutIdentity(),
+        cut: args[0] === "cut",
+        entries: capture(args[1] as string[]),
+      };
+      await clipboard.write([new ClipboardItem({ [clipboardFormat]: fileClipboard.token })]);
+      return `${fileClipboard.cut ? "Cut" : "Copied references for"} ${fileClipboard.entries.length} item(s). Paste within this checkout.`;
+    }
+    if (
+      operation === "transfer" &&
+      args.length === 3 &&
+      ["paste", "duplicate"].includes(String(args[0])) &&
+      typeof args[1] === "string" &&
+      Array.isArray(args[2])
+    ) {
+      if (mutationOrigin) throw Error("Another file operation is pending.");
+      const duplicate = args[0] === "duplicate";
+      const reference = duplicate ? undefined : fileClipboard;
+      const item = duplicate
+        ? undefined
+        : (await clipboard.read()).find((item) => item.types.includes(clipboardFormat));
+      const token = item ? await (await item.getType(clipboardFormat)).text() : "";
+      if (
+        !duplicate &&
+        (!reference ||
+          reference.root !== project.root ||
+          reference.checkout !== project.checkoutIdentity() ||
+          token !== reference.token)
+      )
+        throw Error(
+          "No current escode file references for this checkout. Copy or cut again in Files.",
+        );
+      const entries = duplicate ? capture(args[2] as string[]) : [...reference!.entries];
+      const parent = args[1];
+      const parentIdentity = parent
+        ? project.operationIdentity(parent)
+        : project.checkoutIdentity();
+      const owner = projectSessions.get(identity);
+      const check = () => {
+        if (
+          !owner ||
+          projectSessions.get(identity) !== owner ||
+          projects.get(project.root) !== project ||
+          quitting
+        )
+          throw Error("Originating project unavailable or app quitting.");
+        if (
+          (parent ? project.operationIdentity(parent) : project.checkoutIdentity()) !==
+          parentIdentity
+        )
+          throw Error("Destination folder changed. Retry paste.");
+      };
+      mutationOrigin = project.root;
+      const results: (import("./file-operations").OperationResult & { source: string })[] = [];
+      const open: string[] = [];
+      try {
+        operations.beginBatch(project.root);
+        for (const entry of entries) {
+          const source = entry.source;
+          let destination = "";
+          try {
+            check();
+            protect(source);
+            if (
+              project.operationIdentity(source) !== entry.identity ||
+              statSync(resolve(project.root, source)).isDirectory() !== entry.directory
+            )
+              throw Error("Captured source changed. Copy or cut it again.");
+            const folder = duplicate ? (dirname(source) === "." ? "" : dirname(source)) : parent;
+            destination = folder ? folder + "/" + basename(source) : basename(source);
+            const kind = reference?.cut ? "move" : "copy";
+            if (entry.directory && affected(folder, source))
+              throw Error("Choose a destination outside the source folder.");
+            const siblings = await project.files(folder);
+            const folded = (p: string) => p.normalize("NFC").toLowerCase();
+            const state = await workspace.read();
+            const occupied = (p: string) =>
+              siblings.some((e) => folded(e.path) === folded(p)) ||
+              state.drafts.some(
+                (d) => d.root === project.root && affected(folded(d.path), folded(p)),
+              );
+            const free = () => {
+              const name = basename(source),
+                extension = entry.directory ? "" : extname(name),
+                stem = name.slice(0, name.length - extension.length);
+              for (let i = 1; i < 100000; i++) {
+                const name = `${stem} copy${i === 1 ? "" : " " + i}${extension}`;
+                project.validateName(name);
+                const candidate = folder ? folder + "/" + name : name;
+                if (!occupied(candidate)) return candidate;
+              }
+              throw Error("No free sibling name found.");
+            };
+            if (destination === source && kind === "move")
+              throw Error("Source already belongs to this folder; cut retained.");
+            if (duplicate || destination === source) destination = free();
+            else if (occupied(destination)) {
+              const existing = siblings.find((e) => folded(e.path) === folded(destination));
+              if (existing) destination = existing.path;
+              const dirty = state.drafts.filter(
+                (d) => d.root === project.root && affected(folded(d.path), folded(destination)),
+              );
+              const replace = !entry.directory && existing && !existing.directory && !dirty.length;
+              const buttons = dirty.length
+                ? ["Open affected files", "Keep Both", "Cancel"]
+                : replace
+                  ? ["Replace", "Keep Both", "Skip", "Cancel"]
+                  : ["Keep Both", "Skip", "Cancel"];
+              const targetIdentity = existing ? project.operationIdentity(destination) : "";
+              const answer = await dialog.showMessageBox(window, {
+                message: `Destination occupied: ${destination}`,
+                detail: dirty.length
+                  ? `Unsaved destination blocks Replace. Save or discard ordinarily before retrying.\n${dirty.map((d) => d.path).join("\n")}`
+                  : replace
+                    ? "Replace moves the existing clean disk file to macOS Trash before transferring. A failed transfer can leave that file in Trash."
+                    : "Folder/type conflicts cannot merge or replace trees.",
+                buttons,
+                defaultId: buttons.length - 1,
+                cancelId: buttons.length - 1,
+              });
+              check();
+              const choice = buttons[answer.response];
+              if (choice === "Cancel") {
+                results.push({
+                  source,
+                  applied: false,
+                  message: "Cancelled; remaining references retained.",
+                });
+                break;
+              }
+              if (choice === "Open affected files") {
+                open.push(...dirty.map((d) => d.path));
+                break;
+              }
+              if (choice === "Skip") {
+                results.push({ source, applied: false, message: "Skipped; reference retained." });
+                continue;
+              }
+              if (choice === "Keep Both") destination = free();
+              else {
+                const latest = await workspace.read();
+                if (
+                  latest.drafts.some(
+                    (d) => d.root === project.root && affected(folded(d.path), folded(destination)),
+                  )
+                )
+                  throw Error("Destination became dirty. Save/discard before retrying.");
+                if (project.operationIdentity(destination) !== targetIdentity)
+                  throw Error("Destination changed after consent.");
+                protect(destination);
+                const removed = await operations.run(project, "trash", destination, "", check);
+                results.push({ source: destination, ...removed });
+                if (removed.persistencePending) break;
+                await operations.ack();
+              }
+            }
+            project.validateName(basename(destination));
+            protect(destination);
+            check();
+            const result = await operations.run(project, kind, source, destination, () => {
+              check();
+              protect(source);
+              protect(destination);
+              if (project.operationIdentity(source) !== entry.identity)
+                throw Error("Captured source changed.");
+            });
+            results.push({ source, ...result });
+            if (result.applied && reference?.cut)
+              reference.entries = reference.entries.filter((e) => e !== entry);
+            if (result.persistencePending) break;
+            try {
+              await operations.ack();
+            } catch (error) {
+              result.persistencePending = true;
+              results[results.length - 1].message +=
+                ` Journal acknowledgement failed: ${String(error)}`;
+              break;
+            }
+          } catch (error) {
+            results.push({
+              source,
+              applied: false,
+              message: `${destination || source}: ${String(error)}`,
+            });
+          }
+        }
+        return {
+          results,
+          open,
+          requiresAck: operations.hasBatchFacts(project.root),
+          message:
+            results.map((r) => `${project.root}/${r.source}: ${r.message}`).join("\n") ||
+            "No transfer completed. Available edits retained.",
+        };
+      } finally {
+        operations.releaseEmptyBatch();
+        mutationOrigin = undefined;
+      }
     }
     if (
       operation === "create-entry" &&

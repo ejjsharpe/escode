@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import {
   realpathSync,
   openSync,
@@ -214,6 +214,62 @@ export class Project {
       throw Object.assign(Error(`Move outcome needs reconciliation: ${String(error)}`), {
         uncertain: true,
       });
+    }
+  }
+  async copy(source: string, destination: string, identity: string, temporary: string) {
+    this.validateMove(source, destination);
+    const parent = dirname(destination);
+    const parentIdentity =
+      parent === "." ? this.checkoutIdentity() : this.operationIdentity(parent);
+    const fd = this.checkedDirectory();
+    let staging = "";
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(
+          this.helper,
+          ["copy", source, destination, identity, temporary, parentIdentity],
+          {
+            stdio: ["ignore", "pipe", "pipe", fd],
+          },
+        );
+        child.stdout!.on("data", (chunk) => {
+          staging += chunk;
+        });
+        let errorText = "";
+        child.stderr!.on("data", (chunk) => {
+          errorText += chunk;
+        });
+        child.on("error", reject);
+        child.on("close", (code, signal) =>
+          code === 0
+            ? resolve()
+            : reject(
+                Object.assign(
+                  Error(
+                    errorText + (staging ? ` Opened copy staging object: ${staging.trim()}` : ""),
+                  ),
+                  { uncertain: true, signalled: !!signal },
+                ),
+              ),
+        );
+      });
+      this.checkoutIdentity();
+    } catch (error) {
+      const absent = (path: string) => {
+        try {
+          this.operationIdentity(path);
+          return false;
+        } catch (error) {
+          return (error as NodeJS.ErrnoException).code === "ENOENT";
+        }
+      };
+      if (staging || (error as { signalled?: boolean }).signalled)
+        throw Object.assign(error as Error, { uncertain: true });
+      if (absent(destination) && absent(temporary))
+        throw Object.assign(error as Error, { uncertain: false });
+      throw error;
+    } finally {
+      closeSync(fd);
     }
   }
   trash(source: string, identity: string) {
@@ -616,6 +672,25 @@ export class Project {
 }
 
 export interface ProjectBridge {
+  (
+    operation: "clipboard-capture",
+    checkout: string,
+    kind: "copy" | "cut",
+    paths: string[],
+  ): Promise<string>;
+  (
+    operation: "transfer",
+    checkout: string,
+    kind: "paste" | "duplicate",
+    parent: string,
+    paths: string[],
+  ): Promise<{
+    results: (import("./file-operations").OperationResult & { source: string })[];
+    open: string[];
+    requiresAck: boolean;
+    message: string;
+  }>;
+
   (
     operation: "trash-selection",
     checkout: string,

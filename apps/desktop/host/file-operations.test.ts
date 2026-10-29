@@ -493,3 +493,154 @@ test("renderer acknowledgement of earlier batch facts never clears an uncertain 
     expect(pending?.source).toBe("folder/b.ts");
     expect(pending?.completed).not.toBe(true);
   }));
+
+test("async folder copy carries dirty descendants over actual copied bytes and preserves originals across restart", async () =>
+  fixture(async (p, store, base) => {
+    const ops = new FileOperations(store, join(base, "intent.json"));
+    ops.beginBatch(p.root);
+    const stale = await store.read();
+    const result = await ops.run(p, "copy", "folder", "copied");
+    expect(result.applied).toBe(true);
+    expect(readFileSync(join(p.root, "copied/a.ts"), "utf8")).toBe("disk");
+    expect(readFileSync(join(p.root, "copied/b.ts"), "utf8")).toBe("second disk");
+    await ops.persist(stale);
+    const fresh = new Workspace(join(base, "workspace.json"));
+    const drafts = (await fresh.read()).drafts;
+    expect(drafts.map((d) => d.path)).toEqual([
+      "folder/a.ts",
+      "folder/b.ts",
+      "copied/a.ts",
+      "copied/b.ts",
+    ]);
+    expect(drafts[2].text).toBe("a unsaved");
+    expect(drafts[2].disk).toEqual(await p.read("copied/a.ts"));
+    expect(
+      await new FileOperations(fresh, join(base, "intent.json")).recover(async () => p),
+    ).toContain("Recovered copy");
+    expect((await p.save("copied/a.ts", drafts[2].text, drafts[2].disk.version)).kind).toBe(
+      "saved",
+    );
+    expect(readFileSync(join(p.root, "folder/a.ts"), "utf8")).toBe("disk");
+  }));
+
+test("binary copy exceeds editor limit and lets the host event loop run", async () =>
+  fixture(async (p, store, base) => {
+    const bytes = Buffer.alloc(32 * 1024 * 1024, 173);
+    writeFileSync(join(p.root, "large.bin"), bytes);
+    const ops = new FileOperations(store, join(base, "intent.json"));
+    let ticks = 0;
+    const timer = setInterval(() => ticks++, 1);
+    const start = performance.now();
+    try {
+      const result = await ops.run(p, "copy", "large.bin", "large-copy.bin");
+      expect(result.applied).toBe(true);
+      expect(readFileSync(join(p.root, "large-copy.bin")).equals(bytes)).toBe(true);
+      expect(ticks).toBeGreaterThan(0);
+      console.log(
+        `32 MiB native binary copy: ${(performance.now() - start).toFixed(1)} ms, event loop ticks: ${ticks}`,
+      );
+    } finally {
+      clearInterval(timer);
+    }
+  }));
+
+test("recursive unsupported source is reported without publishing a partial destination", async () =>
+  fixture(async (p, store, base) => {
+    symlinkSync(join(p.root, "folder/a.ts"), join(p.root, "folder/link"));
+    const ops = new FileOperations(store, join(base, "intent.json"));
+    await expect(ops.run(p, "copy", "folder", "copied")).rejects.toThrow();
+    expect(existsSync(join(p.root, "copied"))).toBe(false);
+    expect((await store.read()).drafts).toHaveLength(2);
+  }));
+
+test("native copy success stays applied through persistence failure and stale navigation writes", async () =>
+  fixture(async (p, store, base) => {
+    const file = join(base, "intent.json"),
+      ops = new FileOperations(store, file);
+    const stale = await store.read();
+    ops.beginBatch(p.root);
+    const write = vi.spyOn(store, "write").mockRejectedValueOnce(Error("copy persistence denied"));
+    const result = await ops.run(p, "copy", "folder", "copied");
+    expect(result).toMatchObject({ applied: true, persistencePending: true });
+    expect(result.message).toContain("copy persistence denied");
+    expect(readFileSync(join(p.root, "copied/a.ts"), "utf8")).toBe("disk");
+    write.mockRestore();
+    stale.selected = "Agents";
+    await ops.persist(stale);
+    expect((await store.read()).drafts.find((d) => d.path === "copied/a.ts")?.text).toBe(
+      "a unsaved",
+    );
+    await expect(ops.run(p, "move", "folder", "other")).rejects.toThrow("pending reconciliation");
+    expect(await new FileOperations(store, file).recover(async () => p)).toContain(
+      "Recovered copy",
+    );
+    expect((await store.read()).selected).toBe("Agents");
+  }));
+
+test("copy rejects occupied case variants and descendant destinations without changing disk bytes", async () =>
+  fixture(async (p, store, base) => {
+    expect(() => p.validateMove("folder", "folder/nested")).toThrow();
+    writeFileSync(join(p.root, "École.ts"), "unicode keep");
+    await expect(
+      p.copy("folder/a.ts", "école.ts", p.operationIdentity("folder/a.ts"), ".unicode-stage"),
+    ).rejects.toThrow();
+    expect(readFileSync(join(p.root, "École.ts"), "utf8")).toBe("unicode keep");
+    writeFileSync(join(p.root, "Occupied.ts"), "keep");
+    const ops = new FileOperations(store, join(base, "intent.json"));
+    await expect(ops.run(p, "copy", "folder/a.ts", "occupied.ts")).rejects.toThrow();
+    expect(readFileSync(join(p.root, "Occupied.ts"), "utf8")).toBe("keep");
+    // Staged leftovers deliberately keep uncertain intent, rather than claiming rollback.
+    expect(await new Workspace(join(base, "intent.json")).readIntent()).not.toBe(null);
+  }));
+
+test("an opened copy stage moved away before native failure retains uncertain intent and source drafts", async () =>
+  fixture(async (p, store, base) => {
+    const helper = join(base, "staging-helper");
+    execFileSync("clang", [
+      "-std=c11",
+      "-framework",
+      "CoreServices",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-O2",
+      "-DESCODE_TEST_COPY_STAGE",
+      "host/filesystem.c",
+      "-o",
+      helper,
+    ]);
+    const staged = await Project.open(p.root, helper);
+    const execute = child.spawn;
+    vi.spyOn(child, "spawn").mockImplementation((...args) => {
+      const process = execute(...args);
+      if (Array.isArray(args[1]) && args[1][0] === "copy") {
+        const temporary = args[1][4];
+        process.stdout!.once("data", () =>
+          renameSync(join(p.root, temporary), join(base, "retained-stage")),
+        );
+      }
+      return process;
+    });
+    const file = join(base, "intent.json"),
+      ops = new FileOperations(store, file);
+    try {
+      // No test synchronization descriptors are inherited: the native helper fails after opening/copying staging.
+      await expect(ops.run(staged, "copy", "folder", "destination")).rejects.toThrow(
+        "Uncertain copy",
+      );
+      expect(readFileSync(join(base, "retained-stage/a.ts"), "utf8")).toBe("disk");
+      expect(existsSync(join(p.root, "destination"))).toBe(false);
+      const pending = await new Workspace(file).readIntent();
+      expect(pending?.kind).toBe("copy");
+      expect(pending?.completed).not.toBe(true);
+      expect(pending?.copies?.[0].text).toBe("a unsaved");
+      const fresh = new FileOperations(store, file);
+      expect(await fresh.recover(async () => staged)).toContain("Uncertain file operation");
+      await expect(fresh.run(staged, "move", "folder", "other")).rejects.toThrow(
+        "pending reconciliation",
+      );
+      expect((await store.read()).drafts[0].text).toBe("a unsaved");
+    } finally {
+      staged.close();
+    }
+  }));
