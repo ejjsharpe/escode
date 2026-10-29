@@ -28,7 +28,7 @@ test("saved Codex chat streams and reopens via a fresh connection", async () => 
     await page.getByRole("button", { name: "Open project…" }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
-    await expect(page.getByRole("status")).toHaveText("Ready", { timeout: 45000 });
+    await expect(page.getByRole("status")).toHaveText("Draft");
     await page
       .getByLabel("Message Codex")
       .fill("Reply with exactly ESCODE_UI_OK. Do not use tools or change files.");

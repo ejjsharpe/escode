@@ -7,6 +7,8 @@ export type SavedChat = {
   checkout: string;
   threadId: string | null;
   hasSent?: boolean;
+  phase?: "draft" | "bound";
+  initialSend?: "preparing" | "creating" | "unaccepted" | "uncertain" | "accepted";
   removed?: boolean;
   draft: string;
   createdAt?: number;
@@ -68,6 +70,39 @@ export class Chats {
       return chat;
     });
   }
+  createDraft(project: string, checkout: string) {
+    return this.change((chats) => {
+      const empty = chats.find(
+        (c) =>
+          c.phase === "draft" &&
+          c.project === project &&
+          c.checkout === checkout &&
+          !c.draft &&
+          !c.initialSend,
+      );
+      if (empty) return empty;
+      const chat: SavedChat = {
+        id: randomUUID(),
+        project,
+        checkout,
+        threadId: null,
+        hasSent: false,
+        phase: "draft",
+        draft: "",
+        createdAt: Date.now(),
+      };
+      chats.push(chat);
+      return chat;
+    });
+  }
+  context(project: string, id: string, target: string, checkout: string) {
+    return this.change((chats) => {
+      const chat = chats.find((c) => c.id === id && c.project === project);
+      if (!chat || chat.phase !== "draft") throw Error("Only an unsent draft can change context.");
+      Object.assign(chat, { project: target, checkout, initialSend: undefined });
+      return chat;
+    });
+  }
   async get(project: string, id: string) {
     const chat = (await this.list(project)).find((c) => c.id === id);
     if (!chat) throw Error("Unknown chat in this project.");
@@ -79,7 +114,9 @@ export class Chats {
   update(
     project: string,
     id: string,
-    fields: Partial<Pick<SavedChat, "threadId" | "draft" | "hasSent" | "removed">>,
+    fields: Partial<
+      Pick<SavedChat, "threadId" | "draft" | "hasSent" | "removed" | "phase" | "initialSend">
+    >,
   ) {
     return this.change((chats) => {
       const chat = chats.find((c) => c.id === id && c.project === project);

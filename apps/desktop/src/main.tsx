@@ -699,16 +699,19 @@ function ProjectView({
   const selectChat = async (id: string) => {
     chatNavigation.current++;
     const chat = chats.find((c) => c.id === id);
-    if (chat) selectCheckout(chat.checkout);
+    if (chat && chat.phase !== "draft") selectCheckout(chat.checkout);
     setSelectedChat(id);
     await chatStore.open(id);
   };
   const createChat = async (root: string) => {
     const generation = chatNavigation.current;
-    const chat = await window.escode.chat("create", initial.project, root);
+    const chat =
+      root === checkout
+        ? await window.escode.chat("createDraft", initial.project)
+        : await window.escode.chat("create", initial.project, root);
     await chatStore.load();
     if (chatNavigation.current !== generation) return;
-    selectCheckout(chat.checkout);
+    if (chat.phase !== "draft") selectCheckout(chat.checkout);
     await selectChat(chat.id);
   };
   useEffect(() => {
@@ -782,6 +785,11 @@ function ProjectView({
 function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
   const [projects, setProjects] = useState<Status[]>(restored);
   const [selected, setSelected] = useState(memory.selected || "agents");
+  useEffect(() => {
+    const moved = () => setSelected("agents");
+    window.addEventListener("draft-context-changed", moved);
+    return () => window.removeEventListener("draft-context-changed", moved);
+  }, []);
   const [activity, setActivity] = useState<Record<string, string>>({});
   const [error, setError] = useState(errors.join("\n"));
   const [closing, setClosing] = useState(false);

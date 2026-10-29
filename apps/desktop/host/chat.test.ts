@@ -118,7 +118,7 @@ test("setup failures retain drafts; exact input requests cannot answer another t
     return {
       async request(method: string) {
         if (method === "account/read") return { account: authenticated ? {} : null };
-        if (method === "thread/start")
+        if (method === "thread/start" || method === "thread/resume")
           return {
             thread: { id: "thread" },
             cwd: dir,
@@ -127,6 +127,7 @@ test("setup failures retain drafts; exact input requests cannot answer another t
             approvalPolicy: "never",
             sandbox: { type: "readOnly" },
           };
+        if (method === "thread/turns/list") return { data: [], nextCursor: null };
         if (method === "turn/start") return { turn: { id: "turn" } };
       },
       respond(_id, value) {

@@ -400,7 +400,7 @@ createInterface({input:process.stdin}).on('line', line=>{
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
     let status = page.locator(".chat-actions [role=status]");
-    await expect(status).toHaveText("Ready");
+    await expect(status).toHaveText("Draft");
     await page.getByLabel("Message Codex").fill("explicit message");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByLabel("Conversation history")).toContainText("retained history");

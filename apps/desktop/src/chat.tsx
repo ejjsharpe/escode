@@ -1,4 +1,5 @@
 import { useProjectChats } from "./chat-state";
+import { memory, persist } from "./workspace";
 import { compareChats } from "./chat-order";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -7,6 +8,9 @@ import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
   (operation: "catalogue"): Promise<SavedChat[]>;
+  (operation: "targets"): Promise<{ project: string; checkout: string }[]>;
+  (operation: "createDraft", project: string): Promise<SavedChat>;
+  (operation: "context", project: string, id: string, target: string): Promise<SavedChat>;
   (operation: "list", project: string): Promise<SavedChat[]>;
   (operation: "create", project: string, checkout: string): Promise<SavedChat>;
   (operation: "open" | "snapshot", project: string, id: string): Promise<ChatSnapshot>;
@@ -144,6 +148,12 @@ export function ChatView({
 }) {
   const [store, { chats, snapshots, drafts, pending, responding, errors }] =
     useProjectChats(project);
+  const [targets, setTargets] = useState<{ project: string; checkout: string }[]>([]);
+  useEffect(() => {
+    void window.escode.chat("targets").then(setTargets);
+  }, []);
+  const record = chats.find((c) => c.id === selected);
+  const unsent = record?.phase === "draft";
   const error = errors[selected] || errors[""] || "";
   const working = !!pending[selected];
   const draft = drafts[selected] ?? "";
@@ -152,6 +162,17 @@ export function ChatView({
   }, [store, selected]);
   const run = (action: () => Promise<unknown>) => store.run(selected, action);
   const snapshot = snapshots[selected];
+  const changeContext = (target: string) =>
+    run(async () => {
+      const moved = await window.escode.chat("context", project, selected, target);
+      await store.load();
+      if (target !== project) {
+        memory.agentsChat = moved.id;
+        memory.selected = "agents";
+        await persist();
+        window.dispatchEvent(new Event("draft-context-changed"));
+      }
+    });
   return (
     <>
       {!global &&
@@ -224,17 +245,38 @@ export function ChatView({
                 Stop
               </Button>
               <span role="status">
-                {working && !snapshot
-                  ? "Loading conversation…"
+                {working && (!snapshot || (unsent && !snapshot.busy && !snapshot.requests.length))
+                  ? unsent
+                    ? "Preparing…"
+                    : "Loading conversation…"
                   : snapshot?.requests.length
                     ? "Needs input"
                     : snapshot?.busy
                       ? "Running"
                       : snapshot?.connected
                         ? "Ready"
-                        : "Disconnected"}
+                        : unsent
+                          ? "Draft"
+                          : record?.initialSend === "uncertain"
+                            ? "Acceptance uncertain · Retry to inspect history"
+                            : record?.phase === "bound"
+                              ? "Bound · Disconnected"
+                              : "Disconnected"}
               </span>
             </div>
+            {record?.initialSend === "uncertain" && (
+              <p role="status">
+                Message acceptance is uncertain. Prompt and provider identity are retained. Retry
+                reloads history without resending; inspect history before explicitly sending another
+                message.
+              </p>
+            )}
+            {record?.initialSend === "creating" && (
+              <p role="status">
+                Provider creation may be incomplete. Known identity and the chosen checkout are
+                retained; Retry never creates a replacement for an uncertain conversation.
+              </p>
+            )}
             <div className="transcript" role="region" aria-label="Conversation history">
               {snapshot?.settings && (
                 <details>
@@ -271,6 +313,30 @@ export function ChatView({
                 void store.send(selected);
               }}
             >
+              {unsent && (
+                <label>
+                  Project context
+                  <select
+                    aria-label="Project context"
+                    value={project}
+                    disabled={working}
+                    onChange={(e) => void changeContext(e.target.value)}
+                  >
+                    {targets.map((t) => (
+                      <option key={t.project} value={t.project}>
+                        {t.project.split("/").at(-1)} · {t.project}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    disabled={working}
+                    onClick={() => void changeContext(project)}
+                  >
+                    Use current checkout
+                  </Button>
+                </label>
+              )}
               <label htmlFor={sidebarId + "-message"}>Message Codex</label>
               <textarea
                 disabled={working}
@@ -283,7 +349,9 @@ export function ChatView({
               />
               <Button
                 type="submit"
-                disabled={working || !snapshot?.connected || snapshot.busy || !draft.trim()}
+                disabled={
+                  working || (!unsent && !snapshot?.connected) || snapshot?.busy || !draft.trim()
+                }
               >
                 Send message
               </Button>

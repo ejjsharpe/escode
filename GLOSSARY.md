@@ -2,7 +2,7 @@
 
 A project editor with files, source changes, and Codex conversations.
 
-The Agents and No project concepts below describe the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419); existing project-backed chats and editor closure are implemented; draft creation and No project execution remain later slices.
+The Agents and No project concepts below describe the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419); project-backed chats, editor closure and saved Current checkout drafts are implemented; No project execution and deferred worktree preparation remain later slices.
 
 ## Language
 
@@ -28,7 +28,7 @@ A chat associated with one project and attached to one of its checkout directori
 A chat with no user-project association, attached to its own persistent scratch folder. It appears in Agents without a project tab.
 
 **Chat draft**:
-A locally saved, unsent conversation whose context can change before first Send. It keeps its identity, creation time and message when it becomes a chat.
+A locally saved, unsent conversation whose context can change before first Send. Project drafts retain a resolved Current checkout path until explicitly changed. First Send prepares and binds the conversation while preserving its identity and creation time. Failed or uncertain sends retain the prompt and known provider identity; Retry reconnects without resending.
 
 **Scratch folder**:
 A persistent working folder owned by one No project chat. It starts without Git and is retained independently of the chat's running state.

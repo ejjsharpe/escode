@@ -479,3 +479,58 @@ send({id:m.id,result});});`,
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("global creation keeps newest-first rows before the next catalogue poll", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-create-order-")));
+  const user = join(dir, "user");
+  const roots = ["Alpha", "Beta", "Gamma", "Delta"].map((name) => join(dir, name));
+  for (const root of roots) execFileSync("git", ["init", root]);
+  await mkdir(user);
+  const saved = roots.map((root) => ({ project: root, root }));
+  await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
+  await writeFile(
+    join(user, "workspace.json"),
+    JSON.stringify({
+      projects: [],
+      savedProjects: saved,
+      selected: "agents",
+      views: {},
+      drafts: [],
+    }),
+  );
+  await writeFile(
+    join(user, "chats.json"),
+    JSON.stringify(
+      roots
+        .slice(0, 3)
+        .map((project, index) => ({
+          id: `draft-${index}`,
+          project,
+          checkout: project,
+          threadId: null,
+          phase: "draft",
+          draft: "saved prompt",
+          createdAt: index + 1,
+        })),
+    ),
+  );
+  const app = await launchDesktop(user);
+  try {
+    const page = await app.firstWindow();
+    await page.clock.install({ time: new Date("2026-10-29T12:00:00Z") });
+    // Pause before mounting Agents so no polling refresh can mask the creation result.
+    await page.clock.pauseAt(new Date("2026-10-29T12:01:00Z"));
+    await page.reload();
+    const rows = page.locator(".agent-row span");
+    await expect(rows).toHaveText(["Gamma", "Beta", "Alpha"]);
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await page
+      .getByRole("combobox", { name: "New chat project", exact: true })
+      .selectOption(roots[3]);
+    await expect(rows).toHaveText(["Delta", "Gamma", "Beta", "Alpha"]);
+    await page.screenshot({ path: "/tmp/escode-33-creation-order.png" });
+  } finally {
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

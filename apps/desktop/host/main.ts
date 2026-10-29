@@ -441,6 +441,30 @@ app.whenReady().then(() => {
           projectSessions.set(item.project, projectSessions.get(item.project) ?? {});
       return (await store.all()).filter((c) => saved.some((p) => p.project === c.project));
     }
+    if (operation === "targets" && !args.length) {
+      const state = await workspace.read();
+      const approved = await workspace.approved();
+      const saved = [...(state.savedProjects ?? []), ...state.projects, ...approved];
+      const unique = [...new Map(saved.map((p) => [p.project, p])).values()];
+      for (const p of unique)
+        if (approved.some((a) => a.project === p.project))
+          projectSessions.set(p.project, projectSessions.get(p.project) ?? {});
+      return unique.map((p) => ({
+        project: p.project,
+        checkout: state.views[p.project]?.checkout ?? p.root,
+      }));
+    }
+    const currentTarget = async (identity: string) => {
+      const state = await workspace.read();
+      const saved = [
+        ...(state.savedProjects ?? []),
+        ...state.projects,
+        ...(await workspace.approved()),
+      ];
+      const p = saved.find((p) => p.project === identity);
+      if (!p) throw Error("Unknown saved project.");
+      return state.views[identity]?.checkout ?? p.root;
+    };
     const root = args.shift();
     if (typeof root !== "string") throw Error("Invalid project");
     if (operation === "list" && !args.length) {
@@ -463,6 +487,19 @@ app.whenReady().then(() => {
     };
     requireOpen();
     if (operation === "list" && !args.length) return chats.list(root);
+    if (operation === "createDraft" && !args.length)
+      return store.createDraft(root, await currentTarget(root));
+    if (
+      operation === "context" &&
+      args.length === 2 &&
+      typeof args[0] === "string" &&
+      typeof args[1] === "string"
+    ) {
+      const target = args[1];
+      if (!projectSessions.has(target))
+        throw Error("Approve the target using Open project… first.");
+      return chats.context(root, args[0], target, await currentTarget(target));
+    }
     if (operation === "create" && args.length === 1) {
       const target = await checkout(args[0]);
       requireOpen();
@@ -485,7 +522,15 @@ app.whenReady().then(() => {
     }
     if (args.length === 2 && typeof value === "string" && value.length <= 100000) {
       if (operation === "draft") return chats.draft(root, id, value);
-      if (operation === "send") return chats.send(root, id, value);
+      if (operation === "send")
+        return chats.send(root, id, value, async (chat) => {
+          const target = await checkout(chat.checkout);
+          requireOpen();
+          if (target.repository() !== root || !target.validateRepository().includes(target.root))
+            throw Error(
+              "Saved checkout is unavailable or no longer belongs to this project. Prompt retained; restore this exact path and Retry.",
+            );
+        });
     }
     if (
       operation === "answer" &&

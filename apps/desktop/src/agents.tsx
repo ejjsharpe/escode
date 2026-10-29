@@ -23,7 +23,11 @@ function ChatRow({
       ? "Running"
       : chat.removed || snapshot?.error || errors[chat.id] || errors[""]
         ? "Unavailable"
-        : "Stopped";
+        : chat.phase === "draft"
+          ? "Draft"
+          : chat.initialSend === "uncertain" || chat.initialSend === "creating"
+            ? "Uncertain"
+            : "Stopped";
   return (
     <li>
       <Button className="agent-row" aria-pressed={selected} onClick={select}>
@@ -44,11 +48,27 @@ export function AgentsView() {
   const [chats, setChats] = useState<SavedChat[] | null>(null);
   const [selected, setSelected] = useState(memory.agentsChat ?? "");
   const [error, setError] = useState("");
+  const [targets, setTargets] = useState<{ project: string; checkout: string }[]>([]);
+  const [picking, setPicking] = useState(false);
+  const create = async (project: string) => {
+    try {
+      const draft = await window.escode.chat("createDraft", project);
+      setChats((await window.escode.chat("catalogue")).sort(compareChats));
+      memory.agentsChat = draft.id;
+      await persist();
+      setSelected(draft.id);
+      setPicking(false);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
   useEffect(() => {
     let live = true;
     const load = async () => {
       try {
         const list = await window.escode.chat("catalogue");
+        const available = await window.escode.chat("targets");
+        if (live) setTargets(available);
         if (live) {
           setChats(list.sort(compareChats));
           setError("");
@@ -58,8 +78,14 @@ export function AgentsView() {
       }
     };
     void load();
+    const moved = () => {
+      setSelected(memory.agentsChat ?? "");
+      void load();
+    };
+    window.addEventListener("draft-context-changed", moved);
     const timer = setInterval(() => void load(), 1000);
     return () => {
+      window.removeEventListener("draft-context-changed", moved);
       live = false;
       clearInterval(timer);
     };
@@ -73,6 +99,41 @@ export function AgentsView() {
       </div>
       <div className="workspace">
         <aside aria-label="Agents chats">
+          <Button
+            disabled={!targets.length}
+            onClick={() => {
+              if (targets.length === 1) void create(chat?.project ?? targets[0].project);
+              else setPicking(!picking);
+            }}
+          >
+            New chat
+          </Button>
+          {targets.length > 1 && chat && (
+            <Button onClick={() => void create(chat.project)}>
+              New chat in {chat.project.split("/").at(-1)}
+            </Button>
+          )}
+          {picking && (
+            <label>
+              Choose project
+              <select
+                aria-label="New chat project"
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) void create(e.target.value);
+                }}
+              >
+                <option value="" disabled>
+                  Select a saved project
+                </option>
+                {targets.map((t) => (
+                  <option key={t.project} value={t.project}>
+                    {t.project.split("/").at(-1)} · {t.project}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <h2>Saved chats</h2>
           {chats === null && <p role="status">Loading chats…</p>}
           {chats?.length === 0 && (

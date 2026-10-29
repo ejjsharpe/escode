@@ -17,15 +17,17 @@ import {createInterface} from 'node:readline';
 import {appendFileSync,existsSync} from 'node:fs';
 if(process.argv.includes('--version')) { console.log('codex-cli 0.165.0'); process.exit(0); }
 const send = value => process.stdout.write(JSON.stringify(value)+'\\n');
-const threadId='thread-'+process.pid, turnId='turn';
+let threadId='thread-'+process.pid; const turnId='turn';
 createInterface({input:process.stdin}).on('line', line => {
  const m=JSON.parse(line); if(!m.id) return;
  if(!m.method) { appendFileSync(${JSON.stringify(join(dir, "events"))},JSON.stringify({responseId:m.id,result:m.result,threadId})+'\\n'); send({method:'item/agentMessage/delta',params:{threadId,turnId,itemId:'reply',delta:'Answered by '+process.pid}}); return; }
  appendFileSync(${JSON.stringify(join(dir, "events"))},JSON.stringify({method:m.method,threadId})+'\\n');
+ if(m.method==='thread/resume') threadId=m.params.threadId;
  let result={};
  if(m.method==='initialize') result={userAgent:'codex/0.165.0'};
  if(m.method==='account/read') result={account:{}};
- if(m.method==='thread/start') result={thread:{id:threadId},cwd:process.cwd(),model:'fixture',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
+ if(m.method==='thread/start'||m.method==='thread/resume') result={thread:{id:threadId},cwd:process.cwd(),model:'fixture',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
+ if(m.method==='thread/turns/list') result={data:[],nextCursor:null};
  if(m.method==='turn/start') {
   result={turn:{id:turnId}};
   send({method:'turn/started',params:{threadId,turn:{id:turnId}}});
@@ -117,6 +119,7 @@ createInterface({input:process.stdin}).on('line', line => {
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeDisabled();
     const approval = page.getByRole("button", { name: "Allow once", exact: true });
     await expect(approval).toBeEnabled();
+    await expect(page.locator(".chat-actions:visible [role=status]")).toHaveText("Needs input");
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await page.locator(".agent-row").filter({ hasText: "Chat 2" }).click();
     await expect(approval).toBeEnabled();

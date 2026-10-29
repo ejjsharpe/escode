@@ -44,7 +44,9 @@ class ProjectChats {
   }
   async load() {
     const chats = await window.escode.chat("list", this.project);
-    const drafts = { ...this.state.drafts };
+    const drafts = Object.fromEntries(
+      Object.entries(this.state.drafts).filter(([id]) => chats.some((c) => c.id === id)),
+    );
     for (const chat of chats) if (!(chat.id in drafts)) drafts[chat.id] = chat.draft;
     this.update({ chats, drafts, errors: { ...this.state.errors, "": "" } });
   }
@@ -89,7 +91,9 @@ class ProjectChats {
       this.report(id, e);
     } finally {
       this.update({ pending: { ...this.state.pending, [id]: false } });
-      void this.refresh();
+      void this.load()
+        .then(() => this.refresh())
+        .catch((e) => this.report(id, e));
     }
   }
   async answer(id: string, token: string, value: unknown) {

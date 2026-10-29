@@ -194,7 +194,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       }
       await page.getByRole("button", { name: "Chats", exact: true }).click();
       await page.getByRole("button", { name: "New chat on current checkout" }).click();
-      await expect(page.getByRole("status")).toHaveText("Ready");
+      await expect(page.getByRole("status")).toHaveText("Draft");
       await page.getByLabel("Message Codex").fill("start");
       await page.getByRole("button", { name: "Send message", exact: true }).click();
       await expect(page.getByRole("status")).toHaveText("Running");

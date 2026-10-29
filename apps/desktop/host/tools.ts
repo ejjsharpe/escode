@@ -209,7 +209,11 @@ export async function connectCodex(
         pending.delete(message.id);
         clearTimeout(entry.timer);
         if (message.error)
-          entry.reject(Error(codexDiagnostic(path, version, message.error.message)));
+          entry.reject(
+            Object.assign(Error(codexDiagnostic(path, version, message.error.message)), {
+              rejected: true,
+            }),
+          );
         else entry.resolve(message.result);
       }
     } catch {

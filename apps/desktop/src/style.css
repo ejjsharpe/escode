@@ -395,3 +395,20 @@ main[data-agents="true"] > .project-tabs button[aria-pressed="true"] {
   background: #353047;
   border-color: #b7a7f4;
 }
+
+.chat-compose select,
+.agents aside select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  padding: 6px;
+  color: #e5e7eb;
+  background: #23242a;
+  border: 1px solid #655a82;
+  border-radius: 4px;
+}
+.chat-compose select:focus-visible,
+.agents aside select:focus-visible {
+  outline: 2px solid #b9acf6;
+  outline-offset: 2px;
+}

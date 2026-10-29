@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { accessSync, constants, realpathSync, statSync } from "node:fs";
-import { Chats } from "./chat";
+import { Chats, type SavedChat } from "./chat";
 import { codexDiagnostic, connectCodex, type CodexConnection, type WireMessage } from "./tools";
 export type ChatItem = { id: string; turnId: string; type: string; text: string };
 export type LiveRequest = { token: string; method: string; params: any };
@@ -22,10 +22,23 @@ type Session = ChatSnapshot & {
   opening?: Promise<void>;
   requestIds: Map<string, string | number>;
   stopping: boolean;
+  sending?: boolean;
   checkoutIdentity?: { path: string; dev: number; ino: number };
 };
 export class ChatService {
   private sessions = new Map<string, Session>();
+  private transitions = new Map<string, string>();
+  // Hold identity stable from host authorization through binding; live responses stay independent.
+  private async inContext<T>(project: string, id: string, action: () => Promise<T>) {
+    if (this.transitions.has(id))
+      throw Error("This chat already has an active turn or context change in progress.");
+    this.transitions.set(id, project);
+    try {
+      return await action();
+    } finally {
+      this.transitions.delete(id);
+    }
+  }
   constructor(
     private store: Chats,
     private connect = connectCodex,
@@ -39,7 +52,7 @@ export class ChatService {
   draft(project: string, id: string, text: string) {
     return this.store.draft(project, id, text);
   }
-  private session(project: string, id: string) {
+  private session(project: string, id: string, retain = true) {
     let s = this.sessions.get(id);
     if (s && s.project !== project) throw Error("Unknown project/chat.");
     if (!s) {
@@ -58,12 +71,12 @@ export class ChatService {
         error: null,
         stopping: false,
       };
-      this.sessions.set(id, s);
+      if (retain) this.sessions.set(id, s);
     }
     return s;
   }
   snapshot(project: string, id: string): ChatSnapshot {
-    const s = this.session(project, id);
+    const s = this.session(project, id, false);
     return structuredClone({
       project,
       chatId: id,
@@ -99,7 +112,22 @@ export class ChatService {
       throw Error(s.error);
     }
   }
-  async open(project: string, id: string) {
+  context(project: string, id: string, target: string, checkout: string) {
+    return this.inContext(project, id, async () => {
+      const chat = await this.store.context(project, id, target, checkout);
+      const previous = this.sessions.get(id);
+      if (previous) {
+        previous.epoch = randomUUID();
+        previous.rpc?.close();
+      }
+      this.sessions.delete(id);
+      return chat;
+    });
+  }
+  open(project: string, id: string) {
+    return this.inContext(project, id, () => this.connectSession(project, id));
+  }
+  private async connectSession(project: string, id: string, authorizedDraft?: Readonly<SavedChat>) {
     const s = this.session(project, id);
     if (s.opening) {
       await s.opening;
@@ -111,14 +139,20 @@ export class ChatService {
       s.epoch = epoch;
       s.error = null;
       let rpc: CodexConnection | undefined;
+      let chat: Readonly<SavedChat> | undefined;
       try {
-        const chat = await this.store.get(project, id);
+        chat = authorizedDraft ?? (await this.store.get(project, id));
+        if (chat.phase === "bound" && !chat.threadId && chat.initialSend === "creating")
+          throw Error(
+            "Provider creation outcome is uncertain. No thread identity was returned; the saved path and prompt are retained. Retry cannot create a replacement conversation.",
+          );
         if (chat.removed)
           throw Error(
             "Checkout was removed. History and drafts are retained; this chat cannot run.",
           );
         if (s.epoch !== epoch) throw Error("Project closed while loading saved chat.");
         this.validateCheckout(s, chat.checkout);
+        if (chat.phase === "draft" && !authorizedDraft) return;
         rpc = await this.connect(
           chat.checkout,
           (event) => {
@@ -145,15 +179,25 @@ export class ChatService {
           throw Error(
             "Run codex login externally, then Retry connection. Draft and saved history are retained.",
           );
-        // Codex does not persist an empty thread until its first turn.
-        const resume = Boolean(chat.threadId && chat.hasSent !== false);
+        // A known provider identity is never replaced, including older unsent records.
+        const resume = Boolean(chat.threadId);
         this.validateCheckout(s, chat.checkout);
+        if (chat.phase === "draft")
+          await this.store.update(project, id, { phase: "bound", initialSend: "creating" });
         const result = await rpc.request(
           resume ? "thread/resume" : "thread/start",
           resume
             ? { threadId: chat.threadId, cwd: chat.checkout, excludeTurns: true }
             : { cwd: chat.checkout },
         );
+        // Retain returned identity even if later response validation or persistence fails.
+        if (
+          typeof result.thread?.id === "string" &&
+          (!resume || result.thread.id === chat.threadId)
+        ) {
+          s.threadId = result.thread.id;
+          await this.store.update(project, id, { threadId: s.threadId });
+        }
         if (
           result.cwd !== chat.checkout ||
           typeof result.model !== "string" ||
@@ -166,7 +210,17 @@ export class ChatService {
             "Incompatible Codex thread response. Check supported CLI, then Retry connection.",
           );
         s.threadId = result.thread.id;
-        await this.store.update(project, id, { threadId: s.threadId });
+        await this.store.update(project, id, {
+          threadId: s.threadId,
+          ...(chat.phase
+            ? {
+                initialSend:
+                  chat.initialSend === "uncertain" || chat.initialSend === "accepted"
+                    ? chat.initialSend
+                    : ("unaccepted" as const),
+              }
+            : {}),
+        });
         s.settings = {
           model: result.model,
           reasoning: result.reasoningEffort,
@@ -197,6 +251,12 @@ export class ChatService {
         this.validateCheckout(s, chat.checkout);
         s.connected = true;
       } catch (error) {
+        if (!chat && !s.threadId && !s.rpc && this.sessions.get(id) === s) this.sessions.delete(id);
+        if ((error as { rejected?: boolean }).rejected) {
+          const saved = await this.store.get(project, id);
+          if (saved.initialSend === "creating" && !saved.threadId)
+            await this.store.update(project, id, { phase: "draft", initialSend: "unaccepted" });
+        }
         rpc?.close();
         await rpc?.finished;
         s.connected = false;
@@ -305,38 +365,93 @@ export class ChatService {
     } else if (message.method === "error")
       s.error = p.error?.message ?? "Codex turn failed. Send a new message to continue.";
   }
-  async send(project: string, id: string, text: string) {
-    const chat = await this.store.get(project, id);
-    if (chat.removed) throw Error("Checkout was removed. This chat cannot run.");
+  send(
+    project: string,
+    id: string,
+    text: string,
+    authorize: (chat: Readonly<SavedChat>) => Promise<void> = async () => {},
+  ) {
+    return this.inContext(project, id, () => this.sendInContext(project, id, text, authorize));
+  }
+  private async sendInContext(
+    project: string,
+    id: string,
+    text: string,
+    authorize: (chat: Readonly<SavedChat>) => Promise<void>,
+  ) {
     const s = this.session(project, id);
-    if (!s.connected || !s.rpc)
-      throw Error("Retry connection before sending. Work was not resent.");
-    if (s.busy) throw Error("This chat already has an active turn.");
+    if (s.sending || s.busy) throw Error("This chat already has an active turn.");
     if (!text.trim() || text.length > 100000)
       throw Error("Enter a message under 100,000 characters.");
-    this.validateCheckout(s, chat.checkout);
-    s.busy = true;
-    s.stopping = false;
-    s.error = null;
+    s.sending = true;
+    let launched = false;
+    let sendIntent = false;
+    let chat: Readonly<SavedChat> | undefined;
     try {
-      await this.store.update(project, id, { hasSent: true });
+      const epoch = s.epoch;
+      chat = Object.freeze(await this.store.get(project, id));
+      if (chat.removed) throw Error("Checkout was removed. This chat cannot run.");
+      await authorize(chat);
+      await this.store.draft(project, id, text);
+      if (this.sessions.get(id) !== s || s.epoch !== epoch)
+        throw Error("Chat disconnected during authorization. Work was not submitted.");
+      if (chat.phase === "draft") {
+        await this.store.update(project, id, { initialSend: "preparing" });
+        if (this.sessions.get(id) !== s || s.epoch !== epoch)
+          throw Error("Chat disconnected during preparation. Work was not submitted.");
+        await this.connectSession(project, id, chat);
+      }
+      if (!s.connected || !s.rpc)
+        throw Error("Retry connection before sending. Work was not resent.");
       this.validateCheckout(s, chat.checkout);
+      s.busy = true;
+      s.stopping = false;
+      s.error = null;
+      await this.store.update(project, id, {
+        hasSent: true,
+        ...(chat.phase ? { initialSend: "uncertain" as const } : {}),
+      });
+      sendIntent = true;
+      this.validateCheckout(s, chat.checkout);
+      launched = true;
       const result = await s.rpc.request("turn/start", {
         threadId: s.threadId,
         input: [{ type: "text", text, text_elements: [] }],
       });
-      // turn/started and even turn/completed may arrive before the RPC response.
       if (s.busy && !s.turnId) s.turnId = result.turn.id;
-      await this.store.draft(project, id, "");
+      await this.store.update(project, id, {
+        draft: "",
+        ...(chat.phase ? { initialSend: "accepted" as const } : {}),
+      });
     } catch (error) {
-      s.rpc.close();
-      throw error;
+      if (!chat) {
+        if (!s.threadId && !s.rpc && this.sessions.get(id) === s) this.sessions.delete(id);
+        throw error;
+      }
+      s.rpc?.close();
+      s.connected = false;
+      s.busy = false;
+      const saved = await this.store.get(project, id);
+      const rejected = (error as { rejected?: boolean }).rejected;
+      if (
+        saved.phase === "draft" ||
+        (saved.phase === "bound" && ((launched && rejected) || (!launched && sendIntent)))
+      )
+        await this.store.update(project, id, { initialSend: "unaccepted" });
+      s.error =
+        (error instanceof Error ? error.message : String(error)) +
+        (launched && !rejected
+          ? " Message acceptance is uncertain. Prompt and provider identity are retained. Retry reloads history without resending; inspect history before explicitly sending another message."
+          : " Message was not submitted. Prompt and any known provider identity are retained.");
+      throw Error(s.error);
+    } finally {
+      s.sending = false;
     }
     return this.snapshot(project, id);
   }
   async stop(project: string, id: string) {
     await this.store.get(project, id);
-    const s = this.session(project, id);
+    const s = this.session(project, id, false);
     if (!s.connected || !s.busy || !s.turnId) throw Error("No interruptible active turn.");
     s.stopping = true;
     s.requests = [];
@@ -345,7 +460,7 @@ export class ChatService {
   }
   async answer(project: string, id: string, token: string, answer: unknown) {
     const chat = await this.store.get(project, id);
-    const s = this.session(project, id);
+    const s = this.session(project, id, false);
     const request = s.requests.find((r) => r.token === token),
       wireId = s.requestIds.get(token);
     if (
@@ -398,24 +513,37 @@ export class ChatService {
     s.requests = s.requests.filter((r) => r.token !== token);
   }
   disconnect(project: string, id: string) {
-    const s = this.session(project, id);
-    if (s.busy || s.opening) throw Error("Stop active work before reconnecting.");
+    const s = this.session(project, id, false);
+    if (this.transitions.has(id) || s.busy || s.opening || s.sending)
+      throw Error("Stop active work before reconnecting.");
     s.rpc?.close();
   }
   checkoutActive(project: string, id: string) {
     const s = this.sessions.get(id);
-    return !!s && s.project === project && !!(s.busy || s.opening || s.requests.length);
+    return (
+      this.transitions.has(id) ||
+      (!!s && s.project === project && !!(s.busy || s.opening || s.sending || s.requests.length))
+    );
   }
   async markUnavailable(project: string, id: string) {
-    const s = this.session(project, id);
-    s.rpc?.close();
-    s.connected = false;
-    s.error = "Checkout removal requested. History and drafts are retained; this chat cannot run.";
-    await this.store.update(project, id, { removed: true });
+    return this.inContext(project, id, async () => {
+      await this.store.get(project, id);
+      const s = this.session(project, id);
+      s.rpc?.close();
+      s.connected = false;
+      s.error =
+        "Checkout removal requested. History and drafts are retained; this chat cannot run.";
+      await this.store.update(project, id, { removed: true });
+    });
   }
   active(project?: string) {
-    return [...this.sessions.values()].some(
-      (s) => (!project || s.project === project) && (s.busy || s.opening || s.requests.length),
+    return (
+      [...this.transitions.values()].some((p) => !project || p === project) ||
+      [...this.sessions.values()].some(
+        (s) =>
+          (!project || s.project === project) &&
+          (s.busy || s.opening || s.sending || s.requests.length),
+      )
     );
   }
   async shutdown(project?: string) {

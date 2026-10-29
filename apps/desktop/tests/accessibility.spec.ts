@@ -99,7 +99,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect(diff).toBeFocused();
     await activate(page.getByRole("button", { name: "Chats", exact: true }));
     await activate(page.getByRole("button", { name: "New chat on current checkout" }));
-    await expect(page.locator(".chat-actions [role=status]")).toHaveText("Ready");
+    await expect(page.locator(".chat-actions [role=status]")).toHaveText("Draft");
     const compose = page.getByRole("textbox", { name: "Message Codex" });
     await reach(compose);
     await page.keyboard.type("ask me a question");
