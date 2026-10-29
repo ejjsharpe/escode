@@ -5,12 +5,14 @@ import { Button } from "@base-ui/react/button";
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import type { Change, Document, SaveResult, ProjectBridge } from "../host/project";
+import { ChatView } from "./chat";
+import type { ChatBridge } from "./chat";
 import "./style.css";
 type Status = { root: string; branch: string; changes: Change[] };
 type BufferState = { model: monaco.editor.ITextModel; disk: Document };
 declare global {
   interface Window {
-    escode: { toolStatus(): Promise<unknown>; project: ProjectBridge };
+    escode: { chat: ChatBridge; toolStatus(): Promise<unknown>; project: ProjectBridge };
     MonacoEnvironment: { getWorker(_: string, label: string): Worker };
   }
 }
@@ -225,7 +227,7 @@ function App() {
       <div className="workspace">
         <aside>
           <nav aria-label="Project views">
-            {["Files", "Source Control"].map((view) => (
+            {["Files", "Source Control", "Chats"].map((view) => (
               <Button
                 key={view}
                 disabled={!!conflict || saving}
@@ -287,50 +289,62 @@ function App() {
               ))}
             </>
           )}
+          <div id="chat-sidebar" hidden={mode !== "Chats"} />
         </aside>
         <section className="content" aria-label="Main editor">
-          <div className="toolbar">
-            <span>
-              {diff?.title || path || "No file selected"}
-              {dirty && path ? " • Unsaved" : ""}
-            </span>
-            {path && mode === "Files" && (
-              <Button disabled={saving} onClick={() => void save()}>
-                Save ⌘S
-              </Button>
-            )}
-          </div>
-          {conflict && (
-            <div role="alert" className="conflict">
-              <p>{conflict.path} changed on disk. Your edits are retained.</p>
-              <Button
-                onClick={() =>
-                  setDiff({
-                    original: conflict.disk.text,
-                    modified: buffers.current.get(conflict.path)!.model.getValue(),
-                    title: "Disk versus your edits",
-                  })
-                }
-              >
-                Compare
-              </Button>
-              <Button disabled={saving} onClick={() => void save(conflict.disk.version)}>
-                Overwrite
-              </Button>
-              <Button disabled={saving} onClick={() => void reload()}>Reload</Button>
-              <Button
-                disabled={saving}
-                onClick={() => {
-                  setConflict(null);
-                  setDiff(null);
-                }}
-              >
-                Cancel
-              </Button>
+          {status && (
+            <div hidden={mode !== "Chats"} className="chat-panel">
+              <ChatView project={status.root} />
             </div>
           )}
-          <div className="editor" ref={container} />
-          <p role="status">{message}</p>
+          {mode !== "Chats" && (
+            <>
+              <div className="toolbar">
+                <span>
+                  {diff?.title || path || "No file selected"}
+                  {dirty && path ? " • Unsaved" : ""}
+                </span>
+                {path && mode === "Files" && (
+                  <Button disabled={saving} onClick={() => void save()}>
+                    Save ⌘S
+                  </Button>
+                )}
+              </div>
+              {conflict && (
+                <div role="alert" className="conflict">
+                  <p>{conflict.path} changed on disk. Your edits are retained.</p>
+                  <Button
+                    onClick={() =>
+                      setDiff({
+                        original: conflict.disk.text,
+                        modified: buffers.current.get(conflict.path)!.model.getValue(),
+                        title: "Disk versus your edits",
+                      })
+                    }
+                  >
+                    Compare
+                  </Button>
+                  <Button disabled={saving} onClick={() => void save(conflict.disk.version)}>
+                    Overwrite
+                  </Button>
+                  <Button disabled={saving} onClick={() => void reload()}>
+                    Reload
+                  </Button>
+                  <Button
+                    disabled={saving}
+                    onClick={() => {
+                      setConflict(null);
+                      setDiff(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+              <div className="editor" ref={container} />
+              <p role="status">{message}</p>
+            </>
+          )}
         </section>
       </div>
     </main>

@@ -118,3 +118,92 @@ h2 {
     flex-wrap: wrap;
   }
 }
+.chat-panel {
+  min-height: 0;
+  flex: 1;
+}
+.chat-panel[hidden] {
+  display: none;
+}
+.chat-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.chat-list {
+  padding: 12px 16px;
+  border-bottom: 1px solid #435166;
+}
+.chat-list ul {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 0;
+  gap: 8px;
+}
+.chat-list button[aria-pressed="true"] {
+  background: #415b7b;
+}
+.chat-conversation {
+  padding: 16px;
+  overflow: auto;
+  flex: 1;
+}
+.chat-conversation pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    14px/1.6 ui-monospace,
+    monospace;
+}
+.chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 16px 0;
+}
+.chat-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+}
+.chat-compose textarea,
+.live-request input {
+  background: #18202b;
+  color: #e5e7eb;
+  border: 1px solid #536074;
+  border-radius: 4px;
+  font: inherit;
+  padding: 8px;
+  width: 100%;
+}
+.chat-compose textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.chat-compose textarea:focus-visible,
+.live-request input:focus-visible {
+  outline: 2px solid #92c5ff;
+  outline-offset: 2px;
+}
+.chat-compose button {
+  align-self: flex-start;
+}
+.chat-compose p {
+  font-size: 13px;
+  color: #b9c8dd;
+}
+.live-request {
+  background: #493b21;
+  padding: 16px;
+  margin: 16px 0;
+}
+.live-request label {
+  display: block;
+  margin-bottom: 12px;
+}
+.chat-conversation [role="alert"] {
+  overflow-wrap: anywhere;
+  color: #ffd49b;
+}

@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, session, dialog } from "electron";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { toolStatus } from "./tools";
+import { Chats } from "./chat";
+import { ChatService } from "./chat-service";
 import { Project } from "./project";
 const developmentOrigin = "http://127.0.0.1:5173";
 app.whenReady().then(() => {
@@ -47,8 +49,12 @@ app.whenReady().then(() => {
       throw new Error("Invalid tools request");
     return toolStatus();
   });
+  const chats = new ChatService(new Chats(join(app.getPath("userData"), "chats.json")));
   let project: Project | undefined;
-  app.once("will-quit", () => project?.close());
+  app.once("will-quit", () => {
+    chats.close();
+    project?.close();
+  });
   ipcMain.handle("project", async (event, operation: unknown, ...args: unknown[]) => {
     if (
       event.sender !== window.webContents ||
@@ -82,6 +88,41 @@ app.whenReady().then(() => {
     )
       return project.diff({ path: args[0], area: args[1] as "staged" });
     throw Error("Invalid project request");
+  });
+  ipcMain.handle("chat", async (event, operation: unknown, ...args: unknown[]) => {
+    if (
+      event.sender !== window.webContents ||
+      event.senderFrame !== window.webContents.mainFrame ||
+      event.senderFrame.url !== documentURL
+    )
+      throw Error("Invalid sender");
+    if (!project) throw Error("Open a project first.");
+    const root = project.root;
+    if (operation === "list" && !args.length) return chats.list(root);
+    if (operation === "create" && !args.length) return chats.create(root);
+    const [id, value, answer] = args;
+    if (typeof id !== "string" || id.length > 100) throw Error("Invalid chat identity");
+    await chats.list(root).then((list) => {
+      if (!list.some((c) => c.id === id)) throw Error("Unknown project/chat");
+    });
+    if (args.length === 1) {
+      if (operation === "open") return chats.open(root, id);
+      if (operation === "snapshot") return chats.snapshot(root, id);
+      if (operation === "stop") return chats.stop(root, id);
+      if (operation === "disconnect") return chats.disconnect(root, id);
+    }
+    if (args.length === 2 && typeof value === "string" && value.length <= 100000) {
+      if (operation === "draft") return chats.draft(root, id, value);
+      if (operation === "send") return chats.send(root, id, value);
+    }
+    if (
+      operation === "answer" &&
+      args.length === 3 &&
+      typeof value === "string" &&
+      JSON.stringify(answer)?.length <= 200000
+    )
+      return chats.answer(root, id, value, answer);
+    throw Error("Invalid chat request");
   });
   void window.loadURL(documentURL);
 });

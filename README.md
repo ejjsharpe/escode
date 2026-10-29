@@ -38,5 +38,17 @@ Run `bun run typecheck`, `bun run lint`, `bun run test`, then `bun run build`,
 `bun run package` and `bun run smoke` for Electron checks. See
 [desktop evidence and limitations](docs/compatibility/desktop.md).
 
-Chats, multiple projects, recovery and close/quit protection remain subsequent
-slices. This is an implementation of the file/Git slice, not the completed v1.
+The Chats view creates saved chats on the current checkout using installed,
+authenticated Codex **0.165.0**. Each connected chat owns an app-server process.
+It streams messages/activity, displays effective settings, handles live permission
+and input requests, and supports Stop and fresh-connection history reload. Drafts
+and project/chat/checkout/thread associations live in Electron user data; Codex
+owns saved conversation history. Retry never resends a message.
+
+Run `ESCODE_LIVE_CHAT=1 bun run --cwd apps/desktop smoke -- tests/chat.spec.ts`
+for the opt-in live Codex workflow (consumes a turn); add
+`ESCODE_PACKAGED_CHAT=1` to check the packaged app with a restricted PATH.
+
+Multiple projects, managed worktrees, recovery and close/quit protection remain
+subsequent slices. This implements the current-checkout file/Git/chat slice,
+not the completed v1.

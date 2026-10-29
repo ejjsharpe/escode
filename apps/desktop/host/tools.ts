@@ -6,7 +6,7 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { createInterface } from "node:readline";
 const execute = promisify(execFile);
-const supportedCodexVersion = "0.165.0";
+export const supportedCodexVersion = "0.165.0";
 export async function findExecutable(
   name: "git" | "codex",
   paths = (process.env.PATH ?? "").split(":"),
@@ -34,7 +34,7 @@ export async function findExecutable(
       : `Install Codex externally, run codex login, then retry. Supported build: ${supportedCodexVersion}.`,
   );
 }
-async function codexCommand(path: string, args: string[]) {
+export async function codexCommand(path: string, args: string[]) {
   const file = await open(path, "r");
   const header = Buffer.alloc(64);
   try {

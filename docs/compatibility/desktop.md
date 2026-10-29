@@ -103,3 +103,40 @@ and both packaged/unpackaged editor workflows passed. The packaged workflows
 run with `PATH=/usr/bin:/bin`. The aggregate `bun run smoke` also attempted the
 development hot-reload check, which could not bind port 5173 because an existing
 development server was using it; that server was left running.
+
+## Current-checkout chats (2026-10-29)
+
+The chat adapter supports installed Codex **0.165.0**, using one app-owned
+`app-server --listen stdio://` process per connected chat. Protocol fields were
+checked against `codex app-server generate-ts` from that exact build and the
+[official app-server documentation](https://learn.chatgpt.com/docs/app-server).
+No configuration is rewritten: thread start/resume supply only checkout/thread
+identity and history hydration options. Displayed model, reasoning, approval and
+sandbox values come from the actual start/resume response, including defaults.
+
+Live authenticated checks on the development host established streamed text,
+completed turns, effective settings and saved history through a fresh app-server.
+A second live check interrupted a running `sleep 60` command and reopened its
+history with no active turn and no continuation message sent. These checks used
+a temporary checkout with effective read-only sandbox and on-request approval.
+They do not establish all possible permission profiles or arbitrary CLI versions.
+
+Controlled protocol tests exercise two chats, duplicate-turn rejection, scoped
+Stop, command approval, input answers, one-use responses, wrong-chat/thread
+rejection, disconnection invalidation, explicit reconnect without resend, failed
+authentication and retained drafts. The opt-in Electron chat test exercises
+create/send/stream, view navigation, draft retention and fresh-connection history.
+Live command/file/permission approvals and input prompts are represented by
+controlled events; no claim of exhaustive live approval-policy coverage is made.
+
+Associations/drafts use serialized atomic JSON replacement in Electron user data
+(mode 0600), with Codex as the history source. This is not a crash-durability or
+full workspace-recovery guarantee. Losing a connection clears live requests and
+active state; retry starts a new connection and reads history, never resubmits
+work. If a turn's send result is uncertain, its draft remains available for the
+user to inspect against history before sending again. Missing tools, unsupported
+versions and authentication failures leave saved associations/drafts intact.
+
+This slice provides current-checkout chats only. Close/quit confirmations,
+workspace restoration and managed worktrees remain subsequent tickets. App quit
+ends app-owned connections; agents are not designed to survive app exit.
