@@ -21,8 +21,15 @@
     "nx"
   ],
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@types/node": "26.6.6",
+    "eslint": "10.13.0",
+    "eslint-plugin-import-x": "4.17.1",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
     "nx": "24.0.2",
-    "typescript": "7.0.2"
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "typescript-7": "npm:typescript@7.0.2",
+    "typescript-eslint": "8.72.1"
   }
 }
