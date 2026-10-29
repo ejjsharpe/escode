@@ -106,3 +106,8 @@ require explicit choices; dirty destinations block replacement. Bulk copying use
 native helper asynchronously, independently of text-editor size/encoding limits.
 See [transfer evidence and limitations](docs/compatibility/files-transfer.md).
 Automatic external-change watching remains a later slice.
+
+Internal tree dragging moves entries; Option-drag copies. The destination is highlighted,
+hovering expands folders, and drag moves require confirmation of their captured sources
+and destination. Transfers use the same preservation and collision handling as paste.
+See [internal drag evidence and limits](docs/compatibility/files-drag.md).

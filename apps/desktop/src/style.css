@@ -487,3 +487,14 @@ main[data-agents="true"] > .project-tabs button[aria-pressed="true"] {
 .tree-edit [role="alert"] {
   color: #ffb4ab;
 }
+
+.tree-drop {
+  outline: 2px solid var(--accent, #79b8ff);
+  outline-offset: -2px;
+}
+
+.tree-drop-status {
+  height: 3lh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}

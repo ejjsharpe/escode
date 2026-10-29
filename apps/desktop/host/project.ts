@@ -660,6 +660,7 @@ export class Project {
 }
 
 export interface ProjectBridge {
+  (operation: "drag-capture", checkout: string, paths: string[]): Promise<string>;
   (
     operation: "clipboard-capture",
     checkout: string,
@@ -669,7 +670,7 @@ export interface ProjectBridge {
   (
     operation: "transfer",
     checkout: string,
-    kind: "paste" | "duplicate",
+    kind: "paste" | "duplicate" | "drag-move" | "drag-copy",
     parent: string,
     paths: string[],
   ): Promise<{
