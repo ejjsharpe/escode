@@ -25,7 +25,7 @@ test("create from committed state, retain unsaved edits, and explicitly reuse wi
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("unsaved original");

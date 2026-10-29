@@ -24,7 +24,7 @@ for (const dirty of [false, true]) {
         };
       }, root);
       await page.getByRole("button", { name: "Open project…" }).click();
-      await page.getByRole("button", { name: "a.txt", exact: true }).click();
+      await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
       if (dirty) {
         await page.locator(".monaco-editor:visible").click();
         await page.keyboard.press("Meta+a");

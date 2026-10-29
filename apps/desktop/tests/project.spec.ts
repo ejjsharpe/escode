@@ -18,7 +18,7 @@ for (const packaged of [false, true]) {
       const page = await app.firstWindow();
       await page.getByRole("button", { name: "Open project…" }).click();
       await expect(page.locator("header")).toContainText(root);
-      await page.getByRole("button", { name: "a.txt", exact: true }).click();
+      await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
       await page.locator(".monaco-editor").click();
       await page.keyboard.press("Meta+a");
       await page.keyboard.type("my edits");

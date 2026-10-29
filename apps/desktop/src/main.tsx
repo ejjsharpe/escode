@@ -10,6 +10,7 @@ import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
 import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import type { Change, Document, SaveResult, ProjectBridge } from "../host/project";
 import { affected, moved, reconcile } from "../host/file-operation-state";
+import { FilesTree } from "./files";
 import { AgentsView } from "./agents";
 import { ChatView } from "./chat";
 import { useProjectChats } from "./chat-state";
@@ -82,8 +83,7 @@ function CheckoutView({
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [checkoutError, setCheckoutError] = useState("");
-  const [files, setFiles] = useState<{ path: string; directory: boolean }[]>([]);
-  const [directory, setDirectory] = useMemory(root, "directory", "");
+  const [filesRevision, setFilesRevision] = useState(0);
   const [path, setPath] = useMemory(root, "path", "");
   const [message, setMessage] = useState("Open a local Git checkout to begin.");
   const [conflict, setConflict] = useState<{ path: string; disk: Document } | null>(null);
@@ -169,7 +169,6 @@ function CheckoutView({
   );
   useEffect(() => {
     void refresh().catch(report);
-    void browse(directory);
   }, []);
   useLayoutEffect(() => {
     presentation.current++;
@@ -234,14 +233,6 @@ function CheckoutView({
       modified.dispose();
     };
   }, [diff]);
-  async function browse(dir: string) {
-    try {
-      setFiles(await projectCall("files", root, dir));
-      setDirectory(dir);
-    } catch (e) {
-      report(e);
-    }
-  }
   async function select(file: string, present = true) {
     const generation = present ? ++presentation.current : presentation.current;
     try {
@@ -431,20 +422,13 @@ function CheckoutView({
       setPath(
         kind === "move" ? moved(path, source, destination) : affected(path, source) ? "" : path,
       );
-      const nextDirectory =
-        kind === "move"
-          ? moved(directory, source, destination)
-          : affected(directory, source)
-            ? ""
-            : directory;
-      setDirectory(nextDirectory);
       setDiff(null);
       selectedChange.current = null;
       setBufferRevision((n) => n + 1);
       await persist();
       await projectCall("file-operation-ack", root);
       setOperation(null);
-      await browse(nextDirectory);
+      setFilesRevision((n) => n + 1);
       await refresh();
       setMessage(result.message);
     } catch (error) {
@@ -476,7 +460,7 @@ function CheckoutView({
               onClick={() =>
                 void (async () => {
                   await refresh();
-                  await browse(directory);
+                  setFilesRevision((n) => n + 1);
                   if (path) await select(path, false);
                 })().catch(report)
               }
@@ -491,12 +475,6 @@ function CheckoutView({
         )}
         {status && mode === "Files" && (
           <>
-            <p className="directory">{directory || "Project files"}</p>
-            {directory && (
-              <Button onClick={() => void browse(directory.split("/").slice(0, -1).join("/"))}>
-                ↑ Parent folder
-              </Button>
-            )}
             {operation && (
               <form
                 onSubmit={(event) => {
@@ -522,38 +500,31 @@ function CheckoutView({
                 </Button>
               </form>
             )}
-            <ul>
-              {files.map((file) => (
-                <li key={file.path}>
-                  <Button
-                    aria-pressed={file.directory ? undefined : file.path === path}
-                    disabled={!!conflict || saving}
-                    onClick={() => void (file.directory ? browse(file.path) : select(file.path))}
-                  >
-                    {file.directory ? "▸ " : ""}
-                    {file.path.split("/").at(-1)}
-                    {buffers.current.get(file.path)?.model.getValue() !==
-                    buffers.current.get(file.path)?.disk.text
-                      ? " •"
-                      : ""}
-                  </Button>
-                  <Button
-                    aria-label={"Rename/move " + file.path}
-                    disabled={saving || !!conflict}
-                    onClick={() => setOperation({ source: file.path, destination: file.path })}
-                  >
-                    Rename/move
-                  </Button>
-                  <Button
-                    aria-label={"Move to Trash " + file.path}
-                    disabled={saving || !!conflict}
-                    onClick={() => void fileOperation("trash", file.path)}
-                  >
-                    Trash
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <FilesTree
+              key={root}
+              root={root}
+              active={active}
+              activePath={path}
+              disabled={!!conflict || saving}
+              revision={filesRevision}
+              dirty={(file) => {
+                const b = buffers.current.get(file);
+                return !!b && b.model.getValue() !== b.disk.text;
+              }}
+              open={async (file, focusEditor) => {
+                await select(file);
+                if (focusEditor)
+                  requestAnimationFrame(() => {
+                    if (
+                      container.current?.getClientRects().length &&
+                      editor.current?.getModel() === buffers.current.get(file)?.model
+                    )
+                      editor.current?.focus();
+                  });
+              }}
+              rename={(source) => setOperation({ source, destination: source })}
+              trash={(source) => void fileOperation("trash", source)}
+            />
           </>
         )}
         {status && mode === "Source Control" && (

@@ -57,6 +57,12 @@ test("real folder move preserves descendant drafts and conflict baseline through
     const state = await new Workspace(join(base, "workspace.json")).read();
     expect(state.drafts.map((d) => d.path)).toEqual(["renamed/a.ts", "renamed/b.ts"]);
     expect(state.drafts[0].text).toBe("a unsaved");
+    expect(state.views[p.root].files).toEqual({
+      expanded: ["renamed"],
+      selected: ["renamed/a.ts"],
+      focus: "renamed/a.ts",
+      scroll: 0,
+    });
     expect(readFileSync(join(p.root, "renamed/a.ts"), "utf8")).toBe("disk");
     writeFileSync(join(p.root, "renamed/a.ts"), "external");
     expect((await p.save("renamed/a.ts", "a unsaved", state.drafts[0].disk.version)).kind).toBe(
@@ -80,6 +86,12 @@ test("restart reconciles a crash immediately after native rename, before complet
     const fresh = new FileOperations(new Workspace(join(base, "workspace.json")), file);
     expect(await fresh.recover(async () => p)).toContain("Recovered move");
     expect((await store.read()).drafts[1].path).toBe("moved/b.ts");
+    expect((await store.read()).views[p.root].files).toEqual({
+      expanded: ["moved"],
+      selected: ["moved/a.ts"],
+      focus: "moved/a.ts",
+      scroll: 0,
+    });
     expect(await journal.readIntent()).toBe(null);
   }));
 test("persistence failure after mutation returns the actual outcome and restart recovers edits", async () =>

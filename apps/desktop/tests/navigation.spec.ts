@@ -38,12 +38,12 @@ test("projects and checkout selections retain buffers, drafts and mode without d
       await expect(page.locator("header")).toContainText(root === worktree ? a : root);
     };
     await open(a);
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("alpha draft");
     await open(b);
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("beta draft");
@@ -99,11 +99,25 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(page.getByLabel("Message Codex")).toHaveValue("worktree message draft");
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(page.locator(".view-nav:visible")).toContainText(worktree);
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText(a);
+    await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute(
+      "aria-activedescendant",
+      worktree + ":a.txt",
+    );
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "Chat 1", exact: true }).click();
     await expect(page.getByLabel("Message Codex")).toHaveValue("original message draft");
+    await page.getByRole("button", { name: "Files", exact: true }).click();
+    await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute(
+      "aria-activedescendant",
+      a + ":a.txt",
+    );
+    await expect(
+      page.getByRole("treeitem", { name: "a.txt, unsaved", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".monaco-editor:visible")).toContainText("alpha draft");
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
     await open(b);
     await page
       .getByRole("navigation", { name: "Projects" })

@@ -72,7 +72,8 @@ createInterface({input:process.stdin}).on('line',line=>{
       .getByRole("button", { name: "repo", exact: true });
     await activate(project);
     await expect(project).toHaveAttribute("aria-pressed", "true");
-    await activate(page.getByRole("button", { name: "a.txt", exact: true }));
+    await reach(page.getByRole("tree", { name: "Files", exact: true }));
+    await page.keyboard.press("Space");
     const editor = page.getByRole("textbox", { name: "a.txt editor", exact: true });
     await reach(editor);
     await page.keyboard.press("Meta+a");

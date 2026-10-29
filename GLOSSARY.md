@@ -58,9 +58,10 @@ check. Explicit discard removes the draft; recovery is best effort, not a guaran
 that the latest keystroke survives a crash.
 
 **Files view**:
-The project-local view of files in the current checkout. Its existing directory list
-supports a narrow rename/move and macOS Trash preservation gate; the nested explorer
-specified in issue 38 remains subsequent work. Rename/move retains available unsaved
+The project-local lazy nested tree of files in the current checkout. Expansion, keyboard
+focus, multiple selection and scroll are remembered independently per checkout; selection
+is separate from the active document. Refresh reloads visible directory state. The tree
+retains the narrow rename/move and macOS Trash preservation gate. Rename/move retains available unsaved
 descendant edits and save-conflict baselines at their new paths. Earlier text undo
 history resets with disclosure; subsequent text undo works.
 

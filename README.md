@@ -87,9 +87,10 @@ change files after the final check; late ignored files can be deleted. Transacti
 removal and recoverable removal backups are outside this guarantee.
 See [the v1 acceptance record](docs/compatibility/v1-acceptance.md) for the twelve functional gates, reproducible checks, measured recovery behavior and the user-confirmed VoiceOver checks.
 
-The first Files preservation gate adds Rename/move and native Trash to the existing
-directory list. Moves preserve available dirty descendant buffers and conflict baselines;
+The Files sidebar browses a lazy nested tree with keyboard navigation, independent multiple
+selection, Refresh and Collapse All. Expansion, focus, selection and scroll are remembered per
+checkout. Rename/move and native Trash retain the first Files preservation gate. Moves preserve available dirty descendant buffers and conflict baselines;
 earlier text undo history resets with disclosure, while new text undo works. A durable
 intent journal reconciles interrupted moves on restart. See [file-operation evidence and
-remaining gates](docs/compatibility/file-operations.md). The complete nested explorer is
-not part of this slice.
+remaining gates](docs/compatibility/file-operations.md) and [tree evidence](docs/compatibility/files-tree.md).
+Creation, transfers and automatic external-change watching remain later slices.

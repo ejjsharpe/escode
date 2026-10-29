@@ -2,7 +2,9 @@ import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Document } from "./project";
 export type RecoveryDraft = { root: string; path: string; text: string; disk: Document };
+export type FilesMemory = { expanded: string[]; selected: string[]; focus: string; scroll: number };
 export type ViewMemory = {
+  files?: FilesMemory;
   mode?: string;
   checkout?: string;
   roots?: string[];
@@ -84,6 +86,22 @@ function validate(value: unknown): asserts value is WorkspaceState {
   }
   for (const v of Object.values(s.views)) {
     if (
+      v?.files !== undefined &&
+      (!v.files ||
+        typeof v.files !== "object" ||
+        !Array.isArray(v.files.expanded) ||
+        !Array.isArray(v.files.selected) ||
+        [...v.files.expanded, ...v.files.selected, v.files.focus].some(
+          (p) =>
+            typeof p !== "string" ||
+            p.startsWith("/") ||
+            p.split("/").some((c) => c === ".." || c.toLowerCase() === ".git"),
+        ) ||
+        !Number.isFinite(v.files.scroll) ||
+        v.files.scroll < 0)
+    )
+      throw Error("Invalid Files memory");
+    if (
       !v ||
       typeof v !== "object" ||
       (v.mode !== undefined && !["Files", "Source Control", "Chats"].includes(v.mode)) ||
@@ -144,6 +162,25 @@ export class Workspace {
     try {
       const state: unknown = JSON.parse(await readFile(this.file, "utf8"));
       validate(state);
+      for (const view of Object.values(state.views)) {
+        if (!view.files) {
+          const ancestors = (path: string) => {
+            const parts = path.split("/").filter(Boolean);
+            return parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+          };
+          view.files = {
+            expanded: [
+              ...new Set([
+                ...ancestors(view.directory || ""),
+                ...ancestors((view.path || "").split("/").slice(0, -1).join("/")),
+              ]),
+            ],
+            selected: view.path ? [view.path] : [],
+            focus: view.path || view.directory || "",
+            scroll: 0,
+          };
+        }
+      }
       return state;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyWorkspace();

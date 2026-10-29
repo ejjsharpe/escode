@@ -423,8 +423,14 @@ app.whenReady().then(() => {
         args[1] as string,
       );
     if (operation === "status" && !args.length) return project.status();
-    if (operation === "files" && args.length === 1 && typeof args[0] === "string")
-      return project.files(args[0]);
+    if (operation === "files" && args.length === 1 && typeof args[0] === "string") {
+      const protectedPath = (path: string) => {
+        const absolute = resolve(project.root, path);
+        return isAppState(absolute) || stateFiles.some((file) => file.startsWith(absolute + "/"));
+      };
+      if (args[0] && protectedPath(args[0])) throw Error("App state is unavailable in Files.");
+      return (await project.files(args[0])).filter((entry) => !protectedPath(entry.path));
+    }
     if (operation === "read" && args.length === 1 && typeof args[0] === "string")
       return project.read(args[0]);
     if (operation === "save" && args.length === 3 && args.every((a) => typeof a === "string"))

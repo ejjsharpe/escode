@@ -73,7 +73,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
   let app = await launchDesktop(user, dir);
   try {
     let page = await app.firstWindow();
-    await page.getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("dirty alpha");
