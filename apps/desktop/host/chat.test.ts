@@ -338,7 +338,7 @@ test.each(["missing", "replaced"])(
 );
 
 test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
-  "live Codex chats progress across shared/separate checkouts and projects; stop stays local",
+  "live Codex chats progress across shared/separate checkouts, projects and scratch; stop stays local",
   async () => {
     const { execFileSync } = await import("node:child_process");
     const { realpath } = await import("node:fs/promises");
@@ -346,7 +346,8 @@ test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
     const a = join(dir, "alpha"),
       b = join(dir, "beta");
     let project: import("./project").Project | undefined;
-    const service = new ChatService(new Chats(join(dir, "chats.json")));
+    const store = new Chats(join(dir, "chats.json"));
+    const service = new ChatService(store);
     try {
       for (const root of [a, b]) {
         execFileSync("git", ["init", root]);
@@ -374,6 +375,7 @@ test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
         service.create(a),
         service.create(a, worktree),
         service.create(b),
+        store.createDraft(null, ""),
       ]);
       await Promise.all(chats.map((c) => service.open(c.project, c.id)));
       await Promise.all(

@@ -38,6 +38,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='initialize')result={userAgent:'codex/0.165.0'};
  if(m.method==='account/read')result={account:{}};
  if(m.method==='thread/start')result={thread:{id:threadId},cwd:process.cwd(),model:'fixture',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
+ if(m.method==='turn/interrupt')send({method:'turn/completed',params:{threadId,turn:{id:turnId}}});
  if(m.method==='turn/start'){result={turn:{id:turnId}};setTimeout(()=>send({id:99,method:'item/tool/requestUserInput',params:{threadId,turnId,questions:[{id:'choice',question:'Which name should I use?'}]}}),20);}
  send({id:m.id,result});
 });
@@ -112,6 +113,24 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect(page.getByLabel("Conversation history")).toContainText(
       "Input received: keyboard answer",
     );
+    await activate(page.getByRole("button", { name: "Agents", exact: true }));
+    await activate(page.getByRole("button", { name: "No project", exact: true }));
+    const context = page.getByRole("combobox", { name: "Project context", exact: true });
+    await reach(context);
+    await expect(context).toHaveValue("");
+    await reach(compose);
+    await page.keyboard.type("keyboard scratch question");
+    await activate(page.getByRole("button", { name: "Send message", exact: true }));
+    await reach(question);
+    await page.keyboard.type("scratch keyboard answer");
+    await activate(page.getByRole("button", { name: "Send answers", exact: true }));
+    await expect(page.getByLabel("Conversation history")).toContainText("Input received: scratch keyboard answer");
+    await reach(compose);
+    await page.keyboard.type("stop this scratch turn");
+    await activate(page.getByRole("button", { name: "Send message", exact: true }));
+    await expect(question).toBeVisible();
+    await activate(page.getByRole("button", { name: "Stop", exact: true }));
+    await expect(page.locator(".chat-actions [role=status]")).toHaveText("Ready");
     await page.screenshot({ path: "test-results/keyboard.png" });
   } finally {
     await app.evaluate(({ dialog }) => {

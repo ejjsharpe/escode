@@ -199,6 +199,16 @@ createInterface({input:process.stdin}).on('line',line=>{
       await page.getByRole("button", { name: "Send message", exact: true }).click();
       await expect(page.getByRole("status")).toHaveText("Running");
       const pids: number[] = JSON.parse(await readFile(join(root, "pids"), "utf8"));
+      // Include scratch work in cancellation, failed-save and process-group quit checks.
+      const scratch = await page.evaluate(async () => {
+        const chat = await window.escode.chat("createDraft", null);
+        await window.escode.chat("send", null, chat.id, "run scratch");
+        await window.escode.chat("draft", null, chat.id, "retained scratch draft");
+        return (await window.escode.chat("list", null)).find((c) => c.id === chat.id)!;
+      });
+      pids.push(...JSON.parse(await readFile(join(scratch.checkout, "pids"), "utf8")));
+      await writeFile(join(scratch.checkout, "retained.txt"), "scratch bytes");
+
       const managed = closeProject
         ? await page.evaluate(async (root) => {
             const options = await window.escode.project("worktree-options", root);
@@ -262,7 +272,7 @@ createInterface({input:process.stdin}).on('line',line=>{
           execFileSync("git", ["-C", root, "branch", "--list", managed!.branch]).toString(),
         ).toContain(managed!.branch);
         const saved = JSON.parse(await readFile(join(user, "chats.json"), "utf8"));
-        expect(saved).toHaveLength(2);
+        expect(saved).toHaveLength(3);
         expect(saved.find((chat: any) => chat.checkout === managed!.root).draft).toBe(
           "retained worktree draft",
         );
@@ -294,8 +304,15 @@ createInterface({input:process.stdin}).on('line',line=>{
           }),
         )
         .toBe(false);
+      expect(await readFile(join(scratch.checkout, "interrupts"), "utf8")).toBe("stopped\n");
       app = await launch();
       page = await app.firstWindow();
+      expect(await readFile(join(scratch.checkout, "retained.txt"), "utf8")).toBe("scratch bytes");
+      expect(await readFile(join(scratch.checkout, "turns"), "utf8")).toBe("sent\n");
+      expect(await page.evaluate((id) => window.escode.chat("snapshot", null, id), scratch.id))
+        .toMatchObject({ busy: false });
+      expect((await page.evaluate(() => window.escode.chat("list", null)))[0])
+        .toMatchObject({ id: scratch.id, checkout: scratch.checkout, draft: "retained scratch draft" });
       if (closeProject) {
         await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
           "aria-pressed",

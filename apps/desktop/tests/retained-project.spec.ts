@@ -30,10 +30,11 @@ test("dirty background close preserves work on cancel/failure, retained requests
     join(dir, "codex"),
     `#!/usr/bin/env node
 const {createInterface}=require('node:readline');
+const fs=require('node:fs');
 if(process.argv.includes('--version')){console.log('codex-cli 0.165.0');process.exit()}
 const send=x=>process.stdout.write(JSON.stringify(x)+'\\n');const threadId='thread-'+process.pid;
 createInterface({input:process.stdin}).on('line',line=>{
-const m=JSON.parse(line);if(!m.id)return; if(!m.method)return;
+const m=JSON.parse(line);if(!m.id)return; if(!m.method){fs.writeFileSync('approval-result',JSON.stringify(m));return;}
 let result={};if(m.method==='initialize')result={userAgent:'codex/0.165.0'};
 if(m.method==='account/read')result={account:{}};
 if(m.method==='thread/start')result={thread:{id:threadId},cwd:process.cwd(),model:'fixture',sandbox:{type:'readOnly'},approvalPolicy:'on-request'};
@@ -82,6 +83,16 @@ send({id:m.id,result});});`,
       await window.escode.chat("send", b, chat.id, "run beta");
       return chat;
     }, b);
+    const mixed = await page.evaluate(async (a) => {
+      const shared = await window.escode.chat("create", a, a);
+      await window.escode.chat("open", a, shared.id);
+      await window.escode.chat("send", a, shared.id, "shared checkout");
+      const scratch = await window.escode.chat("createDraft", null);
+      await window.escode.chat("send", null, scratch.id, "scratch work");
+      const draft = await window.escode.chat("createDraft", a);
+      await window.escode.chat("draft", a, draft.id, "unsent integrated draft");
+      return { shared, scratch: (await window.escode.chat("list", null))[0], draft };
+    }, a);
     const alphaTab = page
       .getByRole("navigation", { name: "Projects", exact: true })
       .getByRole("button", { name: /^alpha/ });
@@ -123,7 +134,17 @@ send({id:m.id,result});});`,
       );
     expect(await remove()).toContain("Stop linked agents");
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await page.locator(".agent-row").filter({ hasText: "alpha" }).click();
+    await expect(page.locator(".agent-row")).toHaveCount(5);
+    const order = await page.locator(".agent-row strong").allTextContents();
+    expect(order).toHaveLength(5);
+    await page.locator(".agent-row").filter({ hasText: "No project" }).click();
+    await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Allow once", exact: true }).click();
+    await expect.poll(async () => JSON.parse(await readFile(join(mixed.scratch.checkout, "approval-result"), "utf8")).result.decision).toBe("accept");
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    expect((await page.evaluate((c) => window.escode.chat("snapshot", c.project, c.id), beta)).busy).toBe(true);
+    expect((await page.evaluate((c) => window.escode.chat("snapshot", c.project, c.id), mixed.shared)).busy).toBe(true);
+    await page.locator(".agent-row").filter({ hasText: "alpha" }).filter({ hasText: "Chat 1" }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Allow once", exact: true }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toHaveCount(0);
@@ -133,6 +154,10 @@ send({id:m.id,result});});`,
     expect(
       (await page.evaluate((c) => window.escode.chat("snapshot", c.project, c.id), beta)).busy,
     ).toBe(true);
+    await expect.poll(async () => JSON.parse(await readFile(join(managed.root, "approval-result"), "utf8")).result.decision).toBe("accept");
+    expect(await readFile(join(a, "approval-result"), "utf8").catch(() => "")).toBe("");
+    expect(await readFile(join(b, "approval-result"), "utf8").catch(() => "")).toBe("");
+    expect(await page.locator(".agent-row strong").allTextContents()).toEqual(order);
     const loaded = await page.evaluate(() => window.escode.lifecycle("load"));
     loaded.state.drafts.push({
       root: managed.root,

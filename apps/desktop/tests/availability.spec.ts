@@ -231,6 +231,11 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
     await expect
       .poll(async () => JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).selected)
       .toBe(root);
+    // A stale on-disk snapshot can precede queued selection writes; crash only after acknowledgement.
+    await expect(page.locator("header")).toContainText(root);
+    await expect.poll(async () => (await page.evaluate(() => window.escode.lifecycle("load"))).state.selected).toBe(root);
+    const acknowledged = await page.evaluate(() => window.escode.lifecycle("load"));
+    await page.evaluate((state) => window.escode.lifecycle("persist", state), acknowledged.state);
     await rename(root, root + "-away");
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
