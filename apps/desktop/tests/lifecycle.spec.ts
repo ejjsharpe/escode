@@ -84,7 +84,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
     });
     await page.getByRole("button", { name: "Close file", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("ENOENT");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("ENOENT");
     await expect(page.locator(".monaco-editor:visible")).toContainText("recover these edits");
     await writeFile(join(root, "a.txt"), "external");
     await app.evaluate(({ dialog }) => {

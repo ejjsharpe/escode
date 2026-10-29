@@ -39,6 +39,7 @@ declare global {
       chat: ChatBridge;
       toolStatus(): Promise<unknown>;
       project: ProjectBridge;
+      watchFiles(root: string, paths: string[], callback: (error?: string) => void): () => void;
       nativeFiles(files: File[]): Promise<string>;
     };
     MonacoEnvironment: { getWorker(_: string, label: string): Worker };

@@ -105,7 +105,9 @@ drafts over copied disk contents; moves use the existing preservation gate. Coll
 require explicit choices; dirty destinations block replacement. Bulk copying uses the
 native helper asynchronously, independently of text-editor size/encoding limits.
 See [transfer evidence and limitations](docs/compatibility/files-transfer.md).
-Automatic external-change watching remains a later slice.
+Loaded directories receive coalesced external-change notifications; window focus and Refresh
+rescan missed changes and retry unavailable watches. Available dirty edits remain intact when
+external paths disappear. See [external-change evidence](docs/compatibility/files-watch.md).
 
 Internal tree dragging moves entries; Option-drag copies. The destination is highlighted,
 hovering expands folders, and drag moves require confirmation of their captured sources
