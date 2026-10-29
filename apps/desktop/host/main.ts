@@ -1,7 +1,6 @@
 import { app, BrowserWindow, ipcMain, session } from "electron";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-
 import { toolStatus } from "./tools";
 const developmentOrigin = "http://127.0.0.1:5173";
 app.whenReady().then(() => {
@@ -35,9 +34,7 @@ app.whenReady().then(() => {
   );
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event, url) => {
-    if (url !== documentURL) {
-      event.preventDefault();
-    }
+    if (url !== documentURL) event.preventDefault();
   });
   ipcMain.handle("tools:status", (event, ...args) => {
     if (
@@ -45,9 +42,8 @@ app.whenReady().then(() => {
       event.senderFrame !== window.webContents.mainFrame ||
       event.senderFrame.url !== documentURL ||
       args.length
-    ) {
+    )
       throw new Error("Invalid tools request");
-    }
     return toolStatus();
   });
   void window.loadURL(documentURL);

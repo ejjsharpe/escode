@@ -1,10 +1,10 @@
-import { Button } from "@base-ui/react/button";
+import React, { useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
 import * as stylex from "@stylexjs/stylex";
+import { Button } from "@base-ui/react/button";
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import JsonWorker from "monaco-editor/language/json/json.worker.js?worker";
-import React, { useEffect, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
 import "./style.css";
 declare global {
   interface Window {

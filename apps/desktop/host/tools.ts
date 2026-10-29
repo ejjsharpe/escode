@@ -1,10 +1,10 @@
-import { execFile, spawn } from "node:child_process";
-import { constants } from "node:fs";
 import { access, open } from "node:fs/promises";
+import { constants } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { createInterface } from "node:readline";
 const execute = promisify(execFile);
 const supportedCodexVersion = "0.165.0";
 export async function findExecutable(
@@ -66,9 +66,7 @@ export async function probeCodex(path: string) {
     { resolve: (value: any) => void; reject: (error: Error) => void }
   >();
   const fail = (error: Error) => {
-    for (const request of pending.values()) {
-      request.reject(error);
-    }
+    for (const request of pending.values()) request.reject(error);
     pending.clear();
   };
   child.on("error", fail);
@@ -81,13 +79,11 @@ export async function probeCodex(path: string) {
       const request = pending.get(message.id);
       if (request) {
         pending.delete(message.id);
-        if (message.error) {
+        if (message.error)
           request.reject(
             new Error("Codex rejected compatibility request. Check configuration and retry."),
           );
-        } else {
-          request.resolve(message.result);
-        }
+        else request.resolve(message.result);
       }
     } catch {
       fail(new Error("Invalid Codex protocol response."));
@@ -147,13 +143,12 @@ export async function toolStatus() {
       const version = (
         await execute(command.executable, command.args, { timeout: 5000, env: command.env })
       ).stdout.trim();
-      if (version !== `codex-cli ${supportedCodexVersion}`) {
+      if (version !== `codex-cli ${supportedCodexVersion}`)
         return {
           path,
           version,
           guidance: `Unsupported Codex build. Install tested version ${supportedCodexVersion} externally, then retry.`,
         };
-      }
       return { path, version, ...(await probeCodex(path)) };
     } catch {
       return {

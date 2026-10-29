@@ -1,7 +1,7 @@
 import { test, expect, _electron } from "@playwright/test";
-import electron from "electron";
-import { readFile, writeFile } from "node:fs/promises";
 import { createServer } from "vite-plus";
+import { readFile, writeFile } from "node:fs/promises";
+import electron from "electron";
 test("StyleX updates during development", async () => {
   const source = new URL("../src/main.tsx", import.meta.url);
   const original = await readFile(source, "utf8");
