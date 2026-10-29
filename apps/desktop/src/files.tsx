@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { DragEvent, KeyboardEvent } from "react";
 import { memory, useMemory } from "./workspace";
 import type { FilesMemory } from "../host/workspace";
 
@@ -29,7 +29,7 @@ export function FilesTree({
   create: (parent: string, name: string, kind: "file" | "folder") => Promise<string>;
   trash: (paths: string[]) => Promise<void>;
   transfer: (
-    kind: "copy" | "cut" | "paste" | "duplicate",
+    kind: "copy" | "cut" | "paste" | "duplicate" | "drag-move" | "drag-copy",
     paths: string[],
     parent: string,
   ) => Promise<void>;
@@ -47,6 +47,107 @@ export function FilesTree({
     value: string;
     error?: string;
   } | null>(null);
+  const drag = useRef<{ id: string; paths: string[]; token: Promise<string> } | null>(null);
+  const hover = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const dragGeneration = useRef(0);
+  const [dropTarget, setDropTarget] = useState<{ parent: string; copy: boolean } | null>(null);
+  const dragFormat = "application/x-escode-tree";
+  function clearDrag() {
+    clearTimeout(hover.current);
+    hover.current = undefined;
+    drag.current = null;
+    setDropTarget(null);
+  }
+  useEffect(() => {
+    dragGeneration.current++;
+    clearDrag();
+    return () => {
+      dragGeneration.current++;
+      clearTimeout(hover.current);
+      drag.current = null;
+    };
+  }, [root, active, disabled]);
+  function startDrag(event: DragEvent, path: string) {
+    if (!active || disabled || edit || (event.target as Element).closest("input, textarea")) {
+      event.preventDefault();
+      return;
+    }
+    clearDrag();
+    const paths = latest.current.selected.includes(path) ? [...latest.current.selected] : [path];
+    update({ selected: paths, focus: path });
+    const id = crypto.randomUUID();
+    const token = window.escode.project("drag-capture", root, paths);
+    // Keep capture rejection handled even if the user cancels before dropping.
+    void token.catch(() => {});
+    drag.current = { id, paths, token };
+    event.dataTransfer.setData(dragFormat, id);
+    event.dataTransfer.effectAllowed = "copyMove";
+  }
+  function over(event: DragEvent, parent: string) {
+    event.stopPropagation();
+    const session = drag.current;
+    if (!session || !active || disabled || edit || !event.dataTransfer.types.includes(dragFormat)) {
+      event.dataTransfer.dropEffect = "none";
+      return;
+    }
+    const folded = (p: string) => p.normalize("NFC").toLowerCase();
+    if (
+      session.paths.some(
+        (p) => folded(parent) === folded(p) || folded(parent).startsWith(folded(p) + "/"),
+      )
+    ) {
+      event.dataTransfer.dropEffect = "none";
+      clearTimeout(hover.current);
+      setDropTarget(null);
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = event.altKey ? "copy" : "move";
+    if (dropTarget?.parent !== parent) {
+      clearTimeout(hover.current);
+      const generation = dragGeneration.current;
+      if (parent && !latest.current.expanded.includes(parent))
+        hover.current = setTimeout(() => {
+          if (drag.current === session && generation === dragGeneration.current) {
+            update({ expanded: [...new Set([...latest.current.expanded, parent])] });
+            void load(parent);
+          }
+        }, 650);
+    }
+    setDropTarget({ parent, copy: event.altKey });
+  }
+  async function drop(event: DragEvent, target: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    const session = drag.current;
+    const valid = session && event.dataTransfer.getData(dragFormat) === session.id;
+    const copy = event.altKey;
+    const generation = dragGeneration.current;
+    clearDrag();
+    if (!valid || !active || disabled || edit) {
+      setActionError(
+        "Only a drag from this checkout's Files tree is supported. External imports are not available yet.",
+      );
+      return;
+    }
+    try {
+      let parent = "";
+      if (target) {
+        const container = target.split("/").slice(0, -1).join("/");
+        const listing = cache[container] ?? (await load(container));
+        const entry = listing.entries?.find((e) => e.path === target);
+        if (!entry) throw Error(listing.error || "Destination missing. Refresh and try again.");
+        parent = entry.directory ? target : container;
+      }
+      const token = await session.token;
+      if (generation !== dragGeneration.current) return;
+      setActionError("");
+      await transfer(copy ? "drag-copy" : "drag-move", [token], parent);
+    } catch (error) {
+      if (generation === dragGeneration.current) setActionError(String(error));
+    }
+    if (generation === dragGeneration.current) restoreFocus();
+  }
   const input = useRef<HTMLInputElement>(null);
   const committing = useRef(false);
   const startingEdit = useRef(false);
@@ -170,6 +271,9 @@ export function FilesTree({
       <div
         ref={editRef}
         className="tree-edit"
+        onDragStart={(e) => e.stopPropagation()}
+        onDragOver={(e) => e.stopPropagation()}
+        onDrop={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.stopPropagation()}
       >
@@ -386,6 +490,10 @@ export function FilesTree({
   }
   function key(event: KeyboardEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget || disabled || edit) return;
+    if (event.key === "Escape" && drag.current) {
+      clearDrag();
+      return;
+    }
     if (event.key === "Escape" && menu !== null) {
       event.preventDefault();
       dismiss();
@@ -524,7 +632,16 @@ export function FilesTree({
               aria-current={entry.path === activePath ? "true" : undefined}
             >
               <div
-                className={"tree-row" + (entry.path === focused?.path ? " tree-focus" : "")}
+                className={
+                  "tree-row" +
+                  (entry.path === focused?.path ? " tree-focus" : "") +
+                  (dropTarget?.parent === entry.path ? " tree-drop" : "")
+                }
+                draggable={!disabled && !edit}
+                onDragStart={(event) => startDrag(event, entry.path)}
+                onDragEnd={clearDrag}
+                onDragOver={(event) => over(event, entry.directory ? entry.path : parent)}
+                onDrop={(event) => void drop(event, entry.path)}
                 style={{ paddingLeft: 6 + (level - 1) * 16 }}
                 onClick={(event) => {
                   if (disabled) return;
@@ -561,7 +678,13 @@ export function FilesTree({
                 {dirty(entry.path) && <span aria-hidden="true"> •</span>}
               </div>
               {entry.directory && state.expanded.includes(entry.path) && (
-                <div role="group">{listing(entry.path, level + 1)}</div>
+                <div
+                  role="group"
+                  onDragOver={(event) => over(event, entry.path)}
+                  onDrop={(event) => void drop(event, entry.path)}
+                >
+                  {listing(entry.path, level + 1)}
+                </div>
               )}
             </div>
           );
@@ -598,6 +721,11 @@ export function FilesTree({
           {actionError}
         </div>
       )}
+      <div role="status" className="tree-edit-help tree-drop-status">
+        {dropTarget
+          ? `${dropTarget.copy ? "Copy" : "Move"} to ${dropTarget.parent || "checkout root"}${!dropTarget.copy ? " · confirmation before moving" : ""}`
+          : "Drag to move · Option-drag to copy"}
+      </div>
       <div
         ref={tree}
         role="tree"
@@ -606,7 +734,15 @@ export function FilesTree({
         aria-disabled={disabled}
         aria-activedescendant={focused ? root + ":" + focused.path : undefined}
         tabIndex={0}
-        className="files-tree"
+        className={"files-tree" + (dropTarget?.parent === "" ? " tree-drop" : "")}
+        onDragOver={(event) => over(event, "")}
+        onDrop={(event) => void drop(event, "")}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            clearTimeout(hover.current);
+            setDropTarget(null);
+          }
+        }}
         onKeyDown={key}
         onClick={(e) => {
           if (e.target === e.currentTarget) {

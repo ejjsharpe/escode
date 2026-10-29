@@ -105,6 +105,7 @@ app.whenReady().then(() => {
         entries: { source: string; identity: string; directory: boolean }[];
       }
     | undefined;
+  let fileDrag: typeof fileClipboard;
   let mayClose = false;
   window.on("close", (event) => {
     if (mayClose) return;
@@ -294,6 +295,7 @@ app.whenReady().then(() => {
     const requestedRoot = args.shift();
     if (
       [
+        "drag-capture",
         "clipboard-capture",
         "transfer",
         "trash-selection",
@@ -345,6 +347,17 @@ app.whenReady().then(() => {
           ),
       );
     };
+    if (operation === "drag-capture" && args.length === 1 && Array.isArray(args[0])) {
+      operations.assertIdle();
+      fileDrag = {
+        token: randomUUID(),
+        root: project.root,
+        checkout: project.checkoutIdentity(),
+        cut: false,
+        entries: capture(args[0] as string[]),
+      };
+      return fileDrag.token;
+    }
     if (
       operation === "clipboard-capture" &&
       args.length === 2 &&
@@ -365,17 +378,23 @@ app.whenReady().then(() => {
     if (
       operation === "transfer" &&
       args.length === 3 &&
-      ["paste", "duplicate"].includes(String(args[0])) &&
+      ["paste", "duplicate", "drag-move", "drag-copy"].includes(String(args[0])) &&
       typeof args[1] === "string" &&
       Array.isArray(args[2])
     ) {
       if (mutationOrigin) throw Error("Another file operation is pending.");
       const duplicate = args[0] === "duplicate";
-      const reference = duplicate ? undefined : fileClipboard;
-      const item = duplicate
-        ? undefined
-        : (await clipboard.read()).find((item) => item.types.includes(clipboardFormat));
-      const token = item ? await (await item.getType(clipboardFormat)).text() : "";
+      const dragging = args[0] === "drag-move" || args[0] === "drag-copy";
+      const reference = duplicate ? undefined : dragging ? fileDrag : fileClipboard;
+      const item =
+        duplicate || dragging
+          ? undefined
+          : (await clipboard.read()).find((item) => item.types.includes(clipboardFormat));
+      const token = dragging
+        ? args[2][0]
+        : item
+          ? await (await item.getType(clipboardFormat)).text()
+          : "";
       if (
         !duplicate &&
         (!reference ||
@@ -387,7 +406,9 @@ app.whenReady().then(() => {
           "No current escode file references for this checkout. Copy or cut again in Files.",
         );
       const entries = duplicate ? capture(args[2] as string[]) : [...reference!.entries];
+      if (dragging) fileDrag = undefined;
       const parent = args[1];
+      const checkoutIdentity = project.checkoutIdentity();
       const parentIdentity = parent
         ? project.operationIdentity(parent)
         : project.checkoutIdentity();
@@ -401,8 +422,9 @@ app.whenReady().then(() => {
         )
           throw Error("Originating project unavailable or app quitting.");
         if (
+          project.checkoutIdentity() !== checkoutIdentity ||
           (parent ? project.operationIdentity(parent) : project.checkoutIdentity()) !==
-          parentIdentity
+            parentIdentity
         )
           throw Error("Destination folder changed. Retry paste.");
       };
@@ -410,21 +432,43 @@ app.whenReady().then(() => {
       const results: (import("./file-operations").OperationResult & { source: string })[] = [];
       const open: string[] = [];
       try {
+        if (args[0] === "drag-move") {
+          check();
+          const answer = await dialog.showMessageBox(window, {
+            message: `Move ${entries.length} item(s)?`,
+            detail: `Checkout: ${project.root}\nSources:\n${entries.map((e) => e.source).join("\n")}\nDestination folder: ${parent || "(checkout root)"}\nUnsaved edits follow moved paths. Earlier text undo history resets.`,
+            buttons: ["Move", "Cancel"],
+            defaultId: 1,
+            cancelId: 1,
+          });
+          if (answer.response !== 0)
+            return {
+              results: [],
+              open: [],
+              requiresAck: false,
+              message: "Drag move cancelled. No files changed.",
+            };
+          check();
+        }
         operations.beginBatch(project.root);
         for (const entry of entries) {
           const source = entry.source;
           let destination = "";
           try {
-            check();
-            protect(source);
-            if (
-              project.operationIdentity(source) !== entry.identity ||
-              statSync(resolve(project.root, source)).isDirectory() !== entry.directory
-            )
-              throw Error("Captured source changed. Copy or cut it again.");
             const folder = duplicate ? (dirname(source) === "." ? "" : dirname(source)) : parent;
             destination = folder ? folder + "/" + basename(source) : basename(source);
-            const kind = reference?.cut ? "move" : "copy";
+            const validateTransfer = () => {
+              check();
+              protect(source);
+              protect(destination);
+              if (
+                project.operationIdentity(source) !== entry.identity ||
+                statSync(resolve(project.root, source)).isDirectory() !== entry.directory
+              )
+                throw Error("Captured source changed. Copy or cut it again.");
+            };
+            validateTransfer();
+            const kind = args[0] === "drag-move" || (!dragging && reference?.cut) ? "move" : "copy";
             if (entry.directory && affected(folder, source))
               throw Error("Choose a destination outside the source folder.");
             const siblings = await project.files(folder);
@@ -504,7 +548,11 @@ app.whenReady().then(() => {
                 if (project.operationIdentity(destination) !== targetIdentity)
                   throw Error("Destination changed after consent.");
                 protect(destination);
-                const removed = await operations.run(project, "trash", destination, "", check);
+                const removed = await operations.run(project, "trash", destination, "", () => {
+                  validateTransfer();
+                  if (project.operationIdentity(destination) !== targetIdentity)
+                    throw Error("Destination changed after consent.");
+                });
                 results.push({ source: destination, ...removed });
                 if (removed.persistencePending) break;
                 await operations.ack();
@@ -513,15 +561,15 @@ app.whenReady().then(() => {
             project.validateName(basename(destination));
             protect(destination);
             check();
-            const result = await operations.run(project, kind, source, destination, () => {
-              check();
-              protect(source);
-              protect(destination);
-              if (project.operationIdentity(source) !== entry.identity)
-                throw Error("Captured source changed.");
-            });
+            const result = await operations.run(
+              project,
+              kind,
+              source,
+              destination,
+              validateTransfer,
+            );
             results.push({ source, ...result });
-            if (result.applied && reference?.cut)
+            if (result.applied && !dragging && reference?.cut)
               reference.entries = reference.entries.filter((e) => e !== entry);
             if (result.persistencePending) break;
             try {

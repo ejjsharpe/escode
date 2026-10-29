@@ -552,8 +552,10 @@ for (const change of [
       ).toBe("occupied disk");
       expect(await readFile(join(other, "target/a.ts"), "utf8")).toBe("occupied disk");
       await expect(readFile(join(other, "target/a copy.ts"))).rejects.toThrow();
+      await expect
+        .poll(async () => JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).selected)
+        .toBe("agents");
       const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
-      expect(state.selected).toBe("agents");
       if (change === "retained dirty editor") {
         expect(state.drafts.find((d: any) => d.root === root && d.path === "a.ts")).toMatchObject({
           text: "retained source edits",

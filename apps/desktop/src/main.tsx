@@ -378,17 +378,17 @@ function CheckoutView({
     }
   }
   async function fileOperation(
-    kind: "move" | "trash" | "paste" | "duplicate",
+    kind: "move" | "trash" | "paste" | "duplicate" | "drag-move" | "drag-copy",
     source: string | string[],
     destination = "",
     inline = false,
   ) {
+    const transferring =
+      kind === "paste" || kind === "duplicate" || kind === "drag-move" || kind === "drag-copy";
     if (closeInFlight.current || saveInFlight.current || conflict) {
-      if (inline || kind === "paste" || kind === "duplicate")
-        throw Error("Finish the pending file action first.");
+      if (inline || transferring) throw Error("Finish the pending file action first.");
       return;
     }
-    const transferring = kind === "paste" || kind === "duplicate";
     const sources = typeof source === "string" ? [source] : [...source];
     const single = sources[0];
     closeInFlight.current = true;
