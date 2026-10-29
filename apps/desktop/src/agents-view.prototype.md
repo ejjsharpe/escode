@@ -10,4 +10,6 @@ The study uses the canonical escode terms Agents, Chats, New chat, Codex and No 
 
 Decision ticket: [Validate the Agents tab and chat layout](https://github.com/ejjsharpe/escode/issues/23). Shared behaviour: [Define shared Agents and project-chat behaviour](https://github.com/ejjsharpe/escode/issues/22#issuecomment-6499508429). This artifact is a review asset, not production code or proof of the real integration. It must not be merged into the application.
 
-The user has not yet given the layout verdict. Dirty-file prompts, filesystem races, process shutdown and actual request routing require the real acceptance checks in the subsequent implementation effort.
+The user reviewed the inline interaction study and approved it: **“Yes — this is the v1 layout.”** The question is settled: the supplied visual style works with the agreed flat chat list, one conversation panel and shared chat behaviour. The separate demo controls/state summary are review scaffolding, not product UI.
+
+Dirty-file prompts, filesystem races, process shutdown and actual request routing require the real acceptance checks in the subsequent implementation effort. Layout approval does not establish runtime correctness.
