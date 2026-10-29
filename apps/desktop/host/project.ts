@@ -157,6 +157,35 @@ export class Project {
       }))
       .sort((a, b) => Number(b.directory) - Number(a.directory) || a.path.localeCompare(b.path));
   }
+  async filteredFiles(path = "") {
+    const entries = await this.files(path);
+    try {
+      if (this.filesOnly) throw Error("Git unavailable");
+      let output: Buffer;
+      try {
+        output = this.io(
+          ["git", this.executable, "--work-tree=.", "check-ignore", "-z", "--stdin"],
+          entries.map((e) => e.path).join("\0") + (entries.length ? "\0" : ""),
+        );
+      } catch (error) {
+        if ((error as { status?: number }).status !== 1) throw error;
+        output = Buffer.alloc(0);
+      }
+      return { entries, ignored: output.toString("utf8").split("\0").filter(Boolean) };
+    } catch {
+      return {
+        entries,
+        ignored: [],
+        filterError:
+          "Git ignore filter unavailable. All files are shown. Restore Git or repository access, then Refresh.",
+      };
+    }
+  }
+  entryLocation(path: string) {
+    if (path) this.operationIdentity(path);
+    else this.checkoutIdentity();
+    return path ? resolve(this.root, path) : this.root;
+  }
   checkoutIdentity() {
     closeSync(this.checkedDirectory());
     return `${this.identity.dev}:${this.identity.ino}`;
@@ -763,6 +792,13 @@ export interface ProjectBridge {
     commit: string,
   ): Promise<ReturnType<Project["createWorktree"]>>;
   (operation: "status", checkout: string): ReturnType<Project["status"]>;
+  (
+    operation: "entry-action",
+    checkout: string,
+    path: string,
+    action: "copy-path" | "copy-relative" | "finder",
+  ): Promise<void>;
+  (operation: "files-filter", checkout: string, path: string): ReturnType<Project["filteredFiles"]>;
   (operation: "files", checkout: string, path: string): ReturnType<Project["files"]>;
   (operation: "read", checkout: string, path: string): ReturnType<Project["read"]>;
   (

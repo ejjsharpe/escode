@@ -430,3 +430,114 @@ test("concurrent saves recheck versions and failed saves retain the last disk co
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("ignore filtering batches NUL-delimited real filenames and respects tracked entries", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-46-ignore-"));
+  try {
+    execFileSync("git", ["init", root]);
+    const names = ["space name.log", "line\nbreak.log", "-dash.log", "tracked.log", "visible.txt"];
+    for (const name of names) await writeFile(join(root, name), "disk");
+    fs.mkdirSync(join(root, "ignored folder"));
+    await writeFile(join(root, "ignored folder/child"), "ignored child");
+    execFileSync("git", ["-C", root, "add", "tracked.log"]);
+    await writeFile(join(root, ".gitignore"), "*.log\nignored folder/\n");
+    const project = await openProject(root);
+    const execute = child.execFileSync;
+    const calls: string[][] = [];
+    vi.spyOn(child, "execFileSync").mockImplementation((...args) => {
+      if (Array.isArray(args[1])) calls.push(args[1] as string[]);
+      return execute(...args);
+    });
+    const result = await project.filteredFiles();
+    expect(result.filterError).toBeUndefined();
+    expect(result.ignored.sort()).toEqual(
+      ["space name.log", "line\nbreak.log", "-dash.log", "ignored folder"].sort(),
+    );
+    expect(result.entries.some((e) => e.path === ".git")).toBe(false);
+    expect(calls.filter((c) => c.includes("check-ignore"))).toHaveLength(1);
+    expect(calls.filter((c) => c[0] === "list")).toEqual([["list", "."]]);
+    vi.restoreAllMocks();
+    await writeFile(join(root, ".gitignore"), "");
+    expect((await project.filteredFiles()).ignored).toEqual([]);
+    const spy = vi.spyOn(child, "execFileSync").mockImplementation((...args) => {
+      if (Array.isArray(args[1]) && args[1].includes("check-ignore"))
+        throw Object.assign(Error("Git unavailable"), { status: 128 });
+      return execute(...args);
+    });
+    const failed = await project.filteredFiles();
+    expect(failed.entries).toEqual(result.entries);
+    expect(failed.ignored).toEqual([]);
+    expect(failed.filterError).toContain("All files are shown");
+    spy.mockRestore();
+    expect((await project.filteredFiles()).filterError).toBeUndefined();
+  } finally {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("entry locations validate canonical paths, no-follow ancestry and checkout identity", async () => {
+  const root = fs.realpathSync(await mkdtemp(join(tmpdir(), "escode-46-location-")));
+  const outside = fs.realpathSync(await mkdtemp(join(tmpdir(), "escode-46-outside-")));
+  try {
+    execFileSync("git", ["init", root]);
+    fs.mkdirSync(join(root, "folder"));
+    await writeFile(join(root, "folder/a"), "disk");
+    fs.symlinkSync(outside, join(root, "link"));
+    const project = await openProject(root);
+    expect(project.entryLocation("")).toBe(root);
+    expect(project.entryLocation("folder/a")).toBe(join(root, "folder/a"));
+    for (const path of [
+      ".git",
+      "../outside",
+      "/tmp",
+      "folder/../folder/a",
+      "./folder/a",
+      "folder/a\0",
+      "link",
+    ]) {
+      expect(() => project.entryLocation(path)).toThrow();
+    }
+    fs.renameSync(root, root + "-old");
+    fs.mkdirSync(root);
+    expect(() => project.entryLocation("")).toThrow(/replaced/);
+    expect(() => project.entryLocation("folder/a")).toThrow(/replaced/);
+    fs.rmdirSync(root);
+    fs.renameSync(root + "-old", root);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("large root ignore checks stay batched without listing collapsed descendants", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-46-large-"));
+  try {
+    execFileSync("git", ["init", root]);
+    for (let i = 0; i < 2000; i++)
+      fs.writeFileSync(join(root, `file-${i}.${i % 2 ? "txt" : "log"}`), "disk");
+    fs.mkdirSync(join(root, "collapsed"));
+    fs.writeFileSync(join(root, "collapsed/child"), "not listed");
+    fs.writeFileSync(join(root, ".gitignore"), "*.log\n");
+    const project = await openProject(root);
+    const execute = child.execFileSync;
+    const calls: string[][] = [];
+    vi.spyOn(child, "execFileSync").mockImplementation((...args) => {
+      if (Array.isArray(args[1])) calls.push(args[1] as string[]);
+      return execute(...args);
+    });
+    const start = performance.now();
+    const result = await project.filteredFiles();
+    console.log(
+      `2002 root entries: batched listing/ignore check ${Math.round(performance.now() - start)} ms`,
+    );
+    expect(result.entries).toHaveLength(2002);
+    expect(result.ignored).toHaveLength(1000);
+    expect(result.filterError).toBeUndefined();
+    expect(calls.filter((c) => c.includes("check-ignore"))).toHaveLength(1);
+    expect(calls.filter((c) => c[0] === "list")).toEqual([["list", "."]]);
+  } finally {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  }
+});

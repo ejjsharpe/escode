@@ -2,7 +2,13 @@ import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Document } from "./project";
 export type RecoveryDraft = { root: string; path: string; text: string; disk: Document };
-export type FilesMemory = { expanded: string[]; selected: string[]; focus: string; scroll: number };
+export type FilesMemory = {
+  expanded: string[];
+  selected: string[];
+  focus: string;
+  scroll: number;
+  hideIgnored?: boolean;
+};
 export type ViewMemory = {
   files?: FilesMemory;
   mode?: string;
@@ -97,6 +103,7 @@ function validate(value: unknown): asserts value is WorkspaceState {
             p.startsWith("/") ||
             p.split("/").some((c) => c === ".." || c.toLowerCase() === ".git"),
         ) ||
+        (v.files.hideIgnored !== undefined && typeof v.files.hideIgnored !== "boolean") ||
         !Number.isFinite(v.files.scroll) ||
         v.files.scroll < 0)
     )

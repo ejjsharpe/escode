@@ -53,12 +53,16 @@ async function fixture(run: (p: Project, store: Workspace, base: string) => Prom
 }
 test("real folder move preserves descendant drafts and conflict baseline through a fresh store", async () =>
   fixture(async (p, store, base) => {
+    const before = await store.read();
+    before.views[p.root].files!.hideIgnored = true;
+    await store.write(before);
     const ops = new FileOperations(store, join(base, "intent.json"));
     await ops.run(p, "move", "folder", "renamed");
     const state = await new Workspace(join(base, "workspace.json")).read();
     expect(state.drafts.map((d) => d.path)).toEqual(["renamed/a.ts", "renamed/b.ts"]);
     expect(state.drafts[0].text).toBe("a unsaved");
     expect(state.views[p.root].files).toEqual({
+      hideIgnored: true,
       expanded: ["renamed"],
       selected: ["renamed/a.ts"],
       focus: "renamed/a.ts",
@@ -73,6 +77,9 @@ test("real folder move preserves descendant drafts and conflict baseline through
   }));
 test("restart reconciles a crash immediately after native rename, before completion is journalled", async () =>
   fixture(async (p, store, base) => {
+    const before = await store.read();
+    before.views[p.root].files!.hideIgnored = true;
+    await store.write(before);
     const file = join(base, "intent.json");
     const journal = new Workspace(file);
     await journal.writeIntent({
@@ -88,6 +95,7 @@ test("restart reconciles a crash immediately after native rename, before complet
     expect(await fresh.recover(async () => p)).toContain("Recovered move");
     expect((await store.read()).drafts[1].path).toBe("moved/b.ts");
     expect((await store.read()).views[p.root].files).toEqual({
+      hideIgnored: true,
       expanded: ["moved"],
       selected: ["moved/a.ts"],
       focus: "moved/a.ts",

@@ -67,7 +67,13 @@ descendant edits and save-conflict baselines at their new paths. Earlier text un
 history resets with disclosure; subsequent text undo works. Batch Trash confirms the
 actual paths and affected dirty descendants, prunes selected descendants of selected
 folders, and removes available buffers/drafts only for successful native Trash items.
-Failed items retain their available work and report individual outcomes.
+Failed items retain their available work and report individual outcomes. Reveal Active File
+expands its ancestors and scrolls to the entry without moving keyboard focus. Manual collapse
+survives refresh and restart until the active file changes or explicit reveal. Git-ignored
+entries start visible; Hide Git-ignored files is remembered per checkout. Hidden files retain
+open edits, and explicit reveal offers Show ignored files. Git filter failure shows all entries
+with an unavailable explanation. Copy Path, Copy Relative Path and Reveal in Finder target the
+context entry, or the checkout root for empty space.
 
 **File-operation intent**:
 A durable record of an originating checkout and source/destination object identities,

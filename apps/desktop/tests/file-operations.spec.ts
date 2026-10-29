@@ -272,6 +272,30 @@ test("mutation IPC rejects other senders, unopened checkouts and protected app s
       );
       expect(error).toContain("App state is unavailable");
     }
+    for (const path of [".git", "app-state", "./a.txt", "../repo/a.txt", "/tmp"]) {
+      const error = await page.evaluate(
+        async ({ root, path }) => {
+          try {
+            await window.escode.project("entry-action", root, path, "copy-path");
+            return "accepted";
+          } catch (error) {
+            return String(error);
+          }
+        },
+        { root, path },
+      );
+      expect(error).not.toBe("accepted");
+    }
+    expect(
+      await page.evaluate(async (root) => {
+        try {
+          await window.escode.project("files-filter", root, "app-state");
+          return "accepted";
+        } catch (error) {
+          return String(error);
+        }
+      }, root),
+    ).toContain("App state is unavailable");
     for (const [parent, name] of [
       ["app-state", "new"],
       ["", "app-state"],

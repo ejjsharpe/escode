@@ -607,7 +607,10 @@ test("pending entry resolution retains its source across selection and project c
           return then.call(
             this,
             (value: any) => {
-              if (Array.isArray(value) && value.some((entry) => entry?.path === "folder/deep")) {
+              if (
+                Array.isArray(value?.entries) &&
+                value.entries.some((entry: any) => entry?.path === "folder/deep")
+              ) {
                 // oxlint-disable-next-line unicorn/no-thenable -- Restore the original method before pausing.
                 Object.defineProperty(Promise.prototype, "then", { value: then });
                 return new Promise((resolve) => {

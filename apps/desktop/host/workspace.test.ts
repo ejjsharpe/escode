@@ -84,6 +84,7 @@ test("legacy Files navigation migrates through a fresh store while drafts and ap
       scroll: 0,
     });
     migrated.views[dir].files!.scroll = 140;
+    migrated.views[dir].files!.hideIgnored = true;
     await store.write(migrated);
     const fresh = new Workspace(file);
     expect(await fresh.read()).toEqual(migrated);

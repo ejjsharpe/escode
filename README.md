@@ -116,3 +116,10 @@ Finder files/folders can be copied in by drop or Files-scoped file paste. Import
 file references, retain originals, and share transfer conflicts and per-item results. Binary
 and large regular files copy without editor decoding; unsupported recursive contents are
 rejected before staging. See [native import evidence and manual limits](docs/compatibility/files-import.md).
+
+Reveal Active File expands and scrolls to the document without moving keyboard focus;
+manually collapsed ancestors stay collapsed across refresh/restart. Git-ignored files start
+visible, with a remembered per-checkout Hide Git-ignored files toggle. Hiding retains open
+edits; explicit reveal offers Show ignored files. Git filtering failure keeps files visible.
+Context menus copy absolute/relative paths and request Finder reveal for the targeted entry
+(or the checkout root on empty space). See [reveal/filter evidence](docs/compatibility/files-reveal.md).

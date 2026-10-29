@@ -1,4 +1,13 @@
-import { app, BrowserWindow, ipcMain, session, dialog, clipboard, ClipboardItem } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  session,
+  dialog,
+  clipboard,
+  ClipboardItem,
+  shell,
+} from "electron";
 import { join, resolve, dirname, basename, extname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, realpathSync, statSync } from "node:fs";
@@ -364,6 +373,8 @@ app.whenReady().then(() => {
     const requestedRoot = args.shift();
     if (
       [
+        "entry-action",
+        "files-filter",
         "drag-capture",
         "clipboard-capture",
         "transfer",
@@ -383,6 +394,11 @@ app.whenReady().then(() => {
     )
       throw Error("App state is unavailable through project file operations.");
     const identity = project.repository();
+    if (
+      ["entry-action", "files-filter"].includes(String(operation)) &&
+      (!projectSessions.has(identity) || closingProjects.has(identity) || quitting)
+    )
+      throw Error("Project session closed. Reopen the project.");
     if (removing.has(identity)) throw Error("Worktree removal is in progress. Retry afterward.");
     if (operation === "file-operation-ack" && !args.length) {
       if (mutationOrigin) throw Error("File operation is still delivering results.");
@@ -1041,12 +1057,38 @@ app.whenReady().then(() => {
         args[1] as string,
       );
     if (operation === "status" && !args.length) return project.status();
-    if (operation === "files" && args.length === 1 && typeof args[0] === "string") {
+    if (
+      operation === "entry-action" &&
+      args.length === 2 &&
+      typeof args[0] === "string" &&
+      ["copy-path", "copy-relative", "finder"].includes(String(args[1]))
+    ) {
+      if (args[0]) protect(args[0]);
+      else if (isAppState(project.root)) throw Error("App state is unavailable in Files.");
+      const location = project.entryLocation(args[0]);
+      if (args[1] === "finder") shell.showItemInFolder(location);
+      else
+        await clipboard.write([
+          new ClipboardItem({
+            "text/plain": args[1] === "copy-relative" ? args[0] || "." : location,
+          }),
+        ]);
+      return;
+    }
+    if (
+      (operation === "files" || operation === "files-filter") &&
+      args.length === 1 &&
+      typeof args[0] === "string"
+    ) {
       const protectedPath = (path: string) => {
         const absolute = resolve(project.root, path);
         return isAppState(absolute) || stateFiles.some((file) => file.startsWith(absolute + "/"));
       };
       if (args[0] && protectedPath(args[0])) throw Error("App state is unavailable in Files.");
+      if (operation === "files-filter") {
+        const result = await project.filteredFiles(args[0]);
+        return { ...result, entries: result.entries.filter((entry) => !protectedPath(entry.path)) };
+      }
       return (await project.files(args[0])).filter((entry) => !protectedPath(entry.path));
     }
     if (operation === "read" && args.length === 1 && typeof args[0] === "string")
