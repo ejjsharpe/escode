@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mkdtemp, writeFile, rm, realpath, rename } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm, realpath, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -14,23 +14,30 @@ test("background requests keep focus; replies, stop and connection loss stay wit
     join(dir, "codex"),
     `#!/usr/bin/env node
 import {createInterface} from 'node:readline';
+import {appendFileSync,existsSync} from 'node:fs';
 if(process.argv.includes('--version')) { console.log('codex-cli 0.165.0'); process.exit(0); }
 const send = value => process.stdout.write(JSON.stringify(value)+'\\n');
 const threadId='thread-'+process.pid, turnId='turn';
 createInterface({input:process.stdin}).on('line', line => {
  const m=JSON.parse(line); if(!m.id) return;
- if(!m.method) { send({method:'item/agentMessage/delta',params:{threadId,turnId,itemId:'reply',delta:'Answered by '+process.pid}}); return; }
+ if(!m.method) { appendFileSync(${JSON.stringify(join(dir, "events"))},JSON.stringify({responseId:m.id,result:m.result,threadId})+'\\n'); send({method:'item/agentMessage/delta',params:{threadId,turnId,itemId:'reply',delta:'Answered by '+process.pid}}); return; }
+ appendFileSync(${JSON.stringify(join(dir, "events"))},JSON.stringify({method:m.method,threadId})+'\\n');
  let result={};
  if(m.method==='initialize') result={userAgent:'codex/0.165.0'};
  if(m.method==='account/read') result={account:{}};
  if(m.method==='thread/start') result={thread:{id:threadId},cwd:process.cwd(),model:'fixture',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
  if(m.method==='turn/start') {
   result={turn:{id:turnId}};
+  send({method:'turn/started',params:{threadId,turn:{id:turnId}}});
   if(m.params.input[0].text==='fail') { setTimeout(()=>process.exit(1),20); }
   else setTimeout(()=>send({id:99,method:'item/commandExecution/requestApproval',params:{threadId,turnId,itemId:'command',command:'fixture approval'}}),100);
  }
  if(m.method==='turn/interrupt') send({method:'turn/completed',params:{threadId,turn:{id:turnId}}});
- if(m.method==='thread/start') setTimeout(()=>send({id:m.id,result}),500);
+ if(m.method==='turn/start' && m.params.input[0].text==='delayed') {
+  setTimeout(()=>send({id:100,method:'item/tool/requestUserInput',params:{threadId,turnId,itemId:'question',questions:[{id:'choice',question:'Which choice?',options:[]}]}}),100);
+  const timer=setInterval(()=>{if(existsSync(${JSON.stringify(join(dir, "release-send"))})) {clearInterval(timer);send({id:m.id,result});}},20);
+ }
+ else if(m.method==='thread/start') setTimeout(()=>send({id:m.id,result}),500);
  else send({id:m.id,result});
 });
 `,
@@ -83,6 +90,107 @@ createInterface({input:process.stdin}).on('line', line => {
     );
     await page.getByRole("textbox", { name: "Message Codex" }).fill("second draft");
     await page.evaluate((a) => window.escode.chat("list", a), a);
+    const before = await page.evaluate(({ a, ids }) => window.escode.chat("snapshot", a, ids[1]), {
+      a,
+      ids,
+    });
+    const events = async () =>
+      (await readFile(join(dir, "events"), "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+    const connections = (await events()).filter((e) => e.method === "initialize").length;
+    await page.getByRole("textbox", { name: "Message Codex" }).fill("delayed");
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          (await events()).filter(
+            (e) => e.method === "turn/start" && e.threadId === before.threadId,
+          ).length,
+      )
+      .toBe(1);
+    // Files unmounts the conversation entry view while Send is awaiting acknowledgement.
+    await page.getByRole("button", { name: "Files", exact: true }).click();
+    await page.getByRole("button", { name: /Chats/, exact: false }).click();
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("delayed");
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeDisabled();
+    const approval = page.getByRole("button", { name: "Allow once", exact: true });
+    await expect(approval).toBeEnabled();
+    // Delay host reads so responses remain pending across a conversation remount.
+    await app.evaluate(() => {
+      const fs = process.getBuiltinModule("fs/promises") as any;
+      const readFile = fs.readFile;
+      const gate = new Promise<void>((resolve) => {
+        (globalThis as any).releaseChatResponses = () => {
+          fs.readFile = readFile;
+          resolve();
+        };
+      });
+      fs.readFile = async (...args: unknown[]) => {
+        if (String(args[0]).endsWith("/chats.json")) await gate;
+        return readFile(...args);
+      };
+    });
+    await approval.click();
+    await expect(approval).toBeDisabled();
+    await page.getByRole("button", { name: "Files", exact: true }).click();
+    await page.getByRole("button", { name: /Chats/ }).click();
+    await expect(approval).toBeDisabled();
+    const sendAnswers = page.getByRole("button", { name: "Send answers", exact: true });
+    await expect(sendAnswers).toBeEnabled();
+    await page.getByRole("textbox", { name: "Which choice?" }).fill("first");
+    // Form submission can bypass a disabled submit button: the shared guard must reject duplicates.
+    await sendAnswers.evaluate((button) => {
+      const form = button.closest("form")!;
+      form.requestSubmit();
+      form.requestSubmit();
+    });
+    await expect(sendAnswers).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
+    await app.evaluate(() => {
+      (globalThis as any).releaseChatResponses();
+      delete (globalThis as any).releaseChatResponses;
+    });
+    await expect
+      .poll(async () =>
+        (await events())
+          .filter((e) => e.responseId && e.threadId === before.threadId)
+          .sort((a, b) => a.responseId - b.responseId),
+      )
+      .toEqual([
+        { responseId: 99, result: { decision: "accept" }, threadId: before.threadId },
+        {
+          responseId: 100,
+          result: { answers: { choice: { answers: ["first"] } } },
+          threadId: before.threadId,
+        },
+      ]);
+    await expect(approval).toHaveCount(0);
+    await expect(sendAnswers).toHaveCount(0);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("delayed");
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeDisabled();
+    await expect(page.locator(".transcript:visible")).toContainText("Answered by");
+    await writeFile(join(dir, "release-send"), "release");
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("");
+    const after = await page.evaluate(({ a, ids }) => window.escode.chat("snapshot", a, ids[1]), {
+      a,
+      ids,
+    });
+    expect(after.threadId).toBe(before.threadId);
+    expect(after.busy).toBe(true);
+    expect((await events()).filter((e) => e.method === "initialize")).toHaveLength(connections);
+    expect(
+      (await events()).filter((e) => e.method === "turn/start" && e.threadId === before.threadId),
+    ).toHaveLength(1);
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await expect(page.getByRole("status")).toHaveText("Ready");
+    await page.getByRole("textbox", { name: "Message Codex" }).fill("second draft");
+    await page.getByRole("button", { name: "Files", exact: true }).click();
+    await page.getByRole("button", { name: /Chats/ }).click();
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("second draft");
+
     await page.getByRole("button", { name: "Chat 1", exact: true }).click();
     // Gate the store's atomic replacement to delay create without a production test hook.
     await app.evaluate(() => {
@@ -186,6 +294,7 @@ createInterface({input:process.stdin}).on('line', line => {
     expect(survivor.requests).toHaveLength(1);
     await page.screenshot({ path: "test-results/concurrency.png" });
   } finally {
+    await app.evaluate(() => (globalThis as any).releaseChatResponses?.());
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async (_window: unknown, options?: any) => ({
         response: options.buttons[0] === "Save" ? 1 : 0,

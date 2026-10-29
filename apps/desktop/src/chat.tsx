@@ -1,8 +1,7 @@
-import { useMemory } from "./workspace";
-import React, { useEffect, useRef, useState } from "react";
+import { useProjectChats } from "./chat-state";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@base-ui/react/button";
-import { WorktreeChoices } from "./worktrees";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
@@ -16,20 +15,14 @@ export interface ChatBridge {
 function Request({
   request,
   answer,
+  busy,
 }: {
   request: LiveRequest;
+  busy: boolean;
   answer: (value: unknown) => Promise<void>;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const submit = async (value: unknown) => {
-    setBusy(true);
-    try {
-      await answer(value);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const submit = answer;
   const [content, setContent] = useState("{}");
   const [inputError, setInputError] = useState("");
   if (request.method === "mcpServer/elicitation/request")
@@ -130,115 +123,33 @@ function Request({
     </section>
   );
 }
-// Keep this view mounted while navigating so drafts and the selected chat survive.
 export function ChatView({
   project,
-  onActivity,
   checkout,
   sidebarId,
-  onCheckout,
+  selected,
+  select,
+  createChat,
 }: {
   project: string;
   checkout: string;
   sidebarId: string;
-  onCheckout: (checkout: string) => void;
-  onActivity: (activity: string) => void;
+  selected: string;
+  select: (id: string) => Promise<void>;
+  createChat: (root: string) => Promise<void>;
 }) {
-  const [chats, setChats] = useState<SavedChat[]>([]);
-  const [selected, setSelected] = useMemory(project, "chat", "");
-  const [snapshots, setSnapshots] = useState<Record<string, ChatSnapshot>>({});
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const [store, { chats, snapshots, drafts, pending, responding, errors }] =
+    useProjectChats(project);
+  const error = errors[selected] || errors[""] || "";
   const working = !!pending[selected];
-  const drafts = useRef<Record<string, string>>({});
-  const [draft, setDraft] = useState("");
+  const draft = drafts[selected] ?? "";
   useEffect(() => {
-    const all = Object.values(snapshots);
-    onActivity(
-      all.some((s) => s.requests.length) ? "Needs input" : all.some((s) => s.busy) ? "Running" : "",
-    );
-  }, [snapshots, onActivity]);
-  const selectedRef = useRef("");
-  const navigation = useRef(0);
-  const report = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
-  const load = async () => {
-    const list = await window.escode.chat("list", project);
-    setChats(list);
-    for (const c of list) if (!(c.id in drafts.current)) drafts.current[c.id] = c.draft;
-    return list;
-  };
-  useEffect(() => {
-    void load()
-      .then((list) => {
-        if (selected && list.some((c) => c.id === selected)) {
-          selectedRef.current = selected;
-          setDraft(drafts.current[selected] ?? "");
-          // Opening history may connect; a new turn still requires explicit Send.
-          void window.escode
-            .chat("open", project, selected)
-            .then((value) => setSnapshots((old) => ({ ...old, [selected]: value })))
-            .catch(report);
-        }
-      })
-      .catch(report);
-  }, [project]);
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      try {
-        const updates = await Promise.all(
-          chats.map((c) => window.escode.chat("snapshot", project, c.id)),
-        );
-        if (alive) setSnapshots(Object.fromEntries(updates.map((s) => [s.chatId, s])));
-      } catch (e) {
-        if (alive) report(e);
-      }
-    };
-    const timer = setInterval(() => void poll(), 300);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [chats]);
-  const select = async (id: string) => {
-    navigation.current++;
-    const chat = chats.find((c) => c.id === id);
-    if (chat) onCheckout(chat.checkout);
-    selectedRef.current = id;
-    setSelected(id);
-    setDraft(drafts.current[id] ?? "");
-    setError("");
-    try {
-      const value = await window.escode.chat("open", project, id);
-      setSnapshots((old) => ({ ...old, [id]: value }));
-    } catch (e) {
-      if (selectedRef.current === id) report(e);
-    }
-  };
-  const run = async (action: () => Promise<unknown>) => {
-    const id = selectedRef.current;
-    setPending((old) => ({ ...old, [id]: true }));
-    setError("");
-    try {
-      await action();
-    } catch (e) {
-      if (selectedRef.current === id) report(e);
-    } finally {
-      setPending((old) => ({ ...old, [id]: false }));
-    }
-  };
-  const createChat = async (root: string) => {
-    const generation = navigation.current;
-    const c = await window.escode.chat("create", project, root);
-    await load();
-    if (navigation.current !== generation) return;
-    onCheckout(c.checkout);
-    drafts.current[c.id] = c.draft;
-    await select(c.id);
-  };
+    if (selected) void store.open(selected);
+  }, [store, selected]);
+  const run = (action: () => Promise<unknown>) => store.run(selected, action);
   const snapshot = snapshots[selected];
   return (
-    <div className="chat-view">
+    <>
       {document.getElementById(sidebarId) &&
         createPortal(
           <div className="chat-list" aria-label="Saved chats">
@@ -269,8 +180,7 @@ export function ChatView({
           </div>,
           document.getElementById(sidebarId)!,
         )}
-      <div className="chat-conversation">
-        <WorktreeChoices project={project} createChat={createChat} onRemoved={load} />
+      <>
         {!selected ? (
           <p>Create or select a saved chat to begin. Choose the current checkout or a worktree.</p>
         ) : (
@@ -298,8 +208,7 @@ export function ChatView({
                   void run(async () => {
                     const id = selected;
                     await window.escode.chat("disconnect", project, id);
-                    const value = await window.escode.chat("open", project, id);
-                    setSnapshots((old) => ({ ...old, [id]: value }));
+                    await window.escode.chat("open", project, id);
                   })
                 }
               >
@@ -339,19 +248,8 @@ export function ChatView({
               <Request
                 key={request.token}
                 request={request}
-                answer={async (value) => {
-                  try {
-                    await window.escode.chat(
-                      "answer",
-                      project,
-                      snapshot.chatId,
-                      request.token,
-                      value,
-                    );
-                  } catch (e) {
-                    if (selectedRef.current === snapshot.chatId) report(e);
-                  }
-                }}
+                busy={!!responding[request.token]}
+                answer={(value) => store.answer(snapshot.chatId, request.token, value)}
               />
             ))}
             {(error || snapshot?.error) && <p role="alert">{error || snapshot?.error}</p>}
@@ -359,14 +257,7 @@ export function ChatView({
               className="chat-compose"
               onSubmit={(e) => {
                 e.preventDefault();
-                const id = selected,
-                  text = draft;
-                void run(async () => {
-                  await window.escode.chat("draft", project, id, text);
-                  await window.escode.chat("send", project, id, text);
-                  drafts.current[id] = "";
-                  if (selectedRef.current === id) setDraft("");
-                });
+                void store.send(selected);
               }}
             >
               <label htmlFor={sidebarId + "-message"}>Message Codex</label>
@@ -376,10 +267,7 @@ export function ChatView({
                 maxLength={100000}
                 value={draft}
                 onChange={(e) => {
-                  const value = e.target.value;
-                  setDraft(value);
-                  drafts.current[selected] = value;
-                  void window.escode.chat("draft", project, selected, value).catch(report);
+                  store.edit(selected, e.target.value);
                 }}
               />
               <Button
@@ -393,7 +281,7 @@ export function ChatView({
           </>
         )}
         {!selected && error && <p role="alert">{error}</p>}
-      </div>
-    </div>
+      </>
+    </>
   );
 }

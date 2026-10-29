@@ -10,6 +10,8 @@ import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
 import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import type { Change, Document, SaveResult, ProjectBridge } from "../host/project";
 import { ChatView } from "./chat";
+import { useProjectChats } from "./chat-state";
+import { WorktreeChoices } from "./worktrees";
 import type { ChatBridge } from "./chat";
 import "./style.css";
 import { memory, initialize, persist, flush, useMemory, closers } from "./workspace";
@@ -568,13 +570,37 @@ function ProjectView({
     window.addEventListener("reveal-file", reveal);
     return () => window.removeEventListener("reveal-file", reveal);
   }, []);
-  const activityChanged = React.useCallback(
-    (value: string) => {
-      setActivity(value);
-      onActivity(value);
-    },
-    [onActivity],
-  );
+  const [chatStore, { snapshots, chats }] = useProjectChats(initial.project);
+  const [selectedChat, setSelectedChat] = useMemory(initial.project, "chat", "");
+  const chatNavigation = useRef(0);
+  useEffect(() => {
+    chatNavigation.current++;
+  }, [active, mode]);
+  const selectChat = async (id: string) => {
+    chatNavigation.current++;
+    const chat = chats.find((c) => c.id === id);
+    if (chat) selectCheckout(chat.checkout);
+    setSelectedChat(id);
+    await chatStore.open(id);
+  };
+  const createChat = async (root: string) => {
+    const generation = chatNavigation.current;
+    const chat = await window.escode.chat("create", initial.project, root);
+    await chatStore.load();
+    if (chatNavigation.current !== generation) return;
+    selectCheckout(chat.checkout);
+    await selectChat(chat.id);
+  };
+  useEffect(() => {
+    const all = Object.values(snapshots);
+    const value = all.some((s) => s.requests.length)
+      ? "Needs input"
+      : all.some((s) => s.busy)
+        ? "Running"
+        : "";
+    setActivity(value);
+    onActivity(value);
+  }, [snapshots, onActivity]);
   return (
     <section hidden={!active} aria-label={initial.project}>
       <nav className="view-nav" aria-label="Project views">
@@ -608,13 +634,25 @@ function ProjectView({
         <aside id={sidebarId} />
         <section className="content">
           <div className="chat-panel">
-            <ChatView
-              project={initial.project}
-              checkout={checkout}
-              sidebarId={sidebarId}
-              onCheckout={selectCheckout}
-              onActivity={activityChanged}
-            />
+            <div className="chat-view">
+              <div className="chat-conversation">
+                <WorktreeChoices
+                  project={initial.project}
+                  createChat={createChat}
+                  onRemoved={() => chatStore.load()}
+                />
+                {active && mode === "Chats" && (
+                  <ChatView
+                    project={initial.project}
+                    checkout={checkout}
+                    sidebarId={sidebarId}
+                    selected={selectedChat}
+                    select={selectChat}
+                    createChat={createChat}
+                  />
+                )}
+              </div>
+            </div>
           </div>
         </section>
       </div>
