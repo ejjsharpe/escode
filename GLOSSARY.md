@@ -89,3 +89,11 @@ choose a free sibling name. Copies retain source edits and carry available unsav
 to destination drafts over copied disk baselines. Clean-file Replace explicitly moves
 the former destination to macOS Trash; folder/type collisions never merge trees.
 Copy intents retain staging paths and available draft text through uncertain handoffs.
+
+**Native import reference**:
+A short-lived, single-use host capture of files supplied by the operating system through
+Finder drop or file paste. It authorizes disk-byte copies of those sources only into an
+approved checkout. Source descriptors and ancestor identities are revalidated and released
+after the operation; parent directories receive no continuing approval. Imports retain
+originals and never carry source editor drafts. Collision and result handling follow Files
+clipboard transfers.

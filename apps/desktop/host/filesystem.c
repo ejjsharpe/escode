@@ -44,6 +44,61 @@ static void revalidate_source(const char *path, const struct stat *expected) {
   close(current);
 }
 
+static void revalidate_import(const char *path, const char *parents, const struct stat *expected) {
+  char parent[PATH_MAX], actual[PATH_MAX], id[100];
+  snprintf(parent, sizeof(parent), "%s", path);
+  char *slash = strrchr(parent, '/');
+  if (!slash) { errno = EINVAL; fail("Invalid import path"); }
+  *slash = 0;
+  actual[0] = 0;
+  char prefix[PATH_MAX] = "/";
+  const char *rest = parent;
+  for (;;) {
+    int fd = open(prefix, O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY);
+    struct stat info;
+    if (fd < 0 || fstat(fd, &info)) fail("Open import ancestor");
+    close(fd);
+    snprintf(id, sizeof(id), "%s%llu:%llu", actual[0] ? "," : "", (unsigned long long)info.st_dev, (unsigned long long)info.st_ino);
+    if (strlen(actual) + strlen(id) >= sizeof(actual)) { errno = EINVAL; fail("Import ancestry too deep"); }
+    strcat(actual, id);
+    while (*rest == '/') rest++;
+    if (!*rest) break;
+    const char *end = strchr(rest, '/');
+    size_t n = end ? (size_t)(end - rest) : strlen(rest);
+    if (strlen(prefix) > 1) strcat(prefix, "/");
+    strncat(prefix, rest, n);
+    rest += n;
+  }
+  if (strcmp(actual, parents)) { errno = ESTALE; fail("Import ancestor replaced"); }
+  int fd = open(path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW_ANY);
+  struct stat info;
+  if (fd < 0 || fstat(fd, &info)) fail("Open native import source");
+  close(fd);
+  if (info.st_dev != expected->st_dev || info.st_ino != expected->st_ino || (info.st_mode & S_IFMT) != (expected->st_mode & S_IFMT)) {
+    errno = ESTALE; fail("Native import source replaced");
+  }
+}
+
+// Inspect only the approved checkout's destination ancestors. Never stage inside a source
+// directory reached through a case/Unicode/mount spelling alias.
+static void import_destination(const char *parent, const struct stat *source) {
+  if (!S_ISDIR(source->st_mode)) return;
+  char path[PATH_MAX];
+  snprintf(path, sizeof(path), "%s", parent);
+  for (;;) {
+    int fd = scoped_open(3, path, O_RDONLY | O_DIRECTORY);
+    struct stat info;
+    if (fstat(fd, &info)) fail("Inspect import destination ancestry");
+    close(fd);
+    if (info.st_dev == source->st_dev && info.st_ino == source->st_ino) {
+      errno = EINVAL; fail("Choose a destination outside the source folder");
+    }
+    if (!strcmp(path, ".")) break;
+    char *slash = strrchr(path, '/');
+    if (slash) *slash = 0; else strcpy(path, ".");
+  }
+}
+
 static struct stat regular(int fd) {
   struct stat info;
   if (fstat(fd, &info)) fail("Inspect file");
@@ -99,6 +154,7 @@ static void safe_tree(int fd) {
     }
   }
 #endif
+  if (lseek(fd, 0, SEEK_SET) < 0) fail("Rewind operation folder");
   DIR *dir = fdopendir(dup(fd));
   if (!dir) fail("Inspect operation folder");
   struct dirent *entry;
@@ -290,16 +346,34 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  if (!strcmp(operation, "copy")) {
-    if (argc != 7) { errno = EINVAL; fail("Invalid copy request"); }
-    int source = scoped_open(3, argv[2], O_RDONLY);
+  if (!strcmp(operation, "import-check")) {
+    if (argc != 4) { errno = EINVAL; fail("Invalid import preflight"); }
+    struct stat info;
+    if (fstat(4, &info)) fail("Inspect native source");
+    revalidate_import(argv[2], argv[3], &info);
+    safe_tree(4);
+    revalidate_import(argv[2], argv[3], &info);
+    return 0;
+  }
+
+  if (!strcmp(operation, "copy") || !strcmp(operation, "import")) {
+    int importing = !strcmp(operation, "import");
+    if (argc != (importing ? 10 : 7)) { errno = EINVAL; fail("Invalid copy request"); }
+    int source = importing ? dup(4) : scoped_open(3, argv[2], O_RDONLY);
     struct stat info;
     if (fstat(source, &info)) fail("Inspect copy source");
     char identity[100];
     snprintf(identity, sizeof(identity), "%llu:%llu", (unsigned long long)info.st_dev, (unsigned long long)info.st_ino);
     if (strcmp(identity, argv[4])) { errno = ESTALE; fail("Copy source replaced"); }
     safe_tree(source);
-    revalidate_source(argv[2], &info);
+    if (importing) {
+      int current = open(argv[9], O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY);
+      struct stat actual;
+      if (current < 0 || fstat(current, &actual) || actual.st_dev != root.st_dev || actual.st_ino != root.st_ino) { errno = ESTALE; fail("Import checkout replaced"); }
+      close(current);
+    }
+    if (importing) revalidate_import(argv[7], argv[8], &info);
+    else revalidate_source(argv[2], &info);
     char parent_path[PATH_MAX];
     snprintf(parent_path, sizeof(parent_path), "%s", argv[3]);
     char *slash = strrchr(parent_path, '/');
@@ -309,6 +383,7 @@ int main(int argc, char **argv) {
     if (fstat(parent, &parent_info)) fail("Inspect copy destination parent");
     snprintf(identity, sizeof(identity), "%llu:%llu", (unsigned long long)parent_info.st_dev, (unsigned long long)parent_info.st_ino);
     if (strcmp(identity, argv[6])) { errno = ESTALE; fail("Copy destination parent replaced"); }
+    if (importing) import_destination(parent_path, &info);
     free_case_name(argv[3], NULL);
     // Build under an exclusive sibling; failed staging is retained for inspection.
     if (S_ISDIR(info.st_mode) && mkdirat(3, argv[5], 0700)) fail("Stage copy folder");
@@ -322,12 +397,20 @@ int main(int argc, char **argv) {
 #ifdef ESCODE_TEST_COPY_STAGE
     // Only the separate staging-race test build pauses before final publication checks.
     char resume;
-    if (write(4, "staged", 6) != 6 || read(5, &resume, 1) != 1) {
+    if (write(importing ? 5 : 4, "staged", 6) != 6 || read(importing ? 6 : 5, &resume, 1) != 1) {
       errno = EIO; fail("Synchronize copy staging test");
     }
 #endif
-    revalidate_source(argv[2], &info);
+    if (importing) revalidate_import(argv[7], argv[8], &info);
+    else revalidate_source(argv[2], &info);
+    if (importing) {
+      int current = open(argv[9], O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY);
+      struct stat actual;
+      if (current < 0 || fstat(current, &actual) || actual.st_dev != root.st_dev || actual.st_ino != root.st_ino) { errno = ESTALE; fail("Import checkout replaced"); }
+      close(current);
+    }
     revalidate_source(parent_path, &parent_info);
+    if (importing) import_destination(parent_path, &info);
     free_case_name(argv[3], NULL);
     // shortcut: scoped identity checking is not atomic with rename; upgrade if cross-process transactional publication is required.
     revalidate_source(argv[5], &staging_info);

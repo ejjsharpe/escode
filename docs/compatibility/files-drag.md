@@ -1,6 +1,6 @@
 # Internal Files drag implementation evidence
 
-Implements [Move and copy by dragging within the tree](https://github.com/ejjsharpe/escode/issues/44) against [the Files specification](https://github.com/ejjsharpe/escode/issues/38), starting from `4b71d4208aa0843c019b9b01a3a89a7b7fcc8c93` on `t3/implement-issue-38`. This record covers this ticket only. The corrected source subsequently received fresh independent full Ponytail R2 **Ship** and was committed/pushed as `1b70bca6a0d693e6c90b029c5759c8e8a00aa5bd`. Its integration is pending on `integrate/files-44` in `/private/tmp/escode-files-44-integration-47c070e`, with HEAD `47c070e84ad51ec2ff572bcb4eb46e0177d7dfde` and MERGE_HEAD `1b70bca6a0d693e6c90b029c5759c8e8a00aa5bd`. Fresh full application integration review returned **Ship** with no findings; final independent review of the test/documentation corrections below remains pending. This is not full parent acceptance or tracker closure.
+Implements [Move and copy by dragging within the tree](https://github.com/ejjsharpe/escode/issues/44) against [the Files specification](https://github.com/ejjsharpe/escode/issues/38), starting from `4b71d4208aa0843c019b9b01a3a89a7b7fcc8c93` on `t3/implement-issue-38`. This record covers this ticket only. The corrected source subsequently received fresh independent full Ponytail R2 **Ship** and was committed/pushed as `1b70bca6a0d693e6c90b029c5759c8e8a00aa5bd`. Its integration was subsequently completed as `a3f9d81fc22c8a7263b4443fc8e216a02bf0cf77` (parents `47c070e84ad51ec2ff572bcb4eb46e0177d7dfde` and `1b70bca6a0d693e6c90b029c5759c8e8a00aa5bd`). The historical pending integration was on `integrate/files-44` in `/private/tmp/escode-files-44-integration-47c070e`, with HEAD `47c070e84ad51ec2ff572bcb4eb46e0177d7dfde` and MERGE_HEAD `1b70bca6a0d693e6c90b029c5759c8e8a00aa5bd`. Fresh full application integration review returned **Ship** with no findings; final independent review of the test/documentation corrections below also returned **Ship**, as recorded in the Files44 integration resolution. Files44 is closed after that integration; the parent Files specification remains open.
 
 ## Behavior and boundary
 
@@ -66,11 +66,11 @@ R2 directly changes only `apps/desktop/host/main.ts`, `apps/desktop/tests/files-
 - `bun run --cwd apps/desktop package`: passed; unsigned arm64 directory app, default icon and existing large-chunk warning unchanged. R2 `Contents/Resources/app.asar` SHA-256: `46c30f8279114f32f3aa1a56fb22be2c89a4281d67dc8dc583f3af8bd44e6483`.
 - Final packaged suite, using the same eight-file-suite command recorded above: **52 passed in 2.2 minutes**, including all nine drag tests and six shared transfer tests. Real clean Replace still succeeds; early-open clean copy destination delivery/undo/restart, partial failures, stale navigation, dirty drafts and persistence/acknowledgement failures remain covered. Generated 500 MiB / 8,000-file copy: **3,683 ms**, concurrent fixture protocol Stop **2 ms**, navigation available during copying, and every destination file checked byte-for-byte. Final typecheck/lint and `git diff --check` passed; the index is empty.
 
-At the original R2 handoff, the source diff was unstaged/uncommitted at `4b71d4208aa0843c019b9b01a3a89a7b7fcc8c93`. It subsequently received fresh full R2 Ship and was committed/pushed as `1b70bca6a0d693e6c90b029c5759c8e8a00aa5bd`. The current integration combines that source with `47c070e84ad51ec2ff572bcb4eb46e0177d7dfde` and remains a pending merge.
+At the original R2 handoff, the source diff was unstaged/uncommitted at `4b71d4208aa0843c019b9b01a3a89a7b7fcc8c93`. It subsequently received fresh full R2 Ship and was committed/pushed as `1b70bca6a0d693e6c90b029c5759c8e8a00aa5bd`. The historical Files44 integration combined that source with `47c070e84ad51ec2ff572bcb4eb46e0177d7dfde` and was subsequently completed as `a3f9d81fc22c8a7263b4443fc8e216a02bf0cf77`.
 
-The original source R2 review has completed with **Ship**. The application integration also has a new fresh full Ponytail **Ship** with no findings. The final independent test/documentation review remains pending; no completed integration, signing or full parent acceptance is claimed.
+The original source R2 review has completed with **Ship**. The application integration also has a new fresh full Ponytail **Ship** with no findings. The final independent test/documentation review subsequently returned **Ship** and Files44 was integrated, as confirmed by the [tracker resolution](https://github.com/ejjsharpe/escode/issues/44). Signing and full parent acceptance are not claimed.
 
-## Bounded integration test and evidence correction
+## Historical Files44 integration test and evidence correction
 
 The inherited `pending transfer preserves its origin across root replacement` journey correctly rejected the operation and preserved the asserted disk/draft boundaries, but read persisted workspace selection immediately after asynchronous Agents selection. The first packaged suite recorded 40 passes and this one timing failure; five isolated repeats and the full 41-test rerun passed unchanged. Selection persistence occurs asynchronously in `src/main.tsx`. The test now uses `expect.poll` to await persisted `workspace.selected === "agents"`, then reads the remaining state. No sleep, runtime change or safety/disk/draft assertion was removed.
 
@@ -83,6 +83,18 @@ Follow-up verification reuses the completed built and packaged artifacts without
 - Dedicated-checkout typecheck, lint and working/staged diff checks passed. No runtime rebuild or new broad suite was needed for this test/documentation-only correction; larger integration counts above remain attributed independent evidence.
 - The existing packaged `Contents/Resources/app.asar` SHA-256 remains `71a7c8eeca7ac944dcd14ce0b2045127c74d599f0890369a8e2a7a5c11cf41a1`.
 
-The incoming staged tree is `1571f4aad28f3a1a54e41ab6b8f7bd809b88ed2f`. Runtime `apps/desktop/host` and `apps/desktop/src` remain byte-identical in both the working tree and pending index: subtree hashes `b2ec71a290906af1c64fdba373073af73bab96f6` and `5ef0b2978f2af8d0ebeefbf6e712d11c141772a5`, respectively. Only `apps/desktop/tests/files-transfer.spec.ts` and this document differ from that incoming staged tree. The original eight staged paths are retained, with the inherited transfer test as the ninth path. Both merge parents remain unchanged, and the merge stays pending. This integration contains Files44 only; no Files45 implementation is included.
+The incoming staged tree is `1571f4aad28f3a1a54e41ab6b8f7bd809b88ed2f`. Runtime `apps/desktop/host` and `apps/desktop/src` remain byte-identical in both the working tree and pending index: subtree hashes `b2ec71a290906af1c64fdba373073af73bab96f6` and `5ef0b2978f2af8d0ebeefbf6e712d11c141772a5`, respectively. Only `apps/desktop/tests/files-transfer.spec.ts` and this document differ from that incoming staged tree. The original eight staged paths are retained, with the inherited transfer test as the ninth path. Both merge parents remain unchanged, and the merge stays pending. That historical integration contained Files44 only; the present pending Files45 merge builds on its completed result.
 
-Ready for a **new final independent review** of the staged test/documentation corrections. Application integration Ship is preserved; final correction approval, completed merge, push and full parent acceptance are not claimed.
+The historical handoff requested a new final independent review of the staged test/documentation corrections. That review subsequently returned **Ship** and the merge was completed/pushed as `a3f9d81fc22c8a7263b4443fc8e216a02bf0cf77`; full parent acceptance is not claimed.
+
+
+## Later manual status supplied by the parent for the #45 handoff
+
+The user confirmed the exact #44 drag move/copy, unsaved-text preservation, Cancel,
+hover, and VoiceOver confirmation/focus checks PASS; the parent posted the #44 record.
+This supersedes the earlier “new drag ... unobserved” statement for those bounded checks.
+No manual process restart was confirmed. The earlier bounded #43 transfer VoiceOver pass
+also remains accepted. These are supplied user observations, not new manual checks by the
+#45 implementer, and do not establish Finder import or native-import VoiceOver acceptance.
+
+The supplied bounded manual status agrees with the linked Files44 confirmation above. Files45 Finder drop/file paste and import VoiceOver remain pending; the current combined artifact has no new human acceptance.

@@ -2,7 +2,8 @@ import { app, BrowserWindow, ipcMain, session, dialog, clipboard, ClipboardItem 
 import { join, resolve, dirname, basename, extname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, realpathSync, statSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { NativeImport } from "./native-import";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { toolStatus } from "./tools";
 import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
@@ -106,6 +107,78 @@ app.whenReady().then(() => {
       }
     | undefined;
   let fileDrag: typeof fileClipboard;
+  const imports = new Map<string, { entries: NativeImport[]; expires: number }>();
+  const protectImport = (path: string) => {
+    if (
+      isAppState(path) ||
+      stateFiles.some((file) =>
+        affected(file.normalize("NFC").toLowerCase(), path.normalize("NFC").toLowerCase()),
+      )
+    )
+      throw Error("Protected app state is inside this import.");
+  };
+  const captureImport = (paths: string[]) => {
+    if (!paths.length || paths.length > 10000) throw Error("No native file references.");
+    const entries: NativeImport[] = [];
+    try {
+      for (const path of new Set(paths)) {
+        const entry = new NativeImport(path, protectImport);
+        if (entries.some((existing) => existing.identity === entry.identity)) {
+          entry.close();
+          continue;
+        }
+        entries.push(entry);
+        if (stateFiles.some((file) => entry.containsDirectory(dirname(file))))
+          throw Error("Protected app state is inside this import.");
+      }
+      const pruned = entries.filter(
+        (entry) =>
+          !entries.some(
+            (parent) =>
+              parent !== entry &&
+              parent.directory &&
+              entry.parents.split(",").includes(parent.identity),
+          ),
+      );
+      entries.filter((entry) => !pruned.includes(entry)).forEach((entry) => entry.close());
+      return pruned;
+    } catch (error) {
+      entries.forEach((e) => e.close());
+      throw error;
+    }
+  };
+  const clearImports = () => {
+    for (const value of imports.values()) value.entries.forEach((e) => e.close());
+    imports.clear();
+  };
+  window.webContents.on("did-start-navigation", clearImports);
+  window.webContents.on("render-process-gone", clearImports);
+  const expiry = setInterval(() => {
+    for (const [token, value] of imports)
+      if (Date.now() > value.expires) {
+        value.entries.forEach((e) => e.close());
+        imports.delete(token);
+      }
+  }, 10000);
+  window.on("closed", () => {
+    clearInterval(expiry);
+    clearImports();
+  });
+  // This channel is reachable only through the isolated preload's File resolver.
+  ipcMain.handle("native-import-capture", (event, paths: unknown) => {
+    if (
+      event.sender !== window.webContents ||
+      event.senderFrame !== window.webContents.mainFrame ||
+      event.senderFrame.url !== documentURL ||
+      !Array.isArray(paths) ||
+      paths.some((p) => typeof p !== "string")
+    )
+      throw Error("Invalid native import sender or references.");
+    const entries = captureImport(paths);
+    const token = randomUUID();
+    imports.set(token, { entries, expires: Date.now() + 60000 });
+    return token;
+  });
   let mayClose = false;
   window.on("close", (event) => {
     if (mayClose) return;
@@ -378,16 +451,18 @@ app.whenReady().then(() => {
     if (
       operation === "transfer" &&
       args.length === 3 &&
-      ["paste", "duplicate", "drag-move", "drag-copy"].includes(String(args[0])) &&
+      ["paste", "duplicate", "drag-move", "drag-copy", "import"].includes(String(args[0])) &&
       typeof args[1] === "string" &&
       Array.isArray(args[2])
     ) {
       if (mutationOrigin) throw Error("Another file operation is pending.");
       const duplicate = args[0] === "duplicate";
       const dragging = args[0] === "drag-move" || args[0] === "drag-copy";
+      let nativeEntries: NativeImport[] | undefined;
+      const nativeDrop = args[0] === "import";
       const reference = duplicate ? undefined : dragging ? fileDrag : fileClipboard;
       const item =
-        duplicate || dragging
+        duplicate || dragging || nativeDrop
           ? undefined
           : (await clipboard.read()).find((item) => item.types.includes(clipboardFormat));
       const token = dragging
@@ -395,8 +470,27 @@ app.whenReady().then(() => {
         : item
           ? await (await item.getType(clipboardFormat)).text()
           : "";
+      if (nativeDrop) {
+        const captured = imports.get(String(args[2][0]));
+        if (!captured || captured.expires < Date.now())
+          throw Error("Native references expired. Drop again.");
+        imports.delete(String(args[2][0]));
+        nativeEntries = captured.entries;
+      } else if (args[0] === "paste" && !item) {
+        const native = (await clipboard.read()).find((item) =>
+          item.types.includes("text/uri-list"),
+        );
+        if (native)
+          nativeEntries = captureImport(
+            (await (await native.getType("text/uri-list")).text())
+              .split(/\r?\n/)
+              .filter((p) => p && !p.startsWith("#"))
+              .map((p) => fileURLToPath(p)),
+          );
+      }
       if (
         !duplicate &&
+        !nativeEntries &&
         (!reference ||
           reference.root !== project.root ||
           reference.checkout !== project.checkoutIdentity() ||
@@ -405,13 +499,18 @@ app.whenReady().then(() => {
         throw Error(
           "No current escode file references for this checkout. Copy or cut again in Files.",
         );
-      const entries = duplicate ? capture(args[2] as string[]) : [...reference!.entries];
+      const entries =
+        nativeEntries ?? (duplicate ? capture(args[2] as string[]) : [...reference!.entries]);
       if (dragging) fileDrag = undefined;
       const parent = args[1];
-      const checkoutIdentity = project.checkoutIdentity();
-      const parentIdentity = parent
-        ? project.operationIdentity(parent)
-        : project.checkoutIdentity();
+      let checkoutIdentity: string, parentIdentity: string;
+      try {
+        checkoutIdentity = project.checkoutIdentity();
+        parentIdentity = parent ? project.operationIdentity(parent) : checkoutIdentity;
+      } catch (error) {
+        nativeEntries?.forEach((e) => e.close());
+        throw error;
+      }
       const owner = projectSessions.get(identity);
       const check = () => {
         if (
@@ -453,23 +552,45 @@ app.whenReady().then(() => {
         operations.beginBatch(project.root);
         for (const entry of entries) {
           const source = entry.source;
+          const sourceLabel = entry instanceof NativeImport ? entry.path : source;
           let destination = "";
           try {
             const folder = duplicate ? (dirname(source) === "." ? "" : dirname(source)) : parent;
             destination = folder ? folder + "/" + basename(source) : basename(source);
-            const validateTransfer = () => {
+            // A native basename may be legal on disk but unsupported by the app's name policy.
+            // Reject it before even offering destructive collision choices.
+            project.validateName(basename(destination));
+            const validateTransfer = (allowOriginal = false) => {
               check();
-              protect(source);
+              project.validateName(basename(destination));
+              if (entry instanceof NativeImport) {
+                protectImport(entry.path);
+                entry.validate();
+                if (entry.containsDirectory(resolve(project.root, folder)))
+                  throw Error("Choose a destination outside the source folder.");
+                // Never Trash an imported original, even if a different spelling resolves to it.
+                try {
+                  if (!allowOriginal && project.operationIdentity(destination) === entry.identity)
+                    throw Error("Destination is the native original. Choose a free sibling name.");
+                } catch (error) {
+                  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+                }
+              } else protect(source);
               protect(destination);
               if (
-                project.operationIdentity(source) !== entry.identity ||
-                statSync(resolve(project.root, source)).isDirectory() !== entry.directory
+                !(entry instanceof NativeImport) &&
+                (project.operationIdentity(source) !== entry.identity ||
+                  statSync(resolve(project.root, source)).isDirectory() !== entry.directory)
               )
                 throw Error("Captured source changed. Copy or cut it again.");
             };
-            validateTransfer();
-            const kind = args[0] === "drag-move" || (!dragging && reference?.cut) ? "move" : "copy";
-            if (entry.directory && affected(folder, source))
+            validateTransfer(true);
+            if (entry instanceof NativeImport) await project.preflightImport(entry);
+            const kind =
+              !nativeEntries && (args[0] === "drag-move" || (!dragging && reference?.cut))
+                ? "move"
+                : "copy";
+            if (!(entry instanceof NativeImport) && entry.directory && affected(folder, source))
               throw Error("Choose a destination outside the source folder.");
             const siblings = await project.files(folder);
             const folded = (p: string) => p.normalize("NFC").toLowerCase();
@@ -493,10 +614,21 @@ app.whenReady().then(() => {
             };
             if (destination === source && kind === "move")
               throw Error("Source already belongs to this folder; cut retained.");
-            if (duplicate || destination === source) destination = free();
+            if (
+              duplicate ||
+              (entry instanceof NativeImport
+                ? siblings.some(
+                    (e) =>
+                      folded(e.path) === folded(destination) &&
+                      project.operationIdentity(e.path) === entry.identity,
+                  )
+                : destination === source)
+            )
+              destination = free();
             else if (occupied(destination)) {
               const existing = siblings.find((e) => folded(e.path) === folded(destination));
               if (existing) destination = existing.path;
+              project.validateName(basename(destination));
               const dirty = state.drafts.filter(
                 (d) => d.root === project.root && affected(folded(d.path), folded(destination)),
               );
@@ -506,6 +638,7 @@ app.whenReady().then(() => {
                 : replace
                   ? ["Replace", "Keep Both", "Skip", "Cancel"]
                   : ["Keep Both", "Skip", "Cancel"];
+              validateTransfer();
               const targetIdentity = existing ? project.operationIdentity(destination) : "";
               const answer = await dialog.showMessageBox(window, {
                 message: `Destination occupied: ${destination}`,
@@ -522,7 +655,7 @@ app.whenReady().then(() => {
               const choice = buttons[answer.response];
               if (choice === "Cancel") {
                 results.push({
-                  source,
+                  source: sourceLabel,
                   applied: false,
                   message: "Cancelled; remaining references retained.",
                 });
@@ -533,7 +666,11 @@ app.whenReady().then(() => {
                 break;
               }
               if (choice === "Skip") {
-                results.push({ source, applied: false, message: "Skipped; reference retained." });
+                results.push({
+                  source: sourceLabel,
+                  applied: false,
+                  message: "Skipped; reference retained.",
+                });
                 continue;
               }
               if (choice === "Keep Both") destination = free();
@@ -567,9 +704,10 @@ app.whenReady().then(() => {
               source,
               destination,
               validateTransfer,
+              entry instanceof NativeImport ? entry : undefined,
             );
-            results.push({ source, ...result });
-            if (result.applied && !dragging && reference?.cut)
+            results.push({ source: sourceLabel, ...result });
+            if (result.applied && !nativeEntries && !dragging && reference?.cut)
               reference.entries = reference.entries.filter((e) => e !== entry);
             if (result.persistencePending) break;
             try {
@@ -582,7 +720,7 @@ app.whenReady().then(() => {
             }
           } catch (error) {
             results.push({
-              source,
+              source: sourceLabel,
               applied: false,
               message: `${destination || source}: ${String(error)}`,
             });
@@ -593,10 +731,15 @@ app.whenReady().then(() => {
           open,
           requiresAck: operations.hasBatchFacts(project.root),
           message:
-            results.map((r) => `${project.root}/${r.source}: ${r.message}`).join("\n") ||
-            "No transfer completed. Available edits retained.",
+            results
+              .map(
+                (r) =>
+                  `${r.source.startsWith("/") ? r.source : project.root + "/" + r.source}: ${r.message}`,
+              )
+              .join("\n") || "No transfer completed. Available edits retained.",
         };
       } finally {
+        nativeEntries?.forEach((e) => e.close());
         operations.releaseEmptyBatch();
         mutationOrigin = undefined;
       }

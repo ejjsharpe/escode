@@ -39,6 +39,7 @@ declare global {
       chat: ChatBridge;
       toolStatus(): Promise<unknown>;
       project: ProjectBridge;
+      nativeFiles(files: File[]): Promise<string>;
     };
     MonacoEnvironment: { getWorker(_: string, label: string): Worker };
   }
@@ -378,13 +379,17 @@ function CheckoutView({
     }
   }
   async function fileOperation(
-    kind: "move" | "trash" | "paste" | "duplicate" | "drag-move" | "drag-copy",
+    kind: "move" | "trash" | "paste" | "duplicate" | "drag-move" | "drag-copy" | "import",
     source: string | string[],
     destination = "",
     inline = false,
   ) {
     const transferring =
-      kind === "paste" || kind === "duplicate" || kind === "drag-move" || kind === "drag-copy";
+      kind === "paste" ||
+      kind === "duplicate" ||
+      kind === "drag-move" ||
+      kind === "drag-copy" ||
+      kind === "import";
     if (closeInFlight.current || saveInFlight.current || conflict) {
       if (inline || transferring) throw Error("Finish the pending file action first.");
       return;

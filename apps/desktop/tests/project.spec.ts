@@ -45,7 +45,7 @@ for (const packaged of [false, true]) {
       await page.getByRole("button", { name: "Compare", exact: true }).click();
       await expect(page.locator(".monaco-diff-editor")).toContainText("changed after comparison");
       await page.getByRole("button", { name: "Overwrite", exact: true }).click();
-      await expect(page.getByRole("status")).toContainText("Saved a.txt");
+      await expect(page.locator(".content:visible > [role=status]")).toContainText("Saved a.txt");
       expect(await readFile(join(root, "a.txt"), "utf8")).toBe("my edits");
       await writeFile(join(root, "a.txt"), "reload this");
       await page.keyboard.press("Meta+s");
@@ -79,7 +79,7 @@ for (const packaged of [false, true]) {
       await page.keyboard.type("retained after error");
       await rm(join(root, "a.txt"));
       await page.keyboard.press("Meta+s");
-      await expect(page.getByRole("status")).toContainText("ENOENT");
+      await expect(page.locator(".content:visible > [role=status]")).toContainText("ENOENT");
       await expect(page.locator(".monaco-editor")).toContainText("retained after error");
       await page.screenshot({
         path: `test-results/project-${packaged ? "packaged" : "unpackaged"}.png`,

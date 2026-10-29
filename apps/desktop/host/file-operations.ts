@@ -124,18 +124,19 @@ export class FileOperations {
     source: string,
     destination: string,
     validateOrigin: () => void = () => {},
+    native?: import("./native-import").NativeImport,
   ): Promise<OperationResult> {
     this.assertIdle(p.root);
     this.busy = true;
     try {
-      if (kind !== "trash") p.validateMove(source, destination);
+      if (kind !== "trash" && !native) p.validateMove(source, destination);
       const intent: Intent = {
         root: p.root,
         checkoutIdentity: p.checkoutIdentity(),
         kind,
         source,
         destination,
-        identity: p.operationIdentity(source),
+        identity: native?.identity ?? p.operationIdentity(source),
       };
       if (kind !== "trash") {
         const state = await this.workspace.read();
@@ -143,7 +144,7 @@ export class FileOperations {
           state.drafts.some(
             (d) =>
               d.root === p.root &&
-              !affected(d.path, source) &&
+              (native || !affected(d.path, source)) &&
               affected(
                 d.path.normalize("NFC").toLowerCase(),
                 destination.normalize("NFC").toLowerCase(),
@@ -155,22 +156,26 @@ export class FileOperations {
       if (kind === "copy") {
         intent.temporary = join(dirname(destination), ".escode-copy-" + randomUUID());
         const state = await this.workspace.read();
-        intent.copies = state.drafts
-          .filter((d) => d.root === p.root && affected(d.path, source))
-          .map((d) => ({ ...d, path: destination + d.path.slice(source.length) }));
+        intent.copies = native
+          ? []
+          : state.drafts
+              .filter((d) => d.root === p.root && affected(d.path, source))
+              .map((d) => ({ ...d, path: destination + d.path.slice(source.length) }));
       }
       await this.journal.writeIntent(intent);
       this.pending = intent;
       try {
         validateOrigin();
-        if (kind === "copy") await p.copy(source, destination, intent.identity, intent.temporary!);
+        if (kind === "copy")
+          await p.copy(source, destination, intent.identity, intent.temporary!, native);
         else if (kind === "move") p.move(source, destination, intent.identity);
         else p.trash(source, intent.identity);
       } catch (error) {
-        // Only a still-identical source proves a failed mutation. Otherwise retain intent.
+        // Imports never mutate their source; Project.copy marks any possible publication uncertain.
+        // Other operations require a still-identical source to prove a failed mutation.
         let unchanged = false;
         try {
-          unchanged = p.operationIdentity(source) === intent.identity;
+          unchanged = native ? true : p.operationIdentity(source) === intent.identity;
         } catch {
           /* Keep uncertain intent. */
         }
@@ -212,7 +217,9 @@ export class FileOperations {
         intent,
         message:
           kind === "copy"
-            ? "Copied; source edits remain unsaved."
+            ? native
+              ? "Copied; native original retained."
+              : "Copied; source edits remain unsaved."
             : kind === "move"
               ? "Moved. Earlier text undo history was reset; new edits support undo."
               : "Moved to macOS Trash.",

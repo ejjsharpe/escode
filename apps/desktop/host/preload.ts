@@ -1,7 +1,13 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 contextBridge.exposeInMainWorld(
   "escode",
   Object.freeze({
+    nativeFiles: (files: File[]) => {
+      if (!Array.isArray(files) || !files.length) throw Error("No native files.");
+      const paths = files.map((file) => webUtils.getPathForFile(file));
+      if (paths.some((path) => !path)) throw Error("A genuine native file reference is required.");
+      return ipcRenderer.invoke("native-import-capture", paths);
+    },
     lifecycle: (operation: string, ...args: unknown[]) =>
       ipcRenderer.invoke("lifecycle", operation, ...args),
     onClose: (callback: () => void) => {

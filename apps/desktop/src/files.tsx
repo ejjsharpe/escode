@@ -29,7 +29,7 @@ export function FilesTree({
   create: (parent: string, name: string, kind: "file" | "folder") => Promise<string>;
   trash: (paths: string[]) => Promise<void>;
   transfer: (
-    kind: "copy" | "cut" | "paste" | "duplicate" | "drag-move" | "drag-copy",
+    kind: "copy" | "cut" | "paste" | "duplicate" | "drag-move" | "drag-copy" | "import",
     paths: string[],
     parent: string,
   ) => Promise<void>;
@@ -86,13 +86,21 @@ export function FilesTree({
   function over(event: DragEvent, parent: string) {
     event.stopPropagation();
     const session = drag.current;
-    if (!session || !active || disabled || edit || !event.dataTransfer.types.includes(dragFormat)) {
+    const native =
+      !event.dataTransfer.types.includes(dragFormat) && event.dataTransfer.types.includes("Files");
+    if (
+      (!session && !native) ||
+      !active ||
+      disabled ||
+      edit ||
+      (!native && !event.dataTransfer.types.includes(dragFormat))
+    ) {
       event.dataTransfer.dropEffect = "none";
       return;
     }
     const folded = (p: string) => p.normalize("NFC").toLowerCase();
     if (
-      session.paths.some(
+      session?.paths.some(
         (p) => folded(parent) === folded(p) || folded(parent).startsWith(folded(p) + "/"),
       )
     ) {
@@ -102,7 +110,7 @@ export function FilesTree({
       return;
     }
     event.preventDefault();
-    event.dataTransfer.dropEffect = event.altKey ? "copy" : "move";
+    event.dataTransfer.dropEffect = native || event.altKey ? "copy" : "move";
     if (dropTarget?.parent !== parent) {
       clearTimeout(hover.current);
       const generation = dragGeneration.current;
@@ -114,19 +122,25 @@ export function FilesTree({
           }
         }, 650);
     }
-    setDropTarget({ parent, copy: event.altKey });
+    setDropTarget({ parent, copy: native || event.altKey });
   }
   async function drop(event: DragEvent, target: string) {
     event.preventDefault();
     event.stopPropagation();
     const session = drag.current;
     const valid = session && event.dataTransfer.getData(dragFormat) === session.id;
+    const files = Array.from(event.dataTransfer.files);
+    const native = !event.dataTransfer.types.includes(dragFormat) && files.length > 0;
+    const nativeToken = native
+      ? Promise.resolve().then(() => window.escode.nativeFiles(files))
+      : undefined;
+    void nativeToken?.catch(() => {});
     const copy = event.altKey;
     const generation = dragGeneration.current;
     clearDrag();
-    if (!valid || !active || disabled || edit) {
+    if ((!valid && !native) || !active || disabled || edit) {
       setActionError(
-        "Only a drag from this checkout's Files tree is supported. External imports are not available yet.",
+        "Only a drag from this checkout's Files tree or genuine native files is supported.",
       );
       return;
     }
@@ -139,10 +153,10 @@ export function FilesTree({
         if (!entry) throw Error(listing.error || "Destination missing. Refresh and try again.");
         parent = entry.directory ? target : container;
       }
-      const token = await session.token;
+      const token = await (nativeToken ?? session!.token);
       if (generation !== dragGeneration.current) return;
       setActionError("");
-      await transfer(copy ? "drag-copy" : "drag-move", [token], parent);
+      await transfer(native ? "import" : copy ? "drag-copy" : "drag-move", [token], parent);
     } catch (error) {
       if (generation === dragGeneration.current) setActionError(String(error));
     }
