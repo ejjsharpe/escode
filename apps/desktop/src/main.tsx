@@ -33,6 +33,7 @@ function App() {
   const [files, setFiles] = useState<{ path: string; directory: boolean }[]>([]);
   const [directory, setDirectory] = useState("");
   const [mode, setMode] = useState("Files");
+  const [chatActivity, setChatActivity] = useState("");
   const [path, setPath] = useState("");
   const [message, setMessage] = useState("Open a local Git checkout to begin.");
   const [conflict, setConflict] = useState<{ path: string; disk: Document } | null>(null);
@@ -241,6 +242,7 @@ function App() {
                 }}
               >
                 {view}
+                {view === "Chats" && chatActivity ? ` · ${chatActivity}` : ""}
               </Button>
             ))}
           </nav>
@@ -294,7 +296,7 @@ function App() {
         <section className="content" aria-label="Main editor">
           {status && (
             <div hidden={mode !== "Chats"} className="chat-panel">
-              <ChatView project={status.root} />
+              <ChatView project={status.root} onActivity={setChatActivity} />
             </div>
           )}
           {mode !== "Chats" && (

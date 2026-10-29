@@ -169,7 +169,8 @@ h2 {
   margin-top: 24px;
 }
 .chat-compose textarea,
-.live-request input {
+.live-request input,
+.live-request textarea {
   background: #18202b;
   color: #e5e7eb;
   border: 1px solid #536074;

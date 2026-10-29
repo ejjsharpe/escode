@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Chats } from "./chat";
-import { connectCodex, type CodexConnection, type WireMessage } from "./codex";
+import { connectCodex, type CodexConnection, type WireMessage } from "./tools";
 export type ChatItem = { id: string; turnId: string; type: string; text: string };
 export type LiveRequest = { token: string; method: string; params: any };
 export type ChatSnapshot = {
@@ -111,9 +111,11 @@ export class ChatService {
           throw Error(
             "Run codex login externally, then Retry connection. Draft and saved history are retained.",
           );
+        // Codex does not persist an empty thread until its first turn.
+        const resume = Boolean(chat.threadId && chat.hasSent !== false);
         const result = await rpc.request(
-          chat.threadId ? "thread/resume" : "thread/start",
-          chat.threadId
+          resume ? "thread/resume" : "thread/start",
+          resume
             ? { threadId: chat.threadId, cwd: chat.checkout, excludeTurns: true }
             : { cwd: chat.checkout },
         );
@@ -123,7 +125,7 @@ export class ChatService {
           !result.sandbox ||
           !result.approvalPolicy ||
           typeof result.thread?.id !== "string" ||
-          (chat.threadId && result.thread.id !== chat.threadId)
+          (resume && result.thread.id !== chat.threadId)
         )
           throw Error(
             "Incompatible Codex thread response. Check supported CLI, then Retry connection.",
@@ -136,7 +138,7 @@ export class ChatService {
           approval: result.approvalPolicy,
           sandbox: result.sandbox,
         };
-        if (chat.threadId) {
+        if (resume) {
           const items: ChatItem[] = [];
           let cursor: string | null = null;
           const seen = new Set<string>();
@@ -185,18 +187,42 @@ export class ChatService {
   private event(s: Session, message: WireMessage) {
     const p = message.params;
     if (!p || p.threadId !== s.threadId) return;
+    if (message.method === "serverRequest/resolved") {
+      for (const [token, id] of s.requestIds)
+        if (id === p.requestId) {
+          s.requestIds.delete(token);
+          s.requests = s.requests.filter((r) => r.token !== token);
+        }
+      return;
+    }
+    if (message.method === "thread/settings/updated") {
+      const settings = p.threadSettings;
+      s.settings = {
+        model: settings.model,
+        reasoning: settings.effort,
+        approval: settings.approvalPolicy,
+        sandbox: settings.sandboxPolicy,
+      };
+      return;
+    }
+    if (message.method === "model/rerouted" && p.turnId === s.turnId && s.settings) {
+      s.settings.model = p.toModel;
+      return;
+    }
     if (message.method === "turn/started") {
       s.turnId = p.turn.id;
       s.busy = true;
       return;
     }
     if (message.id !== undefined) {
-      if (!s.busy || s.stopping || p.turnId !== s.turnId) return;
+      const standalone = message.method === "mcpServer/elicitation/request" && p.turnId == null;
+      if (!standalone && (!s.busy || s.stopping || p.turnId !== s.turnId)) return;
       const allowed = [
         "item/commandExecution/requestApproval",
         "item/fileChange/requestApproval",
         "item/tool/requestUserInput",
         "item/permissions/requestApproval",
+        "mcpServer/elicitation/request",
       ];
       if (!allowed.includes(message.method!)) {
         s.error = `Unsupported Codex request: ${message.method}. Stop and update escode before retrying.`;
@@ -212,8 +238,9 @@ export class ChatService {
       s.busy = false;
       s.turnId = null;
       s.stopping = false;
-      s.requests = [];
-      s.requestIds.clear();
+      s.requests = s.requests.filter((r) => r.params.turnId == null);
+      for (const token of s.requestIds.keys())
+        if (!s.requests.some((r) => r.token === token)) s.requestIds.delete(token);
       if (p.turn.error) s.error = p.turn.error.message;
       return;
     }
@@ -250,6 +277,7 @@ export class ChatService {
     s.stopping = false;
     s.error = null;
     try {
+      await this.store.update(project, id, { hasSent: true });
       const result = await s.rpc.request("turn/start", {
         threadId: s.threadId,
         input: [{ type: "text", text, text_elements: [] }],
@@ -281,12 +309,28 @@ export class ChatService {
       !request ||
       wireId === undefined ||
       !s.connected ||
-      !s.busy ||
-      request.params.turnId !== s.turnId
+      (request.params.turnId != null && (!s.busy || request.params.turnId !== s.turnId))
     )
       throw Error("Stale or mismatched live request. Reopen the originating chat.");
     let result: unknown;
-    if (request.method === "item/tool/requestUserInput") {
+    if (request.method === "mcpServer/elicitation/request") {
+      if (!answer || typeof answer !== "object" || Array.isArray(answer))
+        throw Error("Invalid input response.");
+      const value = answer as { action?: unknown; content?: unknown };
+      if (!["accept", "decline", "cancel"].includes(String(value.action)))
+        throw Error("Invalid input action.");
+      if (
+        value.action === "accept" &&
+        request.params.mode !== "url" &&
+        (!value.content || typeof value.content !== "object" || Array.isArray(value.content))
+      )
+        throw Error("Provide the requested information as an object.");
+      result = {
+        action: value.action,
+        content: value.action === "accept" ? (value.content ?? null) : null,
+        _meta: null,
+      };
+    } else if (request.method === "item/tool/requestUserInput") {
       if (!answer || typeof answer !== "object" || Array.isArray(answer))
         throw Error("Answer each question.");
       const answers: Record<string, { answers: string[] }> = {};

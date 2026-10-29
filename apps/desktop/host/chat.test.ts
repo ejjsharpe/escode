@@ -18,7 +18,7 @@ test("saved chats and drafts stay attached to the project checkout after reopeni
 });
 
 import { ChatService } from "./chat-service";
-import type { WireMessage } from "./codex";
+import type { WireMessage } from "./tools";
 test("turns, approvals and Stop stay scoped; reconnect invalidates old callbacks without resending", async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-routing-"));
   const peers: {
@@ -128,6 +128,8 @@ test("setup failures retain drafts; exact input requests cannot answer another t
     expect((await service.list(dir))[0].draft).toBe("keep me");
     authenticated = true;
     await service.open(dir, c.id);
+    service.disconnect(dir, c.id);
+    await service.open(dir, c.id);
     await service.send(dir, c.id, "explicit");
     emit({
       id: 12,
@@ -144,6 +146,21 @@ test("setup failures retain drafts; exact input requests cannot answer another t
         questions: [{ id: "choice", question: "Which?" }],
       },
     });
+    emit({
+      id: 14,
+      method: "item/fileChange/requestApproval",
+      params: { threadId: "thread", turnId: "turn", itemId: "file" },
+    });
+    const resolved = service
+      .snapshot(dir, c.id)
+      .requests.find((r) => r.method === "item/fileChange/requestApproval")!;
+    emit({ method: "serverRequest/resolved", params: { threadId: "thread", requestId: 14 } });
+    await expect(service.answer(dir, c.id, resolved.token, "accept")).rejects.toThrow("Stale");
+    emit({
+      method: "model/rerouted",
+      params: { threadId: "thread", turnId: "turn", toModel: "fallback" },
+    });
+    expect(service.snapshot(dir, c.id).settings.model).toBe("fallback");
     const request = service.snapshot(dir, c.id).requests[0];
     await expect(service.answer(dir, c.id, request.token, {})).rejects.toThrow("Answer each");
     await service.answer(dir, c.id, request.token, { choice: "first" });
@@ -156,6 +173,25 @@ test("setup failures retain drafts; exact input requests cannot answer another t
       params: { threadId: "thread", turn: { id: "turn", status: "interrupted" } },
     });
     expect(service.snapshot(dir, c.id).busy).toBe(false);
+    emit({
+      id: 15,
+      method: "mcpServer/elicitation/request",
+      params: {
+        threadId: "thread",
+        turnId: null,
+        serverName: "calendar",
+        mode: "form",
+        message: "Choose a name",
+        requestedSchema: { type: "object", properties: { name: { type: "string" } } },
+      },
+    });
+    const elicitation = service.snapshot(dir, c.id).requests[0];
+    expect(elicitation?.method).toBe("mcpServer/elicitation/request");
+    await service.answer(dir, c.id, elicitation.token, {
+      action: "accept",
+      content: { name: "Elliot" },
+    });
+    expect(reply).toEqual({ action: "accept", content: { name: "Elliot" }, _meta: null });
     expect((await service.list(dir))[0].draft).toBe("");
   } finally {
     service.close();

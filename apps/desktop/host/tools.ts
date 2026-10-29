@@ -51,62 +51,141 @@ export async function codexCommand(path: string, args: string[]) {
       }
     : { executable: path, args, env: process.env };
 }
-export async function probeCodex(path: string) {
+export type WireMessage = {
+  id?: number | string;
+  method?: string;
+  params?: any;
+  result?: any;
+  error?: { message: string };
+};
+export interface CodexConnection {
+  request(method: string, params: unknown): Promise<any>;
+  respond(id: number | string, result: unknown): void;
+  close(): void;
+}
+export async function connectCodex(
+  cwd: string,
+  receive: (event: WireMessage) => void,
+  disconnected: (error: Error) => void,
+  providedPath?: string,
+): Promise<CodexConnection> {
+  const path = providedPath ?? (await findExecutable("codex"));
+  const version = await codexCommand(path, ["--version"]);
+  const output = await execute(version.executable, version.args, {
+    env: version.env,
+    timeout: 5000,
+  });
+  if (output.stdout.trim() !== `codex-cli ${supportedCodexVersion}`)
+    throw Error(
+      `Install supported Codex ${supportedCodexVersion} externally, then Retry connection.`,
+    );
   const command = await codexCommand(path, ["app-server", "--listen", "stdio://"]);
   const child = spawn(command.executable, command.args, {
-    stdio: ["pipe", "pipe", "pipe"],
-    cwd: homedir(),
+    cwd,
     env: command.env,
+    stdio: ["pipe", "pipe", "pipe"],
   });
   child.stderr.resume();
   const lines = createInterface({ input: child.stdout });
-  let nextId = 0;
+  let sequence = 0,
+    closed = false;
   const pending = new Map<
     number,
-    { resolve: (value: any) => void; reject: (error: Error) => void }
+    {
+      resolve: (value: any) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
   >();
   const fail = (error: Error) => {
-    for (const request of pending.values()) request.reject(error);
+    if (closed) return;
+    closed = true;
+    for (const entry of pending.values()) {
+      clearTimeout(entry.timer);
+      entry.reject(error);
+    }
     pending.clear();
+    lines.close();
+    child.kill();
+    disconnected(error);
+  };
+  const write = (value: unknown) => {
+    if (closed) throw Error("Codex disconnected. Retry connection; send work explicitly.");
+    child.stdin.write(JSON.stringify(value) + "\n");
   };
   child.on("error", fail);
+  child.stdin.on("error", fail);
   child.on("exit", () =>
-    fail(new Error("Codex disconnected. Retry after checking the installed CLI.")),
+    fail(
+      Error(
+        "Codex disconnected. Check installation/authentication, then Retry connection. Work was not resent.",
+      ),
+    ),
   );
   lines.on("line", (line) => {
     try {
-      const message = JSON.parse(line);
-      const request = pending.get(message.id);
-      if (request) {
+      const message: WireMessage = JSON.parse(line);
+      if (message.method) receive(message);
+      else if (typeof message.id === "number") {
+        const entry = pending.get(message.id);
+        if (!entry) return;
         pending.delete(message.id);
-        if (message.error)
-          request.reject(
-            new Error("Codex rejected compatibility request. Check configuration and retry."),
-          );
-        else request.resolve(message.result);
+        clearTimeout(entry.timer);
+        if (message.error) entry.reject(Error(message.error.message));
+        else entry.resolve(message.result);
       }
     } catch {
-      fail(new Error("Invalid Codex protocol response."));
+      fail(Error("Incompatible Codex protocol. Check supported CLI and Retry connection."));
     }
   });
-  const timer = setTimeout(() => {
-    fail(new Error("Codex compatibility check timed out. Check configuration and retry."));
-    child.kill();
-  }, 15000);
-  const request = (method: string, params: unknown) =>
-    new Promise<any>((resolve, reject) => {
-      const id = ++nextId;
-      pending.set(id, { resolve, reject });
-      child.stdin.write(JSON.stringify({ id, method, params }) + "\n");
-    });
+  const rpc: CodexConnection = {
+    request(method, params) {
+      return new Promise((resolve, reject) => {
+        const id = ++sequence;
+        const timer = setTimeout(
+          () => fail(Error("Codex request timed out. Retry connection; work was not resent.")),
+          30000,
+        );
+        pending.set(id, { resolve, reject, timer });
+        try {
+          write({ id, method, params });
+        } catch (error) {
+          clearTimeout(timer);
+          pending.delete(id);
+          reject(error);
+        }
+      });
+    },
+    respond(id, result) {
+      write({ id, result });
+    },
+    close() {
+      fail(Error("Connection closed. Reopen to load saved history."));
+    },
+  };
   try {
-    await request("initialize", {
+    await rpc.request("initialize", {
       clientInfo: { name: "escode", version: "0.1.0" },
       capabilities: {},
     });
-    child.stdin.write(JSON.stringify({ method: "initialized" }) + "\n");
-    const account = await request("account/read", { refreshToken: false });
-    const result = await request("config/read", { includeLayers: false });
+    write({ method: "initialized" });
+    return rpc;
+  } catch (error) {
+    rpc.close();
+    throw error;
+  }
+}
+
+export async function probeCodex(path: string) {
+  const rpc = await connectCodex(
+    homedir(),
+    () => {},
+    () => {},
+    path,
+  );
+  try {
+    const account = await rpc.request("account/read", { refreshToken: false });
+    const result = await rpc.request("config/read", { includeLayers: false });
     const config = result.config;
     return {
       authenticated: Boolean(account.account),
@@ -119,9 +198,7 @@ export async function probeCodex(path: string) {
       guidance: account.account ? null : "Run codex login externally, then retry.",
     };
   } finally {
-    clearTimeout(timer);
-    lines.close();
-    child.kill();
+    rpc.close();
   }
 }
 export async function toolStatus() {

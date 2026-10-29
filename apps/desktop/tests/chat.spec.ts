@@ -44,6 +44,8 @@ test("saved Codex chat streams and reopens via a fresh connection", async () => 
     });
     await expect(page.getByRole("status")).toHaveText("Ready", { timeout: 90000 });
     await expect(page.getByLabel("Conversation history").locator("article")).toHaveCount(2);
+    await page.getByRole("button", { name: "Retry connection / reload history" }).click();
+    await expect(page.getByRole("status")).toHaveText("Ready", { timeout: 45000 });
     await page.getByLabel("Message Codex").fill("retained draft");
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();

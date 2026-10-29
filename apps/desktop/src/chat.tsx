@@ -28,6 +28,57 @@ function Request({
       setBusy(false);
     }
   };
+  const [content, setContent] = useState("{}");
+  const [inputError, setInputError] = useState("");
+  if (request.method === "mcpServer/elicitation/request")
+    return (
+      <section className="live-request" aria-label="MCP server needs input">
+        <h2>{request.params.serverName} requests information</h2>
+        <p>{request.params.message}</p>
+        {request.params.mode === "url" ? (
+          <label>
+            Open this address in your browser, complete the step, then confirm.
+            <input aria-label="Authorization URL" readOnly value={request.params.url} />
+          </label>
+        ) : (
+          <>
+            <details>
+              <summary>Requested information format</summary>
+              <pre>{JSON.stringify(request.params.requestedSchema, null, 2)}</pre>
+            </details>
+            <label>
+              Response (JSON object)
+              <textarea
+                aria-label="MCP response"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+              />
+            </label>
+          </>
+        )}
+        {inputError && <p role="alert">{inputError}</p>}
+        <Button
+          disabled={busy}
+          onClick={() => {
+            try {
+              const value = request.params.mode === "url" ? null : JSON.parse(content);
+              setInputError("");
+              void submit({ action: "accept", content: value });
+            } catch {
+              setInputError("Enter a valid JSON object in the requested format.");
+            }
+          }}
+        >
+          {request.params.mode === "url" ? "I completed this step" : "Send information"}
+        </Button>{" "}
+        <Button disabled={busy} onClick={() => void submit({ action: "decline" })}>
+          Decline
+        </Button>{" "}
+        <Button disabled={busy} onClick={() => void submit({ action: "cancel" })}>
+          Cancel request
+        </Button>
+      </section>
+    );
   const questions =
     request.method === "item/tool/requestUserInput" ? request.params.questions : null;
   return (
@@ -62,7 +113,9 @@ function Request({
         <>
           <pre>{JSON.stringify(request.params, null, 2)}</pre>
           <Button disabled={busy} onClick={() => void submit("accept")}>
-            Allow once
+            {request.method === "item/permissions/requestApproval"
+              ? "Allow for this turn"
+              : "Allow once"}
           </Button>{" "}
           <Button disabled={busy} onClick={() => void submit("decline")}>
             Decline
@@ -76,7 +129,13 @@ function Request({
   );
 }
 // Keep this view mounted while navigating so drafts and the selected chat survive.
-export function ChatView({ project }: { project: string }) {
+export function ChatView({
+  project,
+  onActivity,
+}: {
+  project: string;
+  onActivity: (activity: string) => void;
+}) {
   const [chats, setChats] = useState<SavedChat[]>([]);
   const [selected, setSelected] = useState("");
   const [snapshots, setSnapshots] = useState<Record<string, ChatSnapshot>>({});
@@ -84,6 +143,12 @@ export function ChatView({ project }: { project: string }) {
   const [working, setWorking] = useState(false);
   const drafts = useRef<Record<string, string>>({});
   const [draft, setDraft] = useState("");
+  useEffect(() => {
+    const all = Object.values(snapshots);
+    onActivity(
+      all.some((s) => s.requests.length) ? "Needs input" : all.some((s) => s.busy) ? "Running" : "",
+    );
+  }, [snapshots, onActivity]);
   const selectedRef = useRef("");
   const report = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
   const load = async () => {

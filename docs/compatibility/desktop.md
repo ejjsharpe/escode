@@ -116,8 +116,12 @@ sandbox values come from the actual start/resume response, including defaults.
 
 Live authenticated checks on the development host established streamed text,
 completed turns, effective settings and saved history through a fresh app-server.
-A second live check interrupted a running `sleep 60` command and reopened its
-history with no active turn and no continuation message sent. These checks used
+Additional live checks interrupted a running `sleep 60` command, retained a
+completed bounded file write after Stop, and reopened history with no active turn
+and no continuation message sent. An empty-chat reconnect exposed Codex's lack
+of a saved rollout before the first turn; never-sent chats now receive a fresh
+empty provider thread, while a recorded send attempt always requires resume of
+the original provider thread. These checks used
 a temporary checkout with effective read-only sandbox and on-request approval.
 They do not establish all possible permission profiles or arbitrary CLI versions.
 
@@ -126,7 +130,7 @@ Stop, command approval, input answers, one-use responses, wrong-chat/thread
 rejection, disconnection invalidation, explicit reconnect without resend, failed
 authentication and retained drafts. The opt-in Electron chat test exercises
 create/send/stream, view navigation, draft retention and fresh-connection history.
-Live command/file/permission approvals and input prompts are represented by
+File/permission approvals and MCP/input prompts are represented by
 controlled events; no claim of exhaustive live approval-policy coverage is made.
 
 Associations/drafts use serialized atomic JSON replacement in Electron user data

@@ -6,6 +6,7 @@ export type SavedChat = {
   project: string;
   checkout: string;
   threadId: string | null;
+  hasSent?: boolean;
   draft: string;
 };
 export class Chats {
@@ -43,6 +44,7 @@ export class Chats {
         project,
         checkout: project,
         threadId: null,
+        hasSent: false,
         draft: "",
       };
       chats.push(chat);
@@ -57,7 +59,11 @@ export class Chats {
   draft(project: string, id: string, text: string) {
     return this.update(project, id, { draft: text });
   }
-  update(project: string, id: string, fields: Partial<Pick<SavedChat, "threadId" | "draft">>) {
+  update(
+    project: string,
+    id: string,
+    fields: Partial<Pick<SavedChat, "threadId" | "draft" | "hasSent">>,
+  ) {
     return this.change((chats) => {
       const chat = chats.find((c) => c.id === id && c.project === project);
       if (!chat) throw Error("Unknown chat in this project.");
