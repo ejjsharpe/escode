@@ -21,3 +21,9 @@ existing Git-discovered worktree is an explicit choice; creation never falls bac
 
 **Save conflict**:
 A difference detected before saving between a file's loaded disk version and its current disk version. The user's edits remain available while they compare, explicitly overwrite, reload from disk, or cancel.
+
+**Recovery draft**:
+A locally persisted unsaved file buffer with its checkout/file identity and loaded disk
+baseline. Available drafts reopen as unsaved edits and use the ordinary save-conflict
+check. Explicit discard removes the draft; recovery is best effort, not a guarantee
+that the latest keystroke survives a crash.

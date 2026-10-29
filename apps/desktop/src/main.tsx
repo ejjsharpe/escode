@@ -8,11 +8,18 @@ import type { Change, Document, SaveResult, ProjectBridge } from "../host/projec
 import { ChatView } from "./chat";
 import type { ChatBridge } from "./chat";
 import "./style.css";
+import { memory, initialize, persist, flush, useMemory, closers } from "./workspace";
 type Status = { project: string; root: string; branch: string; changes: Change[] };
 type BufferState = { model: monaco.editor.ITextModel; disk: Document };
 declare global {
   interface Window {
-    escode: { chat: ChatBridge; toolStatus(): Promise<unknown>; project: ProjectBridge };
+    escode: {
+      lifecycle: import("../host/workspace").LifecycleBridge;
+      onClose(callback: () => void): () => void;
+      chat: ChatBridge;
+      toolStatus(): Promise<unknown>;
+      project: ProjectBridge;
+    };
     MonacoEnvironment: { getWorker(_: string, label: string): Worker };
   }
 }
@@ -27,12 +34,14 @@ const styles = stylex.create({
 });
 function CheckoutView({
   root,
+  project,
   active,
   mode,
   onStatus,
   onBlocked,
 }: {
   root: string;
+  project: string;
   active: boolean;
   mode: string;
   onStatus: (status: Status) => void;
@@ -46,15 +55,16 @@ function CheckoutView({
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [files, setFiles] = useState<{ path: string; directory: boolean }[]>([]);
-  const [directory, setDirectory] = useState("");
-  const [path, setPath] = useState("");
+  const [directory, setDirectory] = useMemory(root, "directory", "");
+  const [path, setPath] = useMemory(root, "path", "");
   const [message, setMessage] = useState("Open a local Git checkout to begin.");
   const [conflict, setConflict] = useState<{ path: string; disk: Document } | null>(null);
-  const selectedChange = useRef<Change | null>(null);
+  const selectedChange = useRef<Change | null>(memory.views[root]?.change ?? null);
   const presentation = useRef(0);
   const [diff, setDiff] = useState<{ original: string; modified: string; title: string } | null>(
     null,
   );
+  const [bufferRevision, setBufferRevision] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   useEffect(() => onBlocked(root, !!conflict || saving), [conflict, saving, root, onBlocked]);
@@ -82,6 +92,30 @@ function CheckoutView({
       window.removeEventListener("keydown", key);
     };
   }, [active]);
+  function record(file: string, b: BufferState) {
+    memory.drafts = memory.drafts.filter((d) => d.root !== root || d.path !== file);
+    if (b.model.getValue() !== b.disk.text)
+      memory.drafts.push({ root, path: file, text: b.model.getValue(), disk: b.disk });
+    return persist();
+  }
+  function addBuffer(file: string, disk: Document, text = disk.text) {
+    const b = {
+      disk,
+      model: monaco.editor.createModel(text, undefined, monaco.Uri.file(root + "/" + file)),
+    };
+    buffers.current.set(file, b);
+    b.model.onDidChangeContent(() => {
+      void record(file, b);
+    });
+    return b;
+  }
+  useEffect(() => {
+    for (const d of memory.drafts.filter((d) => d.root === root)) addBuffer(d.path, d.disk, d.text);
+    if (path) void select(path, false);
+    return () => {
+      closers.delete(root);
+    };
+  }, []);
   useEffect(
     () => () => {
       for (const b of buffers.current.values()) b.model.dispose();
@@ -90,7 +124,7 @@ function CheckoutView({
   );
   useEffect(() => {
     void refresh().catch(report);
-    void browse("");
+    void browse(directory);
   }, []);
   useLayoutEffect(() => {
     presentation.current++;
@@ -104,7 +138,8 @@ function CheckoutView({
   }, [status?.root, mode]);
   useEffect(() => {
     if (!container.current || !path || diff || mode !== "Files") return;
-    const b = buffers.current.get(path)!;
+    const b = buffers.current.get(path);
+    if (!b) return;
     const instance = monaco.editor.create(container.current, {
       model: b.model,
       automaticLayout: true,
@@ -120,7 +155,7 @@ function CheckoutView({
       instance.dispose();
       editor.current = null;
     };
-  }, [path, diff, mode]);
+  }, [path, diff, mode, bufferRevision]);
   useEffect(() => {
     if (!diff || !container.current) return;
     const original = monaco.editor.createModel(diff.original, "plaintext");
@@ -147,32 +182,28 @@ function CheckoutView({
       report(e);
     }
   }
-  async function select(file: string) {
-    const generation = ++presentation.current;
+  async function select(file: string, present = true) {
+    const generation = present ? ++presentation.current : presentation.current;
     try {
       if (!buffers.current.has(file)) {
         const disk: Document = await projectCall("read", root, file);
-        if (!buffers.current.has(file))
-          buffers.current.set(file, {
-            disk,
-            model: monaco.editor.createModel(
-              disk.text,
-              undefined,
-              monaco.Uri.file(status!.root + "/" + file),
-            ),
-          });
+        if (!buffers.current.has(file)) addBuffer(file, disk);
+      }
+      if (!present) {
+        setBufferRevision((old) => old + 1);
+        return;
       }
       if (generation !== presentation.current) return;
       setPath(file);
       setDiff(null);
+      setBufferRevision((old) => old + 1);
       setMessage("Cmd+S to save.");
     } catch (e) {
       report(e);
     }
   }
-  async function save(version?: string) {
-    if (!path || saveInFlight.current || mode !== "Files") return;
-    const target = path;
+  async function save(version?: string, target = path) {
+    if (!target || saveInFlight.current) return false;
     const b = buffers.current.get(target)!;
     const text = b.model.getValue();
     saveInFlight.current = true;
@@ -193,8 +224,10 @@ function CheckoutView({
         setDirty(b.model.getValue() !== b.disk.text);
         setConflict(null);
         setDiff(null);
-        setMessage("Saved " + target);
+        await record(target, b);
         await refresh();
+        setMessage("Saved " + target);
+        return b.model.getValue() === b.disk.text;
       }
     } catch (e) {
       report(e);
@@ -214,6 +247,7 @@ function CheckoutView({
       setConflict(null);
       setDiff(null);
       setDirty(false);
+      await record(conflict.path, b);
       setMessage("Reloaded from disk.");
     } catch (e) {
       report(e);
@@ -224,6 +258,8 @@ function CheckoutView({
     const generation = ++presentation.current;
     try {
       selectedChange.current = change;
+      memory.views[root] = { ...memory.views[root], change };
+      void persist();
       const value = await projectCall("diff", root, change.path, change.area);
       if (generation !== presentation.current || modeRef.current !== "Source Control") return;
       setDiff({ ...value, title: change.area + " · " + change.path });
@@ -234,6 +270,50 @@ function CheckoutView({
       report(e);
     }
   }
+  async function closeFile(file: string, dispose = true) {
+    const b = buffers.current.get(file);
+    if (!b || saveInFlight.current) return false;
+    if (b.model.getValue() !== b.disk.text) {
+      const choice = await window.escode.lifecycle("dirty", root + "/" + file);
+      if (choice === 2) return false;
+      if (choice === 0 && !(await save(undefined, file))) {
+        setPath(file);
+        window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
+        return false;
+      }
+    }
+    // Remove the durable draft before disposing the only in-memory copy.
+    const drafts = memory.drafts;
+    memory.drafts = drafts.filter((d) => d.root !== root || d.path !== file);
+    try {
+      await persist();
+    } catch (error) {
+      memory.drafts = drafts;
+      report(error);
+      return false;
+    }
+    if (!dispose) {
+      b.model.setValue(b.disk.text);
+      return true;
+    }
+    buffers.current.delete(file);
+    b.model.dispose();
+    if (path === file) {
+      setPath("");
+      setDiff(null);
+      setConflict(null);
+      setDirty(false);
+    }
+    return true;
+  }
+  closers.set(root, {
+    project,
+    close: async () => {
+      for (const file of [...buffers.current.keys()])
+        if (!(await closeFile(file, false))) return false;
+      return true;
+    },
+  });
   return (
     <div className="workspace" hidden={!active || mode === "Chats"}>
       <aside>
@@ -300,6 +380,11 @@ function CheckoutView({
                 </Button>
               )}
             </div>
+            {path && mode === "Files" && (
+              <Button disabled={saving} onClick={() => void closeFile(path)}>
+                Close file
+              </Button>
+            )}
             {conflict && (
               <div role="alert" className="conflict">
                 <p>{conflict.path} changed on disk. Your edits are retained.</p>
@@ -348,9 +433,9 @@ function ProjectView({
   active: boolean;
   onActivity: (activity: string) => void;
 }) {
-  const [mode, setMode] = useState("Files");
-  const [checkout, setCheckout] = useState(initial.root);
-  const [roots, setRoots] = useState([initial.root]);
+  const [mode, setMode] = useMemory(initial.project, "mode", "Files");
+  const [checkout, setCheckout] = useMemory(initial.project, "checkout", initial.root);
+  const [roots, setRoots] = useMemory(initial.project, "roots", [initial.root]);
   const [branches, setBranches] = useState<Record<string, string>>({
     [initial.root]: initial.branch,
   });
@@ -373,6 +458,17 @@ function ProjectView({
     setRoots((old) => (old.includes(root) ? old : [...old, root]));
     setCheckout(root);
   };
+  useEffect(() => {
+    const reveal = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail.project === initial.project) {
+        selectCheckout(detail.root);
+        setMode("Files");
+      }
+    };
+    window.addEventListener("reveal-file", reveal);
+    return () => window.removeEventListener("reveal-file", reveal);
+  }, []);
   const activityChanged = React.useCallback(
     (value: string) => {
       setActivity(value);
@@ -402,6 +498,7 @@ function ProjectView({
         <CheckoutView
           key={root}
           root={root}
+          project={initial.project}
           mode={mode}
           active={active && root === checkout}
           onBlocked={onBlocked}
@@ -425,28 +522,86 @@ function ProjectView({
     </section>
   );
 }
-function App() {
-  const [projects, setProjects] = useState<Status[]>([]);
-  const [selected, setSelected] = useState("");
+function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
+  const [projects, setProjects] = useState<Status[]>(restored);
+  const [selected, setSelected] = useState(memory.selected);
   const [activity, setActivity] = useState<Record<string, string>>({});
-  const [error, setError] = useState("");
+  const [error, setError] = useState(errors.join("\n"));
+  const [closing, setClosing] = useState(false);
+  const closeInFlight = useRef(false);
+  async function close(project?: string) {
+    if (closeInFlight.current) return;
+    closeInFlight.current = true;
+    setClosing(true);
+    try {
+      if (!(await window.escode.lifecycle("prepare", project))) return;
+      for (const entry of closers.values()) {
+        if ((!project || entry.project === project) && !(await entry.close())) return;
+      }
+      await flush();
+      const previousProjects = memory.projects,
+        previousSelected = memory.selected;
+      try {
+        if (project) {
+          memory.projects = memory.projects.filter((p) => p.project !== project);
+          memory.selected = memory.projects[0]?.project ?? "";
+          await persist();
+        }
+        await window.escode.lifecycle("finish", project);
+      } catch (error) {
+        memory.projects = previousProjects;
+        memory.selected = previousSelected;
+        void persist();
+        throw error;
+      }
+      if (project) {
+        setProjects((old) => old.filter((p) => p.project !== project));
+        setSelected(memory.selected);
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      closeInFlight.current = false;
+      setClosing(false);
+    }
+  }
+  useEffect(() => window.escode.onClose(() => void close()), [projects]);
+  useEffect(() => {
+    const reveal = (event: Event) => setSelected((event as CustomEvent).detail.project);
+    window.addEventListener("reveal-file", reveal);
+    const listener = (event: Event) =>
+      setError("Recovery draft could not be saved: " + (event as CustomEvent).detail);
+    window.addEventListener("recovery-error", listener);
+    return () => {
+      window.removeEventListener("recovery-error", listener);
+      window.removeEventListener("reveal-file", reveal);
+    };
+  }, []);
+  useEffect(() => {
+    memory.selected = selected;
+    void persist();
+  }, [selected]);
   const callbacks = useRef(new Map<string, (value: string) => void>());
   async function open() {
     try {
       const value = await window.escode.project("open");
       if (!value) return;
       setProjects((old) => (old.some((p) => p.project === value.project) ? old : [...old, value]));
+      if (!memory.projects.some((p) => p.project === value.project))
+        memory.projects.push({ project: value.project, root: value.root });
+      void persist();
       setSelected(value.project);
     } catch (e) {
       setError(String(e));
     }
   }
   return (
-    <main {...stylex.props(styles.page)}>
+    <main {...stylex.props(styles.page)} inert={closing}>
       <header>
         <strong>escode</strong>
         <Button onClick={() => void open()}>Open project…</Button>
         <span>{selected}</span>
+        {selected && <Button onClick={() => void close(selected)}>Close project</Button>}
       </header>
       <nav className="project-tabs" aria-label="Projects">
         {projects.map((p) => (
@@ -480,4 +635,26 @@ function App() {
     </main>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+window.escode
+  .lifecycle("load")
+  .then(({ state, restored, errors }) => {
+    initialize(state);
+    createRoot(document.getElementById("root")!).render(
+      <App restored={restored} errors={errors} />,
+    );
+  })
+  .catch((error) => {
+    window.escode.onClose(() => {
+      void window.escode
+        .lifecycle("prepare")
+        .then((confirmed) => {
+          if (confirmed) return window.escode.lifecycle("finish");
+        })
+        .catch((error) => {
+          document.getElementById("root")!.textContent += "\n" + String(error);
+        });
+    });
+    document.getElementById("root")!.textContent =
+      "Workspace could not be loaded. Existing recovery data has been retained. Resolve the error and restart: " +
+      String(error);
+  });

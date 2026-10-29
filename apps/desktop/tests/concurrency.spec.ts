@@ -96,6 +96,7 @@ createInterface({input:process.stdin}).on('line', line => {
       const fs = process.getBuiltinModule("fs/promises") as any;
       const rename = fs.rename;
       fs.rename = async (...args: unknown[]) => {
+        if (!String(args[1]).endsWith("/chats.json")) return rename(...args);
         fs.rename = rename;
         await new Promise<void>((resolve) => {
           (globalThis as any).releaseChatCreate = resolve;
@@ -192,6 +193,12 @@ createInterface({input:process.stdin}).on('line', line => {
     expect(survivor.requests).toHaveLength(1);
     await page.screenshot({ path: "test-results/concurrency.png" });
   } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+        response: options.buttons[0] === "Save" ? 1 : 0,
+        checkboxChecked: false,
+      });
+    });
     await app.close();
     await rm(dir, { recursive: true, force: true });
   }

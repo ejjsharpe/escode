@@ -1,0 +1,133 @@
+import { mkdir, open, readFile, rename } from "node:fs/promises";
+import { dirname, isAbsolute } from "node:path";
+import type { Document } from "./project";
+export type RecoveryDraft = { root: string; path: string; text: string; disk: Document };
+export type ViewMemory = {
+  mode?: string;
+  checkout?: string;
+  roots?: string[];
+  path?: string;
+  directory?: string;
+  change?: { path: string; area: "staged" | "unstaged" | "untracked" };
+  chat?: string;
+};
+export type WorkspaceState = {
+  projects: { project: string; root: string }[];
+  selected: string;
+  views: Record<string, ViewMemory>;
+  drafts: RecoveryDraft[];
+};
+export type RestoredStatus = {
+  project: string;
+  root: string;
+  branch: string;
+  changes: import("./project").Change[];
+};
+export interface LifecycleBridge {
+  (
+    operation: "load",
+  ): Promise<{ state: WorkspaceState; restored: RestoredStatus[]; errors: string[] }>;
+  (operation: "persist", state: WorkspaceState): Promise<void>;
+  (operation: "dirty", path: string): Promise<0 | 1 | 2>;
+  (operation: "prepare", project?: string): Promise<boolean>;
+  (operation: "finish", project?: string): Promise<void>;
+}
+export const emptyWorkspace = (): WorkspaceState => ({
+  projects: [],
+  selected: "",
+  views: {},
+  drafts: [],
+});
+function validate(value: unknown): asserts value is WorkspaceState {
+  const s = value as WorkspaceState;
+  if (
+    !s ||
+    !Array.isArray(s.projects) ||
+    !Array.isArray(s.drafts) ||
+    typeof s.selected !== "string" ||
+    !s.views ||
+    typeof s.views !== "object" ||
+    Array.isArray(s.views)
+  )
+    throw Error("Invalid workspace");
+  if (
+    s.projects.some(
+      (p) =>
+        !p ||
+        typeof p.project !== "string" ||
+        !isAbsolute(p.project) ||
+        typeof p.root !== "string" ||
+        !isAbsolute(p.root),
+    )
+  )
+    throw Error("Invalid project memory");
+  for (const d of s.drafts) {
+    if (
+      !d ||
+      typeof d.root !== "string" ||
+      !isAbsolute(d.root) ||
+      typeof d.path !== "string" ||
+      !d.path ||
+      isAbsolute(d.path) ||
+      d.path.split("/").includes("..") ||
+      typeof d.text !== "string" ||
+      typeof d.disk?.text !== "string" ||
+      typeof d.disk.version !== "string"
+    )
+      throw Error("Invalid recovery draft");
+  }
+  for (const v of Object.values(s.views)) {
+    if (
+      !v ||
+      typeof v !== "object" ||
+      (v.mode !== undefined && !["Files", "Source Control", "Chats"].includes(v.mode)) ||
+      [v.checkout, v.path, v.directory, v.chat].some(
+        (x) => x !== undefined && typeof x !== "string",
+      ) ||
+      (v.roots !== undefined &&
+        (!Array.isArray(v.roots) || v.roots.some((x) => typeof x !== "string"))) ||
+      (v.change !== undefined &&
+        (typeof v.change.path !== "string" ||
+          !["staged", "unstaged", "untracked"].includes(v.change.area)))
+    )
+      throw Error("Invalid view memory");
+  }
+}
+export class Workspace {
+  private queue: Promise<unknown> = Promise.resolve();
+  constructor(private file: string) {}
+  async read(): Promise<WorkspaceState> {
+    await this.queue;
+    try {
+      const state: unknown = JSON.parse(await readFile(this.file, "utf8"));
+      validate(state);
+      return state;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyWorkspace();
+      throw error;
+    }
+  }
+  write(state: unknown) {
+    const task = this.queue.then(async () => {
+      validate(state);
+      await mkdir(dirname(this.file), { recursive: true, mode: 0o700 });
+      const temporary = this.file + ".tmp";
+      const fd = await open(temporary, "w", 0o600);
+      try {
+        await fd.writeFile(JSON.stringify(state));
+        await fd.sync();
+      } finally {
+        await fd.close();
+      }
+      await rename(temporary, this.file);
+      const directory = await open(dirname(this.file), "r");
+      try {
+        await directory.sync();
+      } finally {
+        await directory.close();
+      }
+    });
+    this.queue = task.catch(() => {});
+    return task;
+  }
+}

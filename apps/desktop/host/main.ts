@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { toolStatus } from "./tools";
 import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
+import { Workspace } from "./workspace";
 import { Project } from "./project";
 const developmentOrigin = "http://127.0.0.1:5173";
 app.whenReady().then(() => {
@@ -52,6 +53,93 @@ app.whenReady().then(() => {
   const store = new Chats(join(app.getPath("userData"), "chats.json"));
   const chats = new ChatService(store);
   const projects = new Map<string, Project>();
+  const workspace = new Workspace(join(app.getPath("userData"), "workspace.json"));
+  let mayClose = false;
+  window.on("close", (event) => {
+    if (mayClose) return;
+    event.preventDefault();
+    window.webContents.send("close-request");
+  });
+  app.on("before-quit", (event) => {
+    if (mayClose) return;
+    event.preventDefault();
+    window.webContents.send("close-request");
+  });
+  ipcMain.handle("lifecycle", async (event, operation: unknown, ...args: unknown[]) => {
+    if (
+      event.sender !== window.webContents ||
+      event.senderFrame !== window.webContents.mainFrame ||
+      event.senderFrame.url !== documentURL
+    )
+      throw Error("Invalid sender");
+    if (operation === "load" && !args.length) {
+      const state = await workspace.read();
+      const errors: string[] = [];
+      const restored = [];
+      for (const item of state.projects) {
+        try {
+          const p = await Project.open(item.root, helper);
+          if (p.repository() !== item.project) {
+            p.close();
+            throw Error("Repository identity changed");
+          }
+          projects.get(p.root)?.close();
+          projects.set(p.root, p);
+          restored.push(await p.status());
+        } catch (error) {
+          errors.push(`${item.root}: ${String(error)}`);
+        }
+      }
+      return { state, restored, errors };
+    }
+    if (operation === "persist" && args.length === 1) return workspace.write(args[0]);
+    if (operation === "dirty" && args.length === 1 && typeof args[0] === "string") {
+      return (
+        await dialog.showMessageBox(window, {
+          message: `Save changes to ${args[0]}?`,
+          buttons: ["Save", "Discard", "Cancel"],
+          defaultId: 0,
+          cancelId: 2,
+        })
+      ).response;
+    }
+    const project = args[0];
+    if (
+      project !== undefined &&
+      (typeof project !== "string" ||
+        ![...projects.values()].some((p) => p.repository() === project))
+    )
+      throw Error("Unknown project");
+    if (operation === "prepare") {
+      if (!chats.active(project as string | undefined)) return true;
+      return (
+        (
+          await dialog.showMessageBox(window, {
+            message:
+              "Active agent work will be interrupted. Completed edits, saved chats and worktrees are retained.",
+            buttons: ["Stop and Close", "Cancel"],
+            defaultId: 1,
+            cancelId: 1,
+          })
+        ).response === 0
+      );
+    }
+    if (operation === "finish") {
+      await chats.shutdown(project as string | undefined);
+      if (project === undefined) {
+        mayClose = true;
+        app.quit();
+      } else {
+        for (const [root, p] of projects)
+          if (p.repository() === project) {
+            p.close();
+            projects.delete(root);
+          }
+      }
+      return;
+    }
+    throw Error("Invalid lifecycle request");
+  });
   const helper = join(app.isPackaged ? process.resourcesPath : __dirname, "filesystem");
   const checkout = async (root: unknown) => {
     if (typeof root !== "string") throw Error("Invalid checkout");

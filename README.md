@@ -69,5 +69,9 @@ absolute paths can be copied; setup, commits and integration stay external.
 Worktrees live under Electron user data, separated by repository identity. Failed
 creation reports possible leftovers and retries always reserve a fresh destination.
 
-Recovery, worktree removal and close/quit protection remain subsequent slices. Project tabs and view memory currently last for the app session;
-restart restoration remains lifecycle work. This is not the completed v1.
+Unsaved file buffers are persisted as local recovery drafts. Closing files, projects
+or the app offers Save/Discard/Cancel; active work requires Stop and Close.
+Quit interrupts active turns and terminates app-owned process groups. Restart
+restores tabs, view selections and available drafts; agents do not resume turns.
+Recovery is best effort: see [desktop evidence and limitations](docs/compatibility/desktop.md).
+Worktree removal remains a subsequent slice. This is not the completed v1.

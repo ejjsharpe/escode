@@ -7,6 +7,7 @@ import electron from "electron";
 for (const packaged of [false, true]) {
   test(`${packaged ? "packaged" : "unpackaged"}: edit, navigate, cancel conflict, compare and explicitly overwrite`, async () => {
     const root = await mkdtemp(join(tmpdir(), "escode-ui-"));
+    const userData = await mkdtemp(join(tmpdir(), "escode-project-user-"));
     execFileSync("git", ["init", root]);
     await writeFile(join(root, "a.txt"), "original\n");
     const env = { ...process.env };
@@ -17,7 +18,7 @@ for (const packaged of [false, true]) {
       executablePath: packaged
         ? resolve("release/mac-arm64/escode.app/Contents/MacOS/escode")
         : (electron as unknown as string),
-      args: packaged ? [] : ["."],
+      args: [...(packaged ? [] : ["."]), `--user-data-dir=${userData}`],
       env,
     });
     try {
@@ -94,7 +95,14 @@ for (const packaged of [false, true]) {
         path: `test-results/project-${packaged ? "packaged" : "unpackaged"}.png`,
       });
     } finally {
+      await app.evaluate(({ dialog }) => {
+        dialog.showMessageBox = async (_window: unknown, options: any) => ({
+          response: options.buttons[0] === "Save" ? 1 : 0,
+          checkboxChecked: false,
+        });
+      });
       await app.close();
+      await rm(userData, { recursive: true, force: true });
       await rm(root, { recursive: true, force: true });
     }
   });

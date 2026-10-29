@@ -2,7 +2,7 @@ import { access, open } from "node:fs/promises";
 import { constants } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { execFile, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { createInterface } from "node:readline";
 const execute = promisify(execFile);
@@ -90,6 +90,7 @@ export interface CodexConnection {
   request(method: string, params: unknown): Promise<any>;
   respond(id: number | string, result: unknown): void;
   close(): void;
+  finished?: Promise<void>;
 }
 export async function connectCodex(
   cwd: string,
@@ -111,10 +112,40 @@ export async function connectCodex(
   const command = await codexCommand(path, ["app-server", "--listen", "stdio://"]);
   const child = spawn(command.executable, command.args, {
     cwd,
+    detached: true,
     env: command.env,
     stdio: ["pipe", "pipe", "pipe"],
   });
   child.stderr.resume();
+  // A private process group includes ordinary tool descendants, even after the server exits.
+  const killGroup = (signal: NodeJS.Signals) => {
+    if (!child.pid) return;
+    try {
+      process.kill(-child.pid, signal);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      // macOS may report EPERM for a group whose final process has just exited.
+      if (code === "ESRCH") return;
+      if (
+        code === "EPERM" &&
+        !execFileSync("/bin/ps", ["-axo", "pgid=,stat="], { encoding: "utf8" })
+          .split("\n")
+          .some((line) => {
+            const [group, state] = line.trim().split(/\s+/);
+            return Number(group) === child.pid && !state?.startsWith("Z");
+          })
+      )
+        return;
+      throw error;
+    }
+  };
+  let finish: () => void;
+  let terminationFailed: (error: unknown) => void;
+  const finished = new Promise<void>((resolve, reject) => {
+    finish = resolve;
+    terminationFailed = reject;
+  });
+  void finished.catch(() => {});
   const lines = createInterface({ input: child.stdout });
   let sequence = 0,
     closed = false;
@@ -136,7 +167,19 @@ export async function connectCodex(
     }
     pending.clear();
     lines.close();
-    child.kill();
+    try {
+      killGroup("SIGTERM");
+    } catch {
+      /* Retry with escalation below. */
+    }
+    setTimeout(() => {
+      try {
+        killGroup("SIGKILL");
+        finish();
+      } catch (error) {
+        terminationFailed(error);
+      }
+    }, 300);
     disconnected(error);
   };
   const write = (value: unknown) => {
@@ -174,6 +217,7 @@ export async function connectCodex(
     }
   });
   const rpc: CodexConnection = {
+    finished,
     installation: { path, version },
     request(method, params) {
       return new Promise((resolve, reject) => {
@@ -210,6 +254,7 @@ export async function connectCodex(
     return rpc;
   } catch (error) {
     rpc.close();
+    await rpc.finished;
     throw Error(
       codexDiagnostic(path, version, error instanceof Error ? error.message : String(error)),
     );

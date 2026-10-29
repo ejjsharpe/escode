@@ -75,6 +75,12 @@ test("saved Codex chat streams and reopens via a fresh connection", async () => 
       path: `test-results/chat-${packaged ? "packaged" : "unpackaged"}.png`,
     });
   } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+        response: options.buttons[0] === "Save" ? 1 : 0,
+        checkboxChecked: false,
+      });
+    });
     await app.close();
     await rm(root, { recursive: true, force: true });
     await rm(userData, { recursive: true, force: true });

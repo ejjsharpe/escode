@@ -105,6 +105,10 @@ export class ChatService {
             s.error = error.message;
           },
         );
+        if (s.epoch !== epoch) {
+          rpc.close();
+          throw Error("Project closed during connection.");
+        }
         s.rpc = rpc;
         const account = await rpc.request("account/read", { refreshToken: false });
         if (!account.account)
@@ -162,6 +166,7 @@ export class ChatService {
         s.connected = true;
       } catch (error) {
         rpc?.close();
+        await rpc?.finished;
         s.connected = false;
         const message = error instanceof Error ? error.message : String(error);
         s.error = rpc?.installation
@@ -360,6 +365,37 @@ export class ChatService {
     const s = this.session(project, id);
     if (s.busy || s.opening) throw Error("Stop active work before reconnecting.");
     s.rpc?.close();
+  }
+  active(project?: string) {
+    return [...this.sessions.values()].some(
+      (s) => (!project || s.project === project) && (s.busy || s.opening || s.requests.length),
+    );
+  }
+  async shutdown(project?: string) {
+    const sessions = [...this.sessions.values()].filter((s) => !project || s.project === project);
+    await Promise.all(
+      sessions.map(async (s) => {
+        if (s.busy && s.turnId && s.rpc) {
+          await Promise.race([
+            s.rpc
+              .request("turn/interrupt", { threadId: s.threadId, turnId: s.turnId })
+              .catch(() => {}),
+            new Promise((resolve) => setTimeout(resolve, 500)),
+          ]);
+        }
+        // Invalidate setup before waiting: an in-flight connector must close its eventual RPC.
+        s.epoch = randomUUID();
+        s.rpc?.close();
+        await s.opening?.catch(() => {});
+        s.rpc?.close();
+        await s.rpc?.finished;
+        s.connected = false;
+        s.busy = false;
+        s.turnId = null;
+        s.requests = [];
+        s.requestIds.clear();
+      }),
+    );
   }
   close() {
     for (const s of this.sessions.values()) s.rpc?.close();

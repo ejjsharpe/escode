@@ -13,6 +13,8 @@ test("packaged app loads CSS, Monaco and tools without a development PATH", asyn
     await expect(page.locator("main")).toHaveCSS("background-color", "rgb(24, 32, 43)");
     expect(await page.evaluate(() => typeof (window as any).require)).toBe("undefined");
     expect(await page.evaluate(() => Object.keys((window as any).escode))).toEqual([
+      "lifecycle",
+      "onClose",
       "chat",
       "toolStatus",
       "project",
@@ -23,6 +25,12 @@ test("packaged app loads CSS, Monaco and tools without a development PATH", asyn
     expect(errors).toEqual([]);
     await page.screenshot({ path: "test-results/packaged.png" });
   } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+        response: options.buttons[0] === "Save" ? 1 : 0,
+        checkboxChecked: false,
+      });
+    });
     await app.close();
   }
 });

@@ -81,6 +81,12 @@ test("create from committed state, retain unsaved edits, and explicitly reuse wi
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.screenshot({ path: "test-results/worktree-choices.png" });
   } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+        response: options.buttons[0] === "Save" ? 1 : 0,
+        checkboxChecked: false,
+      });
+    });
     await app.close();
     await rm(dir, { recursive: true, force: true });
   }

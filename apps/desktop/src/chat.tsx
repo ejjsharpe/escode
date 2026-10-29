@@ -1,3 +1,4 @@
+import { useMemory } from "./workspace";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@base-ui/react/button";
@@ -144,7 +145,7 @@ export function ChatView({
   onActivity: (activity: string) => void;
 }) {
   const [chats, setChats] = useState<SavedChat[]>([]);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useMemory(project, "chat", "");
   const [snapshots, setSnapshots] = useState<Record<string, ChatSnapshot>>({});
   const [error, setError] = useState("");
   const [pending, setPending] = useState<Record<string, boolean>>({});
@@ -167,7 +168,19 @@ export function ChatView({
     return list;
   };
   useEffect(() => {
-    void load().catch(report);
+    void load()
+      .then((list) => {
+        if (selected && list.some((c) => c.id === selected)) {
+          selectedRef.current = selected;
+          setDraft(drafts.current[selected] ?? "");
+          // Opening history may connect; a new turn still requires explicit Send.
+          void window.escode
+            .chat("open", project, selected)
+            .then((value) => setSnapshots((old) => ({ ...old, [selected]: value })))
+            .catch(report);
+        }
+      })
+      .catch(report);
   }, [project]);
   useEffect(() => {
     let alive = true;

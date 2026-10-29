@@ -23,6 +23,12 @@ test("StyleX updates during development", async () => {
     await expect(page.locator("main")).toHaveCSS("background-color", "rgb(32, 48, 64)");
   } finally {
     await writeFile(source, original);
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+        response: options.buttons[0] === "Save" ? 1 : 0,
+        checkboxChecked: false,
+      });
+    });
     await app.close();
     await server.close();
   }

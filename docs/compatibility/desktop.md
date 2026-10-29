@@ -247,3 +247,50 @@ message counts rather than assuming there can be no additional activity items.
 Select an installation for this check with `ESCODE_TEST_CODEX_DIR=/opt/homebrew/bin`
 and `ESCODE_LIVE_CHAT=1` when running `bun run --cwd apps/desktop smoke -- tests/chat.spec.ts`.
 Future releases are admitted by version and checked at runtime, not pre-certified.
+
+## [Recover unsaved work and close or restart predictably](https://github.com/ejjsharpe/escode/issues/17)
+
+`workspace.json` in Electron user data contains project tab order, selection,
+per-project mode/checkout/chat, per-checkout file/directory/diff selection and
+unsaved buffers with their loaded disk baselines. Saved chats and message drafts
+remain in `chats.json`; Codex owns conversation history. Restart may connect to
+load the selected saved history, but never sends a turn. Missing original
+checkouts report an error and retain their persisted entries/drafts for retry by
+reopening the project. Invalid workspace data blocks startup without overwriting it.
+
+Recovery writes are serialized, replace the file atomically and sync the temporary
+file and containing directory before acknowledgement. Each content change queues
+a snapshot without a debounce. A crash before IPC delivery or acknowledgement can
+lose recent edits; power-loss durability and arbitrary storage failures are not
+guaranteed. Recovery data contains source text and is stored with private file
+permissions under the user's account. Explicit discard waits for removal of the
+durable draft before closing the buffer. Restored drafts retain the original disk
+baseline, so an external edit still triggers ordinary Compare/Overwrite/Reload.
+
+`tests/lifecycle.spec.ts` hard-kills the real Electron host with SIGKILL after the
+workspace draft appears on disk, changes the source externally, relaunches with
+the same user-data directory, checks recovery/conflict, cancels project close,
+fails a close-save with a deleted file, and verifies explicit discard stays gone
+through restart. It also verifies remembered mode. This establishes recovery of
+an available persisted draft on this filesystem; it does not establish recovery
+of an unacknowledged keystroke or a machine power failure.
+
+`host/shutdown.test.ts` uses real protocol fixture processes and descendants,
+including a child that ignores SIGTERM. Project shutdown requests turn interruption,
+invalidates live requests and connections, terminates its private process groups,
+then escalates to SIGKILL after 300 ms. Other projects remain usable. App quit
+applies this to all connected chats. Saved chats, branches and worktrees are
+retained. Descendants that deliberately escape the owned process group (daemonize
+into a new session) are outside this process-group lifetime guarantee.
+
+The shutdown regressions also cover a connection still opening and a failed
+initialize response: both wait for descendant cleanup before quit can complete.
+The Electron lifecycle smoke checks active-work cancellation, interruption on quit,
+process exit and reopening saved history without another turn. Restart checks
+include the selected file, mode and Git diff. These results supersede the earlier
+slices' close/restart/recovery deferrals above.
+
+Validation on 2026-10-29: typecheck, lint, full host suite, build and packaging
+passed. Electron smoke checks passed with the StyleX development test excluded;
+its required port 5173 was already occupied. The live Codex smoke remains opt-in
+and was not run for this slice; protocol fixtures exercise real child processes.

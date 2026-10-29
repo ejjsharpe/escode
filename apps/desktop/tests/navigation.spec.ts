@@ -98,7 +98,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await page.getByRole("button", { name: "Chat 2", exact: true }).click();
     await expect(page.getByLabel("Message Codex")).toHaveValue("worktree message draft");
     await page.getByRole("button", { name: "Files", exact: true }).click();
-    await expect(page.locator(".view-nav")).toContainText(worktree);
+    await expect(page.locator(".view-nav:visible")).toContainText(worktree);
     await page.getByRole("button", { name: "a.txt", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText(a);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
@@ -113,6 +113,12 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(page.getByLabel("Message Codex")).toHaveValue("original message draft");
     await page.screenshot({ path: "test-results/navigation.png" });
   } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+        response: options.buttons[0] === "Save" ? 1 : 0,
+        checkboxChecked: false,
+      });
+    });
     await app.close();
     await rm(dir, { recursive: true, force: true });
   }
