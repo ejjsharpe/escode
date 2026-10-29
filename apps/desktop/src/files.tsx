@@ -200,6 +200,9 @@ export function FilesTree({
           ],
         });
       }
+      epoch.current++;
+      loaded.current.clear();
+      pendingRescan.current = true;
       setEdit(
         kind === "rename"
           ? {
@@ -338,25 +341,88 @@ export function FilesTree({
     latest.current = { ...latest.current, ...next };
     setState(latest.current);
   }
+  const editing = useRef(edit);
+  editing.current = edit;
+  const pendingRescan = useRef(false);
   function load(path: string): Promise<Listing> {
     const pending = loaded.current.get(path);
     if (pending) return pending;
     const generation = epoch.current;
     const task = window.escode.project("files-filter", root, path).then(
       (listing) => {
-        if (generation === epoch.current) setCache((c) => ({ ...c, [path]: listing }));
+        if (generation === epoch.current && loaded.current.get(path) === task) {
+          setCache((c) => ({ ...c, [path]: listing }));
+        }
         return listing;
       },
       (error) => {
-        if (generation === epoch.current)
+        if (generation === epoch.current && loaded.current.get(path) === task) {
           setCache((c) => ({ ...c, [path]: { error: String(error) } }));
+        }
         return { error: String(error) };
       },
     );
     loaded.current.set(path, task);
     return task;
   }
+  const [watchError, setWatchError] = useState("");
+  const [watchRevision, setWatchRevision] = useState(0);
+  const cacheRef = useRef(cache);
+  cacheRef.current = cache;
+  function loadedDirectories() {
+    return Object.keys(cacheRef.current).filter((path) => {
+      const parts = path.split("/");
+      for (let i = 0; i < parts.length; i++) {
+        const entries = cacheRef.current[parts.slice(0, i).join("/")]?.entries;
+        if (path && entries && !entries.some((e) => e.directory && e.path === parts.slice(0, i + 1).join("/")))
+          return false;
+      }
+      return true;
+    });
+  }
+  function rescan() {
+    // Keep the inline field mounted until its user commits or cancels.
+    if (editing.current) {
+      pendingRescan.current = true;
+      return;
+    }
+    pendingRescan.current = false;
+    epoch.current++;
+    const paths = [...new Set(["", ...loadedDirectories()])];
+    loaded.current.clear();
+    for (const path of paths) void load(path);
+  }
+  useEffect(() => {
+    if (!edit && pendingRescan.current) rescan();
+  }, [edit]);
+  const watchPaths = JSON.stringify(loadedDirectories().sort());
+  useEffect(() => {
+    if (!active) return;
+    return window.escode.watchFiles(root, JSON.parse(watchPaths), (error) => {
+      if (error) setWatchError(error);
+      rescan();
+      if (!error) setWatchRevision((r) => r + 1);
+    });
+  }, [root, active, watchPaths, watchRevision]);
+  const wasActive = useRef(active);
+  useEffect(() => {
+    if (!active) {
+      wasActive.current = false;
+      return;
+    }
+    const recover = () => {
+      setWatchError("");
+      setWatchRevision((r) => r + 1);
+      rescan();
+    };
+    if (!wasActive.current) recover();
+    wasActive.current = true;
+    window.addEventListener("focus", recover);
+    return () => window.removeEventListener("focus", recover);
+  }, [root, active]);
   function refresh() {
+    setWatchError("");
+    setWatchRevision((r) => r + 1);
     restoring.current = true;
     epoch.current++;
     loaded.current.clear();
@@ -364,7 +430,8 @@ export function FilesTree({
   }
   useEffect(() => {
     if (memory.views[root]?.files) setState(memory.views[root].files!);
-    refresh();
+    rescan();
+    setWatchRevision((r) => r + 1);
   }, [revision]);
   useEffect(() => {
     void load("");
@@ -570,6 +637,10 @@ export function FilesTree({
     );
   }
   function toggle(path: string) {
+    if (!state.expanded.includes(path)) {
+      loaded.current.delete(path);
+      void load(path);
+    }
     revealSequence.current++;
     pendingScroll.current = "";
     const expanded = state.expanded.includes(path);
@@ -871,6 +942,11 @@ export function FilesTree({
           Collapse All
         </button>
       </div>
+      {watchError && (
+        <div role="status" className="tree-edit-help">
+          Automatic Files updates unavailable: {watchError} Use Refresh or return to this window to rescan. Available edits are retained.
+        </div>
+      )}
       {filterError && (
         <div role="status" className="tree-edit-help">
           {filterError}

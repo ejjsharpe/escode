@@ -305,6 +305,23 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
         if (typeof listing === "string") throw Error(listing);
         expect(listing.ignored).toEqual(["active.log"]);
       }
+      // Watch authority follows the retained session, with replaced roots and quit still denied.
+      await page.evaluate((root) => {
+        (window as any).watchResult = "pending";
+        (window as any).releaseWatch = window.escode.watchFiles(root, [""], (error) => {
+          (window as any).watchResult = error ?? "changed";
+        });
+      }, root);
+      if (denied) {
+        await expect.poll(() => page.evaluate(() => (window as any).watchResult)).toMatch(/replaced|closed/);
+      } else {
+        let notification = 0;
+        await expect.poll(async () => {
+          await writeFile(join(root, "watch-after-close.txt"), String(notification++));
+          return page.evaluate(() => (window as any).watchResult);
+        }).toBe("changed");
+      }
+      await page.evaluate(() => (window as any).releaseWatch());
       const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
       expect(state.views[root].files.hideIgnored).toBe(true);
       if (change !== "editor close") expect(state.drafts.find((d: any) => d.root === root)).toMatchObject({

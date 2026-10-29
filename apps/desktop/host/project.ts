@@ -13,6 +13,8 @@ import {
   existsSync,
   lstatSync,
   readdirSync,
+  watch,
+  type FSWatcher,
 } from "node:fs";
 import { resolve, relative, isAbsolute, dirname, join, basename } from "node:path";
 import { getSystemErrorName } from "node:util";
@@ -88,7 +90,89 @@ export class Project {
       return project;
     }
   }
+  private watches = new Map<string, { watcher: FSWatcher; listeners: Set<(error?: string) => void> }>();
+  private watchDisposers = new Set<() => void>();
+  watchFiles(paths: string[], notify: (error?: string) => void) {
+    const releases: (() => void)[] = [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let failure: string | undefined;
+    let disposed = false;
+    const changed = (error?: string) => {
+      if (disposed) return;
+      failure = error ?? failure;
+      if (!timer) timer = setTimeout(() => {
+        timer = undefined;
+        notify(failure);
+        failure = undefined;
+      }, 100);
+    };
+    const dispose = () => {
+      disposed = true;
+      clearTimeout(timer);
+      releases.forEach((release) => release());
+      this.watchDisposers.delete(dispose);
+    };
+    this.watchDisposers.add(dispose);
+    for (const path of new Set(paths)) {
+      try {
+        this.checkoutIdentity();
+        if (path && this.path(path) !== path) throw Error("Use an exact directory path.");
+        const full = path ? resolve(this.root, path) : this.root;
+        // O_NOFOLLOW_ANY checks every ancestor; the watcher never grants read/write authority.
+        const fd = openSync(full, directoryFlags);
+        let identity: string;
+        try {
+          const info = fstatSync(fd);
+          identity = `${info.dev}:${info.ino}`;
+        } finally {
+          closeSync(fd);
+        }
+        const key = path + "\0" + identity;
+        let entry = this.watches.get(key);
+        if (!entry) {
+          const listeners = new Set<(error?: string) => void>();
+          const watcher = watch(full, { persistent: false }, () => {
+            listeners.forEach((listener) => listener());
+          });
+          try {
+            this.checkoutIdentity();
+            const check = openSync(full, directoryFlags);
+            try {
+              const current = fstatSync(check);
+              if (`${current.dev}:${current.ino}` !== identity)
+                throw Error("Directory changed while subscribing. Use Refresh to retry.");
+            } finally {
+              closeSync(check);
+            }
+          } catch (error) {
+            watcher.close();
+            throw error;
+          }
+          entry = { watcher, listeners };
+          this.watches.set(key, entry);
+          watcher.on("error", (error) => {
+            listeners.forEach((listener) => listener(`${full}: ${String(error)}`));
+            watcher.close();
+            if (this.watches.get(key)?.watcher === watcher) this.watches.delete(key);
+          });
+        }
+        entry.listeners.add(changed);
+        const captured = entry;
+        releases.push(() => {
+          captured.listeners.delete(changed);
+          if (!captured.listeners.size) {
+            captured.watcher.close();
+            if (this.watches.get(key) === captured) this.watches.delete(key);
+          }
+        });
+      } catch (error) {
+        changed(`${this.root}/${path}: ${String(error)}`);
+      }
+    }
+    return dispose;
+  }
   close() {
+    for (const dispose of this.watchDisposers) dispose();
     if (this.directory !== undefined) closeSync(this.directory);
     this.directory = undefined;
   }

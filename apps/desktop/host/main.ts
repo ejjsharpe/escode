@@ -348,6 +348,39 @@ app.whenReady().then(() => {
     chats.close();
     for (const p of projects.values()) p.close();
   });
+  const filesSubscriptions = new Map<string, () => void>();
+  const clearFilesSubscriptions = () => {
+    filesSubscriptions.forEach((dispose) => dispose());
+    filesSubscriptions.clear();
+  };
+  window.webContents.on("did-start-navigation", clearFilesSubscriptions);
+  window.webContents.on("render-process-gone", clearFilesSubscriptions);
+  window.on("closed", clearFilesSubscriptions);
+  ipcMain.handle("files-watch", (event, root: unknown, id: unknown, paths: unknown) => {
+    if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
+        event.senderFrame.url !== documentURL || typeof root !== "string" ||
+        typeof id !== "string" || id.length > 100 || !Array.isArray(paths) ||
+        paths.length > 10000 || paths.some((p) => typeof p !== "string"))
+      throw Error("Invalid Files subscription.");
+    filesSubscriptions.get(id)?.();
+    filesSubscriptions.delete(id);
+    if (!paths.length) return;
+    const project = projects.get(root);
+    if (!project) throw Error("Open and approve this checkout first.");
+    const identity = project.repository();
+    const session = projectSessions.get(identity);
+    if (!session || quitting) throw Error("Project session closed.");
+    for (const path of paths) {
+      const absolute = resolve(root, path);
+      if (isAppState(absolute) || stateFiles.some((file) => file.startsWith(absolute + "/")))
+        throw Error("App state is unavailable in Files.");
+    }
+    filesSubscriptions.set(id, project.watchFiles(paths, (error) => {
+      if (projects.get(root) === project && projectSessions.get(identity) === session &&
+          !quitting && !window.webContents.isDestroyed())
+        window.webContents.send("files-changed", { id, root, error });
+    }));
+  });
   ipcMain.handle("project", async (event, operation: unknown, ...args: unknown[]) => {
     if (
       event.sender !== window.webContents ||

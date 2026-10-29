@@ -108,7 +108,7 @@ test("lazy tree keyboard, independent selection, menus, refresh and restart reco
   }
 });
 
-test("loaded directories cache until Refresh; missing paths recover and scroll stays per project", async () => {
+test("loaded directories revalidate on expansion; missing paths recover and scroll stays per project", async () => {
   const base = await realpath(await mkdtemp(join(tmpdir(), "escode-tree-cache-")));
   const root = join(base, "repo"),
     other = join(base, "other"),
@@ -156,7 +156,8 @@ test("loaded directories cache until Refresh; missing paths recover and scroll s
     await folder.click();
     await folder.click();
     await expect(page.getByRole("treeitem", { name: "deep", exact: true })).toBeVisible();
-    expect(await app.evaluate(() => (globalThis as any).lists)).toEqual([".", "folder"]);
+    // Reopening a cached collapsed directory revalidates even after a missed notification.
+    expect(await app.evaluate(() => (globalThis as any).lists)).toEqual([".", "folder", "folder"]);
     await app.evaluate(() => {
       (globalThis as any).denyFolder = true;
     });
@@ -169,6 +170,13 @@ test("loaded directories cache until Refresh; missing paths recover and scroll s
     });
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByRole("treeitem", { name: "deep", exact: true })).toBeVisible();
+    // Deliberately miss notifications to exercise explicit recovery and directory errors.
+    await app.evaluate(({ webContents }) => {
+      for (const contents of webContents.getAllWebContents()) {
+        const send = contents.send.bind(contents);
+        contents.send = (channel, ...args) => { if (channel !== "files-changed") send(channel, ...args); };
+      }
+    });
     await rm(join(root, "folder/deep"), { recursive: true });
     await page.getByRole("treeitem", { name: "deep", exact: true }).click();
     await expect(treeStatus()).toContainText("Use Refresh to retry");
@@ -178,7 +186,7 @@ test("loaded directories cache until Refresh; missing paths recover and scroll s
     await rm(join(root, "folder"), { recursive: true });
     await folder.click();
     await folder.click();
-    await expect(page.getByRole("treeitem", { name: "deep", exact: true })).toBeVisible();
+    await expect(treeStatus()).toContainText("Use Refresh to retry");
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByRole("treeitem", { name: "folder", exact: true })).toHaveCount(0);
     await expect(

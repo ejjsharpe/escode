@@ -62,7 +62,11 @@ that the latest keystroke survives a crash.
 **Files view**:
 The project-local lazy nested tree of files in the current checkout. Expansion, keyboard
 focus, multiple selection and scroll are remembered independently per checkout; selection
-is separate from the active document. Refresh reloads visible directory state. The tree
+is separate from the active document. Coalesced host notifications reconcile loaded directories;
+window focus and explicit Refresh rescan missed events and retry unavailable watches. Expanding
+a cached folder revalidates its listing. External disappearance retains available unsaved buffers
+and recovery drafts at their original paths. Notifications defer listing changes during inline
+editing until commit or cancel. The tree
 supports empty file/folder creation and basename-only inline Rename through the narrow
 rename/move and macOS Trash preservation gate. Rename/move retains available unsaved
 descendant edits and save-conflict baselines at their new paths. Earlier text undo
