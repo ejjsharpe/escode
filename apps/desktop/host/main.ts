@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, session } from "electron";
+import { app, BrowserWindow, ipcMain, session, dialog } from "electron";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { toolStatus } from "./tools";
+import { Project } from "./project";
 const developmentOrigin = "http://127.0.0.1:5173";
 app.whenReady().then(() => {
   const page = pathToFileURL(join(__dirname, "../renderer/index.html")).href;
@@ -45,6 +46,38 @@ app.whenReady().then(() => {
     )
       throw new Error("Invalid tools request");
     return toolStatus();
+  });
+  let project: Project | undefined;
+  ipcMain.handle("project", async (event, operation: unknown, ...args: unknown[]) => {
+    if (
+      event.sender !== window.webContents ||
+      event.senderFrame !== window.webContents.mainFrame ||
+      event.senderFrame.url !== documentURL
+    )
+      throw Error("Invalid sender");
+    if (operation === "open" && args.length === 0) {
+      const result = await dialog.showOpenDialog(window, { properties: ["openDirectory"] });
+      if (result.canceled) return null;
+      if (project) throw Error("One project is supported in this slice. Restart to open another.");
+      project = await Project.open(result.filePaths[0]);
+      return project.status();
+    }
+    if (!project) throw Error("Open a project first.");
+    if (operation === "status" && !args.length) return project.status();
+    if (operation === "files" && args.length === 1 && typeof args[0] === "string")
+      return project.files(args[0]);
+    if (operation === "read" && args.length === 1 && typeof args[0] === "string")
+      return project.read(args[0]);
+    if (operation === "save" && args.length === 3 && args.every((a) => typeof a === "string"))
+      return project.save(args[0] as string, args[1] as string, args[2] as string);
+    if (
+      operation === "diff" &&
+      args.length === 2 &&
+      typeof args[0] === "string" &&
+      typeof args[1] === "string"
+    )
+      return project.diff({ path: args[0], area: args[1] as "staged" });
+    throw Error("Invalid project request");
   });
   void window.loadURL(documentURL);
 });
