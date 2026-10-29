@@ -116,6 +116,15 @@ app.whenReady().then(() => {
     if (operation === "load" && !args.length) {
       const state = await workspace.read();
       const approved = await workspace.approved();
+      // Saved registration survives editor closure. Approvals are host-owned authority.
+      state.savedProjects ??= [...state.projects];
+      const historical = (await store.all()).map((c) => ({ project: c.project, root: c.project }));
+      for (const item of [...approved, ...historical])
+        if (!state.savedProjects.some((p) => p.project === item.project))
+          state.savedProjects.push(item);
+      for (const item of state.savedProjects)
+        if (approved.some((p) => p.project === item.project && p.root === item.root))
+          projectSessions.set(item.project, projectSessions.get(item.project) ?? {});
       const errors: string[] = [];
       const restored = [];
       for (const item of state.projects) {
@@ -152,7 +161,12 @@ app.whenReady().then(() => {
       }
       const recovery = await operations.recover(checkout);
       if (recovery) errors.push(recovery);
-      return { state: await workspace.read(), restored, errors };
+      // Recovery changes drafts/paths on disk; registration was derived in memory above.
+      return {
+        state: { ...(await workspace.read()), savedProjects: state.savedProjects },
+        restored,
+        errors,
+      };
     }
     if (operation === "persist" && args.length === 1) {
       if (operations.busy)
@@ -431,13 +445,34 @@ app.whenReady().then(() => {
       event.senderFrame.url !== documentURL
     )
       throw Error("Invalid sender");
+    if (operation === "catalogue" && !args.length) {
+      const state = await workspace.read();
+      const approved = await workspace.approved();
+      const saved = [...(state.savedProjects ?? []), ...state.projects, ...approved];
+      for (const item of saved)
+        if (approved.some((p) => p.project === item.project && p.root === item.root))
+          projectSessions.set(item.project, projectSessions.get(item.project) ?? {});
+      return (await store.all()).filter((c) => saved.some((p) => p.project === c.project));
+    }
     const root = args.shift();
     if (typeof root !== "string") throw Error("Invalid project");
+    if (operation === "list" && !args.length) {
+      const state = await workspace.read();
+      const approved = await workspace.approved();
+      if (
+        ![...state.projects, ...(state.savedProjects ?? []), ...approved].some(
+          (p) => p.project === root,
+        ) &&
+        !projectSessions.has(root)
+      )
+        throw Error("Unknown saved project");
+      return chats.list(root);
+    }
     const owner = projectSessions.get(root);
     const requireOpen = () => {
       if (removing.has(root)) throw Error("Worktree removal is in progress. Retry afterward.");
       if (!owner || projectSessions.get(root) !== owner || quitting || closingProjects.has(root))
-        throw Error("Open this project first.");
+        throw Error("Open this project first. Use Open project… to approve its saved directory.");
     };
     requireOpen();
     if (operation === "list" && !args.length) return chats.list(root);

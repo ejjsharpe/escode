@@ -9,17 +9,27 @@ export type SavedChat = {
   hasSent?: boolean;
   removed?: boolean;
   draft: string;
+  createdAt?: number;
+  legacyOrder?: number;
 };
 export class Chats {
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private file: string) {}
   private async read(): Promise<SavedChat[]> {
     try {
-      return JSON.parse(await readFile(this.file, "utf8"));
+      const chats: SavedChat[] = JSON.parse(await readFile(this.file, "utf8"));
+      return chats.map((chat, index) => ({
+        ...chat,
+        ...(chat.createdAt === undefined ? { legacyOrder: chat.legacyOrder ?? index } : {}),
+      }));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw error;
     }
+  }
+  async all() {
+    await this.queue;
+    return this.read();
   }
   async list(project: string) {
     await this.queue;
@@ -52,6 +62,7 @@ export class Chats {
         threadId: null,
         hasSent: false,
         draft: "",
+        createdAt: Date.now(),
       };
       chats.push(chat);
       return chat;

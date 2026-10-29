@@ -53,12 +53,18 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await open(a);
     await expect(page.locator(".monaco-editor:visible")).toContainText("alpha draft");
     await expect(
-      page.getByRole("navigation", { name: "Projects" }).getByRole("button"),
+      page
+        .getByRole("navigation", { name: "Projects" })
+        .getByRole("button")
+        .filter({ hasNotText: "Agents" }),
     ).toHaveCount(2);
     // A related checkout belongs to the existing repository tab. Seed saved chats without connecting to Codex.
     await open(worktree);
     await expect(
-      page.getByRole("navigation", { name: "Projects" }).getByRole("button"),
+      page
+        .getByRole("navigation", { name: "Projects" })
+        .getByRole("button")
+        .filter({ hasNotText: "Agents" }),
     ).toHaveCount(2);
     const ids = await page.evaluate(
       async ({ a, worktree }) => {

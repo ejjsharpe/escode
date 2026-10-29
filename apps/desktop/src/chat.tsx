@@ -1,10 +1,12 @@
 import { useProjectChats } from "./chat-state";
+import { compareChats } from "./chat-order";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@base-ui/react/button";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
+  (operation: "catalogue"): Promise<SavedChat[]>;
   (operation: "list", project: string): Promise<SavedChat[]>;
   (operation: "create", project: string, checkout: string): Promise<SavedChat>;
   (operation: "open" | "snapshot", project: string, id: string): Promise<ChatSnapshot>;
@@ -130,13 +132,15 @@ export function ChatView({
   selected,
   select,
   createChat,
+  global = false,
 }: {
   project: string;
   checkout: string;
   sidebarId: string;
   selected: string;
   select: (id: string) => Promise<void>;
-  createChat: (root: string) => Promise<void>;
+  createChat?: (root: string) => Promise<void>;
+  global?: boolean;
 }) {
   const [store, { chats, snapshots, drafts, pending, responding, errors }] =
     useProjectChats(project);
@@ -150,24 +154,25 @@ export function ChatView({
   const snapshot = snapshots[selected];
   return (
     <>
-      {document.getElementById(sidebarId) &&
+      {!global &&
+        document.getElementById(sidebarId) &&
         createPortal(
           <div className="chat-list" aria-label="Saved chats">
             <Button
               disabled={working}
               onClick={() =>
                 void run(async () => {
-                  await createChat(checkout);
+                  await createChat?.(checkout);
                 })
               }
             >
               New chat on current checkout
             </Button>
             <ul>
-              {chats.map((c, index) => (
+              {[...chats].sort(compareChats).map((c) => (
                 <li key={c.id}>
                   <Button aria-pressed={selected === c.id} onClick={() => void select(c.id)}>
-                    Chat {index + 1}
+                    Chat {chats.findIndex((chat) => chat.id === c.id) + 1}
                     {snapshots[c.id]?.requests.length
                       ? " · Needs input"
                       : snapshots[c.id]?.busy
@@ -190,16 +195,14 @@ export function ChatView({
                 Checkout removed. History and drafts are retained; this chat cannot run.
               </p>
             )}
+            <div className="conversation-heading">
+              <h2>Chat {chats.findIndex((c) => c.id === selected) + 1}</h2>
+              <p>{project.split("/").at(-1)}</p>
+            </div>
             <p className="directory">Checkout: {chats.find((c) => c.id === selected)?.checkout}</p>
             {chats.filter((c) => c.checkout === chats.find((c) => c.id === selected)?.checkout)
               .length > 1 && (
               <p>These chats share files in this checkout. Their edits can interact.</p>
-            )}
-            {snapshot?.settings && (
-              <details>
-                <summary>Effective Codex settings · {snapshot.settings.model}</summary>
-                <pre>{JSON.stringify(snapshot.settings, null, 2)}</pre>
-              </details>
             )}
             <div className="chat-actions">
               <Button
@@ -221,16 +224,24 @@ export function ChatView({
                 Stop
               </Button>
               <span role="status">
-                {snapshot?.requests.length
-                  ? "Needs input"
-                  : snapshot?.busy
-                    ? "Running"
-                    : snapshot?.connected
-                      ? "Ready"
-                      : "Disconnected"}
+                {working && !snapshot
+                  ? "Loading conversation…"
+                  : snapshot?.requests.length
+                    ? "Needs input"
+                    : snapshot?.busy
+                      ? "Running"
+                      : snapshot?.connected
+                        ? "Ready"
+                        : "Disconnected"}
               </span>
             </div>
             <div className="transcript" role="region" aria-label="Conversation history">
+              {snapshot?.settings && (
+                <details>
+                  <summary>Effective Codex settings · {snapshot.settings.model}</summary>
+                  <pre>{JSON.stringify(snapshot.settings, null, 2)}</pre>
+                </details>
+              )}
               {snapshot?.items.map((item) => (
                 <article key={item.turnId + item.id}>
                   <h2>
@@ -243,16 +254,16 @@ export function ChatView({
                   <pre>{item.text}</pre>
                 </article>
               ))}
+              {snapshot?.requests.map((request) => (
+                <Request
+                  key={request.token}
+                  request={request}
+                  busy={!!responding[request.token]}
+                  answer={(value) => store.answer(snapshot.chatId, request.token, value)}
+                />
+              ))}
+              {(error || snapshot?.error) && <p role="alert">{error || snapshot?.error}</p>}
             </div>
-            {snapshot?.requests.map((request) => (
-              <Request
-                key={request.token}
-                request={request}
-                busy={!!responding[request.token]}
-                answer={(value) => store.answer(snapshot.chatId, request.token, value)}
-              />
-            ))}
-            {(error || snapshot?.error) && <p role="alert">{error || snapshot?.error}</p>}
             <form
               className="chat-compose"
               onSubmit={(e) => {
