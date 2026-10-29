@@ -5,7 +5,7 @@ A project editor with files, source changes, and Codex conversations.
 ## Language
 
 **Project**:
-A local Git repository whose files, source changes, and saved chats belong together across branch switches.
+A local Git repository whose files, source changes, and saved chats belong together across branch switches. Linked worktrees of the same repository share one project tab.
 
 **Chat**:
 A saved Codex conversation belonging to one project and attached to one checkout directory, including the user's messages and the agent's work and responses. Its checkout is chosen when the chat is created and stays fixed for that chat. Multiple chats may share a checkout. Codex stores conversation history; escode stores the project, checkout and provider-thread association and the unsent message draft. Stopping a chat interrupts its active turn without undoing completed file changes.

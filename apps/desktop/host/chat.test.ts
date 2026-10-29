@@ -234,3 +234,106 @@ createInterface({input: process.stdin}).on("line", line => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
+  "live Codex chats progress across shared/separate checkouts and projects; stop stays local",
+  async () => {
+    const { execFileSync } = await import("node:child_process");
+    const { realpath } = await import("node:fs/promises");
+    const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-live-concurrency-")));
+    const a = join(dir, "alpha"),
+      b = join(dir, "beta"),
+      worktree = join(dir, "worktree");
+    const service = new ChatService(new Chats(join(dir, "chats.json")));
+    try {
+      for (const root of [a, b]) {
+        execFileSync("git", ["init", root]);
+        execFileSync("git", [
+          "-C",
+          root,
+          "-c",
+          "user.name=Test",
+          "-c",
+          "user.email=test@example.com",
+          "commit",
+          "--allow-empty",
+          "-m",
+          "initial",
+        ]);
+      }
+      execFileSync("git", ["-C", a, "worktree", "add", "-b", "parallel", worktree]);
+      const chats = await Promise.all([
+        service.create(a),
+        service.create(a),
+        service.create(a, worktree),
+        service.create(b),
+      ]);
+      await Promise.all(chats.map((c) => service.open(c.project, c.id)));
+      await Promise.all(
+        chats.map((c, i) =>
+          service.send(
+            c.project,
+            c.id,
+            i === 0
+              ? "Run sleep 30, then reply WAITED. Do not change any files."
+              : `Reply with exactly ESCODE_CONCURRENT_${i}. Do not use tools or change files.`,
+          ),
+        ),
+      );
+      expect(chats.some((c) => service.snapshot(c.project, c.id).busy)).toBe(true);
+      await expect
+        .poll(
+          () =>
+            service.snapshot(a, chats[0].id).items.some((item) => item.type === "commandExecution"),
+          { timeout: 45000 },
+        )
+        .toBe(true);
+      await service.stop(a, chats[0].id);
+      await expect
+        .poll(() => service.snapshot(a, chats[0].id).busy, { timeout: 30000 })
+        .toBe(false);
+      for (const [i, c] of chats.entries()) {
+        if (!i) continue;
+        await expect
+          .poll(() => service.snapshot(c.project, c.id).busy, { timeout: 90000 })
+          .toBe(false);
+        const snapshot = service.snapshot(c.project, c.id);
+        expect(snapshot.error).toBeNull();
+        expect(
+          snapshot.items
+            .filter((item) => item.type === "agentMessage")
+            .map((item) => item.text)
+            .join(""),
+        ).toContain(`ESCODE_CONCURRENT_${i}`);
+      }
+    } finally {
+      service.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+  150000,
+);
+
+test("legacy worktree chats migrate without changing checkout, thread, draft or identity", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-migration-"));
+  try {
+    const store = new Chats(join(dir, "chats.json"));
+    const worktree = join(dir, "worktree"),
+      primary = join(dir, "primary");
+    const legacy = await store.create(worktree);
+    await store.update(worktree, legacy.id, {
+      threadId: "saved-thread",
+      hasSent: true,
+      draft: "keep draft",
+    });
+    await store.migrate(primary, [primary, worktree]);
+    expect(await store.list(primary)).toEqual([
+      { ...legacy, project: primary, threadId: "saved-thread", hasSent: true, draft: "keep draft" },
+    ]);
+    expect(await store.list(worktree)).toEqual([]);
+    await store.migrate(primary, [primary, worktree]);
+    expect(await store.list(primary)).toHaveLength(1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

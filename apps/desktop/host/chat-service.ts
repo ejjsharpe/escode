@@ -31,8 +31,8 @@ export class ChatService {
   list(project: string) {
     return this.store.list(project);
   }
-  create(project: string) {
-    return this.store.create(project);
+  create(project: string, checkout = project) {
+    return this.store.create(project, checkout);
   }
   draft(project: string, id: string, text: string) {
     return this.store.draft(project, id, text);

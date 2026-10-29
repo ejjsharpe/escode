@@ -4,12 +4,12 @@ import { Button } from "@base-ui/react/button";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
-  (operation: "list"): Promise<SavedChat[]>;
-  (operation: "create"): Promise<SavedChat>;
-  (operation: "open" | "snapshot", id: string): Promise<ChatSnapshot>;
-  (operation: "send" | "draft", id: string, text: string): Promise<unknown>;
-  (operation: "stop" | "disconnect", id: string): Promise<void>;
-  (operation: "answer", id: string, token: string, answer: unknown): Promise<void>;
+  (operation: "list", project: string): Promise<SavedChat[]>;
+  (operation: "create", project: string, checkout: string): Promise<SavedChat>;
+  (operation: "open" | "snapshot", project: string, id: string): Promise<ChatSnapshot>;
+  (operation: "send" | "draft", project: string, id: string, text: string): Promise<unknown>;
+  (operation: "stop" | "disconnect", project: string, id: string): Promise<void>;
+  (operation: "answer", project: string, id: string, token: string, answer: unknown): Promise<void>;
 }
 function Request({
   request,
@@ -132,15 +132,22 @@ function Request({
 export function ChatView({
   project,
   onActivity,
+  checkout,
+  sidebarId,
+  onCheckout,
 }: {
   project: string;
+  checkout: string;
+  sidebarId: string;
+  onCheckout: (checkout: string) => void;
   onActivity: (activity: string) => void;
 }) {
   const [chats, setChats] = useState<SavedChat[]>([]);
   const [selected, setSelected] = useState("");
   const [snapshots, setSnapshots] = useState<Record<string, ChatSnapshot>>({});
   const [error, setError] = useState("");
-  const [working, setWorking] = useState(false);
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const working = !!pending[selected];
   const drafts = useRef<Record<string, string>>({});
   const [draft, setDraft] = useState("");
   useEffect(() => {
@@ -150,9 +157,10 @@ export function ChatView({
     );
   }, [snapshots, onActivity]);
   const selectedRef = useRef("");
+  const navigation = useRef(0);
   const report = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
   const load = async () => {
-    const list = await window.escode.chat("list");
+    const list = await window.escode.chat("list", project);
     setChats(list);
     for (const c of list) if (!(c.id in drafts.current)) drafts.current[c.id] = c.draft;
     return list;
@@ -164,7 +172,9 @@ export function ChatView({
     let alive = true;
     const poll = async () => {
       try {
-        const updates = await Promise.all(chats.map((c) => window.escode.chat("snapshot", c.id)));
+        const updates = await Promise.all(
+          chats.map((c) => window.escode.chat("snapshot", project, c.id)),
+        );
         if (alive) setSnapshots(Object.fromEntries(updates.map((s) => [s.chatId, s])));
       } catch (e) {
         if (alive) report(e);
@@ -177,69 +187,79 @@ export function ChatView({
     };
   }, [chats]);
   const select = async (id: string) => {
+    navigation.current++;
+    const chat = chats.find((c) => c.id === id);
+    if (chat) onCheckout(chat.checkout);
     selectedRef.current = id;
     setSelected(id);
     setDraft(drafts.current[id] ?? "");
     setError("");
     try {
-      const value = await window.escode.chat("open", id);
+      const value = await window.escode.chat("open", project, id);
       setSnapshots((old) => ({ ...old, [id]: value }));
     } catch (e) {
       if (selectedRef.current === id) report(e);
     }
   };
   const run = async (action: () => Promise<unknown>) => {
-    setWorking(true);
+    const id = selectedRef.current;
+    setPending((old) => ({ ...old, [id]: true }));
     setError("");
     try {
       await action();
     } catch (e) {
-      report(e);
+      if (selectedRef.current === id) report(e);
     } finally {
-      setWorking(false);
+      setPending((old) => ({ ...old, [id]: false }));
     }
   };
   const snapshot = snapshots[selected];
   return (
     <div className="chat-view">
-      {createPortal(
-        <div className="chat-list" aria-label="Saved chats">
-          <Button
-            disabled={working}
-            onClick={() =>
-              void run(async () => {
-                const c = await window.escode.chat("create");
-                await load();
-                await select(c.id);
-              })
-            }
-          >
-            New chat on current checkout
-          </Button>
-          <ul>
-            {chats.map((c, index) => (
-              <li key={c.id}>
-                <Button aria-pressed={selected === c.id} onClick={() => void select(c.id)}>
-                  Chat {index + 1}
-                  {snapshots[c.id]?.requests.length
-                    ? " · Needs input"
-                    : snapshots[c.id]?.busy
-                      ? " · Running"
-                      : ""}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>,
-        document.getElementById("chat-sidebar")!,
-      )}
+      {document.getElementById(sidebarId) &&
+        createPortal(
+          <div className="chat-list" aria-label="Saved chats">
+            <Button
+              disabled={working}
+              onClick={() =>
+                void run(async () => {
+                  const generation = navigation.current;
+                  const c = await window.escode.chat("create", project, checkout);
+                  await load();
+                  if (navigation.current !== generation) return;
+                  onCheckout(c.checkout);
+                  drafts.current[c.id] = c.draft;
+                  await select(c.id);
+                })
+              }
+            >
+              New chat on current checkout
+            </Button>
+            <ul>
+              {chats.map((c, index) => (
+                <li key={c.id}>
+                  <Button aria-pressed={selected === c.id} onClick={() => void select(c.id)}>
+                    Chat {index + 1}
+                    {snapshots[c.id]?.requests.length
+                      ? " · Needs input"
+                      : snapshots[c.id]?.busy
+                        ? " · Running"
+                        : ""}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>,
+          document.getElementById(sidebarId)!,
+        )}
       <div className="chat-conversation">
         {!selected ? (
           <p>Create or select a saved chat to begin. Chats use the current checkout.</p>
         ) : (
           <>
             <p className="directory">Checkout: {chats.find((c) => c.id === selected)?.checkout}</p>
-            {chats.length > 1 && (
+            {chats.filter((c) => c.checkout === chats.find((c) => c.id === selected)?.checkout)
+              .length > 1 && (
               <p>These chats share files in this checkout. Their edits can interact.</p>
             )}
             {snapshot?.settings && (
@@ -253,8 +273,10 @@ export function ChatView({
                 disabled={working || snapshot?.busy}
                 onClick={() =>
                   void run(async () => {
-                    await window.escode.chat("disconnect", selected);
-                    await select(selected);
+                    const id = selected;
+                    await window.escode.chat("disconnect", project, id);
+                    const value = await window.escode.chat("open", project, id);
+                    setSnapshots((old) => ({ ...old, [id]: value }));
                   })
                 }
               >
@@ -262,7 +284,7 @@ export function ChatView({
               </Button>
               <Button
                 disabled={working || !snapshot?.busy || !snapshot.turnId}
-                onClick={() => void run(() => window.escode.chat("stop", selected))}
+                onClick={() => void run(() => window.escode.chat("stop", project, selected))}
               >
                 Stop
               </Button>
@@ -296,9 +318,15 @@ export function ChatView({
                 request={request}
                 answer={async (value) => {
                   try {
-                    await window.escode.chat("answer", selected, request.token, value);
+                    await window.escode.chat(
+                      "answer",
+                      project,
+                      snapshot.chatId,
+                      request.token,
+                      value,
+                    );
                   } catch (e) {
-                    report(e);
+                    if (selectedRef.current === snapshot.chatId) report(e);
                   }
                 }}
               />
@@ -311,24 +339,24 @@ export function ChatView({
                 const id = selected,
                   text = draft;
                 void run(async () => {
-                  await window.escode.chat("draft", id, text);
-                  await window.escode.chat("send", id, text);
+                  await window.escode.chat("draft", project, id, text);
+                  await window.escode.chat("send", project, id, text);
                   drafts.current[id] = "";
                   if (selectedRef.current === id) setDraft("");
                 });
               }}
             >
-              <label htmlFor="chat-message">Message Codex</label>
+              <label htmlFor={sidebarId + "-message"}>Message Codex</label>
               <textarea
                 disabled={working}
-                id="chat-message"
+                id={sidebarId + "-message"}
                 maxLength={100000}
                 value={draft}
                 onChange={(e) => {
                   const value = e.target.value;
                   setDraft(value);
                   drafts.current[selected] = value;
-                  void window.escode.chat("draft", selected, value).catch(report);
+                  void window.escode.chat("draft", project, selected, value).catch(report);
                 }}
               />
               <Button

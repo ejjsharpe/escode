@@ -49,11 +49,25 @@ app.whenReady().then(() => {
       throw new Error("Invalid tools request");
     return toolStatus();
   });
-  const chats = new ChatService(new Chats(join(app.getPath("userData"), "chats.json")));
-  let project: Project | undefined;
+  const store = new Chats(join(app.getPath("userData"), "chats.json"));
+  const chats = new ChatService(store);
+  const projects = new Map<string, Project>();
+  const helper = join(app.isPackaged ? process.resourcesPath : __dirname, "filesystem");
+  const checkout = async (root: unknown) => {
+    if (typeof root !== "string") throw Error("Invalid checkout");
+    const existing = projects.get(root);
+    if (existing) return existing;
+    const candidate = await Project.open(root, helper);
+    if (![...projects.values()].some((p) => p.repository() === candidate.repository())) {
+      candidate.close();
+      throw Error("Open this project first.");
+    }
+    projects.set(candidate.root, candidate);
+    return candidate;
+  };
   app.once("will-quit", () => {
     chats.close();
-    project?.close();
+    for (const p of projects.values()) p.close();
   });
   ipcMain.handle("project", async (event, operation: unknown, ...args: unknown[]) => {
     if (
@@ -65,14 +79,15 @@ app.whenReady().then(() => {
     if (operation === "open" && args.length === 0) {
       const result = await dialog.showOpenDialog(window, { properties: ["openDirectory"] });
       if (result.canceled) return null;
-      if (project) throw Error("One project is supported in this slice. Restart to open another.");
-      project = await Project.open(
-        result.filePaths[0],
-        join(app.isPackaged ? process.resourcesPath : __dirname, "filesystem"),
-      );
-      return project.status();
+      const candidate = await Project.open(result.filePaths[0], helper);
+      const existing = projects.get(candidate.root);
+      if (existing) candidate.close();
+      else projects.set(candidate.root, candidate);
+      const opened = existing ?? candidate;
+      await store.migrate(opened.repository(), opened.checkouts());
+      return opened.status();
     }
-    if (!project) throw Error("Open a project first.");
+    const project = await checkout(args.shift());
     if (operation === "status" && !args.length) return project.status();
     if (operation === "files" && args.length === 1 && typeof args[0] === "string")
       return project.files(args[0]);
@@ -96,10 +111,15 @@ app.whenReady().then(() => {
       event.senderFrame.url !== documentURL
     )
       throw Error("Invalid sender");
-    if (!project) throw Error("Open a project first.");
-    const root = project.root;
+    const root = args.shift();
+    if (typeof root !== "string" || ![...projects.values()].some((p) => p.repository() === root))
+      throw Error("Open this project first.");
     if (operation === "list" && !args.length) return chats.list(root);
-    if (operation === "create" && !args.length) return chats.create(root);
+    if (operation === "create" && args.length === 1) {
+      const target = await checkout(args[0]);
+      if (target.repository() !== root) throw Error("Checkout belongs to another project.");
+      return chats.create(root, target.root);
+    }
     const [id, value, answer] = args;
     if (typeof id !== "string" || id.length > 100) throw Error("Invalid chat identity");
     await chats.list(root).then((list) => {

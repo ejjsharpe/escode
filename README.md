@@ -49,6 +49,19 @@ Run `ESCODE_LIVE_CHAT=1 bun run --cwd apps/desktop smoke -- tests/chat.spec.ts`
 for the opt-in live Codex workflow (consumes a turn); add
 `ESCODE_PACKAGED_CHAT=1` to check the packaged app with a restricted PATH.
 
-Multiple projects, managed worktrees, recovery and close/quit protection remain
-subsequent slices. This implements the current-checkout file/Git/chat slice,
-not the completed v1.
+Projects now have independent tabs and remembered views. Reopening a repository
+(including a linked worktree) focuses its existing tab. Files and Source Control
+follow the selected chat checkout; buffers, selections and chat drafts retain
+their identities while navigating. Background chat indicators show Running or
+Needs input without changing focus. Replies and Stop target their originating
+chat and connection. Chats on the same checkout show a shared-files notice.
+
+`tests/navigation.spec.ts` checks repository identity and navigation;
+`tests/concurrency.spec.ts` exercises independent protocol processes and scoped
+requests in the UI. `ESCODE_LIVE_CHAT=1 bun run --cwd apps/desktop test --
+host/chat.test.ts` additionally checks four real Codex chats across shared and
+separate checkouts and projects (consumes turns).
+
+Managed-worktree creation/reuse controls, recovery and close/quit protection remain
+subsequent slices. Project tabs and view memory currently last for the app session;
+restart restoration remains lifecycle work. This is not the completed v1.

@@ -59,6 +59,11 @@ for (const packaged of [false, true]) {
       await writeFile(join(root, "a.txt"), "reload this");
       await page.keyboard.press("Meta+s");
       await page.getByRole("button", { name: "Reload", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Files", exact: true })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await expect(page.locator(".monaco-diff-editor")).toHaveCount(0);
       await expect(page.locator(".monaco-editor")).toContainText("reload this");
       await expect(page.getByText("a.txt • Unsaved", { exact: true })).toHaveCount(0);
       await page.getByRole("button", { name: "Source Control", exact: true }).click();
@@ -69,6 +74,11 @@ for (const packaged of [false, true]) {
         timeout: 8000,
       });
       await page.getByRole("button", { name: "Files", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Files", exact: true })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await expect(page.locator(".monaco-diff-editor")).toHaveCount(0);
       await expect(page.locator(".monaco-editor")).toContainText("reload this");
       await page.getByRole("button", { name: "Source Control", exact: true }).click();
       await expect(page.locator(".monaco-diff-editor")).toContainText("new external");

@@ -208,3 +208,24 @@ h2 {
   overflow-wrap: anywhere;
   color: #ffd49b;
 }
+
+[hidden] {
+  display: none !important;
+}
+.project-tabs,
+.view-nav {
+  padding: 8px 20px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #435166;
+}
+.project-tabs button[aria-pressed="true"],
+.view-nav button[aria-pressed="true"] {
+  background: #415b7b;
+}
+.view-nav {
+  align-items: center;
+}
+.workspace {
+  height: calc(100vh - 152px);
+  min-height: 300px;
+}

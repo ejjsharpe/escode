@@ -132,6 +132,22 @@ export class Project {
       if (staged) this.io(["remove", temp]);
     }
   }
+  private repositoryIdentity?: string;
+  checkouts() {
+    return this.git(["worktree", "list", "--porcelain", "-z"])
+      .toString()
+      .split("\0")
+      .filter((record) => record.startsWith("worktree "))
+      .map((record) => record.slice(9));
+  }
+  repository() {
+    if (!this.repositoryIdentity) {
+      const first = this.checkouts()[0];
+      if (!first) throw Error("Cannot identify repository.");
+      this.repositoryIdentity = realpathSync(first);
+    }
+    return this.repositoryIdentity;
+  }
   async status() {
     const records = this.git([
       "status",
@@ -158,7 +174,7 @@ export class Project {
     } catch {
       branch = this.git(["rev-parse", "--short", "HEAD"]).toString().trim() + " (detached)";
     }
-    return { root: this.root, branch, changes };
+    return { project: this.repository(), root: this.root, branch, changes };
   }
   async diff(change: Change) {
     if (!["staged", "unstaged", "untracked"].includes(change.area))
@@ -203,9 +219,20 @@ export class Project {
 
 export interface ProjectBridge {
   (operation: "open"): Promise<Awaited<ReturnType<Project["status"]>> | null>;
-  (operation: "status"): ReturnType<Project["status"]>;
-  (operation: "files", path: string): ReturnType<Project["files"]>;
-  (operation: "read", path: string): ReturnType<Project["read"]>;
-  (operation: "save", path: string, text: string, version: string): ReturnType<Project["save"]>;
-  (operation: "diff", path: string, area: Change["area"]): ReturnType<Project["diff"]>;
+  (operation: "status", checkout: string): ReturnType<Project["status"]>;
+  (operation: "files", checkout: string, path: string): ReturnType<Project["files"]>;
+  (operation: "read", checkout: string, path: string): ReturnType<Project["read"]>;
+  (
+    operation: "save",
+    checkout: string,
+    path: string,
+    text: string,
+    version: string,
+  ): ReturnType<Project["save"]>;
+  (
+    operation: "diff",
+    checkout: string,
+    path: string,
+    area: Change["area"],
+  ): ReturnType<Project["diff"]>;
 }

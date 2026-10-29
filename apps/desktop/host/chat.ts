@@ -37,12 +37,17 @@ export class Chats {
     this.queue = task.catch(() => {});
     return task;
   }
-  create(project: string) {
+  migrate(project: string, checkouts: string[]) {
+    return this.change((chats) => {
+      for (const chat of chats) if (checkouts.includes(chat.project)) chat.project = project;
+    });
+  }
+  create(project: string, checkout = project) {
     return this.change((chats) => {
       const chat: SavedChat = {
         id: randomUUID(),
         project,
-        checkout: project,
+        checkout,
         threadId: null,
         hasSent: false,
         draft: "",

@@ -144,3 +144,38 @@ versions and authentication failures leave saved associations/drafts intact.
 This slice provides current-checkout chats only. Close/quit confirmations,
 workspace restoration and managed worktrees remain subsequent tickets. App quit
 ends app-owned connections; agents are not designed to survive app exit.
+
+
+## Concurrent navigation (2026-10-29)
+
+Project tabs use the repository's canonical primary checkout identity from Git
+worktree metadata. Opening a linked checkout focuses the same project tab.
+Branch switches leave saved chat associations intact. Host operations carry an
+explicit checkout or project/chat identity; another project's checkout cannot be
+used when creating a chat. Per-checkout Monaco models and selections remain
+mounted while navigating, as do each project's chat selection and drafts.
+Background polling updates activity indicators without selecting a tab or chat.
+
+The opt-in live host test ran four installed Codex 0.165.0 chats: two sharing a
+checkout, one in a linked worktree, and one in a second repository. It interrupted
+one chat after a command began and verified independent completion of the other
+three. The controlled Electron concurrency test uses separate stdio processes to
+exercise background approval indicators without focus changes, exact response
+routing, independent Stop, connection failure and rejection of stale requests.
+These controlled approvals do not establish every live permission profile.
+
+Navigation tests use real Git repositories and a linked worktree, retain dirty
+buffers and saved message drafts, reject a cross-project checkout, and verify
+repository-tab deduplication and chat retention after a branch switch. Project
+mode, checkout context, file/diff and chat selections are held for this app
+session. Full restart restoration, managed-worktree controls, crash recovery,
+close/quit protection and manual VoiceOver validation remain subsequent work.
+
+Validation passed: TypeScript, lint, host tests, production build, macOS packaging,
+and all six non-development Electron checks with live Codex chat enabled. The
+concurrency regression also delays chat creation and reconnection while the user
+selects another chat, preserving selection, checkout context and draft. Legacy
+worktree association migration preserves saved IDs, threads and drafts. Making
+one checkout unavailable does not block another project's chat controls.
+The aggregate smoke command still fails its development hot-reload check because
+port 5173 is occupied by an existing server; that server was left running.
