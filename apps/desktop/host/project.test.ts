@@ -1,9 +1,47 @@
-import { test, expect } from "vite-plus/test";
+import { test, expect, vi } from "vite-plus/test";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { Project } from "./project";
+import * as fs from "node:fs";
+vi.mock("node:fs", async (original) => ({ ...await original<typeof import("node:fs")>() }));
+
+test("an external write during save staging returns a conflict and removes temporary files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-race-"));
+  try {
+    execFileSync("git", ["init", root]);
+    await writeFile(join(root, "a"), "loaded");
+    const project = await Project.open(root);
+    const loaded = await project.read("a");
+    const write = fs.writeFileSync;
+    vi.spyOn(fs, "writeFileSync").mockImplementationOnce((...args) => {
+      write(...args);
+      write(join(root, "a"), "external during staging");
+    });
+    const result = await project.save("a", "my buffer", loaded.version);
+    expect(result).toEqual({ kind: "conflict", disk: await project.read("a") });
+    expect((await project.read("a")).text).toBe("external during staging");
+    expect((await project.files()).map((f) => f.path)).toEqual(["a"]);
+  } finally {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("invalid binary editor content fails before modifying disk", async () => {
+  const root = await mkdtemp(join(tmpdir(), "escode-invalid-"));
+  try {
+    execFileSync("git", ["init", root]);
+    await writeFile(join(root, "a"), "original");
+    const project = await Project.open(root);
+    const loaded = await project.read("a");
+    await expect(project.save("a", "contains\0nul", loaded.version)).rejects.toThrow("binary");
+    expect(await project.read("a")).toEqual(loaded);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 test("save detects external changes, preserves disk, and requires the compared version for overwrite", async () => {
   const root = await mkdtemp(join(tmpdir(), "escode-"));
   try {

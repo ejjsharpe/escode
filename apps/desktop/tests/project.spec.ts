@@ -34,23 +34,36 @@ test("edit, navigate, cancel conflict, compare and explicitly overwrite", async 
     await writeFile(join(root, "a.txt"), "external\n");
     await page.keyboard.press("Meta+s");
     await expect(page.locator(".conflict")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Source Control", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Compare", exact: true }).click();
     await expect(page.locator(".monaco-diff-editor")).toBeVisible();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     expect(await readFile(join(root, "a.txt"), "utf8")).toBe("external\n");
     await page.keyboard.press("Meta+s");
+    await expect(page.locator(".conflict")).toBeVisible();
+    await writeFile(join(root, "a.txt"), "changed after comparison");
+    await page.getByRole("button", { name: "Overwrite", exact: true }).click();
+    await expect(page.locator(".conflict")).toBeVisible();
+    expect(await readFile(join(root, "a.txt"), "utf8")).toBe("changed after comparison");
+    await page.getByRole("button", { name: "Compare", exact: true }).click();
+    await expect(page.locator(".monaco-diff-editor")).toContainText("changed after comparison");
     await page.getByRole("button", { name: "Overwrite", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("Saved a.txt");
     expect(await readFile(join(root, "a.txt"), "utf8")).toBe("my edits");
+    await writeFile(join(root, "a.txt"), "reload this");
+    await page.keyboard.press("Meta+s");
+    await page.getByRole("button", { name: "Reload", exact: true }).click();
+    await expect(page.locator(".monaco-editor")).toContainText("reload this");
+    await expect(page.getByText("a.txt • Unsaved", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
     await page.getByRole("button", { name: "a.txt", exact: true }).click();
-    await expect(page.locator(".monaco-diff-editor")).toContainText("my edits");
+    await expect(page.locator(".monaco-diff-editor")).toContainText("reload this");
     await writeFile(join(root, "a.txt"), "new external");
     await expect(page.locator(".monaco-diff-editor")).toContainText("new external", {
       timeout: 8000,
     });
     await page.getByRole("button", { name: "Files", exact: true }).click();
-    await expect(page.locator(".monaco-editor")).toContainText("my edits");
+    await expect(page.locator(".monaco-editor")).toContainText("reload this");
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
     await expect(page.locator(".monaco-diff-editor")).toContainText("new external");
     await page.getByRole("button", { name: "Files", exact: true }).click();

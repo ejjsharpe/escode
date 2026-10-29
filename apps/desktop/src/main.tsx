@@ -41,6 +41,7 @@ function App() {
   );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const saveInFlight = useRef(false);
   const saveAction = useRef<() => void>(() => {});
   const report = (error: unknown) =>
     setMessage(error instanceof Error ? error.message : String(error));
@@ -147,10 +148,11 @@ function App() {
     }
   }
   async function save(version?: string) {
-    if (!path || saving) return;
+    if (!path || saveInFlight.current || mode !== "Files") return;
     const target = path;
     const b = buffers.current.get(target)!;
     const text = b.model.getValue();
+    saveInFlight.current = true;
     setSaving(true);
     try {
       const result: SaveResult = await window.escode.project(
@@ -173,6 +175,7 @@ function App() {
     } catch (e) {
       report(e);
     } finally {
+      saveInFlight.current = false;
       setSaving(false);
     }
   }
@@ -225,6 +228,7 @@ function App() {
             {["Files", "Source Control"].map((view) => (
               <Button
                 key={view}
+                disabled={!!conflict || saving}
                 aria-pressed={mode === view}
                 onClick={() => {
                   presentation.current++;
@@ -250,7 +254,7 @@ function App() {
                 {files.map((file) => (
                   <li key={file.path}>
                     <Button
-                      disabled={!!conflict}
+                      disabled={!!conflict || saving}
                       onClick={() => void (file.directory ? browse(file.path) : select(file.path))}
                     >
                       {file.directory ? "▸ " : ""}
@@ -313,8 +317,9 @@ function App() {
               <Button disabled={saving} onClick={() => void save(conflict.disk.version)}>
                 Overwrite
               </Button>
-              <Button onClick={() => void reload()}>Reload</Button>
+              <Button disabled={saving} onClick={() => void reload()}>Reload</Button>
               <Button
+                disabled={saving}
                 onClick={() => {
                   setConflict(null);
                   setDiff(null);

@@ -50,9 +50,12 @@ The smoke tests require this machine's separately authenticated supported Codex 
 
 Real temporary-repository tests cover HEAD/index/disk baselines, unborn HEAD,
 literal wildcard filenames, binary/oversized errors, external conflicts,
-concurrent app saves, and save failures. The Electron workflow covers retained
+concurrent app saves, an external write during save staging, temporary-file cleanup,
+invalid binary editor content rejected before disk mutation, and save failures. The Electron workflow covers retained
 buffers, Cmd+S, comparison/cancellation/overwrite, external diff refresh,
-selection restoration and a failed save retaining edits. The desktop screenshot
+selection restoration and a failed save retaining edits. Conflict resolution keeps
+view navigation disabled; a second external change requires another explicit
+overwrite decision, and Reload reads the latest disk version. The desktop screenshot
 is captured by `tests/project.spec.ts`.
 
 Files are UTF-8, limited to 2 MiB. Git command output is bounded to 16 MiB.

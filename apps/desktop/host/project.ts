@@ -75,6 +75,7 @@ export class Project {
   async save(path: string, text: string, version: string): Promise<SaveResult> {
     if (typeof text !== "string" || Buffer.byteLength(text) > limit || typeof version !== "string")
       throw Error("Invalid save");
+    const saved = this.document(Buffer.from(text));
     const full = this.path(path);
     const disk = this.readDisk(path);
     if (disk.version !== version) return { kind: "conflict", disk };
@@ -86,7 +87,7 @@ export class Project {
       // shortcut: portable filesystems lack compare-and-swap rename; an external writer
       // can still race the final check/rename. Revisit with platform coordination.
       renameSync(temp, full);
-      return { kind: "saved", disk: this.document(Buffer.from(text)) };
+      return { kind: "saved", disk: saved };
     } finally {
       try {
         unlinkSync(temp);
