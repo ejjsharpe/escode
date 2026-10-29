@@ -347,3 +347,8 @@ and disconnect all linked sessions even when storing intent fails (which blocks
 deletion). Retry can finish a missing-but-registered owned checkout after checking
 its retained branch and commit. Creating a new worktree uses the primary project
 checkout even when the selected chat remains attached to a removed checkout.
+
+
+The first Files rename/move and native Trash preservation gate has separate
+[compatibility and recovery evidence](file-operations.md), including its disclosed
+Monaco earlier-undo reset and native/manual verification limits.

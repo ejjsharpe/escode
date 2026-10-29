@@ -157,6 +157,43 @@ export class Project {
       }))
       .sort((a, b) => Number(b.directory) - Number(a.directory) || a.path.localeCompare(b.path));
   }
+  checkoutIdentity() {
+    closeSync(this.checkedDirectory());
+    return `${this.identity.dev}:${this.identity.ino}`;
+  }
+  operationIdentity(path: string) {
+    this.checkoutIdentity();
+    if (
+      path !== this.path(path) ||
+      relative(this.root, realpathSync(resolve(this.root, path))) !== path
+    )
+      throw Error("Use the exact checkout-relative path without aliases.");
+    return this.io(["identity", this.path(path)]).toString();
+  }
+  validateMove(source: string, destination: string) {
+    if (source !== this.path(source) || destination !== this.path(destination))
+      throw Error("Use exact checkout-relative paths.");
+    const parent = dirname(destination);
+    if (parent !== "." && relative(this.root, realpathSync(resolve(this.root, parent))) !== parent)
+      throw Error("Use the exact destination parent path without aliases.");
+    if (destination === source || destination.startsWith(source + "/"))
+      throw Error("Choose a different destination outside the source folder.");
+  }
+  move(source: string, destination: string, identity: string) {
+    this.validateMove(source, destination);
+    this.io(["move", source, destination, identity]);
+    try {
+      if (this.operationIdentity(destination) !== identity)
+        throw Error("Destination object changed.");
+    } catch (error) {
+      throw Object.assign(Error(`Move outcome needs reconciliation: ${String(error)}`), {
+        uncertain: true,
+      });
+    }
+  }
+  trash(source: string, identity: string) {
+    return this.io(["trash", this.path(source), "-", identity]).toString();
+  }
   private document(bytes: Buffer): Document {
     if (bytes.length > limit) throw Error("Text unavailable: file exceeds 2 MiB.");
     if (bytes.includes(0)) throw Error("Text unavailable: binary file.");
@@ -542,6 +579,15 @@ export class Project {
 }
 
 export interface ProjectBridge {
+  (
+    operation: "file-operation",
+    checkout: string,
+    kind: "move" | "trash",
+    source: string,
+    destination: string,
+  ): Promise<import("./file-operations").OperationResult>;
+  (operation: "file-operation-ack", checkout: string): Promise<void>;
+
   (
     operation: "worktree-managed",
     checkout: string,

@@ -7,6 +7,8 @@ import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
 import { Workspace } from "./workspace";
 import { Project } from "./project";
+import { FileOperations } from "./file-operations";
+import { affected } from "./file-operation-state";
 const developmentOrigin = /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.ESCODE_DEV_URL ?? "")
   ? process.env.ESCODE_DEV_URL!
   : "http://127.0.0.1:5173";
@@ -61,9 +63,19 @@ app.whenReady().then(() => {
   const closingProjects = new Set<string>();
   const removing = new Set<string>();
   let quitting = false;
+  let mutationOrigin: string | undefined;
   const workspace = new Workspace(join(app.getPath("userData"), "workspace.json"));
+  const operations = new FileOperations(
+    workspace,
+    join(app.getPath("userData"), "file-operation.json"),
+  );
   mkdirSync(app.getPath("userData"), { recursive: true, mode: 0o700 });
-  const stateFiles = ["workspace.json", "approved-projects.json", "chats.json"]
+  const stateFiles = [
+    "workspace.json",
+    "approved-projects.json",
+    "chats.json",
+    "file-operation.json",
+  ]
     .flatMap((name) => [name, name + ".tmp"])
     .map((name) => join(realpathSync(app.getPath("userData")), name));
   const protectedFiles = new Set(stateFiles.map((file) => file.normalize("NFC").toLowerCase()));
@@ -138,9 +150,15 @@ app.whenReady().then(() => {
           });
         }
       }
-      return { state, restored, errors };
+      const recovery = await operations.recover(checkout);
+      if (recovery) errors.push(recovery);
+      return { state: await workspace.read(), restored, errors };
     }
-    if (operation === "persist" && args.length === 1) return workspace.write(args[0]);
+    if (operation === "persist" && args.length === 1) {
+      if (operations.busy)
+        throw Error("File operation is persisting recovery intent. Retry after completion.");
+      return workspace.write(args[0]);
+    }
     if (operation === "dirty" && args.length === 1 && typeof args[0] === "string") {
       return (
         await dialog.showMessageBox(window, {
@@ -246,7 +264,13 @@ app.whenReady().then(() => {
       await store.migrate(opened.repository(), opened.checkouts());
       return opened.status();
     }
-    const project = await checkout(args.shift());
+    const requestedRoot = args.shift();
+    if (
+      ["file-operation", "file-operation-ack"].includes(String(operation)) &&
+      (typeof requestedRoot !== "string" || !projects.has(requestedRoot))
+    )
+      throw Error("Open and approve this checkout first.");
+    const project = await checkout(requestedRoot);
     if (
       ["read", "save", "diff"].includes(String(operation)) &&
       typeof args[0] === "string" &&
@@ -255,6 +279,81 @@ app.whenReady().then(() => {
       throw Error("App state is unavailable through project file operations.");
     const identity = project.repository();
     if (removing.has(identity)) throw Error("Worktree removal is in progress. Retry afterward.");
+    if (operation === "file-operation-ack" && !args.length) return operations.ack(project.root);
+    if (operation === "save") {
+      if (mutationOrigin) throw Error("File operation awaiting confirmation.");
+      operations.assertIdle();
+    }
+    if (
+      operation === "file-operation" &&
+      args.length === 3 &&
+      args.every((a) => typeof a === "string") &&
+      ["move", "trash"].includes(args[0] as string)
+    ) {
+      if (mutationOrigin) throw Error("Another file operation is pending.");
+      mutationOrigin = project.root;
+      try {
+        const [kind, source, destination] = args as ["move" | "trash", string, string];
+        operations.assertIdle();
+        const owner = projectSessions.get(identity);
+        let originalIdentity = project.operationIdentity(source);
+        const check = () => {
+          if (
+            !owner ||
+            projectSessions.get(identity) !== owner ||
+            quitting ||
+            closingProjects.has(identity)
+          )
+            throw Error("Originating project closed.");
+          for (const path of [source, ...(kind === "move" ? [destination] : [])]) {
+            const absolute = resolve(project.root, path);
+            if (
+              isAppState(absolute) ||
+              stateFiles.some((file) => affected(file.toLowerCase(), absolute.toLowerCase()))
+            )
+              throw Error("Protected app state is inside this operation.");
+          }
+          if (project.operationIdentity(source) !== originalIdentity)
+            throw Error(
+              "Source changed after confirmation. Edits retained; retry after inspecting actual paths.",
+            );
+        };
+        check();
+        if (kind === "trash") {
+          const state = await workspace.read();
+          const dirty = state.drafts.filter(
+            (d) => d.root === project.root && affected(d.path, source),
+          );
+          const answer = await dialog.showMessageBox(window, {
+            message: "Move 1 item to macOS Trash?",
+            detail: `${project.root}/${source}\nDirty descendants (${dirty.length}): ${dirty.map((d) => d.path).join(", ") || "None"}\nDisk files can be recovered in Finder Trash.`,
+            buttons: dirty.length
+              ? ["Save and Move to Trash", "Discard and Move to Trash", "Cancel"]
+              : ["Move to Trash", "Cancel"],
+            defaultId: dirty.length ? 2 : 1,
+            cancelId: dirty.length ? 2 : 1,
+          });
+          if (answer.response === (dirty.length ? 2 : 1))
+            return { applied: false, message: "Cancelled; edits retained." };
+          if (dirty.length && answer.response === 0) {
+            for (const d of dirty) {
+              check();
+              const saved = await project.save(d.path, d.text, d.disk.version);
+              if (saved.kind !== "saved")
+                throw Error(
+                  `Save conflict: ${d.path}. Trash cancelled; edits retained. Open the file to resolve its save conflict.`,
+                );
+              // Explicit save atomically replaces a file's inode; folders keep their identity.
+              if (d.path === source) originalIdentity = project.operationIdentity(source);
+            }
+          }
+          check();
+        }
+        return await operations.run(project, kind, source, destination, check);
+      } finally {
+        mutationOrigin = undefined;
+      }
+    }
     const managedRoot = join(app.getPath("userData"), "worktrees");
     if (operation === "worktree-managed" && !args.length)
       return project.managedWorktrees(managedRoot);

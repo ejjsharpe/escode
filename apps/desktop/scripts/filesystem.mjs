@@ -6,6 +6,8 @@ execFileSync(
   "clang",
   [
     "-std=c11",
+    "-framework",
+    "CoreServices",
     "-Wall",
     "-Wextra",
     "-Werror",

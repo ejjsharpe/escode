@@ -56,3 +56,15 @@ A locally persisted unsaved file buffer with its checkout/file identity and load
 baseline. Available drafts reopen as unsaved edits and use the ordinary save-conflict
 check. Explicit discard removes the draft; recovery is best effort, not a guarantee
 that the latest keystroke survives a crash.
+
+**Files view**:
+The project-local view of files in the current checkout. Its existing directory list
+supports a narrow rename/move and macOS Trash preservation gate; the nested explorer
+specified in issue 38 remains subsequent work. Rename/move retains available unsaved
+descendant edits and save-conflict baselines at their new paths. Earlier text undo
+history resets with disclosure; subsequent text undo works.
+
+**File-operation intent**:
+A durable record of an originating checkout and source/destination object identities,
+retained across a rename/move or Trash filesystem/persistence handoff. Restart reconciles
+available drafts with actual paths; uncertain outcomes retain work and block mutations.

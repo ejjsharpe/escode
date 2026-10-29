@@ -86,3 +86,10 @@ Removal follows VS Code’s Git guarantee: an unrelated process can still create
 change files after the final check; late ignored files can be deleted. Transactional
 removal and recoverable removal backups are outside this guarantee.
 See [the v1 acceptance record](docs/compatibility/v1-acceptance.md) for the twelve functional gates, reproducible checks, measured recovery behavior and the user-confirmed VoiceOver checks.
+
+The first Files preservation gate adds Rename/move and native Trash to the existing
+directory list. Moves preserve available dirty descendant buffers and conflict baselines;
+earlier text undo history resets with disclosure, while new text undo works. A durable
+intent journal reconciles interrupted moves on restart. See [file-operation evidence and
+remaining gates](docs/compatibility/file-operations.md). The complete nested explorer is
+not part of this slice.

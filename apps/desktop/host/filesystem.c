@@ -1,3 +1,4 @@
+#include <CoreServices/CoreServices.h>
 #include <copyfile.h>
 #include <dirent.h>
 #include <errno.h>
@@ -26,6 +27,17 @@ static int scoped_open(int dir, const char *path, int flags) {
   int fd = openat(dir, path, flags | SCOPED, 0600);
   if (fd < 0) fail("Open checkout path");
   return fd;
+}
+
+static void revalidate_source(const char *path, const struct stat *expected) {
+  int current = scoped_open(3, path, O_RDONLY);
+  struct stat actual;
+  if (fstat(current, &actual)) fail("Reinspect operation source");
+  if (actual.st_dev != expected->st_dev || actual.st_ino != expected->st_ino) {
+    errno = ESTALE;
+    fail("Source changed after preflight");
+  }
+  close(current);
 }
 
 static struct stat regular(int fd) {
@@ -62,6 +74,41 @@ static void transfer(int from, int to) {
       offset += written;
     }
   }
+}
+
+static void safe_tree(int fd) {
+  struct stat info;
+  if (fstat(fd, &info)) fail("Inspect operation source");
+  if (S_ISREG(info.st_mode)) {
+    if (info.st_nlink != 1) { errno = ENOTSUP; fail("Operation unavailable: hard-linked file"); }
+    return;
+  }
+  if (!S_ISDIR(info.st_mode)) { errno = ENOTSUP; fail("Unsupported source"); }
+#ifdef ESCODE_TEST_PREFLIGHT
+  // Only the separately compiled race-test helper has this synchronization point.
+  static int paused;
+  if (!paused) {
+    paused = 1;
+    char resume;
+    if (write(4, "ready", 5) != 5 || read(5, &resume, 1) != 1) {
+      errno = EIO; fail("Synchronize preflight test");
+    }
+  }
+#endif
+  DIR *dir = fdopendir(dup(fd));
+  if (!dir) fail("Inspect operation folder");
+  struct dirent *entry;
+  errno = 0;
+  while ((entry = readdir(dir))) {
+    if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+    if (!strcasecmp(entry->d_name, ".git")) { errno = EPERM; fail("Protected metadata"); }
+    int child = scoped_open(fd, entry->d_name, O_RDONLY);
+    safe_tree(child);
+    close(child);
+    errno = 0;
+  }
+  if (errno) fail("Inspect operation folder");
+  closedir(dir);
 }
 
 int main(int argc, char **argv) {
@@ -107,6 +154,51 @@ int main(int argc, char **argv) {
       fwrite(entry->d_name, 1, strlen(entry->d_name) + 1, stdout);
     }
     if (ferror(stdout) || closedir(dir)) fail("Browse directory");
+    return 0;
+  }
+
+  if (!strcmp(operation, "identity") || !strcmp(operation, "move") || !strcmp(operation, "trash")) {
+    int fd = scoped_open(3, argv[2], O_RDONLY);
+    struct stat info;
+    if (fstat(fd, &info)) fail("Inspect source");
+    if (!strcmp(operation, "identity")) {
+      printf("%llu:%llu", (unsigned long long)info.st_dev, (unsigned long long)info.st_ino);
+      return 0;
+    }
+    if (argc != 5) { errno = EINVAL; fail("Invalid operation"); }
+    char identity[100];
+    snprintf(identity, sizeof(identity), "%llu:%llu", (unsigned long long)info.st_dev, (unsigned long long)info.st_ino);
+    if (strcmp(identity, argv[4])) { errno = ESTALE; fail("Source replaced"); }
+    safe_tree(fd);
+    // shortcut: this final scoped identity check is not atomic with the native mutation;
+    // upgrade if cross-process transactional file operations become a requirement.
+    revalidate_source(argv[2], &info);
+    if (!strcmp(operation, "move")) {
+      if (renameatx_np(3, argv[2], 3, argv[3], RENAME_EXCL | RENAME_NOFOLLOW_ANY | RENAME_RESOLVE_BENEATH))
+        fail("Move source (destination must be free)");
+      return 0;
+    }
+    // Native Trash uses a filesystem object reference, never a late path lookup.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    char path[PATH_MAX];
+    FSRef source, target;
+    if (fcntl(fd, F_GETPATH, path)) fail("Locate Trash source");
+    OSStatus status = FSPathMakeRefWithOptions((UInt8 *)path, kFSPathMakeRefDoNotFollowLeafSymlink, &source, NULL);
+    if (status) { errno = EIO; fail("Create Trash reference"); }
+    if (FSRefMakePath(&source, (UInt8 *)path, sizeof(path))) { errno = EIO; fail("Resolve Trash reference"); }
+    int referenced = open(path, O_RDONLY | O_NOFOLLOW_ANY | O_NONBLOCK);
+    struct stat actual;
+    if (referenced < 0 || fstat(referenced, &actual) || actual.st_dev != info.st_dev || actual.st_ino != info.st_ino) {
+      errno = ESTALE; fail("Trash source changed");
+    }
+    close(referenced);
+    // A matching native reference alone does not prove the source is still in scope.
+    revalidate_source(argv[2], &info);
+    status = FSMoveObjectToTrashSync(&source, &target, 0);
+    if (status) { fprintf(stderr, "5:Native Trash failed (%d); no permanent deletion attempted\n", (int)status); return 1; }
+    if (!FSRefMakePath(&target, (UInt8 *)path, sizeof(path))) printf("%s", path);
+#pragma clang diagnostic pop
     return 0;
   }
 

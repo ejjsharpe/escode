@@ -9,6 +9,7 @@ import CssWorker from "monaco-editor/language/css/css.worker.js?worker";
 import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
 import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import type { Change, Document, SaveResult, ProjectBridge } from "../host/project";
+import { affected, moved, reconcile } from "../host/file-operation-state";
 import { ChatView } from "./chat";
 import { useProjectChats } from "./chat-state";
 import { WorktreeChoices } from "./worktrees";
@@ -23,7 +24,11 @@ type Status = {
   gitError?: string;
   approvalRequired?: boolean;
 };
-type BufferState = { model: monaco.editor.ITextModel; disk: Document };
+type BufferState = {
+  model: monaco.editor.ITextModel;
+  disk: Document;
+  view?: monaco.editor.ICodeEditorViewState | null;
+};
 declare global {
   interface Window {
     escode: {
@@ -91,6 +96,7 @@ function CheckoutView({
   const [saving, setSaving] = useState(false);
   const [fileClosing, setFileClosing] = useState(false);
   const closeInFlight = useRef(false);
+  const [operation, setOperation] = useState<{ source: string; destination: string } | null>(null);
   useEffect(
     () => onBlocked(root, !!conflict || saving || fileClosing),
     [conflict, saving, fileClosing, root, onBlocked],
@@ -137,7 +143,7 @@ function CheckoutView({
     return persist();
   }
   function addBuffer(file: string, disk: Document, text = disk.text) {
-    const b = {
+    const b: BufferState = {
       disk,
       model: monaco.editor.createModel(text, undefined, monaco.Uri.file(root + "/" + file)),
     };
@@ -186,13 +192,17 @@ function CheckoutView({
       editContext: false,
       ariaLabel: path + " editor",
     });
+    container.current.dataset.modelUri = b.model.uri.toString();
+    container.current.dataset.language = b.model.getLanguageId();
     editor.current = instance;
+    if (b.view) instance.restoreViewState(b.view);
     instance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveAction.current());
     const update = () => setDirty(b.model.getValue() !== b.disk.text);
     update();
     const listener = b.model.onDidChangeContent(update);
     return () => {
       listener.dispose();
+      b.view = instance.saveViewState();
       instance.dispose();
       editor.current = null;
     };
@@ -374,11 +384,81 @@ function CheckoutView({
       editor.current?.updateOptions({ readOnly: false });
     }
   }
+  async function fileOperation(kind: "move" | "trash", source: string, destination = "") {
+    if (closeInFlight.current || saveInFlight.current || conflict) return;
+    closeInFlight.current = true;
+    setFileClosing(true);
+    editor.current?.updateOptions({ readOnly: true });
+    try {
+      for (const [file, b] of buffers.current) {
+        memory.drafts = memory.drafts.filter((d) => d.root !== root || d.path !== file);
+        if (b.model.getValue() !== b.disk.text)
+          memory.drafts.push({ root, path: file, text: b.model.getValue(), disk: b.disk });
+      }
+      await persist();
+      await flush();
+      if (
+        kind === "move" &&
+        Array.from(buffers.current.keys()).some(
+          (f) =>
+            affected(
+              f.normalize("NFC").toLowerCase(),
+              destination.normalize("NFC").toLowerCase(),
+            ) && !affected(f, source),
+        )
+      )
+        throw Error("Destination has open buffers. Close them or choose another path.");
+      const result = await projectCall("file-operation", root, kind, source, destination);
+      if (!result.applied || !result.intent) {
+        setMessage(result.message);
+        return;
+      }
+      // The originating CheckoutView owns this completion even if navigation changed.
+      const current = editor.current?.getModel();
+      // Snapshot because rebinding changes the map during iteration.
+      for (const [file, b] of Array.from(buffers.current)) {
+        if (!affected(file, source)) continue;
+        if (current === b.model) b.view = editor.current?.saveViewState();
+        buffers.current.delete(file);
+        if (kind === "move") {
+          const next = addBuffer(moved(file, source, destination), b.disk, b.model.getValue());
+          next.view = b.view;
+        }
+        b.model.dispose();
+      }
+      reconcile(memory, result.intent);
+      setPath(
+        kind === "move" ? moved(path, source, destination) : affected(path, source) ? "" : path,
+      );
+      const nextDirectory =
+        kind === "move"
+          ? moved(directory, source, destination)
+          : affected(directory, source)
+            ? ""
+            : directory;
+      setDirectory(nextDirectory);
+      setDiff(null);
+      selectedChange.current = null;
+      setBufferRevision((n) => n + 1);
+      await persist();
+      await projectCall("file-operation-ack", root);
+      setOperation(null);
+      await browse(nextDirectory);
+      await refresh();
+      setMessage(result.message);
+    } catch (error) {
+      report(error);
+    } finally {
+      closeInFlight.current = false;
+      setFileClosing(false);
+      editor.current?.updateOptions({ readOnly: false });
+    }
+  }
   closers.set(root, {
     project,
     close: async () => {
-      for (const file of [...buffers.current.keys()])
-        if (!(await closeFile(file, false))) return false;
+      if (closeInFlight.current) return false;
+      for (const file of buffers.current.keys()) if (!(await closeFile(file, false))) return false;
       return true;
     },
   });
@@ -416,6 +496,31 @@ function CheckoutView({
                 ↑ Parent folder
               </Button>
             )}
+            {operation && (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void fileOperation("move", operation.source, operation.destination);
+                }}
+              >
+                <p>
+                  Rename/move {operation.source}. Earlier text undo history resets; unsaved text and
+                  cursor/scroll are preserved.
+                </p>
+                <label>
+                  Checkout-relative destination
+                  <input
+                    aria-label="Checkout-relative destination"
+                    value={operation.destination}
+                    onChange={(e) => setOperation({ ...operation, destination: e.target.value })}
+                  />
+                </label>
+                <Button type="submit">Apply move</Button>
+                <Button type="button" onClick={() => setOperation(null)}>
+                  Cancel move
+                </Button>
+              </form>
+            )}
             <ul>
               {files.map((file) => (
                 <li key={file.path}>
@@ -430,6 +535,20 @@ function CheckoutView({
                     buffers.current.get(file.path)?.disk.text
                       ? " •"
                       : ""}
+                  </Button>
+                  <Button
+                    aria-label={"Rename/move " + file.path}
+                    disabled={saving || !!conflict}
+                    onClick={() => setOperation({ source: file.path, destination: file.path })}
+                  >
+                    Rename/move
+                  </Button>
+                  <Button
+                    aria-label={"Move to Trash " + file.path}
+                    disabled={saving || !!conflict}
+                    onClick={() => void fileOperation("trash", file.path)}
+                  >
+                    Trash
                   </Button>
                 </li>
               ))}
