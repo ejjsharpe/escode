@@ -250,3 +250,148 @@ h2 {
 .worktree-choices code {
   overflow-wrap: anywhere;
 }
+
+main[data-agents="true"] {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+main[data-agents="true"] > header,
+main[data-agents="true"] > .project-tabs {
+  flex-shrink: 0;
+}
+.agents {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #131416;
+  color: #e6e4ed;
+}
+.agents-heading {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  padding: 16px 22px;
+  border-bottom: 1px solid #34323b;
+}
+.agents-heading h1 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+}
+.agents-heading span {
+  color: #b3afbe;
+  font-size: 12px;
+}
+.agents .workspace {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.agents aside {
+  background: #1c1d21;
+  border-color: #34323b;
+}
+.agents aside h2 {
+  margin: 0 0 16px;
+  color: #b3afbe;
+}
+.agents .agent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  background: #23242a;
+  border: 1px solid #37353f;
+  border-radius: 6px;
+}
+.agents .agent-row[aria-pressed="true"] {
+  background: #353047;
+  border-color: #6b608c;
+}
+.agents .agent-row:hover {
+  background: #2c2938;
+}
+.agents .agent-row span {
+  color: #b3afbe;
+  font-size: 12px;
+}
+.agents .agent-row small {
+  color: #c5b8fa;
+}
+.agents button:focus-visible,
+.agents textarea:focus-visible {
+  outline-color: #b9acf6;
+}
+.agents .directory,
+.agents .chat-compose p,
+.agents h2 {
+  color: #c8c0e1;
+}
+.agents button {
+  background: #26252c;
+  border-color: #494650;
+}
+.agents .chat-compose textarea {
+  resize: none;
+  background: #1d1d24;
+  border-color: #655a82;
+  caret-color: #b7a7f4;
+}
+.agents ::selection {
+  background: #554a80;
+  color: #fff;
+}
+.agents {
+  scrollbar-color: #655a82 #1c1d21;
+}
+.agents .content,
+.agents .chat-conversation {
+  min-height: 0;
+}
+.agents .chat-conversation {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+.agents .chat-conversation > * {
+  flex-shrink: 0;
+}
+.agents .transcript {
+  flex: 1 1 0;
+  min-height: 80px;
+  overflow: auto;
+}
+.agents .conversation-heading {
+  border-bottom: 1px solid #34323b;
+  padding-bottom: 12px;
+}
+.agents .conversation-heading h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.agents .conversation-heading p {
+  margin-bottom: 0;
+  color: #b3afbe;
+}
+.project-tabs button[aria-pressed="true"] {
+  background: #353047;
+  border-color: #b7a7f4;
+}
+main[data-agents="true"] > header,
+main[data-agents="true"] > .project-tabs {
+  background: #18181c;
+  border-color: #34323b;
+}
+main[data-agents="true"] > header button,
+main[data-agents="true"] > .project-tabs button {
+  background: #26252c;
+  border-color: #494650;
+}
+main[data-agents="true"] > .project-tabs button[aria-pressed="true"] {
+  background: #353047;
+  border-color: #b7a7f4;
+}

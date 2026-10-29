@@ -9,6 +9,7 @@ import CssWorker from "monaco-editor/language/css/css.worker.js?worker";
 import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
 import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import type { Change, Document, SaveResult, ProjectBridge } from "../host/project";
+import { AgentsView } from "./agents";
 import { ChatView } from "./chat";
 import { useProjectChats } from "./chat-state";
 import { WorktreeChoices } from "./worktrees";
@@ -661,7 +662,7 @@ function ProjectView({
 }
 function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
   const [projects, setProjects] = useState<Status[]>(restored);
-  const [selected, setSelected] = useState(memory.selected);
+  const [selected, setSelected] = useState(memory.selected || "agents");
   const [activity, setActivity] = useState<Record<string, string>>({});
   const [error, setError] = useState(errors.join("\n"));
   const [closing, setClosing] = useState(false);
@@ -681,7 +682,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
       try {
         if (project) {
           memory.projects = memory.projects.filter((p) => p.project !== project);
-          memory.selected = memory.projects[0]?.project ?? "";
+          memory.selected = memory.projects[0]?.project ?? "agents";
           await persist();
         }
         await window.escode.lifecycle("finish", project);
@@ -731,6 +732,9 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
       );
       if (!memory.projects.some((p) => p.project === value.project))
         memory.projects.push({ project: value.project, root: value.root });
+      memory.savedProjects ??= [];
+      if (!memory.savedProjects.some((p) => p.project === value.project))
+        memory.savedProjects.push({ project: value.project, root: value.root });
       void persist();
       setSelected(value.project);
     } catch (e) {
@@ -738,14 +742,19 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
     }
   }
   return (
-    <main {...stylex.props(styles.page)} inert={closing}>
+    <main {...stylex.props(styles.page)} data-agents={selected === "agents"} inert={closing}>
       <header>
         <strong>escode</strong>
         <Button onClick={() => void open()}>Open project…</Button>
         <span>{selected}</span>
-        {selected && <Button onClick={() => void close(selected)}>Close project</Button>}
+        {selected !== "agents" && selected && (
+          <Button onClick={() => void close(selected)}>Close project</Button>
+        )}
       </header>
       <nav className="project-tabs" aria-label="Projects">
+        <Button aria-pressed={selected === "agents"} onClick={() => setSelected("agents")}>
+          Agents
+        </Button>
         {projects.map((p) => (
           <Button
             key={p.project}
@@ -759,7 +768,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
         ))}
       </nav>
       {error && <p role="alert">{error}</p>}
-      {!projects.length && <p>Open a local Git checkout to begin.</p>}
+      {selected === "agents" && <AgentsView />}
       {projects.map((p) => {
         if (!callbacks.current.has(p.project))
           callbacks.current.set(p.project, (value) =>

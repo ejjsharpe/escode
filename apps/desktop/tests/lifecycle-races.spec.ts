@@ -147,7 +147,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await page.getByRole("button", { name: "Close project", exact: true }).click();
     await expect(
       page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
-    ).toHaveCount(0);
+    ).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Close project", exact: true })).toHaveCount(0);
     await app.evaluate(() => {
       (globalThis as any).releaseMetadata();

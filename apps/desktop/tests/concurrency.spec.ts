@@ -117,6 +117,15 @@ createInterface({input:process.stdin}).on('line', line => {
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeDisabled();
     const approval = page.getByRole("button", { name: "Allow once", exact: true });
     await expect(approval).toBeEnabled();
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await page.locator(".agent-row").filter({ hasText: "Chat 2" }).click();
+    await expect(approval).toBeEnabled();
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("delayed");
+    await page
+      .getByRole("navigation", { name: "Projects" })
+      .getByRole("button", { name: /^alpha/ })
+      .click();
+    await expect(approval).toBeEnabled();
     // Delay host reads so responses remain pending across a conversation remount.
     await app.evaluate(() => {
       const fs = process.getBuiltinModule("fs/promises") as any;

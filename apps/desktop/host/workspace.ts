@@ -13,6 +13,8 @@ export type ViewMemory = {
 };
 export type WorkspaceState = {
   projects: { project: string; root: string }[];
+  savedProjects?: { project: string; root: string }[];
+  agentsChat?: string;
   selected: string;
   views: Record<string, ViewMemory>;
   drafts: RecoveryDraft[];
@@ -53,7 +55,9 @@ function validate(value: unknown): asserts value is WorkspaceState {
   )
     throw Error("Invalid workspace");
   if (
-    s.projects.some(
+    (s.savedProjects !== undefined && !Array.isArray(s.savedProjects)) ||
+    (s.agentsChat !== undefined && typeof s.agentsChat !== "string") ||
+    [...s.projects, ...(s.savedProjects ?? [])].some(
       (p) =>
         !p ||
         typeof p.project !== "string" ||

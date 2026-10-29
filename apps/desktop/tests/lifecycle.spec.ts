@@ -49,7 +49,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     const tabs = page
       .getByRole("navigation", { name: "Projects", exact: true })
       .getByRole("button");
-    await expect(tabs).toHaveText(["repo", "other"]);
+    await expect(tabs).toHaveText(["Agents", "repo", "other"]);
     await page
       .getByRole("navigation", { name: "Projects", exact: true })
       .getByRole("button", { name: "repo", exact: true })
@@ -66,7 +66,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     page = await app.firstWindow();
     await expect(
       page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
-    ).toHaveText(["repo", "other"]);
+    ).toHaveText(["Agents", "repo", "other"]);
     await expect(page.locator("header")).toContainText(root);
     await expect(page.locator(".monaco-editor:visible")).toContainText("recover these edits");
     await page.getByRole("button", { name: "Save ⌘S" }).click();
@@ -116,7 +116,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     await expect(page.locator(".monaco-diff-editor:visible")).toContainText("external");
     await expect(
       page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
-    ).toHaveText(["repo", "other"]);
+    ).toHaveText(["Agents", "repo", "other"]);
     await page
       .getByRole("navigation", { name: "Projects", exact: true })
       .getByRole("button", { name: "other", exact: true })
@@ -239,7 +239,13 @@ createInterface({input:process.stdin}).on('line',line=>{
       });
       if (closeProject) {
         await page.getByRole("button", { name: "Close project", exact: true }).click();
-        await expect(page.getByText("Open a local Git checkout to begin.")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Close project", exact: true })).toHaveCount(
+          0,
+        );
+        await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
         expect(await readFile(join(root, "a.txt"), "utf8")).toBe("save on close");
         expect(await readFile(join(managed!.root, "a.txt"), "utf8")).toBe("committed");
         expect(
