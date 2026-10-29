@@ -235,6 +235,8 @@ createInterface({input: process.stdin}).on("line", line => {
  if(m.method==="turn/start") {result={turn:{id:"pipe-turn"}}; setTimeout(()=>process.stdout.end(),20);}
  process.stdout.write(JSON.stringify({id:m.id,result})+"\\n");
 });
+
+
 `,
   );
   const service = new ChatService(new Chats(join(dir, "chats.json")), (cwd, receive, drop) =>
@@ -252,6 +254,88 @@ createInterface({input: process.stdin}).on("line", line => {
   }
 });
 
+test.each(["missing", "replaced"])(
+  "a %s checkout blocks new turns without losing history or drafts",
+  async (kind) => {
+    const { mkdir, rename } = await import("node:fs/promises");
+    const dir = await mkdtemp(join(tmpdir(), "escode-checkout-loss-"));
+    const root = join(dir, "checkout");
+    await mkdir(root);
+    let sends = 0;
+    const service = new ChatService(
+      new Chats(join(dir, "chats.json")),
+      async (cwd, receive, drop) => ({
+        async request(method: string) {
+          if (method === "account/read") return { account: {} };
+          if (method === "thread/start" || method === "thread/resume")
+            return {
+              thread: { id: cwd },
+              cwd,
+              model: "fixture",
+              approvalPolicy: "on-request",
+              sandbox: { type: "readOnly" },
+            };
+          if (method === "thread/turns/list")
+            return {
+              data: [
+                {
+                  id: "turn",
+                  items: [{ id: "reply", type: "agentMessage", text: "retained history" }],
+                },
+              ],
+              nextCursor: null,
+            };
+          if (method === "turn/start") {
+            sends++;
+            receive({ method: "turn/started", params: { threadId: cwd, turn: { id: "turn" } } });
+            receive({
+              method: "item/completed",
+              params: {
+                threadId: cwd,
+                turnId: "turn",
+                item: { id: "reply", type: "agentMessage", text: "retained history" },
+              },
+            });
+            receive({ method: "turn/completed", params: { threadId: cwd, turn: { id: "turn" } } });
+            return { turn: { id: "turn" } };
+          }
+        },
+        respond() {},
+        close() {
+          drop(Error("connection closed"));
+        },
+      }),
+    );
+    try {
+      const chat = await service.create(dir, root);
+      await service.open(dir, chat.id);
+      await service.send(dir, chat.id, "first message");
+      await service.draft(dir, chat.id, "keep this draft");
+      await rename(root, root + "-original");
+      if (kind === "replaced") await mkdir(root);
+      await expect(service.send(dir, chat.id, "keep this draft")).rejects.toThrow(
+        /checkout.*unavailable|checkout.*changed/i,
+      );
+      expect(sends).toBe(1);
+      expect(service.snapshot(dir, chat.id).items[0].text).toBe("retained history");
+      expect((await service.list(dir))[0].draft).toBe("keep this draft");
+      const other = await service.create(dir);
+      await service.open(dir, other.id);
+      await service.send(dir, other.id, "other checkout still works");
+      expect(sends).toBe(2);
+      if (kind === "replaced") await rm(root, { recursive: true });
+      await rename(root + "-original", root);
+      await service.open(dir, chat.id);
+      expect(sends).toBe(2);
+      expect(service.snapshot(dir, chat.id).items[0].text).toBe("retained history");
+      expect((await service.list(dir))[0].draft).toBe("keep this draft");
+    } finally {
+      service.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
+
 test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
   "live Codex chats progress across shared/separate checkouts and projects; stop stays local",
   async () => {
@@ -259,8 +343,8 @@ test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
     const { realpath } = await import("node:fs/promises");
     const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-live-concurrency-")));
     const a = join(dir, "alpha"),
-      b = join(dir, "beta"),
-      worktree = join(dir, "worktree");
+      b = join(dir, "beta");
+    let project: import("./project").Project | undefined;
     const service = new ChatService(new Chats(join(dir, "chats.json")));
     try {
       for (const root of [a, b]) {
@@ -278,7 +362,12 @@ test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
           "initial",
         ]);
       }
-      execFileSync("git", ["-C", a, "worktree", "add", "-b", "parallel", worktree]);
+      const { Project } = await import("./project");
+      project = await Project.open(a);
+      const base = project.worktreeOptions().bases.find((b) => b.ref === "HEAD")!;
+      const created = project.createWorktree(join(dir, "managed"), base.ref, base.commit);
+      expect(created.error).toBeNull();
+      const worktree = created.root;
       const chats = await Promise.all([
         service.create(a),
         service.create(a),
@@ -324,7 +413,8 @@ test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
         ).toContain(`ESCODE_CONCURRENT_${i}`);
       }
     } finally {
-      service.close();
+      await service.shutdown();
+      project?.close();
       await rm(dir, { recursive: true, force: true });
     }
   },

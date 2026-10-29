@@ -6,7 +6,7 @@ The first iteration has one tab per project. Inside a project, the sidebar switc
 
 Projects can have multiple saved chats and multiple agents running concurrently. Starting agent work offers the current checkout or a new worktree. File editing uses explicit saving; switching views preserves unsaved edits.
 
-The long-term aim is a daily editor that can replace VS Code. The current effort defines the smallest useful first version; implementation follows once its product and architecture decisions are settled.
+The long-term aim is a daily editor that can replace VS Code. The v1 workflow is implemented; [integrated acceptance evidence](docs/compatibility/v1-acceptance.md) records its tested scope and the remaining manual VoiceOver validation.
 
 ## Planning
 
@@ -73,6 +73,7 @@ Unsaved file buffers are persisted as local recovery drafts. Closing files, proj
 or the app offers Save/Discard/Cancel; active work requires Stop and Close.
 Quit interrupts active turns and terminates app-owned process groups. Restart
 restores tabs, view selections and available drafts; agents do not resume turns.
+Saved roots from older builds need one approval through **Open project…**; available drafts are retained.
 Recovery is best effort: see [desktop evidence and limitations](docs/compatibility/desktop.md).
 Managed worktrees offer explicit removal with a confirmation listing the path, retained
 branch and affected chats. Active work, recovery drafts, local files (including ignored
@@ -82,4 +83,4 @@ required, so worktrees created by older builds require external management.
 Removal follows VS Code’s Git guarantee: an unrelated process can still create or
 change files after the final check; late ignored files can be deleted. Transactional
 removal and recoverable removal backups are outside this guarantee.
-This is not the completed v1.
+See [the v1 acceptance record](docs/compatibility/v1-acceptance.md) for the twelve functional gates, reproducible checks, measured recovery behavior and the manual VoiceOver checklist.

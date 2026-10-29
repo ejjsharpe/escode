@@ -1,5 +1,5 @@
 import { mkdir, open, readFile, rename } from "node:fs/promises";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import type { Document } from "./project";
 export type RecoveryDraft = { root: string; path: string; text: string; disk: Document };
 export type ViewMemory = {
@@ -22,6 +22,8 @@ export type RestoredStatus = {
   root: string;
   branch: string;
   changes: import("./project").Change[];
+  gitError?: string;
+  approvalRequired?: boolean;
 };
 export interface LifecycleBridge {
   (
@@ -96,6 +98,43 @@ function validate(value: unknown): asserts value is WorkspaceState {
 export class Workspace {
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private file: string) {}
+  private async readApprovals(): Promise<{ project: string; root: string }[]> {
+    try {
+      const value = JSON.parse(
+        await readFile(join(dirname(this.file), "approved-projects.json"), "utf8"),
+      );
+      if (
+        !Array.isArray(value) ||
+        value.some(
+          (p) =>
+            !p ||
+            typeof p.project !== "string" ||
+            !isAbsolute(p.project) ||
+            typeof p.root !== "string" ||
+            !isAbsolute(p.root),
+        )
+      )
+        throw Error("Invalid project approvals. Existing data is retained.");
+      return value;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+  }
+  async approved() {
+    await this.queue;
+    return this.readApprovals();
+  }
+  approve(project: string, root: string) {
+    return this.change(async () => {
+      if (!isAbsolute(project) || !isAbsolute(root)) throw Error("Invalid project approval");
+      const approved = await this.readApprovals();
+      if (!approved.some((p) => p.project === project && p.root === root)) {
+        approved.push({ project, root });
+        await this.replace(join(dirname(this.file), "approved-projects.json"), approved);
+      }
+    });
+  }
   async read(): Promise<WorkspaceState> {
     await this.queue;
     try {
@@ -108,26 +147,32 @@ export class Workspace {
     }
   }
   write(state: unknown) {
-    const task = this.queue.then(async () => {
+    return this.change(async () => {
       validate(state);
-      await mkdir(dirname(this.file), { recursive: true, mode: 0o700 });
-      const temporary = this.file + ".tmp";
-      const fd = await open(temporary, "w", 0o600);
-      try {
-        await fd.writeFile(JSON.stringify(state));
-        await fd.sync();
-      } finally {
-        await fd.close();
-      }
-      await rename(temporary, this.file);
-      const directory = await open(dirname(this.file), "r");
-      try {
-        await directory.sync();
-      } finally {
-        await directory.close();
-      }
+      await this.replace(this.file, state);
     });
+  }
+  private change(edit: () => Promise<void>) {
+    const task = this.queue.then(edit);
     this.queue = task.catch(() => {});
     return task;
+  }
+  private async replace(file: string, value: unknown) {
+    await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+    const temporary = file + ".tmp";
+    const fd = await open(temporary, "w", 0o600);
+    try {
+      await fd.writeFile(JSON.stringify(value));
+      await fd.sync();
+    } finally {
+      await fd.close();
+    }
+    await rename(temporary, file);
+    const directory = await open(dirname(file), "r");
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
   }
 }

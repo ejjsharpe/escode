@@ -270,11 +270,7 @@ export function ChatView({
           document.getElementById(sidebarId)!,
         )}
       <div className="chat-conversation">
-        <WorktreeChoices
-          project={project}
-          createChat={createChat}
-          onRemoved={load}
-        />
+        <WorktreeChoices project={project} createChat={createChat} onRemoved={load} />
         {!selected ? (
           <p>Create or select a saved chat to begin. Choose the current checkout or a worktree.</p>
         ) : (
@@ -325,7 +321,7 @@ export function ChatView({
                       : "Disconnected"}
               </span>
             </div>
-            <div className="transcript" aria-label="Conversation history">
+            <div className="transcript" role="region" aria-label="Conversation history">
               {snapshot?.items.map((item) => (
                 <article key={item.turnId + item.id}>
                   <h2>

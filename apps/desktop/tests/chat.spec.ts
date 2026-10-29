@@ -1,9 +1,9 @@
-import { test, expect, _electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import electron from "electron";
+import { launchDesktop } from "./desktop";
 // Explicit opt-in: this exercises installed, authenticated Codex and consumes a turn.
 test("saved Codex chat streams and reopens via a fresh connection", async () => {
   test.skip(
@@ -14,20 +14,8 @@ test("saved Codex chat streams and reopens via a fresh connection", async () => 
   const root = await mkdtemp(join(tmpdir(), "escode-chat-ui-"));
   const userData = await mkdtemp(join(tmpdir(), "escode-chat-user-"));
   execFileSync("git", ["init", root]);
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.ESCODE_DEV_URL;
-  const packaged = process.env.ESCODE_PACKAGED_CHAT === "1";
-  if (packaged) env.PATH = "/usr/bin:/bin";
-  else if (process.env.ESCODE_TEST_CODEX_DIR)
-    env.PATH = process.env.ESCODE_TEST_CODEX_DIR + ":" + env.PATH;
-  const app = await _electron.launch({
-    executablePath: packaged
-      ? resolve("release/mac-arm64/escode.app/Contents/MacOS/escode")
-      : (electron as unknown as string),
-    args: [...(packaged ? [] : ["."]), `--user-data-dir=${userData}`],
-    env,
-  });
+  const packaged = process.env.ESCODE_PACKAGED_CHAT === "1" || process.env.ESCODE_PACKAGED === "1";
+  const app = await launchDesktop(userData, process.env.ESCODE_TEST_CODEX_DIR, packaged);
   try {
     await app.evaluate(({ dialog }, root) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
@@ -76,7 +64,7 @@ test("saved Codex chat streams and reopens via a fresh connection", async () => 
     });
   } finally {
     await app.evaluate(({ dialog }) => {
-      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+      dialog.showMessageBox = async (_window: unknown, options?: any) => ({
         response: options.buttons[0] === "Save" ? 1 : 0,
         checkboxChecked: false,
       });

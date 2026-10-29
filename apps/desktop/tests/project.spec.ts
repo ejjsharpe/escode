@@ -1,26 +1,16 @@
-import { test, expect, _electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import electron from "electron";
+import { launchDesktop } from "./desktop";
 for (const packaged of [false, true]) {
   test(`${packaged ? "packaged" : "unpackaged"}: edit, navigate, cancel conflict, compare and explicitly overwrite`, async () => {
     const root = await mkdtemp(join(tmpdir(), "escode-ui-"));
     const userData = await mkdtemp(join(tmpdir(), "escode-project-user-"));
     execFileSync("git", ["init", root]);
     await writeFile(join(root, "a.txt"), "original\n");
-    const env = { ...process.env };
-    if (packaged) env.PATH = "/usr/bin:/bin";
-    delete env.ELECTRON_RUN_AS_NODE;
-    delete env.ESCODE_DEV_URL;
-    const app = await _electron.launch({
-      executablePath: packaged
-        ? resolve("release/mac-arm64/escode.app/Contents/MacOS/escode")
-        : (electron as unknown as string),
-      args: [...(packaged ? [] : ["."]), `--user-data-dir=${userData}`],
-      env,
-    });
+    const app = await launchDesktop(userData, undefined, packaged);
     try {
       await app.evaluate(({ dialog }, root) => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
@@ -96,7 +86,7 @@ for (const packaged of [false, true]) {
       });
     } finally {
       await app.evaluate(({ dialog }) => {
-        dialog.showMessageBox = async (_window: unknown, options: any) => ({
+        dialog.showMessageBox = async (_window: unknown, options?: any) => ({
           response: options.buttons[0] === "Save" ? 1 : 0,
           checkboxChecked: false,
         });

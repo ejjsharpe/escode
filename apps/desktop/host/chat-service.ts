@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { accessSync, constants, realpathSync, statSync } from "node:fs";
 import { Chats } from "./chat";
 import { codexDiagnostic, connectCodex, type CodexConnection, type WireMessage } from "./tools";
 export type ChatItem = { id: string; turnId: string; type: string; text: string };
@@ -21,6 +22,7 @@ type Session = ChatSnapshot & {
   opening?: Promise<void>;
   requestIds: Map<string, string | number>;
   stopping: boolean;
+  checkoutIdentity?: { path: string; dev: number; ino: number };
 };
 export class ChatService {
   private sessions = new Map<string, Session>();
@@ -75,6 +77,28 @@ export class ChatService {
       error: s.error,
     });
   }
+  private validateCheckout(s: Session, checkout: string) {
+    try {
+      accessSync(checkout, constants.R_OK | constants.X_OK);
+      const identity = statSync(checkout);
+      const path = realpathSync(checkout);
+      const previous = s.checkoutIdentity;
+      if (
+        !identity.isDirectory() ||
+        (previous &&
+          (previous.path !== path ||
+            previous.dev !== identity.dev ||
+            previous.ino !== identity.ino))
+      )
+        throw Error("Checkout changed");
+      s.checkoutIdentity = { path, dev: identity.dev, ino: identity.ino };
+    } catch {
+      s.rpc?.close();
+      s.error =
+        "Checkout unavailable or changed. Restore access to the original directory, then Retry connection. History and drafts are retained; work was not resent.";
+      throw Error(s.error);
+    }
+  }
   async open(project: string, id: string) {
     const s = this.session(project, id);
     if (s.opening) {
@@ -94,6 +118,7 @@ export class ChatService {
             "Checkout was removed. History and drafts are retained; this chat cannot run.",
           );
         if (s.epoch !== epoch) throw Error("Project closed while loading saved chat.");
+        this.validateCheckout(s, chat.checkout);
         rpc = await this.connect(
           chat.checkout,
           (event) => {
@@ -122,6 +147,7 @@ export class ChatService {
           );
         // Codex does not persist an empty thread until its first turn.
         const resume = Boolean(chat.threadId && chat.hasSent !== false);
+        this.validateCheckout(s, chat.checkout);
         const result = await rpc.request(
           resume ? "thread/resume" : "thread/start",
           resume
@@ -168,6 +194,7 @@ export class ChatService {
           s.items = items;
         }
         if (s.epoch !== epoch) throw Error("Codex disconnected during setup. Retry connection.");
+        this.validateCheckout(s, chat.checkout);
         s.connected = true;
       } catch (error) {
         rpc?.close();
@@ -287,11 +314,13 @@ export class ChatService {
     if (s.busy) throw Error("This chat already has an active turn.");
     if (!text.trim() || text.length > 100000)
       throw Error("Enter a message under 100,000 characters.");
+    this.validateCheckout(s, chat.checkout);
     s.busy = true;
     s.stopping = false;
     s.error = null;
     try {
       await this.store.update(project, id, { hasSent: true });
+      this.validateCheckout(s, chat.checkout);
       const result = await s.rpc.request("turn/start", {
         threadId: s.threadId,
         input: [{ type: "text", text, text_elements: [] }],
@@ -315,7 +344,7 @@ export class ChatService {
     await s.rpc!.request("turn/interrupt", { threadId: s.threadId, turnId: s.turnId });
   }
   async answer(project: string, id: string, token: string, answer: unknown) {
-    await this.store.get(project, id);
+    const chat = await this.store.get(project, id);
     const s = this.session(project, id);
     const request = s.requests.find((r) => r.token === token),
       wireId = s.requestIds.get(token);
@@ -363,6 +392,7 @@ export class ChatService {
           ? { permissions: answer === "accept" ? request.params.permissions : {}, scope: "turn" }
           : { decision: answer };
     }
+    this.validateCheckout(s, chat.checkout);
     s.rpc!.respond(wireId, result);
     s.requestIds.delete(token);
     s.requests = s.requests.filter((r) => r.token !== token);

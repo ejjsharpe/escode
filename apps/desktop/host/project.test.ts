@@ -251,6 +251,44 @@ test("a replaced checkout is unavailable for file and Git operations", async () 
   }
 });
 
+test("losing Git leaves file editing available and status retry recovers", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-git-loss-"));
+  const root = join(dir, "repo"),
+    bin = join(dir, "bin");
+  fs.mkdirSync(bin);
+  execFileSync("git", ["init", root]);
+  await writeFile(join(root, "a"), "original");
+  const executable = join(bin, "git");
+  await writeFile(executable, '#!/bin/sh\nexec /usr/bin/git "$@"\n', { mode: 0o700 });
+  vi.stubEnv("PATH", bin);
+  try {
+    let project = await openProject(root);
+    const loaded = await project.read("a");
+    const repository = project.repository();
+    await rm(executable);
+    expect((await project.status()).gitError).toMatch(/retry/i);
+    project.close();
+    await writeFile(executable, "#!/bin/sh\nexit 127\n", { mode: 0o700 });
+    project = await Project.restore(project.root, repository);
+    projects.push(project);
+    const unavailable = await project.status();
+    expect(unavailable).toMatchObject({
+      branch: "Git unavailable",
+      changes: [],
+      gitError: expect.stringMatching(/retry/i),
+    });
+    expect(await project.files()).toEqual([{ path: "a", directory: false }]);
+    expect((await project.save("a", "saved without Git", loaded.version)).kind).toBe("saved");
+    await writeFile(executable, '#!/bin/sh\nexec /usr/bin/git "$@"\n', { mode: 0o700 });
+    expect((await project.status()).changes).toEqual([{ path: "a", area: "untracked" }]);
+    expect((await project.read("a")).text).toBe("saved without Git");
+    expect(project.worktreeOptions().checkouts).toContain(project.root);
+  } finally {
+    vi.unstubAllEnvs();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("Git stays in the opened checkout when external configuration changes its work tree", async () => {
   const root = await mkdtemp(join(tmpdir(), "escode-git-scope-"));
   const outside = await mkdtemp(join(tmpdir(), "escode-git-outside-"));

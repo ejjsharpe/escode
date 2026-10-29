@@ -1,5 +1,7 @@
 # Desktop compatibility foundation
 
+For the current integrated checks, fixes and remaining manual VoiceOver validation, see [V1 acceptance evidence](v1-acceptance.md). The sections below preserve the scope and limitations of each earlier implementation slice.
+
 This is the implementation slice for [Prove packaged desktop launch and installed-tool compatibility](https://github.com/ejjsharpe/escode/issues/12), governed by [the v1 specification](https://github.com/ejjsharpe/escode/issues/11). The foundation now hosts the one-checkout file/Git editor slice from issue 13; it is not the completed v1.
 
 ## Run

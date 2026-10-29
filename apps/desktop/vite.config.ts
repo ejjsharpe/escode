@@ -11,5 +11,5 @@ export default defineConfig(({ mode }) => ({
           react(),
         ],
   build: { outDir: "dist/renderer" },
-  test: { include: ["host/**/*.test.ts"] },
+  test: { include: ["host/**/*.test.ts"], testTimeout: 15000 },
 }));

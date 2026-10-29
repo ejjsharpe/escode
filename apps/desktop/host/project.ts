@@ -28,9 +28,10 @@ export class Project {
   private directory: number | undefined;
   private gitDirectory = "";
   private gitIdentity?: { dev: number; ino: number };
+  private filesOnly = false;
   private constructor(
     readonly root: string,
-    private readonly executable: string,
+    private executable: string,
     private readonly helper: string,
     private readonly identity: { dev: number; ino: number },
     directory: number,
@@ -59,17 +60,54 @@ export class Project {
       throw error;
     }
   }
+  static async restore(path: string, repository: string, helper = resolve("dist/host/filesystem")) {
+    try {
+      const project = await Project.open(path, helper);
+      if (project.repository() !== repository) {
+        project.close();
+        throw Error("Repository identity changed. Reopen the project.");
+      }
+      return project;
+    } catch (error) {
+      let executable = "",
+        gitWorks = false;
+      try {
+        executable = await findExecutable("git");
+        execFileSync(executable, ["--version"], { timeout: 5000, stdio: "pipe" });
+        gitWorks = true;
+      } catch {
+        /* Previously approved files remain usable without Git. */
+      }
+      if (gitWorks) throw error;
+      const root = realpathSync(path);
+      if (root !== path) throw Error("Checkout path changed. Restore the original directory.");
+      const fd = openSync(root, directoryFlags);
+      const project = new Project(root, executable, helper, fstatSync(fd), fd);
+      project.repositoryIdentity = repository;
+      project.filesOnly = true;
+      return project;
+    }
+  }
   close() {
     if (this.directory !== undefined) closeSync(this.directory);
     this.directory = undefined;
   }
-  private io(args: string[], input?: string) {
+  private checkedDirectory() {
     if (this.directory === undefined) throw Error("Project is closed.");
     const fd = openSync(this.root, directoryFlags);
     try {
       const identity = fstatSync(fd);
       if (identity.dev !== this.identity.dev || identity.ino !== this.identity.ino)
         throw Error("Checkout directory was replaced. Reopen the project.");
+      return fd;
+    } catch (error) {
+      closeSync(fd);
+      throw error;
+    }
+  }
+  private io(args: string[], input?: string) {
+    const fd = this.checkedDirectory();
+    try {
       try {
         return execFileSync(this.helper, args, {
           input,
@@ -405,16 +443,46 @@ export class Project {
       throw Error("Removal incomplete. Leftovers retained; retry revalidates them.");
   }
   async status() {
-    const records = this.git([
-      "status",
-      "--porcelain=v1",
-      "-z",
-      "--untracked-files=all",
-      "--no-renames",
-    ])
-      .toString("utf8")
-      .split("\0")
-      .filter(Boolean);
+    let output: Buffer;
+    try {
+      if (this.filesOnly) {
+        const live = await Project.open(this.root, this.helper);
+        try {
+          if (
+            live.repository() !== this.repository() ||
+            live.identity.dev !== this.identity.dev ||
+            live.identity.ino !== this.identity.ino
+          )
+            throw Error("Checkout identity changed. Restore the original checkout.");
+          this.executable = live.executable;
+          this.gitDirectory = live.gitDirectory;
+          this.gitIdentity = live.gitIdentity;
+          this.filesOnly = false;
+        } finally {
+          live.close();
+        }
+      }
+      output = this.git([
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--no-renames",
+      ]);
+    } catch (error) {
+      if (!this.filesOnly && typeof (error as { status?: unknown }).status !== "number")
+        throw error;
+      closeSync(this.checkedDirectory());
+      return {
+        project: this.repository(),
+        root: this.root,
+        branch: "Git unavailable",
+        changes: [] as Change[],
+        gitError:
+          "Git unavailable. Restore Git or repository access, then Retry Git. File editing and existing chats remain available.",
+      };
+    }
+    const records = output.toString("utf8").split("\0").filter(Boolean);
     const changes: Change[] = [];
     for (const row of records) {
       const path = row.slice(3);

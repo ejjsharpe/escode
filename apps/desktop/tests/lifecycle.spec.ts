@@ -1,9 +1,9 @@
-import { test, expect, _electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import electron from "electron";
+import { launchDesktop } from "./desktop";
 
 test("crash recovery preserves baseline; cancel and failed save retain edits; discard survives restart", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-lifecycle-")));
@@ -14,15 +14,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
   const other = join(dir, "other");
   execFileSync("git", ["init", other]);
   await writeFile(join(other, "b.txt"), "secondary project");
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.ESCODE_DEV_URL;
-  const launch = () =>
-    _electron.launch({
-      executablePath: electron as unknown as string,
-      args: [".", `--user-data-dir=${user}`],
-      env,
-    });
+  const launch = () => launchDesktop(user);
   let app = await launch();
   try {
     let page = await app.firstWindow();
@@ -33,6 +25,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     await page.getByRole("button", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
+    const recoveryStarted = Date.now();
     await page.keyboard.type("recover these edits");
     await expect
       .poll(
@@ -40,6 +33,11 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
           JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts[0]?.text,
       )
       .toBe("recover these edits");
+    const durable = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+    await page.evaluate((state) => window.escode.lifecycle("persist", state), durable);
+    console.log(
+      `Recovery draft acknowledged ${Date.now() - recoveryStarted} ms after typing began; crash recovery below starts from this durable draft.`,
+    );
     await app.evaluate(({ dialog }, other) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [other] });
     }, other);
@@ -179,15 +177,7 @@ createInterface({input:process.stdin}).on('line',line=>{
 `,
       { mode: 0o700 },
     );
-    const env = { ...process.env, PATH: dir + ":" + process.env.PATH };
-    delete env.ELECTRON_RUN_AS_NODE;
-    delete env.ESCODE_DEV_URL;
-    const launch = () =>
-      _electron.launch({
-        executablePath: electron as unknown as string,
-        args: [".", `--user-data-dir=${user}`],
-        env,
-      });
+    const launch = () => launchDesktop(user, dir);
     let app = await launch();
     try {
       let page = await app.firstWindow();
@@ -231,7 +221,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       if (closeProject) {
         // Accept Stop and Close, then cancel the dirty-file prompt. Work must keep running.
         await app.evaluate(({ dialog }) => {
-          dialog.showMessageBox = async (_window: unknown, options: any) => ({
+          dialog.showMessageBox = async (_window: unknown, options?: any) => ({
             response: options.buttons[0] === "Save" ? 2 : 0,
             checkboxChecked: false,
           });

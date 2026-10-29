@@ -3,6 +3,24 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Workspace } from "./workspace";
+test("renderer workspace data cannot change host project approvals", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-approvals-"));
+  try {
+    const store = new Workspace(join(dir, "workspace.json"));
+    await store.approve(dir, dir);
+    await store.write({
+      projects: [{ project: "/unapproved", root: "/unapproved" }],
+      selected: "/unapproved",
+      views: {},
+      drafts: [],
+    });
+    expect(await new Workspace(join(dir, "workspace.json")).approved()).toEqual([
+      { project: dir, root: dir },
+    ]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 test("acknowledged recovery survives a fresh store; discard cannot resurrect it", async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-recovery-"));
   try {

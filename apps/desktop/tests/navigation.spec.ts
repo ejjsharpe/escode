@@ -1,9 +1,9 @@
-import { test, expect, _electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import electron from "electron";
+import { launchDesktop } from "./desktop";
 
 test("projects and checkout selections retain buffers, drafts and mode without duplicate tabs", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-navigation-")));
@@ -27,14 +27,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     ]);
   }
   execFileSync("git", ["-C", a, "worktree", "add", "-b", "other", worktree]);
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.ESCODE_DEV_URL;
-  const app = await _electron.launch({
-    executablePath: electron as unknown as string,
-    args: [".", `--user-data-dir=${join(dir, "user")}`],
-    env,
-  });
+  const app = await launchDesktop(join(dir, "user"));
   try {
     const page = await app.firstWindow();
     const open = async (root: string) => {
@@ -42,6 +35,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
       }, root);
       await page.getByRole("button", { name: "Open project…" }).click();
+      await expect(page.locator("header")).toContainText(root === worktree ? a : root);
     };
     await open(a);
     await page.getByRole("button", { name: "a.txt", exact: true }).click();
@@ -114,7 +108,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await page.screenshot({ path: "test-results/navigation.png" });
   } finally {
     await app.evaluate(({ dialog }) => {
-      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+      dialog.showMessageBox = async (_window: unknown, options?: any) => ({
         response: options.buttons[0] === "Save" ? 1 : 0,
         checkboxChecked: false,
       });

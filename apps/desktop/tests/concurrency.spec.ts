@@ -1,9 +1,9 @@
-import { test, expect, _electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, rm, realpath, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import electron from "electron";
+import { launchDesktop } from "./desktop";
 
 test("background requests keep focus; replies, stop and connection loss stay with their chat", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-concurrent-")));
@@ -36,14 +36,7 @@ createInterface({input:process.stdin}).on('line', line => {
 `,
     { mode: 0o700 },
   );
-  const env = { ...process.env, PATH: dir + ":" + process.env.PATH };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.ESCODE_DEV_URL;
-  const app = await _electron.launch({
-    executablePath: electron as unknown as string,
-    args: [".", `--user-data-dir=${join(dir, "user")}`],
-    env,
-  });
+  const app = await launchDesktop(join(dir, "user"), dir);
   try {
     const page = await app.firstWindow();
     const open = async (root: string) => {
@@ -194,7 +187,7 @@ createInterface({input:process.stdin}).on('line', line => {
     await page.screenshot({ path: "test-results/concurrency.png" });
   } finally {
     await app.evaluate(({ dialog }) => {
-      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+      dialog.showMessageBox = async (_window: unknown, options?: any) => ({
         response: options.buttons[0] === "Save" ? 1 : 0,
         checkboxChecked: false,
       });

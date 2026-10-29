@@ -1,9 +1,9 @@
-import { test, expect, _electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import electron from "electron";
+import { launchDesktop } from "./desktop";
 
 test("create from committed state, retain unsaved edits, and explicitly reuse with a shared-files notice", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-worktree-ui-")));
@@ -18,14 +18,7 @@ test("create from committed state, retain unsaved edits, and explicitly reuse wi
   git("add", ".");
   git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "initial");
   await writeFile(join(root, "a.txt"), "disk edits");
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.ESCODE_DEV_URL;
-  const app = await _electron.launch({
-    executablePath: electron as unknown as string,
-    args: [".", `--user-data-dir=${join(dir, "user")}`],
-    env,
-  });
+  const app = await launchDesktop(join(dir, "user"));
   try {
     const page = await app.firstWindow();
     await app.evaluate(({ dialog }, root) => {
@@ -80,7 +73,7 @@ test("create from committed state, retain unsaved edits, and explicitly reuse wi
     await expect(page.locator(".monaco-editor:visible")).toContainText("unsaved original");
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await app.evaluate(({ dialog }) => {
-      dialog.showMessageBox = async (_window: unknown, options: any) => {
+      dialog.showMessageBox = async (_window: unknown, options?: any) => {
         if (options.message === "Remove managed worktree?") {
           if (
             !options.detail.includes("Retained branch:") ||
@@ -133,7 +126,7 @@ test("create from committed state, retain unsaved edits, and explicitly reuse wi
     await expect(page.getByRole("button", { name: "Chat 4", exact: true })).toBeVisible();
   } finally {
     await app.evaluate(({ dialog }) => {
-      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+      dialog.showMessageBox = async (_window: unknown, options?: any) => ({
         response: options.buttons[0] === "Save" ? 1 : 0,
         checkboxChecked: false,
       });

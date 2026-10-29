@@ -1,9 +1,9 @@
-import { test, expect, _electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import electron from "electron";
+import { launchDesktop } from "./desktop";
 
 for (const dirty of [false, true]) {
   test(`file close locks editing and duplicate closes while ${dirty ? "discarding" : "closing a clean file"}`, async () => {
@@ -12,14 +12,7 @@ for (const dirty of [false, true]) {
       user = join(dir, "user");
     execFileSync("git", ["init", root]);
     await writeFile(join(root, "a.txt"), "original");
-    const env = { ...process.env };
-    delete env.ELECTRON_RUN_AS_NODE;
-    delete env.ESCODE_DEV_URL;
-    const app = await _electron.launch({
-      executablePath: electron as unknown as string,
-      args: [".", `--user-data-dir=${user}`],
-      env,
-    });
+    const app = await launchDesktop(user);
     try {
       const page = await app.firstWindow();
       await app.evaluate(({ dialog }, root) => {
@@ -109,14 +102,7 @@ createInterface({input:process.stdin}).on('line',line=>{
 `,
     { mode: 0o700 },
   );
-  const env = { ...process.env, PATH: dir + ":" + process.env.PATH };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.ESCODE_DEV_URL;
-  const app = await _electron.launch({
-    executablePath: electron as unknown as string,
-    args: [".", `--user-data-dir=${user}`],
-    env,
-  });
+  const app = await launchDesktop(user, dir);
   try {
     const page = await app.firstWindow();
     await app.evaluate(({ dialog }, root) => {
@@ -124,6 +110,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
+    await expect(page.locator("header")).toContainText(root);
     const chat = await page.evaluate((root) => window.escode.chat("create", root, root), root);
     await app.evaluate(() => {
       const fs = process.getBuiltinModule("fs/promises") as any;

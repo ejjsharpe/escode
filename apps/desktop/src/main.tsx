@@ -4,12 +4,23 @@ import * as stylex from "@stylexjs/stylex";
 import { Button } from "@base-ui/react/button";
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
+import JsonWorker from "monaco-editor/language/json/json.worker.js?worker";
+import CssWorker from "monaco-editor/language/css/css.worker.js?worker";
+import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
+import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import type { Change, Document, SaveResult, ProjectBridge } from "../host/project";
 import { ChatView } from "./chat";
 import type { ChatBridge } from "./chat";
 import "./style.css";
 import { memory, initialize, persist, flush, useMemory, closers } from "./workspace";
-type Status = { project: string; root: string; branch: string; changes: Change[] };
+type Status = {
+  project: string;
+  root: string;
+  branch: string;
+  changes: Change[];
+  gitError?: string;
+  approvalRequired?: boolean;
+};
 type BufferState = { model: monaco.editor.ITextModel; disk: Document };
 declare global {
   interface Window {
@@ -23,7 +34,15 @@ declare global {
     MonacoEnvironment: { getWorker(_: string, label: string): Worker };
   }
 }
-window.MonacoEnvironment = { getWorker: () => new EditorWorker() };
+window.MonacoEnvironment = {
+  getWorker: (_id, label) => {
+    if (label === "json") return new JsonWorker();
+    if (["css", "scss", "less"].includes(label)) return new CssWorker();
+    if (["html", "handlebars", "razor"].includes(label)) return new HtmlWorker();
+    if (label === "typescript" || label === "javascript") return new TypeScriptWorker();
+    return new EditorWorker();
+  },
+};
 const styles = stylex.create({
   page: {
     color: "#e5e7eb",
@@ -54,6 +73,7 @@ function CheckoutView({
   const buffers = useRef(new Map<string, BufferState>());
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
+  const [checkoutError, setCheckoutError] = useState("");
   const [files, setFiles] = useState<{ path: string; directory: boolean }[]>([]);
   const [directory, setDirectory] = useMemory(root, "directory", "");
   const [path, setPath] = useMemory(root, "path", "");
@@ -78,10 +98,21 @@ function CheckoutView({
   const report = (error: unknown) =>
     setMessage(error instanceof Error ? error.message : String(error));
   const refresh = async () => {
-    const value = await projectCall("status", root);
+    let value: Status;
+    try {
+      value = await projectCall("status", root);
+      setCheckoutError("");
+    } catch (error) {
+      setCheckoutError(
+        "Checkout unavailable. Restore access to the original directory, then Retry checkout. Edits and chat associations are retained. " +
+          String(error),
+      );
+      throw error;
+    }
     setStatus(value);
     onStatus(value);
-    if (selectedChange.current && modeRef.current === "Source Control") {
+    if (value.gitError) setDiff(null);
+    else if (selectedChange.current && modeRef.current === "Source Control") {
       await showDiff(selectedChange.current);
     }
   };
@@ -149,6 +180,9 @@ function CheckoutView({
       model: b.model,
       automaticLayout: true,
       theme: "vs-dark",
+      accessibilitySupport: "on",
+      editContext: false,
+      ariaLabel: path + " editor",
     });
     editor.current = instance;
     instance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveAction.current());
@@ -171,8 +205,16 @@ function CheckoutView({
       automaticLayout: true,
       theme: "vs-dark",
       renderSideBySide: false,
+      accessibilitySupport: "on",
+      editContext: false,
+      domReadOnly: true,
+      originalAriaLabel: diff.title + " original",
+      modifiedAriaLabel: diff.title + " modified",
     });
     instance.setModel({ original, modified });
+    // Monaco's initial diff option pass clears the side labels.
+    instance.getOriginalEditor().updateOptions({ ariaLabel: diff.title + " original" });
+    instance.getModifiedEditor().updateOptions({ ariaLabel: diff.title + " modified" });
     return () => {
       instance.dispose();
       original.dispose();
@@ -269,7 +311,12 @@ function CheckoutView({
       void persist();
       const value = await projectCall("diff", root, change.path, change.area);
       if (generation !== presentation.current || modeRef.current !== "Source Control") return;
-      setDiff({ ...value, title: change.area + " · " + change.path });
+      const title = change.area + " · " + change.path;
+      setDiff((old) =>
+        old?.title === title && old.original === value.original && old.modified === value.modified
+          ? old
+          : { ...value, title },
+      );
       setMessage("Read-only Git diff · unsaved edits excluded.");
     } catch (e) {
       if (generation !== presentation.current) return;
@@ -335,10 +382,30 @@ function CheckoutView({
   });
   return (
     <div className="workspace" hidden={!active || mode === "Chats"} inert={fileClosing}>
-      <aside>
+      <aside aria-label={mode + " sidebar"}>
         <p className="directory">
           {status?.branch} · {root}
         </p>
+        {checkoutError && (
+          <>
+            <p role="status">{checkoutError}</p>
+            <Button
+              onClick={() =>
+                void (async () => {
+                  await refresh();
+                  await browse(directory);
+                  if (path) await select(path, false);
+                })().catch(report)
+              }
+            >
+              Retry checkout
+            </Button>
+          </>
+        )}
+        {status?.gitError && <p role="status">{status.gitError}</p>}
+        {status?.gitError && (
+          <Button onClick={() => void refresh().catch(report)}>Retry Git</Button>
+        )}
         {status && mode === "Files" && (
           <>
             <p className="directory">{directory || "Project files"}</p>
@@ -351,6 +418,7 @@ function CheckoutView({
               {files.map((file) => (
                 <li key={file.path}>
                   <Button
+                    aria-pressed={file.directory ? undefined : file.path === path}
                     disabled={!!conflict || saving}
                     onClick={() => void (file.directory ? browse(file.path) : select(file.path))}
                   >
@@ -376,7 +444,15 @@ function CheckoutView({
                     .filter((c) => c.area === area)
                     .map((c) => (
                       <li key={c.path}>
-                        <Button onClick={() => void showDiff(c)}>{c.path}</Button>
+                        <Button
+                          aria-pressed={
+                            selectedChange.current?.path === c.path &&
+                            selectedChange.current.area === area
+                          }
+                          onClick={() => void showDiff(c)}
+                        >
+                          {c.path}
+                        </Button>
                       </li>
                     ))}
                 </ul>
@@ -436,6 +512,10 @@ function CheckoutView({
               </div>
             )}
             <div className="editor" ref={container} />
+            <p className="directory">
+              Ctrl+Shift+M toggles whether Tab leaves the editor. F7 / Shift+F7 reads the next /
+              previous diff change; Escape returns to the diff.
+            </p>
             <p role="status">{message}</p>
           </>
         )}
@@ -605,7 +685,12 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
     try {
       const value = await window.escode.project("open");
       if (!value) return;
-      setProjects((old) => (old.some((p) => p.project === value.project) ? old : [...old, value]));
+      setError("");
+      setProjects((old) =>
+        old.some((p) => p.project === value.project)
+          ? old.map((p) => (p.project === value.project && p.approvalRequired ? value : p))
+          : [...old, value],
+      );
       if (!memory.projects.some((p) => p.project === value.project))
         memory.projects.push({ project: value.project, root: value.root });
       void persist();
@@ -644,7 +729,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
           );
         return (
           <ProjectView
-            key={p.project}
+            key={p.project + (p.approvalRequired ? ":approval" : "")}
             initial={p}
             active={selected === p.project}
             onActivity={callbacks.current.get(p.project)!}

@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["node", "vite-plus/client"]
   },
-  "include": ["src", "host", "vite.config.ts"]
+  "include": ["src", "host", "tests", "vite.config.ts", "playwright.config.ts"]
 }

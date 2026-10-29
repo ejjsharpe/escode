@@ -1,12 +1,15 @@
 import { app, BrowserWindow, ipcMain, session, dialog } from "electron";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { mkdirSync, realpathSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { toolStatus } from "./tools";
 import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
 import { Workspace } from "./workspace";
 import { Project } from "./project";
-const developmentOrigin = "http://127.0.0.1:5173";
+const developmentOrigin = /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.ESCODE_DEV_URL ?? "")
+  ? process.env.ESCODE_DEV_URL!
+  : "http://127.0.0.1:5173";
 app.whenReady().then(() => {
   const page = pathToFileURL(join(__dirname, "../renderer/index.html")).href;
   const dev = !app.isPackaged && process.env.ESCODE_DEV_URL === developmentOrigin;
@@ -30,7 +33,7 @@ app.whenReady().then(() => {
         ...details.responseHeaders,
         "Content-Security-Policy": [
           dev
-            ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:5173; worker-src 'self' blob:; font-src 'self' data:"
+            ? `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ${developmentOrigin.replace("http:", "ws:")}; worker-src 'self' blob:; font-src 'self' data:`
             : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; font-src 'self' data:",
         ],
       },
@@ -53,10 +56,33 @@ app.whenReady().then(() => {
   const store = new Chats(join(app.getPath("userData"), "chats.json"));
   const chats = new ChatService(store);
   const projects = new Map<string, Project>();
+  const projectSessions = new Map<string, object>();
+  const unapprovedProjects = new Set<string>();
   const closingProjects = new Set<string>();
   const removing = new Set<string>();
   let quitting = false;
   const workspace = new Workspace(join(app.getPath("userData"), "workspace.json"));
+  mkdirSync(app.getPath("userData"), { recursive: true, mode: 0o700 });
+  const stateFiles = ["workspace.json", "approved-projects.json", "chats.json"]
+    .flatMap((name) => [name, name + ".tmp"])
+    .map((name) => join(realpathSync(app.getPath("userData")), name));
+  const protectedFiles = new Set(stateFiles.map((file) => file.normalize("NFC").toLowerCase()));
+  const isAppState = (path: string) => {
+    if (protectedFiles.has(path.normalize("NFC").toLowerCase())) return true;
+    try {
+      const target = statSync(path);
+      return stateFiles.some((file) => {
+        try {
+          const state = statSync(file);
+          return target.dev === state.dev && target.ino === state.ino;
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return false;
+    }
+  };
   let mayClose = false;
   window.on("close", (event) => {
     if (mayClose) return;
@@ -77,20 +103,39 @@ app.whenReady().then(() => {
       throw Error("Invalid sender");
     if (operation === "load" && !args.length) {
       const state = await workspace.read();
+      const approved = await workspace.approved();
       const errors: string[] = [];
       const restored = [];
       for (const item of state.projects) {
+        if (!approved.some((p) => p.project === item.project && p.root === item.root)) {
+          unapprovedProjects.add(item.project);
+          errors.push(
+            `${item.root}: Use Open project to approve this saved directory. Saved state is retained.`,
+          );
+          restored.push({
+            project: item.project,
+            root: item.root,
+            branch: "Approval required",
+            changes: [],
+            approvalRequired: true,
+          });
+          continue;
+        }
+        unapprovedProjects.delete(item.project);
+        if (!projectSessions.has(item.project)) projectSessions.set(item.project, {});
         try {
-          const p = await Project.open(item.root, helper);
-          if (p.repository() !== item.project) {
-            p.close();
-            throw Error("Repository identity changed");
-          }
+          const p = await Project.restore(item.root, item.project, helper);
           projects.get(p.root)?.close();
           projects.set(p.root, p);
           restored.push(await p.status());
         } catch (error) {
           errors.push(`${item.root}: ${String(error)}`);
+          restored.push({
+            project: item.project,
+            root: item.root,
+            branch: "Checkout unavailable",
+            changes: [],
+          });
         }
       }
       return { state, restored, errors };
@@ -110,7 +155,7 @@ app.whenReady().then(() => {
     if (
       project !== undefined &&
       (typeof project !== "string" ||
-        ![...projects.values()].some((p) => p.repository() === project))
+        (!projectSessions.has(project) && !unapprovedProjects.has(project)))
     )
       throw Error("Unknown project");
     if (operation === "prepare") {
@@ -136,6 +181,8 @@ app.whenReady().then(() => {
           mayClose = true;
           app.quit();
         } else {
+          projectSessions.delete(project as string);
+          unapprovedProjects.delete(project as string);
           for (const [root, p] of projects)
             if (p.repository() === project) {
               p.close();
@@ -157,8 +204,12 @@ app.whenReady().then(() => {
     if (typeof root !== "string") throw Error("Invalid checkout");
     const existing = projects.get(root);
     if (existing) return existing;
-    const candidate = await Project.open(root, helper);
-    if (![...projects.values()].some((p) => p.repository() === candidate.repository())) {
+    const associations = await Promise.all([...projectSessions.keys()].map((id) => store.list(id)));
+    const saved = associations.flat().find((c) => c.checkout === root && !c.removed);
+    const candidate = saved
+      ? await Project.restore(root, saved.project, helper)
+      : await Project.open(root, helper);
+    if (!projectSessions.has(candidate.repository())) {
       candidate.close();
       throw Error("Open this project first.");
     }
@@ -182,12 +233,26 @@ app.whenReady().then(() => {
       const candidate = await Project.open(result.filePaths[0], helper);
       const existing = projects.get(candidate.root);
       if (existing) candidate.close();
-      else projects.set(candidate.root, candidate);
       const opened = existing ?? candidate;
+      try {
+        await workspace.approve(opened.repository(), opened.root);
+      } catch (error) {
+        if (!existing) opened.close();
+        throw error;
+      }
+      if (!existing) projects.set(candidate.root, candidate);
+      unapprovedProjects.delete(opened.repository());
+      if (!projectSessions.has(opened.repository())) projectSessions.set(opened.repository(), {});
       await store.migrate(opened.repository(), opened.checkouts());
       return opened.status();
     }
     const project = await checkout(args.shift());
+    if (
+      ["read", "save", "diff"].includes(String(operation)) &&
+      typeof args[0] === "string" &&
+      isAppState(resolve(project.root, args[0]))
+    )
+      throw Error("App state is unavailable through project file operations.");
     const identity = project.repository();
     if (removing.has(identity)) throw Error("Worktree removal is in progress. Retry afterward.");
     const managedRoot = join(app.getPath("userData"), "worktrees");
@@ -269,10 +334,10 @@ app.whenReady().then(() => {
       throw Error("Invalid sender");
     const root = args.shift();
     if (typeof root !== "string") throw Error("Invalid project");
-    const owner = [...projects.values()].find((p) => p.repository() === root);
+    const owner = projectSessions.get(root);
     const requireOpen = () => {
       if (removing.has(root)) throw Error("Worktree removal is in progress. Retry afterward.");
-      if (!owner || projects.get(owner.root) !== owner || quitting || closingProjects.has(root))
+      if (!owner || projectSessions.get(root) !== owner || quitting || closingProjects.has(root))
         throw Error("Open this project first.");
     };
     requireOpen();

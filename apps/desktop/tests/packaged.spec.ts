@@ -1,10 +1,15 @@
-import { test, expect, _electron } from "@playwright/test";
-import { resolve } from "node:path";
+import { test, expect } from "@playwright/test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { launchDesktop } from "./desktop";
+import { execFileSync } from "node:child_process";
 test("packaged app loads CSS, Monaco and tools without a development PATH", async () => {
-  const app = await _electron.launch({
-    executablePath: resolve("release/mac-arm64/escode.app/Contents/MacOS/escode"),
-    env: { HOME: process.env.HOME!, PATH: "/usr/bin:/bin", TMPDIR: process.env.TMPDIR! },
-  });
+  const user = await mkdtemp(join(tmpdir(), "escode-packaged-"));
+  const root = join(user, "repo");
+  execFileSync("git", ["init", root]);
+  await writeFile(join(root, "fixture.json"), '{"broken": }');
+  const app = await launchDesktop(user, undefined, true);
   try {
     const page = await app.firstWindow();
     const errors: string[] = [];
@@ -22,15 +27,22 @@ test("packaged app loads CSS, Monaco and tools without a development PATH", asyn
     await expect(page.evaluate(() => (window as any).escode.toolStatus())).resolves.toHaveProperty(
       "git.version",
     );
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, root);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await page.getByRole("button", { name: "fixture.json", exact: true }).click();
+    await expect(page.locator(".squiggly-error")).toBeVisible();
     expect(errors).toEqual([]);
     await page.screenshot({ path: "test-results/packaged.png" });
   } finally {
     await app.evaluate(({ dialog }) => {
-      dialog.showMessageBox = async (_window: unknown, options: any) => ({
+      dialog.showMessageBox = async (_window: unknown, options?: any) => ({
         response: options.buttons[0] === "Save" ? 1 : 0,
         checkboxChecked: false,
       });
     });
     await app.close();
+    await rm(user, { recursive: true, force: true });
   }
 });
