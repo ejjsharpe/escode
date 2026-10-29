@@ -1,0 +1,29 @@
+# Unsaved editor files changed by an agent
+
+Investigated 29 October 2026 for [Define project, editing, and chat behaviour](https://github.com/ejjsharpe/escode/issues/5). This is supporting evidence, not a product decision or runtime test.
+
+## VS Code
+
+For ordinary file-system changes, VS Code's text-file model manager reloads clean models after update/add events and explicitly skips dirty models. It checks again before resolving a queued reload, preserving edits made while the reload was pending. Thus an external writer does not normally replace the unsaved editor buffer. [Source: model manager, inspected commit](https://github.com/microsoft/vscode/blob/76e5c7e5e1eb0a68099cdd8ef9538bcd9b4a1afd/src/vs/workbench/services/textfile/common/textFileEditorModelManager.ts#L133-L147), [queued reload guard](https://github.com/microsoft/vscode/blob/76e5c7e5e1eb0a68099cdd8ef9538bcd9b4a1afd/src/vs/workbench/services/textfile/common/textFileEditorModelManager.ts#L350-L362).
+
+The save-conflict check happens when saving: if the file changed on disk, saving is refused by default. Compare opens the disk version on the left and editor contents on the right; the user can retain/adapt their edits and explicitly overwrite disk, or revert to disk and discard the buffer. VS Code also offers Overwrite directly in the notification. The default `files.saveConflictResolution` is `askUser`; users can configure unconditional overwrite instead. This is a save conflict, not necessarily a Git merge conflict, and it does not require interrupting the external writer. [Official current guidance](https://code.visualstudio.com/docs/editing/getting-started/tips-and-tricks#_preventing-dirty-writes), [official description of direct Overwrite and configuration](https://code.visualstudio.com/updates/v1_42#_save-conflict-resolution).
+
+Example: the user adds paragraph A without saving; an agent writes paragraph B to disk. VS Code keeps A in the buffer and B on disk. A later save asks the user to reconcile them. It does not silently combine the two versions.
+
+## T3 Code
+
+Inspected current `main` at commit `29f33af7d7e81ced8d0c3098ea0fe0ff1895d6a7`. T3 has editable file surfaces; this is not merely an agent-diff review interface.
+
+Its file editor follows a different model: edits enter a file-scoped save session with a **500 ms debounce**, and the final departing editor surface flushes pending edits. Local surfaces for the same environment/directory/path share a write queue. This is autosaving, rather than escode's accepted explicit-save behaviour. [Save sessions and RPC payload](https://github.com/pingdotgg/t3code/blob/29f33af7d7e81ced8d0c3098ea0fe0ff1895d6a7/apps/web/src/components/files/fileSaveSessions.ts), [coordinator](https://github.com/pingdotgg/t3code/blob/29f33af7d7e81ced8d0c3098ea0fe0ff1895d6a7/apps/web/src/components/files/fileSaveCoordinator.ts).
+
+Unsaved edits are retained as an optimistic file overlay, preferred over read-query data until confirmation. Successful persistence confirms the overlay and refreshes the read query, then clears that confirmed overlay once a fresh read succeeds. An external contents value reaching the editable surface replaces its editor draft, but the unsaved overlay takes precedence in the data feeding that surface. These mechanisms are not a compare/reconcile dialog. [Overlay and query state](https://github.com/pingdotgg/t3code/blob/29f33af7d7e81ced8d0c3098ea0fe0ff1895d6a7/apps/web/src/components/files/projectFilesQueryState.ts), [editor update handling](https://github.com/pingdotgg/t3code/blob/29f33af7d7e81ced8d0c3098ea0fe0ff1895d6a7/apps/web/src/components/files/FilePreviewPanel.tsx#L650-L710).
+
+The inspected write contract contains directory, relative path, and new contents, with no expected disk revision/hash. The server validates the target path, then writes with truncation, without comparing the prior contents or modification version. Therefore this path does **not** supply VS Code-style stale-save protection: a queued local draft can overwrite a concurrent external/agent change. Shared local write ordering does not coordinate arbitrary external writers. This is a code-based risk inference, not a reproduced bug. [Write contract](https://github.com/pingdotgg/t3code/blob/29f33af7d7e81ced8d0c3098ea0fe0ff1895d6a7/packages/contracts/src/project.ts#L500-L510), [server write implementation](https://github.com/pingdotgg/t3code/blob/29f33af7d7e81ced8d0c3098ea0fe0ff1895d6a7/apps/server/src/workspace/WorkspaceFileSystem.ts#L528-L581).
+
+Read queries have caching and explicit refresh paths; the examined read-file query does not specify an external-file refresh trigger. The file preview also exposes refresh. No claim is made that every external edit is immediately detected or that every T3 editing surface follows exactly this route. [Read query configuration](https://github.com/pingdotgg/t3code/blob/29f33af7d7e81ced8d0c3098ea0fe0ff1895d6a7/packages/client-runtime/src/state/projectCommands.ts#L136-L149), [file preview](https://github.com/pingdotgg/t3code/blob/29f33af7d7e81ced8d0c3098ea0fe0ff1895d6a7/apps/web/src/components/files/FilePreviewPanel.tsx).
+
+## Implication for escode
+
+Recommend the VS Code model for explicit saving: automatically refresh clean files; preserve dirty buffers; detect a changed disk version before saving; offer comparison plus explicit overwrite/reload. Users can keep editing while the conflict is unresolved. Worktrees isolate working copies, while concurrent agents sharing one checkout still need their own coordination; protecting the user's editor buffer alone does not prevent agents overwriting each other's disk changes.
+
+No applications were run and no race conditions were reproduced. The report establishes documented VS Code behaviour and the inspected T3 implementation, not guarantees across versions, extensions, remote filesystems, or every editor surface.
