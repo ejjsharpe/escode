@@ -12,11 +12,11 @@ The long-term aim is a daily editor that can replace VS Code. The v1 workflow is
 
 The accepted baseline is [Specification: smallest useful escode v1](https://github.com/ejjsharpe/escode/issues/11), planned through the completed [Define the smallest useful escode](https://github.com/ejjsharpe/escode/issues/1) map.
 
-The current planning map is [Specify the shared Agents view](https://github.com/ejjsharpe/escode/issues/20). It defines an amendment for a permanent app-wide Agents tab alongside project-local Chats, sharing conversations across both views and adding No project chats. This feature is not implemented yet. [Agree the Agents view specification](https://github.com/ejjsharpe/escode/issues/24) reconciles its behaviour, approved layout and acceptance requirements with the baseline before a subsequent implementation effort. Child issues hold decisions and their resolutions; native issue dependencies show what can be worked on next.
+The completed [Specify the shared Agents view](https://github.com/ejjsharpe/escode/issues/20) map records the [agreed Agents specification amendment](https://github.com/ejjsharpe/escode/issues/24#issuecomment-6501288419): a permanent app-wide Agents tab alongside project-local Chats, shared conversations across both views, and No project chats. The amendment reconciles the behaviour and approved layout with the baseline and defines fourteen implementation acceptance scenarios. This feature is not implemented yet; application changes and their acceptance evidence belong to a subsequent effort. Child issues retain the decisions and their resolutions.
 
 The selected foundation is macOS, Electron, React, TypeScript, and Monaco, using installed Git and Codex directly. T3 Code remains a workflow reference.
 
-The platform, editor, reuse boundary, and local-service architecture are recorded in [Choose the desktop foundation](https://github.com/ejjsharpe/escode/issues/4#issuecomment-6484074577). The decision map indexes supporting research and the remaining behaviour, interaction, and specification decisions.
+The platform, editor, reuse boundary, and local-service architecture are recorded in [Choose the desktop foundation](https://github.com/ejjsharpe/escode/issues/4#issuecomment-6484074577). The completed maps index the supporting research, behaviour, interaction and specification decisions.
 
 See [GLOSSARY.md](GLOSSARY.md) for product terminology and [the tracker conventions](docs/agents/issue-tracker.md) for the planning workflow.
 
