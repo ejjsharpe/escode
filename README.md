@@ -10,7 +10,9 @@ The long-term aim is a daily editor that can replace VS Code. The v1 workflow is
 
 ## Planning
 
-The canonical scope and decision map are [Define the smallest useful escode](https://github.com/ejjsharpe/escode/issues/1). Child issues hold individual decisions and their resolutions. Native issue dependencies show what can be worked on next.
+The accepted baseline is [Specification: smallest useful escode v1](https://github.com/ejjsharpe/escode/issues/11), planned through the completed [Define the smallest useful escode](https://github.com/ejjsharpe/escode/issues/1) map.
+
+The current planning map is [Specify the shared Agents view](https://github.com/ejjsharpe/escode/issues/20). It defines an amendment for a permanent app-wide Agents tab alongside project-local Chats, sharing conversations across both views and adding No project chats. This feature is not implemented yet. [Agree the Agents view specification](https://github.com/ejjsharpe/escode/issues/24) reconciles its behaviour, approved layout and acceptance requirements with the baseline before a subsequent implementation effort. Child issues hold decisions and their resolutions; native issue dependencies show what can be worked on next.
 
 The selected foundation is macOS, Electron, React, TypeScript, and Monaco, using installed Git and Codex directly. T3 Code remains a workflow reference.
 

@@ -6,6 +6,50 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { launchDesktop } from "./desktop";
 
+test("approved projects reopen across repeated restarts without choosing directories again", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-reopen-")));
+  const roots = [join(dir, "alpha"), join(dir, "beta")];
+  const user = join(dir, "user");
+  for (const root of roots) {
+    execFileSync("git", ["init", root]);
+    await writeFile(join(root, "a.txt"), root);
+  }
+  let app = await launchDesktop(user);
+  try {
+    let page = await app.firstWindow();
+    for (const root of roots) {
+      await app.evaluate(({ dialog }, root) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+      }, root);
+      await page.getByRole("button", { name: "Open project…" }).click();
+      await expect(page.locator("header")).toContainText(root);
+      await page.getByRole("button", { name: "a.txt", exact: true }).click();
+      await expect(page.locator(".monaco-editor:visible")).toContainText(root);
+    }
+    for (let restart = 0; restart < 2; restart++) {
+      await app.close();
+      app = await launchDesktop(user);
+      page = await app.firstWindow();
+      const loaded = await page.evaluate(() => window.escode.lifecycle("load"));
+      expect(loaded.errors).toEqual([]);
+      expect(loaded.restored.map((p) => p.root)).toEqual(roots);
+      expect(loaded.restored.some((p) => p.approvalRequired)).toBe(false);
+      await expect(page.locator("header")).toContainText(roots[1]);
+      for (const root of roots) {
+        await page
+          .getByRole("navigation", { name: "Projects" })
+          .getByRole("button", { name: root.split("/").pop()!, exact: true })
+          .click();
+        await expect(page.locator(".monaco-editor:visible")).toContainText(root);
+      }
+      await expect(page.getByRole("alert").filter({ hasText: "approve" })).toHaveCount(0);
+    }
+  } finally {
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("renderer state cannot grant file access or overwrite approvals; native reopening restores legacy drafts", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-approval-boundary-")));
   const root = join(dir, "repo"),

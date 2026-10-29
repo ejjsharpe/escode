@@ -2,13 +2,36 @@
 
 A project editor with files, source changes, and Codex conversations.
 
+The Agents and No project concepts below describe the [planned Agents amendment](https://github.com/ejjsharpe/escode/issues/20); they are not implemented yet.
+
 ## Language
 
 **Project**:
-A local Git repository whose files, source changes, and saved chats belong together across branch switches. Linked worktrees of the same repository share one project tab.
+A saved local Git repository whose files, source changes, and project-backed chats belong together across branch switches. Linked worktrees of the same repository share one project identity.
+
+**Project tab**:
+An open editor view of a project, containing Files, Source Control and Chats. Closing this view leaves the saved project and its chats available in Agents.
+
+**Agents**:
+The permanent app-wide view of chats and chat drafts across all saved projects, including projects with closed editor tabs, and No project contexts.
+
+**Chats view**:
+The view inside a project tab showing only that project's chats and chat drafts. It opens the same conversations and drafts as Agents.
 
 **Chat**:
-A saved Codex conversation belonging to one project and attached to one checkout directory, including the user's messages and the agent's work and responses. Its checkout is chosen when the chat is created and stays fixed for that chat. Multiple chats may share a checkout. Codex stores conversation history; escode stores the project, checkout and provider-thread association and the unsent message draft. Stopping a chat interrupts its active turn without undoing completed file changes.
+A saved Codex conversation, including the user's messages and the agent's work and responses, with an optional project association. Its project association and working directory are fixed by first Send; its history and unsent message are shared wherever it is opened.
+
+**Project-backed chat**:
+A chat associated with one project and attached to one of its checkout directories. Multiple chats may share a checkout.
+
+**No project chat**:
+A chat with no user-project association, attached to its own persistent scratch folder. It appears in Agents without a project tab.
+
+**Chat draft**:
+A locally saved, unsent conversation whose context can change before first Send. It keeps its identity, creation time and message when it becomes a chat.
+
+**Scratch folder**:
+A persistent working folder owned by one No project chat. It starts without Git and is retained independently of the chat's running state.
 
 **Original checkout**:
 The checkout through which a project was opened, shown by Files and Source Control before a chat is selected.
