@@ -198,3 +198,39 @@ test("setup failures retain drafts; exact input requests cannot answer another t
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("loss of the protocol output stops the chat even if its process stays alive", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-pipe-"));
+  const { writeFile } = await import("node:fs/promises");
+  const { connectCodex } = await import("./tools");
+  const executable = join(dir, "codex.mjs");
+  await writeFile(
+    executable,
+    `#!/usr/bin/env node
+import { createInterface } from "node:readline";
+if (process.argv.includes("--version")) { console.log("codex-cli 0.165.0"); process.exit(0); }
+setInterval(() => {}, 1000);
+createInterface({input: process.stdin}).on("line", line => {
+ const m=JSON.parse(line); if (!m.id) return;
+ let result={};
+ if(m.method==="account/read") result={account:{type:"chatgpt"}};
+ if(m.method==="thread/start") result={thread:{id:"pipe-thread"},cwd:m.params.cwd,model:"actual",approvalPolicy:"on-request",sandbox:{type:"readOnly"}};
+ if(m.method==="turn/start") {result={turn:{id:"pipe-turn"}}; setTimeout(()=>process.stdout.end(),20);}
+ process.stdout.write(JSON.stringify({id:m.id,result})+"\\n");
+});
+`,
+  );
+  const service = new ChatService(new Chats(join(dir, "chats.json")), (cwd, receive, drop) =>
+    connectCodex(cwd, receive, drop, executable),
+  );
+  try {
+    const c = await service.create(dir);
+    await service.open(dir, c.id);
+    await service.send(dir, c.id, "hello");
+    await expect.poll(() => service.snapshot(dir, c.id).connected, { timeout: 1000 }).toBe(false);
+    expect(service.snapshot(dir, c.id).busy).toBe(false);
+  } finally {
+    service.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

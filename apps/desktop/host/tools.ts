@@ -115,6 +115,10 @@ export async function connectCodex(
   };
   child.on("error", fail);
   child.stdin.on("error", fail);
+  child.stdout.on("error", fail);
+  lines.on("close", () =>
+    fail(Error("Codex protocol connection closed. Retry connection; work was not resent.")),
+  );
   child.on("exit", () =>
     fail(
       Error(
