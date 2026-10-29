@@ -187,9 +187,10 @@ export class Workspace {
       throw error;
     }
   }
-  write(state: unknown) {
+  write(state: unknown, reconcileState?: (state: WorkspaceState) => void) {
     return this.change(async () => {
       validate(state);
+      reconcileState?.(state);
       await this.replace(this.file, state);
     });
   }
@@ -201,7 +202,7 @@ export class Workspace {
       if (
         !v ||
         !isAbsolute(v.root) ||
-        !["move", "trash"].includes(v.kind) ||
+        !["move", "trash", "save"].includes(v.kind) ||
         typeof v.checkoutIdentity !== "string" ||
         typeof v.identity !== "string" ||
         typeof v.source !== "string" ||
@@ -215,7 +216,14 @@ export class Workspace {
             v.destination
               .split("/")
               .some((p: string) => p === ".." || p.toLowerCase() === ".git"))) ||
-        (v.completed !== undefined && typeof v.completed !== "boolean")
+        (v.completed !== undefined && typeof v.completed !== "boolean") ||
+        (v.kind === "save" &&
+          (typeof v.saveText !== "string" ||
+            (v.completed && !v.savedDisk) ||
+            (v.savedDisk !== undefined &&
+              (!v.savedDisk ||
+                typeof v.savedDisk.text !== "string" ||
+                typeof v.savedDisk.version !== "string"))))
       )
         throw Error("Invalid operation journal; retained for inspection.");
       return v;

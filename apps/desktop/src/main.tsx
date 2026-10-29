@@ -9,7 +9,7 @@ import CssWorker from "monaco-editor/language/css/css.worker.js?worker";
 import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
 import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import type { Change, Document, SaveResult, ProjectBridge } from "../host/project";
-import { affected, moved, reconcile } from "../host/file-operation-state";
+import { affected, moved, reconcile, reconcileSave } from "../host/file-operation-state";
 import { FilesTree } from "./files";
 import { AgentsView } from "./agents";
 import { ChatView } from "./chat";
@@ -377,7 +377,7 @@ function CheckoutView({
   }
   async function fileOperation(
     kind: "move" | "trash",
-    source: string,
+    source: string | string[],
     destination = "",
     inline = false,
   ) {
@@ -385,6 +385,8 @@ function CheckoutView({
       if (inline) throw Error("Finish the pending file action first.");
       return;
     }
+    const sources = typeof source === "string" ? [source] : [...source];
+    const single = sources[0];
     closeInFlight.current = true;
     setFileClosing(true);
     editor.current?.updateOptions({ readOnly: true });
@@ -403,47 +405,86 @@ function CheckoutView({
             affected(
               f.normalize("NFC").toLowerCase(),
               destination.normalize("NFC").toLowerCase(),
-            ) && !affected(f, source),
+            ) && !affected(f, single),
         )
       )
         throw Error("Destination has open buffers. Close them or choose another path.");
-      const result = await projectCall(
-        "file-operation",
-        root,
-        inline ? "rename" : kind,
-        source,
-        inline ? destination.split("/").at(-1)! : destination,
-      );
-      if (!result.applied || !result.intent) {
-        setMessage(result.message);
-        if (inline) throw Error(result.message);
-        return;
+      const batch = kind === "trash" ? await projectCall("trash-selection", root, sources) : null;
+      const results = batch
+        ? batch.results
+        : [
+            {
+              source: single,
+              ...(await projectCall(
+                "file-operation",
+                root,
+                inline ? "rename" : "move",
+                single,
+                inline ? destination.split("/").at(-1)! : destination,
+              )),
+            },
+          ];
+      for (const saved of batch?.saves ?? []) {
+        const b = buffers.current.get(saved.path);
+        if (b) b.disk = saved.disk;
+        reconcileSave(memory, root, saved);
       }
-      // The originating CheckoutView owns this completion even if navigation changed.
-      const current = editor.current?.getModel();
-      // Snapshot because rebinding changes the map during iteration.
-      for (const [file, b] of Array.from(buffers.current)) {
-        if (!affected(file, source)) continue;
-        if (current === b.model) b.view = editor.current?.saveViewState();
-        buffers.current.delete(file);
-        if (kind === "move") {
-          const next = addBuffer(moved(file, source, destination), b.disk, b.model.getValue());
-          next.view = b.view;
+      let nextPath = path;
+      for (const result of results) {
+        if (!result.applied || !result.intent) continue;
+        const source = result.intent.source;
+        const current = editor.current?.getModel();
+        for (const [file, b] of Array.from(buffers.current)) {
+          if (!affected(file, source)) continue;
+          if (current === b.model) b.view = editor.current?.saveViewState();
+          buffers.current.delete(file);
+          if (kind === "move") {
+            const next = addBuffer(moved(file, source, destination), b.disk, b.model.getValue());
+            next.view = b.view;
+          }
+          b.model.dispose();
         }
-        b.model.dispose();
+        reconcile(memory, result.intent);
+        nextPath =
+          kind === "move"
+            ? moved(nextPath, source, destination)
+            : affected(nextPath, source)
+              ? ""
+              : nextPath;
       }
-      reconcile(memory, result.intent);
-      setPath(
-        kind === "move" ? moved(path, source, destination) : affected(path, source) ? "" : path,
-      );
+      setPath(nextPath);
       setDiff(null);
       selectedChange.current = null;
       setBufferRevision((n) => n + 1);
-      await persist();
-      await projectCall("file-operation-ack", root);
+      setDirty(
+        !!buffers.current.get(nextPath) &&
+          buffers.current.get(nextPath)!.model.getValue() !==
+            buffers.current.get(nextPath)!.disk.text,
+      );
+      let completionError = "";
+      try {
+        await persist();
+        // Never acknowledge before the reconciled state has reached durable storage.
+        if (batch?.requiresAck || (!batch && results.some((r) => r.applied)))
+          await projectCall("file-operation-ack", root);
+      } catch (error) {
+        completionError = `\nRecovery persistence/acknowledgement failed; restart to reconcile available intent: ${String(error)}`;
+      }
       setFilesRevision((n) => n + 1);
-      await refresh();
-      setMessage(result.message);
+      let refreshError = "";
+      try {
+        await refresh();
+      } catch (error) {
+        refreshError = `\nRefresh failed: ${String(error)}`;
+      }
+      const failed = batch?.results.find((r) => r.conflict);
+      if (failed?.conflict) {
+        await select(failed.conflict.path);
+        setConflict(failed.conflict);
+      }
+      const message = (batch?.message ?? results[0].message) + completionError + refreshError;
+      setMessage(message);
+      if (inline && !results[0].applied) throw Error(message);
     } catch (error) {
       report(error);
       if (inline) throw error;
@@ -527,7 +568,9 @@ function CheckoutView({
                 if (kind === "file") await select(file);
                 return file;
               }}
-              trash={(source) => void fileOperation("trash", source)}
+              trash={async (sources) => {
+                await fileOperation("trash", sources);
+              }}
             />
           </>
         )}
@@ -608,12 +651,24 @@ function CheckoutView({
                 </Button>
               </div>
             )}
+            <p
+              role="status"
+              tabIndex={0}
+              style={{
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+                maxHeight: "30vh",
+                overflow: "auto",
+                flexShrink: 0,
+              }}
+            >
+              {message}
+            </p>
             <div className="editor" ref={container} />
             <p className="directory">
               Ctrl+Shift+M toggles whether Tab leaves the editor. F7 / Shift+F7 reads the next /
               previous diff change; Escape returns to the diff.
             </p>
-            <p role="status">{message}</p>
           </>
         )}
       </section>

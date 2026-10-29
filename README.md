@@ -101,4 +101,7 @@ remaining gates](docs/compatibility/file-operations.md) and [tree evidence](docs
 New File/New Folder and basename-only inline Rename are available from the toolbar,
 context menu and tree-focused keyboard controls. New files open in the editor; invalid
 or occupied names retain their input. See [create/rename evidence](docs/compatibility/files-inline.md).
+Batch Trash is available from the context menu, Trash action and tree-focused
+Cmd+Backspace/Delete, with explicit dirty-file choices and per-item results. See
+[batch Trash evidence](docs/compatibility/files-trash.md).
 Transfers and automatic external-change watching remain later slices.

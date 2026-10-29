@@ -617,9 +617,20 @@ export class Project {
 
 export interface ProjectBridge {
   (
+    operation: "trash-selection",
+    checkout: string,
+    paths: string[],
+  ): Promise<{
+    results: import("./file-operations").TrashResult[];
+    saves: import("./file-operations").SavedFile[];
+    requiresAck: boolean;
+    message: string;
+  }>;
+
+  (
     operation: "file-operation",
     checkout: string,
-    kind: "move" | "rename" | "trash",
+    kind: "move" | "rename",
     source: string,
     destination: string,
   ): Promise<import("./file-operations").OperationResult>;

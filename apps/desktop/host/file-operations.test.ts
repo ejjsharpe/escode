@@ -1,5 +1,6 @@
 import { test, expect, vi } from "vite-plus/test";
 import {
+  chmodSync,
   mkdtempSync,
   mkdirSync,
   writeFileSync,
@@ -269,3 +270,226 @@ for (const replacement of ["directory", "symlink"])
       expect(existsSync(join(outside, "new"))).toBe(false);
       expect(existsSync(join(p.root, "original/new"))).toBe(false);
     }));
+
+test("Trash permission and missing-source failures preserve drafts in a fresh store", async () =>
+  fixture(async (p, store, base) => {
+    const ops = new FileOperations(store, join(base, "intent.json"));
+    chmodSync(join(p.root, "folder"), 0o555);
+    try {
+      await expect(ops.run(p, "trash", "folder/a.ts", "")).rejects.toThrow();
+      expect(readFileSync(join(p.root, "folder/a.ts"), "utf8")).toBe("disk");
+      ops.assertIdle();
+    } finally {
+      chmodSync(join(p.root, "folder"), 0o755);
+    }
+    rmSync(join(p.root, "folder/a.ts"));
+    await expect(ops.run(p, "trash", "folder/a.ts", "")).rejects.toThrow();
+    expect(
+      (await new Workspace(join(base, "workspace.json")).read()).drafts.map((d) => d.text),
+    ).toEqual(["a unsaved", "b unsaved"]);
+    ops.assertIdle();
+  }));
+
+test("batch save persists the completed baseline without replacing newer recoverable text", async () =>
+  fixture(async (p, store, base) => {
+    const ops = new FileOperations(store, join(base, "intent.json"));
+    const state = await store.read();
+    state.drafts[0].text = "newer available edit";
+    await store.write(state);
+    const saved = await ops.save(
+      p,
+      "folder/a.ts",
+      "completed save",
+      state.drafts[0].disk.version,
+      () => {},
+    );
+    expect(saved.kind).toBe("saved");
+    const fresh = await new Workspace(join(base, "workspace.json")).read();
+    expect(fresh.drafts[0].text).toBe("newer available edit");
+    expect(fresh.drafts[0].disk.text).toBe("completed save");
+    expect(
+      (await p.save("folder/a.ts", "newer available edit", fresh.drafts[0].disk.version)).kind,
+    ).toBe("saved");
+    ops.assertIdle();
+  }));
+
+test("saved disk outcome survives baseline persistence failure and fresh journal recovery", async () =>
+  fixture(async (p, store, base) => {
+    const file = join(base, "intent.json"),
+      ops = new FileOperations(store, file);
+    const draft = (await store.read()).drafts[0];
+    vi.spyOn(store, "write").mockRejectedValueOnce(Error("save baseline denied"));
+    const result = await ops.save(p, draft.path, draft.text, draft.disk.version, () => {});
+    expect(result).toMatchObject({ kind: "saved", persistencePending: true });
+    expect(readFileSync(join(p.root, draft.path), "utf8")).toBe(draft.text);
+    expect(() => ops.assertIdle()).toThrow("pending reconciliation");
+    const freshStore = new Workspace(join(base, "workspace.json"));
+    expect(await new FileOperations(freshStore, file).recover(async () => p)).toContain(
+      "Recovered saved baseline",
+    );
+    expect((await freshStore.read()).drafts[0]).toMatchObject({
+      text: draft.text,
+      disk: { text: draft.text },
+    });
+  }));
+
+test("restart reconciles a save interrupted after replacement but before completion was journalled", async () =>
+  fixture(async (p, store, base) => {
+    const file = join(base, "intent.json"),
+      draft = (await store.read()).drafts[0];
+    await new Workspace(file).writeIntent({
+      root: p.root,
+      checkoutIdentity: p.checkoutIdentity(),
+      source: draft.path,
+      destination: "",
+      kind: "save",
+      identity: p.operationIdentity(draft.path),
+      saveText: draft.text,
+    });
+    await p.save(draft.path, draft.text, draft.disk.version);
+    expect(await new FileOperations(store, file).recover(async () => p)).toContain(
+      "Recovered saved baseline",
+    );
+    const fresh = (await new Workspace(join(base, "workspace.json")).read()).drafts[0];
+    expect(fresh.disk.text).toBe(draft.text);
+    writeFileSync(join(p.root, draft.path), "external after completed save");
+    expect((await p.save(draft.path, "new available edit", fresh.disk.version)).kind).toBe(
+      "conflict",
+    );
+  }));
+
+test("failed baseline acknowledgement retains pending save and does not deny the completed save", async () =>
+  fixture(async (p, store, base) => {
+    const file = join(base, "intent.json"),
+      ops = new FileOperations(store, file),
+      draft = (await store.read()).drafts[0];
+    vi.spyOn(ops, "ack").mockRejectedValueOnce(Error("save ack denied"));
+    expect(await ops.save(p, draft.path, draft.text, draft.disk.version, () => {})).toMatchObject({
+      kind: "saved",
+      persistencePending: true,
+    });
+    expect((await store.read()).drafts[0].disk.text).toBe(draft.text);
+    expect(() => ops.assertIdle()).toThrow("pending reconciliation");
+    expect(await new FileOperations(store, file).recover(async () => p)).toContain(
+      "Recovered saved baseline",
+    );
+  }));
+
+test("origin closure after save intent prevents saving and leaves the original baseline", async () =>
+  fixture(async (p, store, base) => {
+    const ops = new FileOperations(store, join(base, "intent.json")),
+      draft = (await store.read()).drafts[0];
+    await expect(
+      ops.save(p, draft.path, draft.text, draft.disk.version, () => {
+        throw Error("origin closed");
+      }),
+    ).rejects.toThrow("origin closed");
+    expect(readFileSync(join(p.root, draft.path), "utf8")).toBe("disk");
+    expect((await store.read()).drafts[0].disk.text).toBe("disk");
+    ops.assertIdle();
+  }));
+
+test("interrupted save intent before replacement keeps the original draft and baseline", async () =>
+  fixture(async (p, store, base) => {
+    const file = join(base, "intent.json"),
+      draft = (await store.read()).drafts[0];
+    await new Workspace(file).writeIntent({
+      root: p.root,
+      checkoutIdentity: p.checkoutIdentity(),
+      source: draft.path,
+      destination: "",
+      kind: "save",
+      identity: p.operationIdentity(draft.path),
+      saveText: draft.text,
+    });
+    expect(await new FileOperations(store, file).recover(async () => p)).toContain(
+      "did not replace",
+    );
+    expect((await store.read()).drafts[0]).toEqual(draft);
+    expect(await new Workspace(file).readIntent()).toBe(null);
+  }));
+
+test("ambiguous interrupted save retains its draft and blocks later mutations", async () =>
+  fixture(async (p, store, base) => {
+    const file = join(base, "intent.json"),
+      draft = (await store.read()).drafts[0];
+    await new Workspace(file).writeIntent({
+      root: p.root,
+      checkoutIdentity: p.checkoutIdentity(),
+      source: draft.path,
+      destination: "",
+      kind: "save",
+      identity: p.operationIdentity(draft.path),
+      saveText: draft.text,
+    });
+    await p.save(draft.path, "different external replacement", draft.disk.version);
+    const fresh = new FileOperations(store, file);
+    expect(await fresh.recover(async () => p)).toContain("Uncertain file operation");
+    expect((await store.read()).drafts[0]).toEqual(draft);
+    expect(() => fresh.assertIdle()).toThrow("pending reconciliation");
+  }));
+
+test("whole batch facts protect stale navigation snapshots until renderer acknowledgement", async () =>
+  fixture(async (p, store, base) => {
+    const ops = new FileOperations(store, join(base, "intent.json"));
+    const stale = await store.read();
+    ops.beginBatch(p.root);
+    const saved = await ops.save(
+      p,
+      stale.drafts[0].path,
+      stale.drafts[0].text,
+      stale.drafts[0].disk.version,
+      () => {},
+    );
+    expect(saved.kind).toBe("saved");
+    let trash = "";
+    const nativeTrash = p.trash.bind(p);
+    vi.spyOn(p, "trash").mockImplementation((...args) => (trash = nativeTrash(...args)));
+    try {
+      await ops.run(p, "trash", "folder/b.ts", "");
+      await ops.ack();
+      stale.selected = "agents";
+      stale.drafts[0].text = "newer available text";
+      await ops.persist(stale);
+      const fresh = await new Workspace(join(base, "workspace.json")).read();
+      expect(fresh.selected).toBe("agents");
+      expect(fresh.drafts).toHaveLength(1);
+      expect(fresh.drafts[0]).toMatchObject({
+        text: "newer available text",
+        disk: { text: "a unsaved" },
+      });
+      expect(() => ops.assertIdle()).toThrow("pending reconciliation");
+      await ops.ack(p.root);
+      ops.assertIdle();
+      p.create("folder", "b.ts", "file");
+      fresh.drafts.push({
+        root: p.root,
+        path: "folder/b.ts",
+        text: "new incarnation",
+        disk: await p.read("folder/b.ts"),
+      });
+      await ops.persist(fresh);
+      expect((await store.read()).drafts[1].text).toBe("new incarnation");
+    } finally {
+      if (trash) rmSync(trash);
+    }
+  }));
+
+test("renderer acknowledgement of earlier batch facts never clears an uncertain later item", async () =>
+  fixture(async (p, store, base) => {
+    const ops = new FileOperations(store, join(base, "intent.json")),
+      draft = (await store.read()).drafts[0];
+    ops.beginBatch(p.root);
+    await ops.save(p, draft.path, draft.text, draft.disk.version, () => {});
+    vi.spyOn(p, "trash").mockImplementationOnce(() => {
+      renameSync(join(p.root, "folder/b.ts"), join(p.root, "elsewhere.ts"));
+      throw Error("unknown native outcome");
+    });
+    await expect(ops.run(p, "trash", "folder/b.ts", "")).rejects.toThrow("Uncertain");
+    await ops.persist(await store.read());
+    await ops.ack(p.root);
+    expect(() => ops.assertIdle()).toThrow("pending reconciliation");
+    const pending = await new Workspace(join(base, "intent.json")).readIntent();
+    expect(pending?.source).toBe("folder/b.ts");
+    expect(pending?.completed).not.toBe(true);
+  }));

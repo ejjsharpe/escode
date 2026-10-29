@@ -26,7 +26,7 @@ export function FilesTree({
   open: (path: string, editor: boolean) => Promise<void>;
   rename: (path: string, destination: string) => Promise<void>;
   create: (parent: string, name: string, kind: "file" | "folder") => Promise<string>;
-  trash: (path: string) => void;
+  trash: (paths: string[]) => Promise<void>;
 }) {
   const [state, setState] = useMemory(root, "files", {
     expanded: [],
@@ -351,11 +351,23 @@ export function FilesTree({
     setMenu(null);
     tree.current?.focus();
   }
+  async function moveToTrash() {
+    if (disabled || edit || !latest.current.selected.length) return;
+    const paths = [...latest.current.selected];
+    dismiss();
+    await trash(paths);
+    if (active) restoreFocus();
+  }
   function key(event: KeyboardEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget || disabled || edit) return;
     if (event.key === "Escape" && menu !== null) {
       event.preventDefault();
       dismiss();
+      return;
+    }
+    if (event.metaKey && ["Backspace", "Delete"].includes(event.key)) {
+      event.preventDefault();
+      void moveToTrash();
       return;
     }
     const row = focused;
@@ -646,15 +658,12 @@ export function FilesTree({
           </button>
           <button
             role="menuitem"
-            disabled={disabled || !!edit || state.selected.length !== 1}
-            onClick={() => {
-              dismiss();
-              trash(menu);
-            }}
+            disabled={disabled || !!edit || !state.selected.length}
+            onClick={() => void moveToTrash()}
           >
             Move to Trash
           </button>
-          {state.selected.length > 1 && <p>Choose one entry for Rename or Trash.</p>}
+          {state.selected.length > 1 && <p>Choose one entry for Rename.</p>}
           <button role="menuitem" onClick={dismiss}>
             Dismiss menu
           </button>
@@ -669,9 +678,15 @@ export function FilesTree({
           Rename
         </button>
         <button
-          disabled={disabled || !!edit || state.selected.length !== 1}
-          aria-label={"Move to Trash " + state.selected[0]}
-          onClick={() => trash(state.selected[0])}
+          disabled={disabled || !!edit || !state.selected.length}
+          aria-label={
+            "Move to Trash " +
+            (state.selected.length === 1
+              ? state.selected[0]
+              : state.selected.length + " selected items")
+          }
+          aria-keyshortcuts="Meta+Backspace Meta+Delete"
+          onClick={() => void moveToTrash()}
         >
           Trash
         </button>
