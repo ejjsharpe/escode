@@ -45,7 +45,9 @@ authenticated Codex **0.163.0 or newer** (tested baseline **0.165.0**). Each con
 It streams messages/activity, displays effective settings, handles live permission
 and input requests, and supports Stop and fresh-connection history reload. Drafts
 and project/chat/checkout/thread associations live in Electron user data; Codex
-owns saved conversation history. Retry never resends a message.
+owns saved conversation history. Retry never resends a message. Unavailable project and scratch contexts retain their exact
+paths, drafts and provider identities; Stop remains available for active work. Existing
+chat execution remains usable without Git. See [chat recovery evidence](docs/compatibility/chat-recovery.md).
 
 Run `ESCODE_LIVE_CHAT=1 bun run --cwd apps/desktop smoke -- tests/chat.spec.ts`
 for the opt-in live Codex workflow (consumes a turn); add

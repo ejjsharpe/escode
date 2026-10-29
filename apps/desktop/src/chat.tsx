@@ -284,17 +284,22 @@ export function ChatView({
                     ? "Needs input"
                     : snapshot?.busy
                       ? "Running"
-                      : snapshot?.connected
-                        ? "Ready"
-                        : unsent
-                          ? "Draft"
-                          : record?.initialSend === "uncertain"
-                            ? "Acceptance uncertain · Retry to inspect history"
-                            : record?.phase === "bound"
-                              ? "Bound · Disconnected"
-                              : "Disconnected"}
+                      : snapshot?.contextError
+                        ? "Unavailable"
+                        : snapshot?.connected
+                          ? "Ready"
+                          : unsent
+                            ? "Draft"
+                            : record?.initialSend === "uncertain"
+                              ? "Acceptance uncertain · Retry to inspect history"
+                              : record?.phase === "bound"
+                                ? "Bound · Disconnected"
+                                : "Disconnected"}
               </span>
             </div>
+            {(snapshot?.contextError || error || snapshot?.error) && (
+              <p role="alert">{snapshot?.contextError || error || snapshot?.error}</p>
+            )}
             {record?.initialSend === "uncertain" && (
               <p role="status">
                 Message acceptance is uncertain. Prompt and provider identity are retained. Retry
@@ -335,7 +340,6 @@ export function ChatView({
                   answer={(value) => store.answer(snapshot.chatId, request.token, value)}
                 />
               ))}
-              {(error || snapshot?.error) && <p role="alert">{error || snapshot?.error}</p>}
             </div>
             <form
               className="chat-compose"
@@ -441,6 +445,7 @@ export function ChatView({
                 type="submit"
                 disabled={
                   working ||
+                  !!snapshot?.contextError ||
                   (!!record?.scratch && !!(error || snapshot?.error)) ||
                   (!unsent && !snapshot?.connected) ||
                   snapshot?.busy ||

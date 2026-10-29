@@ -225,9 +225,23 @@ app.whenReady().then(() => {
   const checkout = async (root: unknown) => {
     if (typeof root !== "string") throw Error("Invalid checkout");
     const existing = projects.get(root);
-    if (existing) return existing;
     const associations = await Promise.all([...projectSessions.keys()].map((id) => store.list(id)));
-    const saved = associations.flat().find((c) => c.checkout === root && !c.removed);
+    const linked = associations.flat().filter((c) => c.checkout === root && !c.removed);
+    const saved = linked.find((c) => c.directoryIdentity) ?? linked[0];
+    if (saved?.directoryIdentity) {
+      const error = await store.validateDirectory(saved);
+      if (error) throw Error(error);
+      if (existing) {
+        try {
+          existing.checkoutIdentity();
+          return existing;
+        } catch {
+          // Only the validated original directory may replace a stale cache entry.
+          existing.close();
+          projects.delete(root);
+        }
+      }
+    } else if (existing) return existing;
     const candidate = saved
       ? await Project.restore(root, saved.project!, helper)
       : await Project.open(root, helper);
@@ -491,7 +505,7 @@ app.whenReady().then(() => {
       if (!owner || projectSessions.get(root) !== owner || quitting)
         throw Error("Open this project first. Use Open project… to approve its saved directory.");
     };
-    requireOpen();
+    if (!["snapshot", "draft"].includes(String(operation))) requireOpen();
     if (operation === "list" && !args.length) return chats.list(root);
     if (operation === "createDraft" && !args.length)
       return store.createDraft(root, root === null ? "" : await currentTarget(root));
@@ -550,10 +564,25 @@ app.whenReady().then(() => {
     await chats.list(root).then((list) => {
       if (!list.some((c) => c.id === id)) throw Error("Unknown project/chat");
     });
-    requireOpen();
+    if (!["snapshot", "draft"].includes(String(operation))) requireOpen();
     if (args.length === 1) {
-      if (operation === "open") return chats.open(root, id);
-      if (operation === "snapshot") return chats.snapshot(root, id);
+      if (operation === "open") {
+        const chat = await store.get(root, id);
+        if (root !== null) {
+          const target = await checkout(chat.checkout);
+          target.checkoutIdentity();
+          if (target.repository() !== root) throw Error("Wrong project checkout.");
+        }
+        return chats.open(root, id);
+      }
+      if (operation === "snapshot") {
+        if (root !== null && !owner)
+          return {
+            ...chats.snapshot(root, id),
+            contextError: `Checkout unavailable: ${(await store.get(root, id)).checkout}. Open this project first. Use Open project… to approve this saved directory. History and drafts are retained.`,
+          };
+        return chats.inspect(root, id);
+      }
       if (operation === "stop") return chats.stop(root, id);
       if (operation === "disconnect") return chats.disconnect(root, id);
     }
@@ -571,7 +600,15 @@ app.whenReady().then(() => {
             }
             const target = await checkout(chat.checkout);
             requireOpen();
-            if (target.repository() !== root || !target.validateRepository().includes(target.root))
+            target.checkoutIdentity();
+            if (
+              chat.phase === "draft" &&
+              !chat.directoryIdentity &&
+              !chat.worktree?.reservation &&
+              !target.validateRepository().includes(target.root)
+            )
+              throw Error("Choose an available Git checkout before first Send. Prompt retained.");
+            if (target.repository() !== root)
               throw Error(
                 "Saved checkout is unavailable or no longer belongs to this project. Prompt retained; restore this exact path and Retry.",
               );

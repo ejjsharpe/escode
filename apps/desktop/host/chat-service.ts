@@ -15,6 +15,7 @@ export type ChatSnapshot = {
   items: ChatItem[];
   requests: LiveRequest[];
   error: string | null;
+  contextError?: string | null;
 };
 type Session = ChatSnapshot & {
   rpc?: CodexConnection;
@@ -90,6 +91,16 @@ export class ChatService {
       error: s.error,
     });
   }
+  async inspect(project: string | null, id: string) {
+    const chat = await this.store.get(project, id);
+    const snapshot = this.snapshot(project, id);
+    snapshot.contextError =
+      chat.phase === "draft" &&
+      ((chat.project === null && !chat.scratch) || (chat.worktree && !chat.worktree.reservation))
+        ? chat.availabilityError
+        : await this.store.validateDirectory(chat);
+    return snapshot;
+  }
   private validateCheckout(s: Session, checkout: string) {
     try {
       accessSync(checkout, constants.R_OK | constants.X_OK);
@@ -106,9 +117,7 @@ export class ChatService {
         throw Error("Checkout changed");
       s.checkoutIdentity = { path, dev: identity.dev, ino: identity.ino };
     } catch {
-      s.rpc?.close();
-      s.error =
-        "Checkout unavailable or changed. Restore access to the original directory, then Retry connection. History and drafts are retained; work was not resent.";
+      s.error = `Checkout unavailable or changed: ${checkout}. Restore access to the original directory, then Retry connection. History and drafts are retained; work was not resent.`;
       throw Error(s.error);
     }
   }
@@ -143,7 +152,11 @@ export class ChatService {
       await s.opening;
       return this.snapshot(project, id);
     }
-    if (s.connected) return this.snapshot(project, id);
+    if (s.connected) {
+      const error = await this.store.validateDirectory(await this.store.get(project, id), true);
+      if (error) throw Error(error);
+      return this.snapshot(project, id);
+    }
     s.opening = (async () => {
       const epoch = randomUUID();
       s.epoch = epoch;
@@ -167,9 +180,13 @@ export class ChatService {
           else if (chat.scratch) this.store.validateScratch(chat);
           return;
         }
-        this.store.validateWorktree(chat);
-        this.store.validateScratch(chat);
+        const directoryError = await this.store.validateDirectory(chat);
+        if (directoryError) throw Error(directoryError);
         this.validateCheckout(s, chat.checkout);
+        if (!chat.directoryIdentity) {
+          const error = await this.store.validateDirectory(chat, true);
+          if (error) throw Error(error);
+        }
         rpc = await this.connect(
           chat.checkout,
           (event) => {
@@ -435,6 +452,11 @@ export class ChatService {
       this.store.validateWorktree(chat);
       this.store.validateScratch(chat);
       this.validateCheckout(s, chat.checkout);
+      const directoryError = await this.store.validateDirectory(
+        await this.store.get(project, id),
+        true,
+      );
+      if (directoryError) throw Error(directoryError);
       s.busy = true;
       s.stopping = false;
       s.error = null;

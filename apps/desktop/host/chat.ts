@@ -21,6 +21,8 @@ export type SavedChat = {
     };
   };
   scratch?: { path: string; dev?: number; ino?: number };
+  directoryIdentity?: { path: string; dev: number; ino: number };
+  availabilityError?: string | null;
   threadId: string | null;
   hasSent?: boolean;
   phase?: "draft" | "bound";
@@ -126,7 +128,14 @@ export class Chats {
       const chat = chats.find((c) => c.id === id && c.project === project);
       if (!chat || chat.phase !== "draft" || chat.scratch || chat.worktree?.reservation)
         throw Error("Only an unsent draft without prepared resources can change context.");
-      Object.assign(chat, { project: target, checkout, worktree, initialSend: undefined });
+      Object.assign(chat, {
+        project: target,
+        checkout,
+        worktree,
+        initialSend: undefined,
+        directoryIdentity: undefined,
+        availabilityError: undefined,
+      });
       return chat;
     });
   }
@@ -245,6 +254,34 @@ export class Chats {
     this.validateScratch(prepared);
     return Object.freeze(prepared);
   }
+  async validateDirectory(chat: Readonly<SavedChat>, remember = false) {
+    try {
+      this.validateWorktree(chat);
+      this.validateScratch(chat);
+      accessSync(chat.checkout, constants.R_OK | constants.X_OK);
+      const actual = lstatSync(chat.checkout);
+      const previous = chat.directoryIdentity;
+      const path = realpathSync(chat.checkout);
+      if (
+        !actual.isDirectory() ||
+        (previous &&
+          (previous.path !== path || previous.dev !== actual.dev || previous.ino !== actual.ino))
+      )
+        throw Error("Directory identity changed");
+      if (remember && !previous)
+        await this.update(chat.project, chat.id, {
+          directoryIdentity: { path, dev: actual.dev, ino: actual.ino },
+        });
+      if (chat.availabilityError)
+        await this.update(chat.project, chat.id, { availabilityError: null });
+      return null;
+    } catch (error) {
+      const message = `Checkout unavailable or changed: ${chat.checkout}. Restore access to the original directory, then Retry connection. History and drafts are retained; work was not resent. ${String(error)}`;
+      if (chat.availabilityError !== message)
+        await this.update(chat.project, chat.id, { availabilityError: message });
+      return message;
+    }
+  }
   async get(project: string | null, id: string) {
     const chat = (await this.list(project)).find((c) => c.id === id);
     if (!chat) throw Error("Unknown chat in this project.");
@@ -259,6 +296,8 @@ export class Chats {
     fields: Partial<
       Pick<
         SavedChat,
+        | "directoryIdentity"
+        | "availabilityError"
         | "threadId"
         | "draft"
         | "hasSent"

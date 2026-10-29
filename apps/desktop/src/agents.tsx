@@ -21,7 +21,7 @@ function ChatRow({
     ? "Needs input"
     : snapshot?.busy
       ? "Running"
-      : chat.removed || snapshot?.error || errors[chat.id] || errors[""]
+      : chat.removed || snapshot?.contextError || snapshot?.error || errors[chat.id] || errors[""]
         ? "Unavailable"
         : chat.phase === "draft"
           ? "Draft"
