@@ -100,3 +100,10 @@ The import conflict is marked resolved in the index, and the semantic fix, new r
 ## Current first-slice status before the tree slice
 
 Issue 39 is accepted and closed at baseline `f08183d`, after independent Ship reviews including combined Agents recovery. The earlier pending-review and integration paragraphs above record historical handoffs. The user confirmed the first-slice controls with VoiceOver and Finder Put Back restoring the correct path in dev snapshot `9342650`. Restored contents were checked separately by automation; they were not user-confirmed. Finder Put Back does not automatically refresh Files, recorded in issue 47. The tree slice supplies explicit Refresh; automatic watchers remain deferred. None of the first-slice manual evidence certifies the new tree controls.
+
+
+Issue 41 replaces the temporary checkout-relative Rename/move form with basename-only
+inline Rename. Its host request validates the basename before reusing the same move
+intent, reconciliation, native safety and Monaco rebinding flow. Empty create operations
+use a narrow exclusive native capability. See [inline evidence](files-inline.md).
+The accepted earlier text-undo reset remains disclosed before and after rename.

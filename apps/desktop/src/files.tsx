@@ -14,6 +14,7 @@ export function FilesTree({
   dirty,
   open,
   rename,
+  create,
   trash,
 }: {
   root: string;
@@ -23,7 +24,8 @@ export function FilesTree({
   revision: number;
   dirty: (path: string) => boolean;
   open: (path: string, editor: boolean) => Promise<void>;
-  rename: (path: string) => void;
+  rename: (path: string, destination: string) => Promise<void>;
+  create: (parent: string, name: string, kind: "file" | "folder") => Promise<string>;
   trash: (path: string) => void;
 }) {
   const [state, setState] = useMemory(root, "files", {
@@ -32,8 +34,173 @@ export function FilesTree({
     focus: "",
     scroll: 0,
   });
+  const [edit, setEdit] = useState<{
+    source?: string;
+    parent: string;
+    kind: "file" | "folder";
+    value: string;
+    error?: string;
+  } | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const committing = useRef(false);
+  const startingEdit = useRef(false);
+  const [actionError, setActionError] = useState("");
+  const editRef = useRef<HTMLDivElement>(null);
+  const initializedInput = useRef<HTMLInputElement | null>(null);
+  async function beginEdit(kind: "rename" | "file" | "folder", target = state.selected[0] || "") {
+    if (edit || disabled || startingEdit.current) return;
+    startingEdit.current = true;
+    setActionError("");
+    setMenu(null);
+    try {
+      let parent = "";
+      let directory = false;
+      if (target) {
+        const container = target.split("/").slice(0, -1).join("/");
+        const listing = cache[container] ?? (await load(container));
+        const entry = listing.entries?.find((entry) => entry.path === target);
+        if (!entry)
+          throw Error(
+            listing.error || "Selected entry is missing. Refresh and select the entry again.",
+          );
+        directory = entry.directory;
+        parent = kind === "rename" || !directory ? container : target;
+      } else if (kind === "rename") {
+        throw Error("Select one entry to rename.");
+      }
+      if (parent && kind !== "rename") {
+        const parts = parent.split("/");
+        update({
+          expanded: [
+            ...new Set([
+              ...latest.current.expanded,
+              ...parts.map((_, i) => parts.slice(0, i + 1).join("/")),
+            ]),
+          ],
+        });
+      }
+      setEdit(
+        kind === "rename"
+          ? {
+              source: target,
+              parent,
+              kind: directory ? "folder" : "file",
+              value: target.split("/").at(-1)!,
+            }
+          : { parent, kind, value: "" },
+      );
+    } catch (error) {
+      setActionError(
+        `Cannot ${kind === "rename" ? "rename" : "create at"} ${root}/${target}: ${String(error)} Use Refresh and select the entry again.`,
+      );
+      restoreFocus();
+    } finally {
+      startingEdit.current = false;
+    }
+  }
+  function restoreFocus() {
+    requestAnimationFrame(() => {
+      if (tree.current?.getClientRects().length) tree.current.focus();
+    });
+  }
+  async function commit() {
+    if (!edit || committing.current) return;
+    const name = edit.value;
+    if (
+      !name.trim() ||
+      name === "." ||
+      name === ".." ||
+      /[/\\\0]/.test(name) ||
+      name.toLowerCase() === ".git"
+    ) {
+      setEdit({ ...edit, error: "Enter one name without separators or traversal." });
+      requestAnimationFrame(() => input.current?.focus());
+      return;
+    }
+    committing.current = true;
+    try {
+      const destination = edit.parent ? edit.parent + "/" + name : name;
+      if (edit.source && destination !== edit.source) await rename(edit.source, destination);
+      else if (!edit.source) await create(edit.parent, name, edit.kind);
+      update({ focus: destination, selected: [destination] });
+      setEdit(null);
+      refresh();
+      restoreFocus();
+    } catch (error) {
+      setEdit({
+        ...edit,
+        error: String(error).includes("EEXIST")
+          ? "This name is already in use. Choose another name."
+          : `${root}/${edit.source || (edit.parent ? edit.parent + "/" : "") + name}: ${String(error)}`,
+      });
+      requestAnimationFrame(() => {
+        if (input.current?.getClientRects().length) input.current.focus();
+      });
+    } finally {
+      committing.current = false;
+    }
+  }
+  useLayoutEffect(() => {
+    if (!active || !edit || !input.current || initializedInput.current === input.current) return;
+    initializedInput.current = input.current;
+    input.current.focus();
+    const end =
+      edit.kind === "file" && edit.value.lastIndexOf(".") > 0
+        ? edit.value.lastIndexOf(".")
+        : edit.value.length;
+    input.current?.setSelectionRange(0, end);
+  });
+  useEffect(() => {
+    if (!edit || edit.error || !active) return;
+    const clickAway = (event: PointerEvent) => {
+      if (!editRef.current?.contains(event.target as Node)) void commit();
+    };
+    document.addEventListener("pointerdown", clickAway);
+    return () => document.removeEventListener("pointerdown", clickAway);
+  }, [edit, active]);
+  function field() {
+    if (!edit) return null;
+    return (
+      <div
+        ref={editRef}
+        className="tree-edit"
+        onClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => e.stopPropagation()}
+      >
+        <input
+          ref={input}
+          aria-label={edit.source ? "Rename " + edit.source : "New " + edit.kind + " name"}
+          aria-invalid={!!edit.error}
+          aria-describedby={root + ":edit-help"}
+          value={edit.value}
+          onChange={(e) => setEdit({ ...edit, value: e.target.value, error: undefined })}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void commit();
+            }
+            if (e.key === "Escape" && !committing.current) {
+              e.preventDefault();
+              setEdit(null);
+              restoreFocus();
+            }
+          }}
+        />
+        <div id={root + ":edit-help"} className="tree-edit-help">
+          {edit.error ? (
+            <div role="alert">{edit.error}</div>
+          ) : edit.source ? (
+            "Enter to rename; Escape to cancel. Earlier text undo history resets; unsaved text and cursor/scroll are preserved."
+          ) : (
+            "Enter to create; Escape to cancel."
+          )}
+        </div>
+      </div>
+    );
+  }
   const [cache, setCache] = useState<Record<string, Listing>>({});
-  const loaded = useRef(new Map<string, Promise<void>>());
+  const loaded = useRef(new Map<string, Promise<Listing>>());
   const epoch = useRef(0);
   const restoring = useRef(true);
   const tree = useRef<HTMLDivElement>(null);
@@ -54,10 +221,12 @@ export function FilesTree({
     const task = window.escode.project("files", root, path).then(
       (entries) => {
         if (generation === epoch.current) setCache((c) => ({ ...c, [path]: { entries } }));
+        return { entries };
       },
       (error) => {
         if (generation === epoch.current)
           setCache((c) => ({ ...c, [path]: { error: String(error) } }));
+        return { error: String(error) };
       },
     );
     loaded.current.set(path, task);
@@ -183,7 +352,7 @@ export function FilesTree({
     tree.current?.focus();
   }
   function key(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.target !== event.currentTarget || disabled) return;
+    if (event.target !== event.currentTarget || disabled || edit) return;
     if (event.key === "Escape" && menu !== null) {
       event.preventDefault();
       dismiss();
@@ -196,12 +365,24 @@ export function FilesTree({
       update({ selected: rows.map((r) => r.path) });
       return;
     }
-    if (!row) return;
-    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+    if ((event.metaKey || event.ctrlKey) && event.altKey && ["n", "N"].includes(event.key)) {
       event.preventDefault();
-      context(row.path);
+      beginEdit(event.shiftKey ? "folder" : "file");
       return;
     }
+    if (event.key === "Enter" && state.selected.length === 1) {
+      event.preventDefault();
+      beginEdit("rename", state.selected[0]);
+      return;
+    }
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+      event.preventDefault();
+      const target = state.selected[0] || row?.path;
+      if (target) context(target);
+      else setMenu("");
+      return;
+    }
+    if (!row) return;
     if (event.metaKey && event.key === "ArrowDown") {
       event.preventDefault();
       if (!row.directory) void open(row.path, true);
@@ -260,81 +441,114 @@ export function FilesTree({
     const value = cache[parent];
     if (!value?.entries)
       return (
-        <div className="tree-message" role="status" style={{ paddingLeft: level * 16 }}>
-          {value?.error
-            ? `${parent || "Checkout"}: ${value.error}. Use Refresh to retry.`
-            : "Loading files…"}
-        </div>
+        <>
+          {edit && !edit.source && edit.parent === parent && field()}
+          <div className="tree-message" role="status" style={{ paddingLeft: level * 16 }}>
+            {value?.error
+              ? `${parent || "Checkout"}: ${value.error}. Use Refresh to retry.`
+              : "Loading files…"}
+          </div>
+        </>
       );
-    if (!value.entries.length)
+    if (!value.entries.length && !(edit && !edit.source && edit.parent === parent))
       return (
         <div className="tree-message" role="status" style={{ paddingLeft: level * 16 }}>
           Empty folder
         </div>
       );
-    return value.entries.map((entry, index) => {
-      return (
-        <div
-          key={entry.path}
-          role="treeitem"
-          id={root + ":" + entry.path}
-          data-path={entry.path}
-          aria-label={entry.path.split("/").at(-1) + (dirty(entry.path) ? ", unsaved" : "")}
-          aria-level={level}
-          aria-posinset={index + 1}
-          aria-setsize={value.entries!.length}
-          aria-selected={state.selected.includes(entry.path)}
-          aria-expanded={entry.directory ? state.expanded.includes(entry.path) : undefined}
-          aria-current={entry.path === activePath ? "true" : undefined}
-        >
-          <div
-            className={"tree-row" + (entry.path === focused?.path ? " tree-focus" : "")}
-            style={{ paddingLeft: 6 + (level - 1) * 16 }}
-            onClick={(event) => {
-              if (disabled) return;
-              tree.current?.focus();
-              focus(entry.path, event.shiftKey, event.metaKey || event.ctrlKey);
-              if (!event.shiftKey && !event.metaKey && !event.ctrlKey) {
-                if (entry.directory) toggle(entry.path);
-                else void open(entry.path, false);
-              }
-            }}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              if (!disabled) context(entry.path);
-            }}
-          >
-            {entry.directory && (
-              <svg
-                aria-hidden="true"
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                style={{
-                  transform: state.expanded.includes(entry.path) ? "rotate(90deg)" : undefined,
+    return (
+      <>
+        {edit && !edit.source && edit.parent === parent && field()}
+        {value.entries.map((entry, index) => {
+          return (
+            <div
+              key={entry.path}
+              role="treeitem"
+              id={root + ":" + entry.path}
+              data-path={entry.path}
+              aria-label={entry.path.split("/").at(-1) + (dirty(entry.path) ? ", unsaved" : "")}
+              aria-level={level}
+              aria-posinset={index + 1}
+              aria-setsize={value.entries!.length}
+              aria-selected={state.selected.includes(entry.path)}
+              aria-expanded={entry.directory ? state.expanded.includes(entry.path) : undefined}
+              aria-current={entry.path === activePath ? "true" : undefined}
+            >
+              <div
+                className={"tree-row" + (entry.path === focused?.path ? " tree-focus" : "")}
+                style={{ paddingLeft: 6 + (level - 1) * 16 }}
+                onClick={(event) => {
+                  if (disabled) return;
+                  tree.current?.focus();
+                  focus(entry.path, event.shiftKey, event.metaKey || event.ctrlKey);
+                  if (!event.shiftKey && !event.metaKey && !event.ctrlKey) {
+                    if (entry.directory) toggle(entry.path);
+                    else void open(entry.path, false);
+                  }
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  if (!disabled) context(entry.path);
                 }}
               >
-                <path d="m4 2 4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            )}
-            <span>{entry.path.split("/").at(-1)}</span>
-            {dirty(entry.path) && <span aria-hidden="true"> •</span>}
-          </div>
-          {entry.directory && state.expanded.includes(entry.path) && (
-            <div role="group">{listing(entry.path, level + 1)}</div>
-          )}
-        </div>
-      );
-    });
+                {entry.directory && (
+                  <svg
+                    aria-hidden="true"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 12 12"
+                    style={{
+                      transform: state.expanded.includes(entry.path) ? "rotate(90deg)" : undefined,
+                    }}
+                  >
+                    <path d="m4 2 4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                )}
+                {edit?.source === entry.path ? (
+                  field()
+                ) : (
+                  <span>{entry.path.split("/").at(-1)}</span>
+                )}
+                {dirty(entry.path) && <span aria-hidden="true"> •</span>}
+              </div>
+              {entry.directory && state.expanded.includes(entry.path) && (
+                <div role="group">{listing(entry.path, level + 1)}</div>
+              )}
+            </div>
+          );
+        })}
+      </>
+    );
   }
   return (
     <>
       <div className="files-tools" aria-label="Files actions">
+        <button
+          title="New File (Cmd+Option+N)"
+          aria-keyshortcuts="Meta+Alt+N"
+          disabled={disabled || !!edit}
+          onClick={() => beginEdit("file")}
+        >
+          New File
+        </button>
+        <button
+          title="New Folder (Cmd+Option+Shift+N)"
+          aria-keyshortcuts="Meta+Alt+Shift+N"
+          disabled={disabled || !!edit}
+          onClick={() => beginEdit("folder")}
+        >
+          New Folder
+        </button>
         <button onClick={refresh}>Refresh</button>
         <button onClick={() => update({ expanded: [], focus: state.focus.split("/")[0] || "" })}>
           Collapse All
         </button>
       </div>
+      {actionError && (
+        <div role="alert" className="tree-edit-help">
+          {actionError}
+        </div>
+      )}
       <div
         ref={tree}
         role="tree"
@@ -345,11 +559,32 @@ export function FilesTree({
         tabIndex={0}
         className="files-tree"
         onKeyDown={key}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            update({ selected: [], focus: "" });
+            tree.current?.focus();
+          }
+        }}
+        onContextMenu={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault();
+            update({ selected: [], focus: "" });
+            setMenu("");
+          }
+        }}
         onScroll={(event) => {
           if (active && !restoring.current && event.currentTarget.getClientRects().length)
             update({ scroll: event.currentTarget.scrollTop });
         }}
       >
+        {edit &&
+          (edit.source
+            ? !rows.some((r) => r.path === edit.source)
+            : edit.parent &&
+              !rows.some(
+                (r) => r.path === edit.parent && r.directory && state.expanded.includes(r.path),
+              )) &&
+          field()}
         {listing("", 1)}
       </div>
       {menu !== null && (
@@ -387,17 +622,31 @@ export function FilesTree({
           </p>
           <button
             role="menuitem"
-            disabled={disabled || state.selected.length !== 1}
-            onClick={() => {
-              dismiss();
-              rename(menu);
-            }}
+            disabled={disabled || !!edit}
+            onClick={() => beginEdit("file", menu)}
           >
-            Rename/move
+            New File
           </button>
           <button
             role="menuitem"
-            disabled={disabled || state.selected.length !== 1}
+            disabled={disabled || !!edit}
+            onClick={() => beginEdit("folder", menu)}
+          >
+            New Folder
+          </button>
+          <button
+            role="menuitem"
+            disabled={disabled || !!edit || state.selected.length !== 1}
+            onClick={() => {
+              dismiss();
+              beginEdit("rename", menu);
+            }}
+          >
+            Rename
+          </button>
+          <button
+            role="menuitem"
+            disabled={disabled || !!edit || state.selected.length !== 1}
             onClick={() => {
               dismiss();
               trash(menu);
@@ -405,7 +654,7 @@ export function FilesTree({
           >
             Move to Trash
           </button>
-          {state.selected.length > 1 && <p>Choose one entry for Rename/move or Trash.</p>}
+          {state.selected.length > 1 && <p>Choose one entry for Rename or Trash.</p>}
           <button role="menuitem" onClick={dismiss}>
             Dismiss menu
           </button>
@@ -413,14 +662,14 @@ export function FilesTree({
       )}
       <div className="files-operation-actions">
         <button
-          disabled={disabled || state.selected.length !== 1}
-          aria-label={"Rename/move " + state.selected[0]}
-          onClick={() => rename(state.selected[0])}
+          disabled={disabled || !!edit || state.selected.length !== 1}
+          aria-label={"Rename " + state.selected[0]}
+          onClick={() => beginEdit("rename", state.selected[0])}
         >
-          Rename/move
+          Rename
         </button>
         <button
-          disabled={disabled || state.selected.length !== 1}
+          disabled={disabled || !!edit || state.selected.length !== 1}
           aria-label={"Move to Trash " + state.selected[0]}
           onClick={() => trash(state.selected[0])}
         >

@@ -93,4 +93,7 @@ checkout. Rename/move and native Trash retain the first Files preservation gate.
 earlier text undo history resets with disclosure, while new text undo works. A durable
 intent journal reconciles interrupted moves on restart. See [file-operation evidence and
 remaining gates](docs/compatibility/file-operations.md) and [tree evidence](docs/compatibility/files-tree.md).
-Creation, transfers and automatic external-change watching remain later slices.
+New File/New Folder and basename-only inline Rename are available from the toolbar,
+context menu and tree-focused keyboard controls. New files open in the editor; invalid
+or occupied names retain their input. See [create/rename evidence](docs/compatibility/files-inline.md).
+Transfers and automatic external-change watching remain later slices.

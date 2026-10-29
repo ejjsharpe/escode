@@ -157,6 +157,27 @@ int main(int argc, char **argv) {
     return 0;
   }
 
+  if (!strcmp(operation, "create")) {
+    if (argc != 6 || !argv[3][0] || strchr(argv[3], '/') || strchr(argv[3], '\\') ||
+        !strcmp(argv[3], ".") || !strcmp(argv[3], "..") || !strcasecmp(argv[3], ".git")) {
+      errno = EINVAL; fail("Invalid basename");
+    }
+    int parent = scoped_open(3, argv[2], O_RDONLY | O_DIRECTORY);
+    struct stat info;
+    if (fstat(parent, &info)) fail("Inspect create parent");
+    char identity[100];
+    snprintf(identity, sizeof(identity), "%llu:%llu", (unsigned long long)info.st_dev, (unsigned long long)info.st_ino);
+    if (strcmp(identity, argv[5])) { errno = ESTALE; fail("Create parent replaced"); }
+    revalidate_source(argv[2], &info);
+    if (!strcmp(argv[4], "folder")) {
+      if (mkdirat(parent, argv[3], 0700)) fail("Create folder (name must be free)");
+    } else if (!strcmp(argv[4], "file")) {
+      int fd = scoped_open(parent, argv[3], O_WRONLY | O_CREAT | O_EXCL);
+      if (close(fd)) fail("Close new file");
+    } else { errno = EINVAL; fail("Invalid create kind"); }
+    return 0;
+  }
+
   if (!strcmp(operation, "identity") || !strcmp(operation, "move") || !strcmp(operation, "trash")) {
     int fd = scoped_open(3, argv[2], O_RDONLY);
     struct stat info;

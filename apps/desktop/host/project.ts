@@ -170,6 +170,31 @@ export class Project {
       throw Error("Use the exact checkout-relative path without aliases.");
     return this.io(["identity", this.path(path)]).toString();
   }
+  validateName(name: string) {
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      name === "." ||
+      name === ".." ||
+      /[/\\\0]/.test(name) ||
+      name.toLowerCase() === ".git"
+    )
+      throw Error("Enter one file or folder name without separators or traversal.");
+  }
+  create(parent: string, name: string, kind: "file" | "folder") {
+    this.validateName(name);
+    if (kind !== "file" && kind !== "folder") throw Error("Invalid create kind.");
+    const scoped = parent ? this.path(parent) : ".";
+    if (parent && scoped !== parent) throw Error("Use the exact parent path.");
+    const identity = this.io(["identity", scoped]).toString();
+    this.io(["create", scoped, name, kind, identity]);
+    return parent ? parent + "/" + name : name;
+  }
+  renameDestination(source: string, name: string) {
+    this.validateName(name);
+    this.path(source);
+    return join(dirname(source), name);
+  }
   validateMove(source: string, destination: string) {
     if (source !== this.path(source) || destination !== this.path(destination))
       throw Error("Use exact checkout-relative paths.");
@@ -582,10 +607,17 @@ export interface ProjectBridge {
   (
     operation: "file-operation",
     checkout: string,
-    kind: "move" | "trash",
+    kind: "move" | "rename" | "trash",
     source: string,
     destination: string,
   ): Promise<import("./file-operations").OperationResult>;
+  (
+    operation: "create-entry",
+    checkout: string,
+    parent: string,
+    name: string,
+    kind: "file" | "folder",
+  ): Promise<string>;
   (operation: "file-operation-ack", checkout: string): Promise<void>;
 
   (

@@ -469,3 +469,21 @@ main[data-agents="true"] > .project-tabs button[aria-pressed="true"] {
   overflow-wrap: anywhere;
   font-size: 12px;
 }
+
+.tree-edit {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+}
+.tree-edit input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.tree-edit-help {
+  white-space: normal;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.tree-edit [role="alert"] {
+  color: #ffb4ab;
+}

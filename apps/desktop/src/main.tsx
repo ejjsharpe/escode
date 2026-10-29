@@ -97,7 +97,6 @@ function CheckoutView({
   const [saving, setSaving] = useState(false);
   const [fileClosing, setFileClosing] = useState(false);
   const closeInFlight = useRef(false);
-  const [operation, setOperation] = useState<{ source: string; destination: string } | null>(null);
   useEffect(
     () => onBlocked(root, !!conflict || saving || fileClosing),
     [conflict, saving, fileClosing, root, onBlocked],
@@ -376,8 +375,16 @@ function CheckoutView({
       editor.current?.updateOptions({ readOnly: false });
     }
   }
-  async function fileOperation(kind: "move" | "trash", source: string, destination = "") {
-    if (closeInFlight.current || saveInFlight.current || conflict) return;
+  async function fileOperation(
+    kind: "move" | "trash",
+    source: string,
+    destination = "",
+    inline = false,
+  ) {
+    if (closeInFlight.current || saveInFlight.current || conflict) {
+      if (inline) throw Error("Finish the pending file action first.");
+      return;
+    }
     closeInFlight.current = true;
     setFileClosing(true);
     editor.current?.updateOptions({ readOnly: true });
@@ -400,9 +407,16 @@ function CheckoutView({
         )
       )
         throw Error("Destination has open buffers. Close them or choose another path.");
-      const result = await projectCall("file-operation", root, kind, source, destination);
+      const result = await projectCall(
+        "file-operation",
+        root,
+        inline ? "rename" : kind,
+        source,
+        inline ? destination.split("/").at(-1)! : destination,
+      );
       if (!result.applied || !result.intent) {
         setMessage(result.message);
+        if (inline) throw Error(result.message);
         return;
       }
       // The originating CheckoutView owns this completion even if navigation changed.
@@ -427,12 +441,12 @@ function CheckoutView({
       setBufferRevision((n) => n + 1);
       await persist();
       await projectCall("file-operation-ack", root);
-      setOperation(null);
       setFilesRevision((n) => n + 1);
       await refresh();
       setMessage(result.message);
     } catch (error) {
       report(error);
+      if (inline) throw error;
     } finally {
       closeInFlight.current = false;
       setFileClosing(false);
@@ -475,31 +489,6 @@ function CheckoutView({
         )}
         {status && mode === "Files" && (
           <>
-            {operation && (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void fileOperation("move", operation.source, operation.destination);
-                }}
-              >
-                <p>
-                  Rename/move {operation.source}. Earlier text undo history resets; unsaved text and
-                  cursor/scroll are preserved.
-                </p>
-                <label>
-                  Checkout-relative destination
-                  <input
-                    aria-label="Checkout-relative destination"
-                    value={operation.destination}
-                    onChange={(e) => setOperation({ ...operation, destination: e.target.value })}
-                  />
-                </label>
-                <Button type="submit">Apply move</Button>
-                <Button type="button" onClick={() => setOperation(null)}>
-                  Cancel move
-                </Button>
-              </form>
-            )}
             <FilesTree
               key={root}
               root={root}
@@ -522,7 +511,22 @@ function CheckoutView({
                       editor.current?.focus();
                   });
               }}
-              rename={(source) => setOperation({ source, destination: source })}
+              rename={(source, destination) => fileOperation("move", source, destination, true)}
+              create={async (parent, name, kind) => {
+                const destination = (parent ? parent + "/" : "") + name;
+                if (
+                  Array.from(buffers.current.keys()).some(
+                    (file) =>
+                      file.normalize("NFC").toLowerCase() ===
+                      destination.normalize("NFC").toLowerCase(),
+                  )
+                )
+                  throw Error("Destination has an open buffer. Close it or choose a free name.");
+                const file = await projectCall("create-entry", root, parent, name, kind);
+                setFilesRevision((n) => n + 1);
+                if (kind === "file") await select(file);
+                return file;
+              }}
               trash={(source) => void fileOperation("trash", source)}
             />
           </>

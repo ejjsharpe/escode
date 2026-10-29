@@ -1,5 +1,7 @@
 # Lazy Files tree (issue 40)
 
+**Current acceptance:** issue 40 is accepted/closed after independent Ship review and the user’s new-tree VoiceOver pass. The historical pending-manual notes below are superseded by the final [accepted manual evidence](#accepted-tree-manual-evidence-2026-10-29). That pass does not cover manual restart or the later inline controls.
+
 This bounded slice implements nested browsing in the existing Files sidebar and single main editor, retaining branch/checkout context and the accepted rename/Trash preservation boundary. It adds no filesystem mutation APIs or dependencies. Implementation is authorized by the assigned ticket and explicit user instruction after the completed specification maps.
 
 Each directory is listed only when reachable and expanded. Collapsing retains its cache; Refresh clears caches and reloads root and visible expanded directories. Loading, empty and failed listings appear in context; errors explain Refresh recovery. Protected .git paths continue through the native listing boundary. The host also filters protected app-state entries and folders containing them, and rejects direct listing/read/save requests for protected state. Refresh reflects Finder Put Back and other external changes without replacing unsaved buffers. Automatic watchers remain issue 47.
@@ -72,3 +74,16 @@ git diff --check
 Typecheck, lint, host rebuild and diff check passed. The focused Electron safety test **passed (1 test)** against the rebuilt host using an isolated profile. It verifies hidden app-state entries, rejected direct protected listing/read/save requests, mutation rejection for protected/unapproved paths and rejection of another sender. No full-suite or packaged rerun is claimed for this six-line deletion.
 
 Exact changes since that review: six lines deleted from `apps/desktop/host/main.ts`; this follow-up section appended to `docs/compatibility/files-tree.md`. Ready for fresh independent code review; overall acceptance still requires new-tree manual VoiceOver evidence. No staging, commit, merge, push, issue write, main-worktree modification or delegation occurred. The user app on port 5173 and its snapshot were untouched.
+
+
+## Accepted tree manual evidence (2026-10-29)
+
+The later [issue 40 resolution](https://github.com/ejjsharpe/escode/issues/40#issuecomment-6504830600)
+supersedes the pending-manual statements above. The user tested the **new tree**:
+nested expansion/navigation and nested.txt selection, Shift-arrow multiple selection,
+Shift+F10/Escape menus, and Space/Cmd+Down editor navigation, then replied:
+“Pass — new tree works with VoiceOver”. Issue 40 is accepted/closed on baseline
+`676baa3dd27249c1c8a480ea54aecf9144b567c6`, following independent Ponytail Ship review.
+This does not claim a manual process-restart test or user testing of the later inline controls.
+The first-slice Finder Put Back restored the path; automatic refresh remains issue 47,
+while this tree's explicit Refresh reflects restored entries.

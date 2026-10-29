@@ -209,6 +209,12 @@ test("loaded directories cache until Refresh; missing paths recover and scroll s
       .click();
     await expect(tree).toHaveAttribute("aria-activedescendant", root + ":file-099.txt");
     expect(await tree.evaluate((el) => el.scrollTop)).toBe(scroll);
+    await expect
+      .poll(async () => {
+        const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+        return state.selected === root && state.views[root].files.scroll === scroll;
+      })
+      .toBe(true);
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
     app = await launchDesktop(user);

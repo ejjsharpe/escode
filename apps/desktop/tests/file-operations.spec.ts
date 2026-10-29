@@ -37,10 +37,10 @@ test("dirty descendants move through Monaco and bridge, undo, save conflict and 
       .locator(":scope > .tree-row")
       .click({ button: "right" });
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Rename/move folder", exact: true }).click();
+    await page.getByRole("button", { name: "Rename folder", exact: true }).click();
     await expect(page.getByText(/Earlier text undo history resets/)).toBeVisible();
-    await page.getByRole("textbox", { name: "Checkout-relative destination" }).fill("moved");
-    await page.getByRole("button", { name: "Apply move", exact: true }).click();
+    await page.getByRole("textbox", { name: "Rename folder" }).fill("moved");
+    await page.keyboard.press("Enter");
     await expect(page.locator(".content:visible > [role=status]")).toContainText(
       "Earlier text undo history was reset",
     );
@@ -93,9 +93,9 @@ test("dirty descendants move through Monaco and bridge, undo, save conflict and 
     await expect.poll(() => readFile(join(root, "moved/b.txt"), "utf8")).toBe("dirty b");
     await page.getByRole("treeitem", { name: /^a.ts/ }).click({ button: "right" });
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Rename/move moved/a.ts", exact: true }).click();
-    await page.getByRole("textbox", { name: "Checkout-relative destination" }).fill("moved/a.json");
-    await page.getByRole("button", { name: "Apply move", exact: true }).click();
+    await page.getByRole("button", { name: "Rename moved/a.ts", exact: true }).click();
+    await page.getByRole("textbox", { name: "Rename moved/a.ts" }).fill("a.json");
+    await page.keyboard.press("Enter");
     await expect(page.locator(".content:visible > [role=status]")).toContainText(
       "Earlier text undo history was reset",
     );
@@ -269,6 +269,25 @@ test("mutation IPC rejects other senders, unopened checkouts and protected app s
         { root, operation },
       );
       expect(error).toContain("App state is unavailable");
+    }
+    for (const [parent, name] of [
+      ["app-state", "new"],
+      ["", "app-state"],
+      [".git", "new"],
+      ["", "../escape"],
+    ]) {
+      const error = await page.evaluate(
+        async ({ root, parent, name }) => {
+          try {
+            await window.escode.project("create-entry", root, parent, name, "file");
+            return "accepted";
+          } catch (error) {
+            return String(error);
+          }
+        },
+        { root, parent, name },
+      );
+      expect(error).not.toBe("accepted");
     }
     for (const path of [".", "../repo/a.txt", ".git", "app-state"]) {
       const error = await page.evaluate(
