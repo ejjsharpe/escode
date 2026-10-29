@@ -107,7 +107,10 @@ test("real drag hover, Option copy and confirmed dirty move retain disk, drafts 
     await expect
       .poll(async () => (await drafts()).find((d: any) => d.path === "target/nested/a.ts")?.text)
       .toBe("unsaved source");
-    await row(page, "target/nested").click(); // expand moved folder
+    await expect(page.locator('[data-path="target/nested"]')).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    ); // active moved file is revealed
     await row(page, "target/nested/a.ts").click();
     await expect(page.locator(".editor:visible")).toHaveAttribute(
       "data-model-uri",

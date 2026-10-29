@@ -4,7 +4,7 @@ import { memory, useMemory } from "./workspace";
 import type { FilesMemory } from "../host/workspace";
 
 type Entry = { path: string; directory: boolean };
-type Listing = { entries?: Entry[]; error?: string };
+type Listing = { entries?: Entry[]; error?: string; ignored?: string[]; filterError?: string };
 export function FilesTree({
   root,
   active,
@@ -338,14 +338,14 @@ export function FilesTree({
     latest.current = { ...latest.current, ...next };
     setState(latest.current);
   }
-  function load(path: string) {
+  function load(path: string): Promise<Listing> {
     const pending = loaded.current.get(path);
     if (pending) return pending;
     const generation = epoch.current;
-    const task = window.escode.project("files", root, path).then(
-      (entries) => {
-        if (generation === epoch.current) setCache((c) => ({ ...c, [path]: { entries } }));
-        return { entries };
+    const task = window.escode.project("files-filter", root, path).then(
+      (listing) => {
+        if (generation === epoch.current) setCache((c) => ({ ...c, [path]: listing }));
+        return listing;
       },
       (error) => {
         if (generation === epoch.current)
@@ -370,7 +370,7 @@ export function FilesTree({
     void load("");
     // Only expanded ancestors reachable from the root are loaded.
     function visit(parent: string) {
-      for (const entry of cache[parent]?.entries ?? []) {
+      for (const entry of visible(parent)) {
         if (entry.directory && state.expanded.includes(entry.path)) {
           void load(entry.path);
           visit(entry.path);
@@ -378,16 +378,128 @@ export function FilesTree({
       }
     }
     visit("");
-  }, [cache, state.expanded]);
+  }, [cache, state.expanded, state.hideIgnored]);
   useEffect(
     () => () => {
       epoch.current++;
     },
     [],
   );
+  const filterError = Object.values(cache).find((v) => v.filterError)?.filterError;
+  function visible(parent: string) {
+    const value = cache[parent];
+    return (value?.entries ?? []).filter(
+      (e) => !state.hideIgnored || filterError || !value?.ignored?.includes(e.path),
+    );
+  }
+  const previousActive = useRef(activePath);
+  const revealSequence = useRef(0);
+  const [revealMessage, setRevealMessage] = useState("");
+  const [hiddenReveal, setHiddenReveal] = useState("");
+  const pendingScroll = useRef("");
+  const revealButton = useRef<HTMLButtonElement>(null);
+  const origin = useRef({ root, active, activePath });
+  origin.current = { root, active, activePath };
+  async function reveal(explicit = false, showIgnored = false) {
+    const sequence = ++revealSequence.current;
+    const generation = epoch.current;
+    const originGeneration = dragGeneration.current;
+    const file = activePath;
+    const valid = () =>
+      sequence === revealSequence.current &&
+      generation === epoch.current &&
+      originGeneration === dragGeneration.current &&
+      origin.current.root === root &&
+      origin.current.active &&
+      origin.current.activePath === file;
+    if (!file || !active) return;
+    if (explicit) {
+      setRevealMessage("");
+      setHiddenReveal("");
+    }
+    const parts = file.split("/");
+    const ancestors: string[] = [];
+    for (let i = 0; i < parts.length; i++) {
+      const parent = parts.slice(0, i).join("/");
+      const listing = await load(parent);
+      if (!valid()) return;
+      const path = parts.slice(0, i + 1).join("/");
+      if (!listing.entries?.some((e) => e.path === path)) {
+        if (explicit)
+          setRevealMessage(listing.error || "Active file is unavailable. Refresh and try again.");
+        return;
+      }
+      if (
+        !showIgnored &&
+        latest.current.hideIgnored &&
+        !filterError &&
+        !listing.filterError &&
+        listing.ignored?.includes(path)
+      ) {
+        if (explicit) {
+          setHiddenReveal(file);
+          setRevealMessage("Active file is hidden by Hide Git-ignored files.");
+        }
+        return;
+      }
+      if (i < parts.length - 1) ancestors.push(path);
+    }
+    if (!valid()) return;
+    if (showIgnored) {
+      update({ hideIgnored: false });
+      requestAnimationFrame(() => {
+        if (valid()) revealButton.current?.focus();
+      });
+    }
+    update({ expanded: [...new Set([...latest.current.expanded, ...ancestors])] });
+    restoring.current = false;
+    pendingScroll.current = file;
+    if (explicit) {
+      setHiddenReveal("");
+      setRevealMessage("Revealed " + file);
+    }
+  }
+  useEffect(() => {
+    if (active && !disabled && previousActive.current !== activePath) {
+      previousActive.current = activePath;
+      setHiddenReveal("");
+      setRevealMessage("");
+      void reveal();
+    }
+  }, [activePath, active, disabled]);
+  useLayoutEffect(() => {
+    if (!active || pendingScroll.current !== activePath) {
+      pendingScroll.current = "";
+      return;
+    }
+    const row = tree.current?.querySelector<HTMLElement>(
+      `[data-path="${CSS.escape(pendingScroll.current)}"] > .tree-row`,
+    );
+    if (row) {
+      row.scrollIntoView({ block: "nearest" });
+      pendingScroll.current = "";
+    }
+  });
+  async function entryAction(action: "copy-path" | "copy-relative" | "finder") {
+    const target = menu ?? "";
+    const generation = dragGeneration.current;
+    dismiss();
+    setActionError("");
+    try {
+      await window.escode.project("entry-action", root, target, action);
+      if (generation === dragGeneration.current)
+        setRevealMessage(
+          action === "finder"
+            ? "Requested Finder reveal for " + (target || root)
+            : "Copied " + (target || root),
+        );
+    } catch (error) {
+      if (generation === dragGeneration.current) setActionError(String(error));
+    }
+  }
   const rows: (Entry & { level: number })[] = [];
   function collect(parent: string, level: number) {
-    const entries = cache[parent]?.entries ?? [];
+    const entries = visible(parent);
     entries.forEach((entry) => {
       rows.push({ ...entry, level });
       if (entry.directory && state.expanded.includes(entry.path)) collect(entry.path, level + 1);
@@ -458,6 +570,8 @@ export function FilesTree({
     );
   }
   function toggle(path: string) {
+    revealSequence.current++;
+    pendingScroll.current = "";
     const expanded = state.expanded.includes(path);
     update({
       expanded: expanded ? state.expanded.filter((p) => p !== path) : [...state.expanded, path],
@@ -621,16 +735,19 @@ export function FilesTree({
           </div>
         </>
       );
-    if (!value.entries.length && !(edit && !edit.source && edit.parent === parent))
+    const entries = visible(parent);
+    if (!entries.length && !(edit && !edit.source && edit.parent === parent))
       return (
         <div className="tree-message" role="status" style={{ paddingLeft: level * 16 }}>
-          Empty folder
+          {value.entries.length
+            ? "No visible entries · Git-ignored files are hidden"
+            : "Empty folder"}
         </div>
       );
     return (
       <>
         {edit && !edit.source && edit.parent === parent && field()}
-        {value.entries.map((entry, index) => {
+        {entries.map((entry, index) => {
           return (
             <div
               key={entry.path}
@@ -640,7 +757,7 @@ export function FilesTree({
               aria-label={entry.path.split("/").at(-1) + (dirty(entry.path) ? ", unsaved" : "")}
               aria-level={level}
               aria-posinset={index + 1}
-              aria-setsize={value.entries!.length}
+              aria-setsize={entries.length}
               aria-selected={state.selected.includes(entry.path)}
               aria-expanded={entry.directory ? state.expanded.includes(entry.path) : undefined}
               aria-current={entry.path === activePath ? "true" : undefined}
@@ -668,6 +785,7 @@ export function FilesTree({
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
+                  event.stopPropagation();
                   if (!disabled) context(entry.path);
                 }}
               >
@@ -725,11 +843,45 @@ export function FilesTree({
         >
           New Folder
         </button>
+        <button
+          ref={revealButton}
+          disabled={!activePath || disabled || !!edit}
+          onClick={() => void reveal(true)}
+        >
+          Reveal Active File
+        </button>
+        <button
+          aria-pressed={!!state.hideIgnored}
+          onClick={() => {
+            update({ hideIgnored: !state.hideIgnored });
+            setHiddenReveal("");
+            setRevealMessage("");
+          }}
+        >
+          Hide Git-ignored files
+        </button>
         <button onClick={refresh}>Refresh</button>
-        <button onClick={() => update({ expanded: [], focus: state.focus.split("/")[0] || "" })}>
+        <button
+          onClick={() => {
+            revealSequence.current++;
+            pendingScroll.current = "";
+            update({ expanded: [], focus: state.focus.split("/")[0] || "" });
+          }}
+        >
           Collapse All
         </button>
       </div>
+      {filterError && (
+        <div role="status" className="tree-edit-help">
+          {filterError}
+        </div>
+      )}
+      <div role="status" className="tree-edit-help">
+        {revealMessage}
+      </div>
+      {hiddenReveal === activePath && hiddenReveal && (
+        <button onClick={() => void reveal(true, true)}>Show ignored files</button>
+      )}
       {actionError && (
         <div role="alert" className="tree-edit-help">
           {actionError}
@@ -816,6 +968,15 @@ export function FilesTree({
             }
           }}
         >
+          <button role="menuitem" onClick={() => void entryAction("copy-path")}>
+            Copy Path
+          </button>
+          <button role="menuitem" onClick={() => void entryAction("copy-relative")}>
+            Copy Relative Path
+          </button>
+          <button role="menuitem" onClick={() => void entryAction("finder")}>
+            Reveal in Finder
+          </button>
           <p>
             {state.selected.length} selected · {menu}
           </p>

@@ -53,12 +53,16 @@ async function fixture(run: (p: Project, store: Workspace, base: string) => Prom
 }
 test("real folder move preserves descendant drafts and conflict baseline through a fresh store", async () =>
   fixture(async (p, store, base) => {
+    const before = await store.read();
+    before.views[p.root].files!.hideIgnored = true;
+    await store.write(before);
     const ops = new FileOperations(store, join(base, "intent.json"));
     await ops.run(p, "move", "folder", "renamed");
     const state = await new Workspace(join(base, "workspace.json")).read();
     expect(state.drafts.map((d) => d.path)).toEqual(["renamed/a.ts", "renamed/b.ts"]);
     expect(state.drafts[0].text).toBe("a unsaved");
     expect(state.views[p.root].files).toEqual({
+      hideIgnored: true,
       expanded: ["renamed"],
       selected: ["renamed/a.ts"],
       focus: "renamed/a.ts",
@@ -73,6 +77,9 @@ test("real folder move preserves descendant drafts and conflict baseline through
   }));
 test("restart reconciles a crash immediately after native rename, before completion is journalled", async () =>
   fixture(async (p, store, base) => {
+    const before = await store.read();
+    before.views[p.root].files!.hideIgnored = true;
+    await store.write(before);
     const file = join(base, "intent.json");
     const journal = new Workspace(file);
     await journal.writeIntent({
@@ -88,6 +95,7 @@ test("restart reconciles a crash immediately after native rename, before complet
     expect(await fresh.recover(async () => p)).toContain("Recovered move");
     expect((await store.read()).drafts[1].path).toBe("moved/b.ts");
     expect((await store.read()).views[p.root].files).toEqual({
+      hideIgnored: true,
       expanded: ["moved"],
       selected: ["moved/a.ts"],
       focus: "moved/a.ts",
@@ -433,6 +441,8 @@ test("whole batch facts protect stale navigation snapshots until renderer acknow
   fixture(async (p, store, base) => {
     const ops = new FileOperations(store, join(base, "intent.json"));
     const stale = await store.read();
+    stale.views[p.root].files!.hideIgnored = true;
+    await store.write(stale);
     ops.beginBatch(p.root);
     const saved = await ops.save(
       p,
@@ -453,6 +463,7 @@ test("whole batch facts protect stale navigation snapshots until renderer acknow
       await ops.persist(stale);
       const fresh = await new Workspace(join(base, "workspace.json")).read();
       expect(fresh.selected).toBe("agents");
+      expect(fresh.views[p.root].files!.hideIgnored).toBe(true);
       expect(fresh.drafts).toHaveLength(1);
       expect(fresh.drafts[0]).toMatchObject({
         text: "newer available text",
@@ -470,6 +481,7 @@ test("whole batch facts protect stale navigation snapshots until renderer acknow
       });
       await ops.persist(fresh);
       expect((await store.read()).drafts[1].text).toBe("new incarnation");
+      expect((await store.read()).views[p.root].files!.hideIgnored).toBe(true);
     } finally {
       if (trash) rmSync(trash);
     }
@@ -499,6 +511,8 @@ test("async folder copy carries dirty descendants over actual copied bytes and p
     const ops = new FileOperations(store, join(base, "intent.json"));
     ops.beginBatch(p.root);
     const stale = await store.read();
+    stale.views[p.root].files!.hideIgnored = true;
+    await store.write(stale);
     const result = await ops.run(p, "copy", "folder", "copied");
     expect(result.applied).toBe(true);
     expect(readFileSync(join(p.root, "copied/a.ts"), "utf8")).toBe("disk");
@@ -517,6 +531,7 @@ test("async folder copy carries dirty descendants over actual copied bytes and p
     expect(
       await new FileOperations(fresh, join(base, "intent.json")).recover(async () => p),
     ).toContain("Recovered copy");
+    expect((await fresh.read()).views[p.root].files!.hideIgnored).toBe(true);
     expect((await p.save("copied/a.ts", drafts[2].text, drafts[2].disk.version)).kind).toBe(
       "saved",
     );

@@ -82,6 +82,13 @@ test("closed editor membership persists independently of catalogue, checkout mem
         [checkout]: {
           path: "folder/a.ts",
           directory: "folder",
+          files: {
+            expanded: ["folder"],
+            selected: ["folder/a.ts"],
+            focus: "folder/a.ts",
+            scroll: 0,
+            hideIgnored: true,
+          },
           change: { path: "folder/a.ts", area: "unstaged" as const },
         },
       },
@@ -112,6 +119,7 @@ test("closed editor membership persists independently of catalogue, checkout mem
             selected: ["folder/a.ts"],
             focus: "folder/a.ts",
             scroll: 0,
+            hideIgnored: true,
           },
         },
       },
@@ -154,6 +162,7 @@ test("legacy Files navigation migrates through a fresh store while drafts and ap
       scroll: 0,
     });
     migrated.views[dir].files!.scroll = 140;
+    migrated.views[dir].files!.hideIgnored = true;
     await store.write(migrated);
     const fresh = new Workspace(file);
     expect(await fresh.read()).toEqual(migrated);

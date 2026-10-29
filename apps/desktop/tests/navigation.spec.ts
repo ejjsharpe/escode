@@ -42,7 +42,11 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("alpha draft");
+    await page.getByRole("button", { name: "Hide Git-ignored files", exact: true }).click();
     await open(b);
+    await expect(
+      page.getByRole("button", { name: "Hide Git-ignored files", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
@@ -99,6 +103,9 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(page.getByLabel("Message Codex")).toHaveValue("worktree message draft");
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(page.locator(".view-nav:visible")).toContainText(worktree);
+    await expect(
+      page.getByRole("button", { name: "Hide Git-ignored files", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText(a);
     await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute(
@@ -107,6 +114,11 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     );
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await page.getByRole("button", { name: "Files", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Hide Git-ignored files", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
     await expect(page.getByLabel("Message Codex")).toHaveValue("original message draft");
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute(

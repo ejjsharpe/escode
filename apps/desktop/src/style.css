@@ -219,7 +219,8 @@ h2 {
   border-bottom: 1px solid #435166;
 }
 .project-tabs button[aria-pressed="true"],
-.view-nav button[aria-pressed="true"] {
+.view-nav button[aria-pressed="true"],
+.files-tools button[aria-pressed="true"] {
   background: #415b7b;
 }
 .view-nav {
