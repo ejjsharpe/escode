@@ -131,7 +131,7 @@ See [internal drag evidence and limits](docs/compatibility/files-drag.md).
 Finder files/folders can be copied in by drop or Files-scoped file paste. Imports use native
 file references, retain originals, and share transfer conflicts and per-item results. Binary
 and large regular files copy without editor decoding; unsupported recursive contents are
-rejected before staging. See [native import evidence and manual limits](docs/compatibility/files-import.md).
+rejected before staging. See [native import evidence and manual limits](docs/compatibility/files-import.md). Native import now uses scoped single-use references through authenticated host transfers; [foundation import evidence](docs/compatibility/foundation-native-import.md) records the transport, resource limits and checks.
 
 Reveal Active File expands and scrolls to the document without moving keyboard focus;
 manually collapsed ancestors stay collapsed across refresh/restart. Git-ignored files start
