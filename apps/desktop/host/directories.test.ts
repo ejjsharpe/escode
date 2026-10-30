@@ -103,7 +103,8 @@ test("request admission stays bounded while an adapter is stalled", async () => 
 
 test("stalled delivery exhausts a finite response budget without blocking a healthy client", async () => {
   const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
-    list: async () => ({ kind: "available", listing: { entries: [{ path: "x".repeat(400000), directory: false }], ignored: [] } }) });
+    list: async () => ({ kind: "available", listing: { entries: [], ignored: [] } }),
+    summaries: async () => [{ id: "x".repeat(400000), project: null, checkout: "", threadId: null, busy: false, needsInput: false, unavailable: false }] });
   try {
     const socket = await connect(host.bootstrap().url);
     let responses = 0;
@@ -114,10 +115,7 @@ test("stalled delivery exhausts a finite response budget without blocking a heal
         if (String(data).includes("admission exhausted")) resolve();
       });
     });
-    socket.pause();
-    for (let i = 0; i < 20; i++) socket.send(JSON.stringify({ _tag: "Request", id: i, tag: "listDirectory", headers: [], payload: { root: "/repo", path: "" } }));
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    socket.resume();
+    for (let i = 0; i < 20; i++) socket.send(JSON.stringify({ _tag: "Request", id: i, tag: "chatSummaries", headers: [], payload: null }));
     await rejected;
     expect(responses).toBeLessThanOrEqual(16);
     const done = closed(socket); socket.close(); await done;
@@ -261,3 +259,44 @@ test("saved history uses authenticated validated queries and bounded responses",
     expect(calls).toEqual([{ project: null, id: "saved", cursor: null }, { project: null, id: "large", cursor: null }]);
   } finally { await host.close(); }
 });
+
+test("live handoff sends bounded append batches, retains ACK charge and releases stalled views", async () => {
+  let text = "captured", captures = 0;
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "denied" }),
+    chatSnapshot: async () => {
+      const value = text;
+      captures++;
+      // A provider update during snapshot capture must be covered by the following batch.
+      if (captures === 1) text += " during capture";
+      return { project: null, chatId: "chat", threadId: "provider", connected: true, busy: true,
+        turnId: "turn", settings: null, requests: [], error: null,
+        items: [{ id: "body", turnId: "turn", type: "agentMessage", text: value }] };
+    },
+  });
+  const socket = await connect(host.bootstrap().url);
+  const messages: any[] = [];
+  let ack = true;
+  socket.on("message", data => {
+    const message = JSON.parse(String(data)); messages.push(message);
+    if (ack && message._tag === "Chunk") socket.send(JSON.stringify({ _tag: "Ack", requestId: message.requestId }));
+  });
+  try {
+    socket.send(JSON.stringify({ _tag: "Request", id: "1", tag: "chatLive", headers: [], payload: { project: null, id: "chat" } }));
+    await expect.poll(() => messages.filter(m => m._tag === "Chunk").length).toBeGreaterThanOrEqual(2);
+    const batches = messages.filter(m => m._tag === "Chunk").flatMap(m => m.values);
+    expect(batches[0].changes[0]).toMatchObject({ append: false, item: { text: "captured" } });
+    expect(batches[1].changes[0]).toMatchObject({ append: true, item: { text: " during capture" } });
+    expect(batches[1].revision).toBe(batches[0].revision + 1);
+    ack = false;
+    await expect.poll(() => messages.some(m => m._tag === "Defect" && String(m.defect).includes("stalled")), { timeout: 18000 }).toBe(true);
+    const count = captures;
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect(captures).toBe(count);
+    const healthy = await connect(host.bootstrap().url);
+    const response = new Promise<string>(resolve => healthy.once("message", value => resolve(String(value))));
+    healthy.send(JSON.stringify({ _tag: "Request", id: "2", tag: "listDirectory", headers: [], payload: { root: "repo", path: "" } }));
+    expect(await response).toContain("denied");
+    healthy.terminate();
+  } finally { socket.terminate(); await host.close(); }
+}, 22000);

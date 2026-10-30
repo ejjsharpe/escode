@@ -310,7 +310,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       page = await app.firstWindow();
       expect(await readFile(join(scratch.checkout, "retained.txt"), "utf8")).toBe("scratch bytes");
       expect(await readFile(join(scratch.checkout, "turns"), "utf8")).toBe("sent\n");
-      expect(await page.evaluate((id) => window.escode.chat("snapshot", null, id), scratch.id))
+      expect(await page.evaluate((id) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( null, id), scratch.id))
         .toMatchObject({ busy: false });
       expect((await page.evaluate(readChats, null))[0])
         .toMatchObject({ id: scratch.id, checkout: scratch.checkout, draft: "retained scratch draft" });

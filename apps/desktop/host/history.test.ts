@@ -59,3 +59,41 @@ test("saved history pages preserve binding without Git, immutable revisions and 
     expect(calls.find(c => c.method === "thread/turns/list")?.params).toMatchObject({ threadId: "exact-provider", limit: 20 });
   } finally { service.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+test("live output stays bounded on spool failure without cancelling provider work", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-live-"));
+  const store = new Chats(join(dir, "chats.json"));
+  const chat = await store.createDraft(dir, dir);
+  await store.update(dir, chat.id, { phase: "bound", threadId: "provider" });
+  let emit = (_event: any) => {}, stopped = 0, closed = 0;
+  const service = new ChatService(store, async (_cwd, receive) => {
+    emit = receive;
+    return { async request(method) {
+      if (method === "account/read") return { account: {} };
+      if (method === "thread/resume") return { thread: { id: "provider" }, cwd: dir, model: "fixture", sandbox: {}, approvalPolicy: "on-request" };
+      if (method === "thread/turns/list") return { data: [], nextCursor: null };
+      if (method === "turn/interrupt") { stopped++; return {}; }
+      throw Error(method);
+    }, respond() {}, close() { closed++; } };
+  });
+  try {
+    await service.open(dir, chat.id);
+    emit({ method: "turn/started", params: { threadId: "provider", turn: { id: "turn" } } });
+    emit({ method: "item/agentMessage/delta", params: { threadId: "provider", turnId: "turn", itemId: "body", delta: "durable text" } });
+    const before = service.snapshot(dir, chat.id);
+    const recovered = new ChatService(store);
+    expect((await recovered.inspect(dir, chat.id)).items[0].text).toBe("durable text");
+    await rm(store.spoolDirectory, { recursive: true });
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(store.spoolDirectory, "disk failure fixture");
+    for (let n = 0; n < 20; n++) emit({ method: "item/agentMessage/delta", params: { threadId: "provider", turnId: "turn", itemId: "body", delta: "x".repeat(100000) } });
+    const snapshot = service.snapshot(dir, chat.id);
+    expect(snapshot.error).toMatch(/partial|unavailable/i);
+    expect(snapshot).toMatchObject({ busy: true, threadId: "provider", turnId: "turn" });
+    expect(JSON.stringify(snapshot).length).toBeLessThan(160000);
+    expect(closed).toBe(0);
+    expect(before.items[0].text).toBe("durable text");
+    await service.stop(dir, chat.id);
+    expect(stopped).toBe(1);
+  } finally { service.close(); await rm(dir, { recursive: true, force: true }); }
+});

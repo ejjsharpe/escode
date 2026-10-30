@@ -81,7 +81,7 @@ createInterface({input:process.stdin}).on('line', line => {
     await expect
       .poll(() =>
         page.evaluate(
-          ({ a, ids }) => window.escode.chat("snapshot", a, ids[0]).then((s) => s.connected),
+          ({ a, ids }) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( a, ids[0]).then((s) => s.connected),
           { a, ids },
         ),
       )
@@ -92,7 +92,7 @@ createInterface({input:process.stdin}).on('line', line => {
     );
     await page.getByRole("textbox", { name: "Message Codex" }).fill("second draft");
     await page.evaluate(readChats, a);
-    const before = await page.evaluate(({ a, ids }) => window.escode.chat("snapshot", a, ids[1]), {
+    const before = await page.evaluate(({ a, ids }) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( a, ids[1]), {
       a,
       ids,
     });
@@ -196,7 +196,7 @@ createInterface({input:process.stdin}).on('line', line => {
     await expect(page.locator(".transcript:visible")).toContainText("Answered by");
     await writeFile(join(dir, "release-send"), "release");
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("");
-    const after = await page.evaluate(({ a, ids }) => window.escode.chat("snapshot", a, ids[1]), {
+    const after = await page.evaluate(({ a, ids }) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( a, ids[1]), {
       a,
       ids,
     });
@@ -273,9 +273,9 @@ createInterface({input:process.stdin}).on('line', line => {
     const states = await page.evaluate(
       async ({ a, b, ids }) =>
         Promise.all([
-          window.escode.chat("snapshot", a, ids[0]),
-          window.escode.chat("snapshot", a, ids[1]),
-          window.escode.chat("snapshot", b, ids[2]),
+          ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( a, ids[0]),
+          ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( a, ids[1]),
+          ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( b, ids[2]),
         ]),
       { a, b, ids },
     );
@@ -309,7 +309,7 @@ createInterface({input:process.stdin}).on('line', line => {
     );
     expect(result).toBe("stale");
     const survivor = await page.evaluate(
-      ({ a, ids }) => window.escode.chat("snapshot", a, ids[1]),
+      ({ a, ids }) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( a, ids[1]),
       { a, ids },
     );
     expect(survivor.busy).toBe(true);

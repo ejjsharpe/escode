@@ -104,10 +104,10 @@ test("installed Codex accepts scratch and deferred worktree drafts through Elect
       return [project, a, b];
     }, root);
     for (const c of chats) {
-      await expect.poll(async () => (await page.evaluate((c) => window.escode.chat("snapshot", c.project, c.id), c)).busy, { timeout: 120000 }).toBe(false);
+      await expect.poll(async () => (await page.evaluate((c) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( c.project, c.id), c)).busy, { timeout: 120000 }).toBe(false);
       await page.evaluate((c) => window.escode.chat("disconnect", c.project, c.id), c);
       await page.evaluate((c) => window.escode.chat("open", c.project, c.id), c);
-      const snapshot = await page.evaluate((c) => window.escode.chat("snapshot", c.project, c.id), c);
+      const snapshot = await page.evaluate((c) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( c.project, c.id), c);
       expect(snapshot.error).toBeNull();
       expect(snapshot.items.filter((i) => i.type === "userMessage")).toHaveLength(1);
       expect(snapshot.items.filter((i) => i.type === "agentMessage").map((i) => i.text).join("")).toContain("INTEGRATED_LIVE_OK");

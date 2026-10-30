@@ -35,6 +35,7 @@ export type SavedChat = {
 export class Chats {
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private file: string) {}
+  get spoolDirectory() { return join(dirname(this.file), "live-spool-v1"); }
   private async read(): Promise<SavedChat[]> {
     try {
       const value = JSON.parse(await readFile(this.file, "utf8"));

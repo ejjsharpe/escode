@@ -1,7 +1,7 @@
 import { Effect, Exit, Layer, Schedule, Schema, Scope, Semaphore, Stream, Fiber } from "effect";
 import { RpcClient, RpcSerialization } from "effect/rpc";
 import { Socket } from "effect/socket";
-import { Bootstrap, HostQueries, type HistoryPage, type ChatSummaries, type DirectoryResult } from "@escode/contracts";
+import { Bootstrap, ChatDetail, HostQueries, type HistoryPage, type ChatSummaries, type DirectoryResult } from "@escode/contracts";
 
 export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
   const queries = Semaphore.makeUnsafe(4);
@@ -44,7 +44,33 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
   }
   return {
     openChat: (project: string | null, id: string) => chatQuery(client => client.openChat({ project, id })),
-    chatSnapshot: (project: string | null, id: string) => chatQuery(client => client.chatSnapshot({ project, id })),
+    chatLive(project: string | null, id: string, apply: (detail: typeof ChatDetail.Type) => void, error: (message: string) => void) {
+      let active = true;
+      const controller = new AbortController();
+      let epoch: string | undefined, revision = 0;
+      let items: typeof ChatDetail.Type.items = [];
+      const effect = Effect.gen(function* () {
+        const client = yield* Effect.tryPromise(connect);
+        yield* client.chatLive({ project, id }).pipe(Stream.runForEach(batch => Effect.sync(() => {
+          if (!active) return;
+          if (batch.epoch === epoch && batch.revision <= revision) return;
+          if (batch.revision !== revision + 1 || (epoch && epoch !== batch.epoch)) throw Error("Live coverage reset required. Reopen the view.");
+          const next = items.filter(item => !batch.removed.some(old => old.id === item.id && old.turnId === item.turnId));
+          for (const change of batch.changes) {
+            const index = next.findIndex(item => item.id === change.item.id && item.turnId === change.item.turnId);
+            if (change.append && index < 0) throw Error("Incomplete live batch. Reopen the view.");
+            const item = { ...change.item, text: change.append ? next[index].text + change.item.text : change.item.text };
+            if (index < 0) next.push(item); else next[index] = item;
+          }
+          const detail = Schema.decodeUnknownSync(ChatDetail)({ ...batch.detail, items: next });
+          if (new TextEncoder().encode(JSON.stringify(detail)).length > 512 * 1024) throw Error("Live cache exhausted");
+          apply(detail);
+          items = next; epoch = batch.epoch; revision = batch.revision;
+        })));
+      });
+      void Effect.runPromise(effect, { signal: controller.signal }).catch(value => { if (active) error(`Live output unavailable; reopen the view to reset. ${String(value)}`); });
+      return () => { active = false; items = []; controller.abort(); };
+    },
     chatHistory: (project: string | null, id: string, cursor: string | null): Promise<HistoryPage> =>
       chatQuery(client => client.chatHistory({ project, id, cursor })),
     async listDirectory(root: string, path: string): Promise<DirectoryResult> {

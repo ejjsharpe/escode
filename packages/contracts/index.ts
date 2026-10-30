@@ -45,9 +45,10 @@ export const ChatSummary = Schema.Struct({
 export type ChatSummary = typeof ChatSummary.Type;
 export const ChatSummaries = Schema.Struct({ epoch: Schema.String, revision: Schema.Number, chats: Schema.Array(ChatSummary) });
 export type ChatSummaries = typeof ChatSummaries.Type;
+export const HistoryItem = Schema.Struct({ id: Schema.String, turnId: Schema.String, type: Schema.String, text: Schema.String, revision: Schema.optional(Schema.String) });
 export const HistoryPage = Schema.Struct({
   revision: Schema.String,
-  items: Schema.Array(Schema.Struct({ id: Schema.String, turnId: Schema.String, type: Schema.String, text: Schema.String, revision: Schema.optional(Schema.String) })),
+  items: Schema.Array(HistoryItem),
   nextCursor: Schema.NullOr(Schema.String),
 });
 export type HistoryPage = typeof HistoryPage.Type;
@@ -60,8 +61,15 @@ export const ChatDetail = Schema.Struct({
   history: Schema.optional(Schema.Struct({ nextCursor: Schema.NullOr(Schema.String), revision: Schema.String })),
 });
 export type ChatDetail = typeof ChatDetail.Type;
+export const LiveBatch = Schema.Struct({
+  epoch: Schema.String, revision: Schema.Number,
+  detail: ChatDetail,
+  changes: Schema.Array(Schema.Struct({ item: HistoryItem, append: Schema.Boolean })),
+  removed: Schema.Array(Schema.Struct({ id: Schema.String, turnId: Schema.String })),
+});
+export type LiveBatch = typeof LiveBatch.Type;
 export const HistoryQuery = { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)),
   cursor: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096))) };
 export const HostQueries = Directories.merge(RpcGroup.make(Rpc.make("chatSummaries", {
   success: ChatSummaries, error: Schema.String, stream: true,
-}), Rpc.make("chatSnapshot", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));
+}), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));

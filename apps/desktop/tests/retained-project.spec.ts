@@ -102,7 +102,7 @@ send({id:m.id,result});});`,
     await expect(page.locator("header")).toContainText(b);
     await expect(alphaTab).toBeVisible();
     expect(
-      (await page.evaluate((a) => window.escode.chat("snapshot", a.project, a.id), managed.chat))
+      (await page.evaluate((a) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( a.project, a.id), managed.chat))
         .busy,
     ).toBe(true);
     await rm(join(a, "a.txt"));
@@ -111,7 +111,7 @@ send({id:m.id,result});});`,
     await expect(page.locator(".monaco-editor:visible")).toContainText("dirty alpha");
     await expect(alphaTab).toBeVisible();
     expect(
-      (await page.evaluate((a) => window.escode.chat("snapshot", a.project, a.id), managed.chat))
+      (await page.evaluate((a) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( a.project, a.id), managed.chat))
         .busy,
     ).toBe(true);
     await writeFile(join(a, "a.txt"), "baseline");
@@ -143,8 +143,8 @@ send({id:m.id,result});});`,
     await page.getByRole("button", { name: "Allow once", exact: true }).click();
     await expect.poll(async () => JSON.parse(await readFile(join(mixed.scratch.checkout, "approval-result"), "utf8")).result.decision).toBe("accept");
     await page.getByRole("button", { name: "Stop", exact: true }).click();
-    expect((await page.evaluate((c) => window.escode.chat("snapshot", c.project, c.id), beta)).busy).toBe(true);
-    expect((await page.evaluate((c) => window.escode.chat("snapshot", c.project, c.id), mixed.shared)).busy).toBe(true);
+    expect((await page.evaluate((c) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( c.project, c.id), beta)).busy).toBe(true);
+    expect((await page.evaluate((c) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( c.project, c.id), mixed.shared)).busy).toBe(true);
     await page.locator(".agent-row").filter({ hasText: "alpha" }).filter({ hasText: "Chat 1" }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Allow once", exact: true }).click();
@@ -153,7 +153,7 @@ send({id:m.id,result});});`,
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.getByRole("status")).toHaveText("Ready");
     expect(
-      (await page.evaluate((c) => window.escode.chat("snapshot", c.project, c.id), beta)).busy,
+      (await page.evaluate((c) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( c.project, c.id), beta)).busy,
     ).toBe(true);
     await expect.poll(async () => JSON.parse(await readFile(join(managed.root, "approval-result"), "utf8")).result.decision).toBe("accept");
     expect(await readFile(join(a, "approval-result"), "utf8").catch(() => "")).toBe("");

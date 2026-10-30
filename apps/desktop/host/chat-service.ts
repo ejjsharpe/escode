@@ -1,3 +1,4 @@
+import { LiveSpool } from "./live-spool";
 import type { HistoryPage } from "@escode/contracts";
 import { createHash, randomUUID } from "node:crypto";
 import { accessSync, constants, realpathSync, statSync } from "node:fs";
@@ -25,6 +26,8 @@ type Session = ChatSnapshot & {
   opening?: Promise<void>;
   requestIds: Map<string, string | number>;
   stopping: boolean;
+  outputFailed?: boolean;
+  recovered?: boolean;
   sending?: boolean;
   checkoutIdentity?: { path: string; dev: number; ino: number };
 };
@@ -46,6 +49,7 @@ export class ChatService {
     private store: Chats,
     private connect = connectCodex,
   ) {}
+  private get spool() { return new LiveSpool(this.store.spoolDirectory); }
   list(project: string | null) {
     return this.store.list(project);
   }
@@ -101,6 +105,15 @@ export class ChatService {
   }
   async inspect(project: string | null, id: string) {
     const chat = await this.store.get(project, id);
+    const s = this.session(project, id);
+    if (!s.recovered && !s.rpc && chat.threadId) {
+      s.recovered = true;
+      s.threadId = chat.threadId;
+      try {
+        const saved = this.spool.read(id, chat.threadId);
+        if (saved) { s.items = [...saved.items]; s.error = "Recovered live output; Retry to inspect provider history. Work was not resumed."; }
+      } catch { s.error = "Live output unavailable: incomplete spool. Provider identity retained; Retry explicitly."; }
+    }
     const snapshot = this.snapshot(project, id);
     snapshot.contextError =
       chat.phase === "draft" &&
@@ -272,8 +285,11 @@ export class ChatService {
           sandbox: result.sandbox,
         };
         if (resume) {
+          const captured = new Map(s.items.map(item => [item.turnId + "/" + item.id, item]));
           const page = await this.readHistory(s, null);
-          s.items = [...page.items];
+          const live = s.items.filter(item => captured.get(item.turnId + "/" + item.id) !== item);
+          s.items = [...page.items.filter(item => !live.some(value => value.id === item.id && value.turnId === item.turnId)), ...live];
+          s.outputFailed = false;
           s.history = { nextCursor: page.nextCursor, revision: page.revision };
         }
         if (s.epoch !== epoch) throw Error("Codex disconnected during setup. Retry connection.");
@@ -398,6 +414,10 @@ export class ChatService {
         s.rpc?.close();
         return;
       }
+      if (s.requests.length >= 32 || Buffer.byteLength(JSON.stringify([...s.requests, { params: p }])) > 64 * 1024) {
+        s.error = "Provider request capacity exhausted. Request details unavailable; provider work continues and Stop remains available.";
+        return;
+      }
       const token = randomUUID();
       s.requestIds.set(token, message.id);
       s.requests.push({ token, method: message.method!, params: p });
@@ -414,6 +434,9 @@ export class ChatService {
       return;
     }
     if (p.turnId !== s.turnId) return;
+    if (s.outputFailed && (p.item || typeof p.delta === "string")) return;
+    const previous = s.items;
+    s.items = s.items.map(item => ({ ...item }));
     if (message.method === "item/started" || message.method === "item/completed") {
       const value = this.item(p.turnId, p.item);
       const index = s.items.findIndex((i) => i.id === value.id && i.turnId === value.turnId);
@@ -434,6 +457,17 @@ export class ChatService {
       item.text += p.delta;
     } else if (message.method === "error")
       s.error = p.error?.message ?? "Codex turn failed. Send a new message to continue.";
+    if (p.item || typeof p.delta === "string") {
+      try {
+        if (s.items.length > 1000 || Buffer.byteLength(JSON.stringify(s.items)) > 128 * 1024)
+          throw Error("Live display capacity exhausted");
+        if (s.threadId) this.spool.write(s.chatId, s.threadId, s.items, false);
+      } catch (error) {
+        s.items = previous;
+        s.outputFailed = true;
+        s.error = `Live output partial/unavailable: ${String(error)}. Provider work continues; Stop remains available. Reload saved history after completion.`;
+      }
+    }
   }
   send(
     project: string | null,

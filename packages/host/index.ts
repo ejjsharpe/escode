@@ -5,7 +5,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { HostQueries, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type Bootstrap, type DirectoryResult } from "@escode/contracts";
+import { HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type Bootstrap, type DirectoryResult } from "@escode/contracts";
 
 // Guard parser/error writes too; they bypass the RPC response budget.
 class BoundedWebSocket extends WebSocket {
@@ -50,7 +50,11 @@ export async function startDirectoryHost(options: {
     const rejected = new Set<number>();
     const reject = (id: number) => {
       rejected.add(id);
-      return protocol.send(id, { _tag: "Defect", defect: "Invalid request or request admission exhausted" }).pipe(Effect.ensuring(protocol.end(id)));
+      return protocol.send(id, { _tag: "Defect", defect: "Invalid request or request admission exhausted; output coverage reset" }).pipe(
+        Effect.ensuring(Effect.suspend(() => Effect.all([...(pending.get(id) ?? [])].map(requestId => {
+          acknowledge(id, requestId);
+          return interrupt(id, requestId);
+        })).pipe(Effect.asVoid))));
     };
     const sentBytes = new Map<number, number>();
     const unacknowledged = new Map<number, Map<string | number, { bytes: number; timer: ReturnType<typeof setTimeout> }>>();
@@ -62,13 +66,21 @@ export async function startDirectoryHost(options: {
       unacknowledged.get(id)?.delete(requestId);
     };
     const pending = new Map<number, Set<string | number>>();
+    let interrupt: (id: number, requestId: string | number) => Effect.Effect<void> = () => Effect.void;
+    const stall = (id: number, requestId: string | number) => {
+      acknowledge(id, requestId);
+      return protocol.send(id, { _tag: "Defect", defect: "Live delivery stalled. Output coverage reset; reopen the view. Provider work and control retained." })
+        .pipe(Effect.andThen(interrupt(id, requestId)));
+    };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatSnapshot"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
       ...protocol,
-      run: (receive) => protocol.run((id, data) => Effect.suspend(() => {
+      run: (receive) => {
+        interrupt = (id, requestId) => receive(id, { _tag: "Interrupt", requestId });
+        return protocol.run((id, data) => Effect.suspend(() => {
         if (rejected.has(id)) return Effect.void;
         if (!data || typeof data !== "object") return reject(id);
         if (data._tag === "Request") {
@@ -81,7 +93,8 @@ export async function startDirectoryHost(options: {
           acknowledge(id, data.requestId);
         } else if (data._tag !== "Ping" && data._tag !== "Eof") return reject(id);
         return receive(id, data);
-      })),
+      }));
+      },
       send: (id, response, transferables) => {
         if (rejected.has(id)) return Effect.void;
         const bytes = (sentBytes.get(id) ?? 0) + Buffer.byteLength(JSON.stringify(response));
@@ -90,7 +103,7 @@ export async function startDirectoryHost(options: {
         if (response._tag === "Chunk") {
           const chunks = unacknowledged.get(id) ?? new Map();
           chunks.set(response.requestId, { bytes: Buffer.byteLength(JSON.stringify(response)),
-            timer: setTimeout(() => { Effect.runFork(protocol.end(id)); }, 15000) });
+            timer: setTimeout(() => { Effect.runFork(stall(id, response.requestId)); }, 15000) });
           unacknowledged.set(id, chunks);
         }
         if (response._tag === "Exit") pending.get(id)?.delete(response.requestId);
@@ -102,12 +115,25 @@ export async function startDirectoryHost(options: {
       unacknowledged.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
       Effect.provide(HostQueries.toLayer({
-        chatSnapshot: ({ project, id }) => Effect.tryPromise({ try: async () => {
-          if (!options.chatSnapshot) throw Error("Chat detail unavailable");
-          const detail = await options.chatSnapshot(project, id);
-          if (Buffer.byteLength(JSON.stringify(detail)) > maximumFrameBytes / 2) throw Error("Chat detail unavailable: capacity exhausted");
-          return Schema.decodeUnknownSync(ChatDetail)(detail);
-        }, catch: String }),
+        chatLive: ({ project, id }) => Stream.suspend(() => {
+          let previous: ChatDetail | undefined, revision = 0;
+          return Stream.fromEffectSchedule(Effect.tryPromise({ try: async () => {
+            if (!options.chatSnapshot) throw Error("Live output unavailable");
+            const detail = Schema.decodeUnknownSync(ChatDetail)(await options.chatSnapshot(project, id));
+            if (Buffer.byteLength(JSON.stringify(detail)) > maximumFrameBytes / 2) throw Error("Live output unavailable: capacity exhausted; control retained");
+            const changes: LiveBatch["changes"][number][] = [];
+            for (const item of detail.items) {
+              const old = previous?.items.find(value => value.id === item.id && value.turnId === item.turnId);
+              if (JSON.stringify(old) === JSON.stringify(item)) continue;
+              const append = !!old && old.type === item.type && old.revision === item.revision && item.text.startsWith(old.text);
+              changes.push({ item: { ...item, text: append ? item.text.slice(old!.text.length) : item.text }, append });
+            }
+            const removed = previous?.items.filter(old => !detail.items.some(item => item.id === old.id && item.turnId === old.turnId)).map(({ id, turnId }) => ({ id, turnId })) ?? [];
+            const batch = Schema.decodeUnknownSync(LiveBatch)({ epoch, revision: ++revision, detail: { ...detail, items: [] }, changes, removed });
+            previous = detail;
+            return batch;
+          }, catch: String }), Schedule.spaced("100 millis"));
+        }),
         openChat: ({ project, id }) => Effect.tryPromise({ try: async () => {
           if (!options.openChat) throw Error("Chat unavailable");
           const detail = await options.openChat(project, id);

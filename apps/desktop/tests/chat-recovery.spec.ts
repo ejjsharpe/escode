@@ -62,13 +62,13 @@ send({id:m.id,result});});`,
     await expect
       .poll(() =>
         page.evaluate(
-          ({ root, id }) => window.escode.chat("snapshot", root, id).then((s) => s.busy),
+          ({ root, id }) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( root, id).then((s) => s.busy),
           { root, id: ids.a },
         ),
       )
       .toBe(false);
     expect(
-      (await page.evaluate((id) => window.escode.chat("snapshot", null, id), ids.b)).busy,
+      (await page.evaluate((id) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( null, id), ids.b)).busy,
     ).toBe(true);
     await page.evaluate((id) => window.escode.chat("stop", null, id), ids.b);
     await app.close();

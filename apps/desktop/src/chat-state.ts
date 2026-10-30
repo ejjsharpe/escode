@@ -37,11 +37,11 @@ class ProjectChats {
     errors: {} as Record<string, string>,
   };
   private opening = new Map<string, Promise<void>>();
-  private polling = false;
+  private streams = new Map<string, () => void>();
   private observationEpoch = new Map<string, object>();
   private observed = new Map<string, number>();
   private release?: () => void;
-  private timer?: ReturnType<typeof setInterval>;
+
   constructor(private project: string | null) {}
   subscribe = (listener: () => void) => {
     if (!this.listeners.size) {
@@ -54,12 +54,11 @@ class ProjectChats {
       apply();
     }
     this.listeners.add(listener);
-    this.timer ??= setInterval(() => void this.refresh(), 300);
+
     return () => {
       this.listeners.delete(listener);
       if (!this.listeners.size) {
-        clearInterval(this.timer);
-        this.timer = undefined;
+
         this.release?.();
       }
     };
@@ -93,6 +92,8 @@ class ProjectChats {
       const count = (this.observed.get(id) ?? 1) - 1;
       if (count) this.observed.set(id, count);
       else {
+        this.streams.get(id)?.();
+        this.streams.delete(id);
         this.observed.delete(id);
         this.observationEpoch.delete(id);
         const snapshots = { ...this.state.snapshots }, history = { ...this.state.history };
@@ -106,26 +107,16 @@ class ProjectChats {
     };
   }
   async refresh() {
-    if (this.polling) return;
-    this.polling = true;
-    try {
-      await Promise.all(
-        [...this.observed.keys()].map(async (id) => {
-          const epoch = this.observationEpoch.get(id);
-          const chat = { id };
-          const snapshot = await window.escode.chat("snapshot", this.project, chat.id);
-          if (!this.observed.has(chat.id) || this.observationEpoch.get(id) !== epoch) return;
-          const responding = { ...this.state.responding };
-          for (const request of this.state.snapshots[chat.id]?.requests ?? [])
-            if (!snapshot.requests.some((r) => r.token === request.token))
-              delete responding[request.token];
-          this.update({ snapshots: { ...this.state.snapshots, [chat.id]: snapshot }, responding });
-        }),
-      );
-    } catch (e) {
-      this.report("", e);
-    } finally {
-      this.polling = false;
+    for (const id of this.observed.keys()) {
+      if (this.streams.has(id)) continue;
+      const epoch = this.observationEpoch.get(id);
+      this.streams.set(id, window.escode.chatLive(this.project, id, snapshot => {
+        if (this.observationEpoch.get(id) !== epoch) return;
+        const responding = { ...this.state.responding };
+        for (const request of this.state.snapshots[id]?.requests ?? [])
+          if (!snapshot.requests.some(r => r.token === request.token)) delete responding[request.token];
+        this.update({ snapshots: { ...this.state.snapshots, [id]: { ...snapshot, items: [...snapshot.items], requests: [...snapshot.requests] } }, responding });
+      }, error => this.report(id, error)));
     }
   }
   history(id: string, cursor: string | null) {
@@ -142,6 +133,9 @@ class ProjectChats {
       const history = { ...this.state.history };
       delete history[id];
       this.update({ history });
+      this.streams.get(id)?.();
+      this.streams.delete(id);
+      await this.refresh();
     });
   }
   open(id: string) {

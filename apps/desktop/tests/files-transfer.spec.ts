@@ -224,7 +224,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect(page.locator(".content:visible > [role=status]")).toContainText("vanishing.txt");
     await expect(readFile(join(root, "target/vanishing.txt"))).rejects.toThrow();
     expect(await page.evaluate(({ root, chat }) =>
-      window.escode.chat("snapshot", root, chat).then((s) => s.busy), { root, chat })).toBe(true);
+      ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( root, chat).then((s) => s.busy), { root, chat })).toBe(true);
     await page.getByRole("treeitem", { name: "bulk", exact: true }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
     await expect.poll(() => app.evaluate(() => (globalThis as any).copyRunning)).toBe(true);
@@ -237,7 +237,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect
       .poll(() =>
         page.evaluate(
-          ({ root, chat }) => window.escode.chat("snapshot", root, chat).then((s) => s.busy),
+          ({ root, chat }) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( root, chat).then((s) => s.busy),
           { root, chat },
         ),
       )
