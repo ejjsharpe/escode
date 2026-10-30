@@ -174,7 +174,7 @@ export class FoundationState {
     state.creates.push(receipt);
     this.persist(state); this.state = state;
     try { receipt = { ...receipt, status: "accepted", path: effect() }; }
-    catch (error) { receipt = { ...receipt, status: "rejected", message: String(error) }; }
+    catch (error) { receipt = { ...receipt, status: (error as { rejected?: boolean })?.rejected ? "rejected" : "uncertain", message: `Creation failed or uncertain; inspect the exact path before further action. ${String(error)}` }; }
     const completed = this.read();
     completed.creates![completed.creates!.length - 1] = receipt;
     this.persist(completed); this.state = completed;

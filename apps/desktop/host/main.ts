@@ -652,7 +652,16 @@ app.whenReady().then(async () => {
       check();
       if (mutationOrigin) throw Error("File operation awaiting confirmation.");
       operations.assertIdle();
-      return foundation.create(command, () => { check(); return project.create(parent, name, kind); });
+      return foundation.create(command, () => {
+        check();
+        const destination = parent ? parent + "/" + name : name;
+        const identity = () => { try { return project.operationIdentity(destination); } catch { return ""; } };
+        const before = identity();
+        try { return project.create(parent, name, kind); }
+        catch (error) {
+          throw Object.assign(Error(String(error)), { rejected: identity() === before });
+        }
+      });
     },
     readFile: async (root, path) => { const { project } = await fileContext(root, path); return project.read(path); },
     saveFile: async (root, path, text, version) => {

@@ -654,3 +654,34 @@ test("pending entry resolution retains its source across selection and project c
     await rm(base, { recursive: true, force: true, maxRetries: 3 });
   }
 });
+
+test("lost native creation result retains input and does not repeat the effect", async () => {
+  const base = await realpath(await mkdtemp(join(tmpdir(), "escode-create-uncertain-")));
+  const root = join(base, "repo");
+  execFileSync("git", ["init", root]);
+  const app = await launchDesktop(join(base, "user"));
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+      const cp = process.getBuiltinModule("child_process") as any, execute = cp.execFileSync;
+      cp.execFileSync = (...args: any[]) => {
+        const value = execute(...args);
+        if (args[1]?.[0] === "create") throw Error("lost native creation result");
+        return value;
+      };
+    }, root);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await page.getByRole("button", { name: "New File", exact: true }).click();
+    const input = page.getByRole("textbox", { name: "New file name", exact: true });
+    await input.fill("new.txt");
+    await input.press("Enter");
+    await expect(page.locator(".tree-edit [role=alert]")).toContainText("uncertain");
+    await expect(input).toHaveValue("new.txt");
+    expect(await readFile(join(root, "new.txt"), "utf8")).toBe("");
+    await writeFile(join(root, "new.txt"), "retained bytes");
+    await input.press("Enter");
+    await expect(page.locator(".tree-edit [role=alert]")).toContainText("uncertain");
+    expect(await readFile(join(root, "new.txt"), "utf8")).toBe("retained bytes");
+  } finally { app.process().kill("SIGKILL"); await rm(base, { recursive: true, force: true }); }
+});
