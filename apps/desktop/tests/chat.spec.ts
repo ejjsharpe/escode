@@ -3,7 +3,7 @@ import { mkdtemp, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { launchDesktop } from "./desktop";
+import { launchDesktop, readChats } from "./desktop";
 // Explicit opt-in: this exercises installed, authenticated Codex and consumes a turn.
 test("saved Codex chat streams and reopens via a fresh connection", async () => {
   test.skip(
@@ -114,17 +114,7 @@ test("installed Codex accepts scratch and deferred worktree drafts through Elect
       expect(snapshot.settings.model).toBeTruthy();
       console.log("Integrated installed-Codex settings", JSON.stringify(snapshot.settings));
     }
-    const saved = await page.evaluate(async (root) => [...await new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
-      const off = window.escode.chatSummaries(async ({ chats }) => {
-        off();
-        try { resolve(await Promise.all(chats.filter(c => c.project === root).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
-      }, reject);
-    }), ...await new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
-      const off = window.escode.chatSummaries(async ({ chats }) => {
-        off();
-        try { resolve(await Promise.all(chats.filter(c => c.project === null).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
-      }, reject);
-    })], root);
+    const saved = [...await page.evaluate(readChats, root), ...await page.evaluate(readChats, null)];
     expect(new Set(saved.map((c) => c.checkout)).size).toBe(3);
     expect(saved[0].checkout).not.toBe(root);
     await page.getByRole("button", { name: "Agents", exact: true }).click();

@@ -200,17 +200,13 @@ createInterface({input:process.stdin}).on('line',line=>{
       await expect(page.getByRole("status")).toHaveText("Running");
       const pids: number[] = JSON.parse(await readFile(join(root, "pids"), "utf8"));
       // Include scratch work in cancellation, failed-save and process-group quit checks.
-      const scratch = await page.evaluate(async () => {
+      const scratchId = await page.evaluate(async () => {
         const chat = await window.escode.chat("createDraft", null);
         await window.escode.chat("send", null, chat.id, "run scratch");
         await window.escode.chat("draft", null, chat.id, "retained scratch draft");
-        return (await new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
-      const off = window.escode.chatSummaries(async ({ chats }) => {
-        off();
-        try { resolve(await Promise.all(chats.filter(c => c.project === null).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
-      }, reject);
-    })).find((c) => c.id === chat.id)!;
+        return chat.id;
       });
+      const scratch = (await page.evaluate(readChats, null)).find(c => c.id === scratchId)!;
       pids.push(...JSON.parse(await readFile(join(scratch.checkout, "pids"), "utf8")));
       await writeFile(join(scratch.checkout, "retained.txt"), "scratch bytes");
 

@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { launchDesktop } from "./desktop";
+import { launchDesktop, readChats } from "./desktop";
 
 test("dirty background close preserves work on cancel/failure, retained requests and managed removal protections", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-retained-")));
@@ -91,13 +91,9 @@ send({id:m.id,result});});`,
       await window.escode.chat("send", null, scratch.id, "scratch work");
       const draft = await window.escode.chat("createDraft", a);
       await window.escode.chat("draft", a, draft.id, "unsent integrated draft");
-      return { shared, scratch: (await new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
-      const off = window.escode.chatSummaries(async ({ chats }) => {
-        off();
-        try { resolve(await Promise.all(chats.filter(c => c.project === null).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
-      }, reject);
-    }))[0], draft };
+      return { shared, scratch, draft };
     }, a);
+    mixed.scratch = (await page.evaluate(readChats, null))[0];
     const alphaTab = page
       .getByRole("navigation", { name: "Projects", exact: true })
       .getByRole("button", { name: /^alpha/ });

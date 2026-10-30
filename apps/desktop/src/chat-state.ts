@@ -43,7 +43,11 @@ class ProjectChats {
   constructor(private project: string | null) {}
   subscribe = (listener: () => void) => {
     if (!this.listeners.size) {
-      const apply = () => this.update({ chats: catalogue.filter(c => c.project === this.project), errors: { ...this.state.errors, "": summaryError } });
+      const apply = () => {
+        const chats = catalogue.filter(c => c.project === this.project);
+        const drafts = Object.fromEntries(Object.entries(this.state.drafts).filter(([id]) => chats.some(c => c.id === id)));
+        this.update({ chats, drafts, errors: { ...this.state.errors, "": summaryError } });
+      };
       this.release = subscribe(apply);
       apply();
     }
@@ -80,11 +84,12 @@ class ProjectChats {
   }
   observe(id: string) {
     this.observed.set(id, (this.observed.get(id) ?? 0) + 1);
+    this.update({ snapshots: Object.fromEntries(Object.entries(this.state.snapshots).filter(([key]) => this.observed.has(key))) });
     void this.refresh();
     return () => {
       const count = (this.observed.get(id) ?? 1) - 1;
       if (count) this.observed.set(id, count);
-      else { this.observed.delete(id); const snapshots = { ...this.state.snapshots }; delete snapshots[id]; this.update({ snapshots }); }
+      else this.observed.delete(id);
     };
   }
   async refresh() {

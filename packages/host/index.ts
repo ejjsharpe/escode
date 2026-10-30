@@ -2,7 +2,7 @@ import WebSocket from "ws";
 import { createServer } from "node:http";
 import { randomBytes, randomUUID } from "node:crypto";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Effect, Fiber, Schema, Stream, Schedule } from "effect";
+import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { HostQueries, ChatSummaries, maximumFrameBytes, wireRevision, type Bootstrap, type DirectoryResult } from "@escode/contracts";
@@ -25,6 +25,7 @@ class BoundedWebSocket extends WebSocket {
 export async function startDirectoryHost(options: {
   hostId: string; clientId: string; origin: string;
   list(root: string, path: string): Promise<DirectoryResult>;
+  watch?(root: string, paths: readonly string[], notify: (error?: string) => void): () => void;
   summaries?: () => Promise<ChatSummaries["chats"]>;
   now?: () => number;
 }) {
@@ -46,7 +47,7 @@ export async function startDirectoryHost(options: {
     const rejected = new Set<number>();
     const reject = (id: number) => {
       rejected.add(id);
-      return protocol.send(id, { _tag: "Defect", defect: "Invalid request or request admission exhausted" });
+      return protocol.send(id, { _tag: "Defect", defect: "Invalid request or request admission exhausted" }).pipe(Effect.ensuring(protocol.end(id)));
     };
     const sentBytes = new Map<number, number>();
     const unacknowledged = new Map<number, Map<string | number, { bytes: number; timer: ReturnType<typeof setTimeout> }>>();
@@ -59,7 +60,7 @@ export async function startDirectoryHost(options: {
     };
     const pending = new Map<number, Set<string | number>>();
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["listDirectory", "chatSummaries"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -82,7 +83,7 @@ export async function startDirectoryHost(options: {
         if (rejected.has(id)) return Effect.void;
         const bytes = (sentBytes.get(id) ?? 0) + Buffer.byteLength(JSON.stringify(response));
         if (bytes > 2 * maximumFrameBytes) return reject(id);
-        sentBytes.set(id, bytes);
+        if (response._tag === "Chunk") sentBytes.set(id, bytes);
         if (response._tag === "Chunk") {
           const chunks = unacknowledged.get(id) ?? new Map();
           chunks.set(response.requestId, { bytes: Buffer.byteLength(JSON.stringify(response)),
@@ -105,6 +106,19 @@ export async function startDirectoryHost(options: {
         }, catch: String }), Schedule.spaced("300 millis")), listDirectory: ({ root, path }) =>
         Effect.tryPromise(() => options.list(root, path)).pipe(Effect.catch(() =>
           Effect.succeed({ kind: "unavailable" as const, message: "Directory unavailable. Refresh to retry." }))),
+        watchDirectories: ({ root, paths }) => Stream.callback((queue) => Effect.acquireRelease(
+          Effect.sync(() => {
+            if (!options.watch) throw Error("Directory watches unavailable");
+            let failure: string | undefined;
+            const release = options.watch(root, paths, (error) => {
+              failure = error ?? failure;
+              Queue.offerUnsafe(queue, failure ? { error: failure } : {});
+            });
+            Queue.offerUnsafe(queue, { ready: true }); // Revalidate after the watch is installed.
+            return release;
+          }),
+          (release) => Effect.sync(release),
+        ), { bufferSize: 1, strategy: "sliding" }),
       })), Effect.forkScoped,
     );
     let connections = 0;

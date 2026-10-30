@@ -14,8 +14,12 @@ export const DirectoryResult = Schema.Union([
   Schema.Struct({ kind: Schema.Literals(["denied", "unavailable", "overflow"]), message: Schema.String }),
 ]);
 export type DirectoryResult = typeof DirectoryResult.Type;
+export const DirectoryChange = Schema.Struct({ error: Schema.optionalKey(Schema.String), ready: Schema.optionalKey(Schema.Boolean) });
 export const Directories = RpcGroup.make(Rpc.make("listDirectory", {
   payload: { root: Schema.String, path: Schema.String }, success: DirectoryResult,
+}), Rpc.make("watchDirectories", {
+  payload: { root: Schema.String, paths: Schema.Array(Schema.String).check(Schema.isMaxLength(10000)) },
+  success: DirectoryChange, stream: true,
 }));
 export const Bootstrap = Schema.Struct({
   hostId: Schema.String, clientId: Schema.String, wireRevision: Schema.Literal(wireRevision),

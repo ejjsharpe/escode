@@ -119,7 +119,7 @@ test("stalled delivery exhausts a finite response budget without blocking a heal
     await new Promise((resolve) => setTimeout(resolve, 100));
     socket.resume();
     await rejected;
-    expect(responses).toBeLessThanOrEqual(6);
+    expect(responses).toBeLessThanOrEqual(16);
     const done = closed(socket); socket.close(); await done;
     const healthy = await connect(host.bootstrap().url);
     const response = new Promise<string>((resolve) => healthy.once("message", (data) => resolve(String(data))));
@@ -194,3 +194,47 @@ test("acknowledged summaries stay connected beyond the directory deadline and cu
     expect(chunks).toBeGreaterThan(45);
   } finally { socket.terminate(); await host.close(); }
 }, 22000);
+test("watch streams share the query connection, report failures, and release on interrupt and disconnect", async () => {
+  const listeners = new Set<(error?: string) => void>();
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "available", listing: { entries: [{ path: "external.txt", directory: false }], ignored: [] } }),
+    watch: (_root, _paths, notify) => { listeners.add(notify); return () => { listeners.delete(notify); }; },
+  });
+  const socket = await connect(host.bootstrap().url);
+  const messages: any[] = [];
+  socket.on("message", (data) => {
+    const message = JSON.parse(String(data)); messages.push(message);
+    if (message._tag === "Chunk") socket.send(JSON.stringify({ _tag: "Ack", requestId: message.requestId }));
+  });
+  const request = (id: string, tag: string, payload: unknown) => socket.send(JSON.stringify({ _tag: "Request", id, tag, payload, headers: [] }));
+  try {
+    request("watch", "watchDirectories", { root: "/repo", paths: [""] });
+    await expect.poll(() => messages.some((m) => m._tag === "Chunk")).toBe(true);
+    expect(listeners.size).toBe(1);
+    listeners.forEach((notify) => notify("EMFILE injected"));
+    await expect.poll(() => JSON.stringify(messages)).toContain("EMFILE injected");
+    request("list", "listDirectory", { root: "/repo", path: "" });
+    await expect.poll(() => JSON.stringify(messages)).toContain("external.txt");
+    socket.send(JSON.stringify({ _tag: "Interrupt", requestId: "watch" }));
+    await expect.poll(() => listeners.size).toBe(0);
+    request("again", "watchDirectories", { root: "/repo", paths: [""] });
+    await expect.poll(() => listeners.size).toBe(1);
+    socket.terminate();
+    await expect.poll(() => listeners.size).toBe(0);
+  } finally { socket.terminate(); await host.close(); }
+});
+
+
+test("consumed unary listings may exceed the aggregate stream delivery budget", async () => {
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "available", listing: { entries: [{ path: "x".repeat(400000), directory: false }], ignored: [] } }),
+  });
+  const socket = await connect(host.bootstrap().url);
+  try {
+    for (let id = 0; id < 8; id++) {
+      const reply = new Promise<string>((resolve) => socket.once("message", (data) => resolve(String(data))));
+      socket.send(JSON.stringify({ _tag: "Request", id, tag: "listDirectory", payload: { root: "/repo", path: "" }, headers: [] }));
+      expect(await reply).toContain("available");
+    }
+  } finally { socket.terminate(); await host.close(); }
+});

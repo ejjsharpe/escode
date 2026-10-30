@@ -1,28 +1,13 @@
-import { listDirectory, subscribeChatSummaries } from "@escode/client-runtime";
+import { createDirectoryClient } from "@escode/client-runtime";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+const directories = createDirectoryClient(() => ipcRenderer.invoke("local-bootstrap"));
+window.addEventListener("unload", () => { void directories.close(); });
 contextBridge.exposeInMainWorld(
   "escode",
   Object.freeze({
-    chatSummaries: (apply: Parameters<typeof subscribeChatSummaries>[1], error: (message: string) => void) =>
-      subscribeChatSummaries(() => ipcRenderer.invoke("local-bootstrap"), apply, error),
-    listDirectory: (root: string, path: string) =>
-      listDirectory(() => ipcRenderer.invoke("local-bootstrap"), root, path),
-    watchFiles: (root: string, paths: string[], callback: (error?: string) => void) => {
-      const id = crypto.randomUUID();
-      let disposed = false;
-      const listener = (_event: unknown, value: { id: string; root: string; error?: string }) => {
-        if (!disposed && value.id === id && value.root === root) callback(value.error);
-      };
-      ipcRenderer.on("files-changed", listener);
-      void ipcRenderer.invoke("files-watch", root, id, paths).catch((error) => {
-        if (!disposed) callback(String(error));
-      });
-      return () => {
-        disposed = true;
-        ipcRenderer.removeListener("files-changed", listener);
-        void ipcRenderer.invoke("files-watch", root, id, []).catch(() => {});
-      };
-    },
+    chatSummaries: directories.chatSummaries,
+    listDirectory: directories.listDirectory,
+    watchFiles: directories.watchFiles,
     nativeFiles: (files: File[]) => {
       if (!Array.isArray(files) || !files.length) throw Error("No native files.");
       const paths = files.map((file) => webUtils.getPathForFile(file));

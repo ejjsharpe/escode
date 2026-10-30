@@ -344,6 +344,7 @@ export function FilesTree({
   const editing = useRef(edit);
   editing.current = edit;
   const pendingRescan = useRef(false);
+  const revealing = useRef(0);
   function load(path: string): Promise<Listing> {
     const pending = loaded.current.get(path);
     if (pending) return pending;
@@ -385,7 +386,7 @@ export function FilesTree({
   }
   function rescan() {
     // Keep the inline field mounted until its user commits or cancels.
-    if (editing.current) {
+    if (editing.current || revealing.current) {
       pendingRescan.current = true;
       return;
     }
@@ -401,10 +402,10 @@ export function FilesTree({
   const watchPaths = JSON.stringify(loadedDirectories().sort());
   useEffect(() => {
     if (!active) return;
-    return window.escode.watchFiles(root, JSON.parse(watchPaths), (error) => {
+    return window.escode.watchFiles(root, JSON.parse(watchPaths), (error, ready) => {
       if (error) setWatchError(error);
       rescan();
-      if (!error) setWatchRevision((r) => r + 1);
+      if (!error && !ready) setWatchRevision((r) => r + 1);
     });
   }, [root, active, watchPaths, watchRevision]);
   const wasActive = useRef(active);
@@ -487,46 +488,52 @@ export function FilesTree({
       setRevealMessage("");
       setHiddenReveal("");
     }
-    const parts = file.split("/");
-    const ancestors: string[] = [];
-    for (let i = 0; i < parts.length; i++) {
-      const parent = parts.slice(0, i).join("/");
-      const listing = await load(parent);
-      if (!valid()) return;
-      const path = parts.slice(0, i + 1).join("/");
-      if (!listing.entries?.some((e) => e.path === path)) {
-        if (explicit)
-          setRevealMessage(listing.error || "Active file is unavailable. Refresh and try again.");
-        return;
-      }
-      if (
-        !showIgnored &&
-        latest.current.hideIgnored &&
-        !filterError &&
-        !listing.filterError &&
-        listing.ignored?.includes(path)
-      ) {
-        if (explicit) {
-          setHiddenReveal(file);
-          setRevealMessage("Active file is hidden by Hide Git-ignored files.");
+    revealing.current++;
+    try {
+      const parts = file.split("/");
+      const ancestors: string[] = [];
+      for (let i = 0; i < parts.length; i++) {
+        const parent = parts.slice(0, i).join("/");
+        const listing = await load(parent);
+        if (!valid()) return;
+        const path = parts.slice(0, i + 1).join("/");
+        if (!listing.entries?.some((e) => e.path === path)) {
+          if (explicit)
+            setRevealMessage(listing.error || "Active file is unavailable. Refresh and try again.");
+          return;
         }
-        return;
+        if (
+          !showIgnored &&
+          latest.current.hideIgnored &&
+          !filterError &&
+          !listing.filterError &&
+          listing.ignored?.includes(path)
+        ) {
+          if (explicit) {
+            setHiddenReveal(file);
+            setRevealMessage("Active file is hidden by Hide Git-ignored files.");
+          }
+          return;
+        }
+        if (i < parts.length - 1) ancestors.push(path);
       }
-      if (i < parts.length - 1) ancestors.push(path);
-    }
-    if (!valid()) return;
-    if (showIgnored) {
-      update({ hideIgnored: false });
-      requestAnimationFrame(() => {
-        if (valid()) revealButton.current?.focus();
-      });
-    }
-    update({ expanded: [...new Set([...latest.current.expanded, ...ancestors])] });
-    restoring.current = false;
-    pendingScroll.current = file;
-    if (explicit) {
-      setHiddenReveal("");
-      setRevealMessage("");
+      if (!valid()) return;
+      if (showIgnored) {
+        update({ hideIgnored: false });
+        requestAnimationFrame(() => {
+          if (valid()) revealButton.current?.focus();
+        });
+      }
+      update({ expanded: [...new Set([...latest.current.expanded, ...ancestors])] });
+      restoring.current = false;
+      pendingScroll.current = file;
+      if (explicit) {
+        setHiddenReveal("");
+        setRevealMessage("");
+      }
+    } finally {
+      revealing.current--;
+      if (!revealing.current && pendingRescan.current) rescan();
     }
   }
   useEffect(() => {

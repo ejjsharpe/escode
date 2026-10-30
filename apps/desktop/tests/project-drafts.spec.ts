@@ -70,6 +70,13 @@ send({id:m.id,result});});`,
     await expect(message()).toHaveValue("Retain this draft");
     await expect(page.locator(".agents .directory")).toContainText(worktree);
     await expect.poll(async () => (await records())[0]?.project).toBe(beta);
+    await message().fill("Newer prompt in beta");
+    await expect.poll(async () => (await records())[0]?.draft).toBe("Newer prompt in beta");
+    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(alpha);
+    await expect(message()).toHaveValue("Newer prompt in beta");
+    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(beta);
+    await expect(message()).toHaveValue("Newer prompt in beta");
+    await message().fill("Retain this draft");
     expect(await readFile(join(dir, "calls"), "utf8").catch(() => "")).toBe("");
     await page.setViewportSize({ width: 728, height: 600 });
     await message().scrollIntoViewIfNeeded();

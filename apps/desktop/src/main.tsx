@@ -41,7 +41,7 @@ declare global {
       toolStatus(): Promise<unknown>;
       project: ProjectBridge;
       listDirectory(root: string, path: string): Promise<import("@escode/contracts").DirectoryResult>;
-      watchFiles(root: string, paths: string[], callback: (error?: string) => void): () => void;
+      watchFiles(root: string, paths: string[], callback: (error?: string, ready?: boolean) => void): () => void;
       nativeFiles(files: File[]): Promise<string>;
     };
     MonacoEnvironment: { getWorker(_: string, label: string): Worker };

@@ -72,13 +72,18 @@ test("external restoration, loaded/collapsed updates, focus recovery and dirty m
     await page.keyboard.press("Meta+s");
     await expect(page.locator(".monaco-editor")).toContainText("retained external deletion edits");
     await expect(readFile(join(root, "folder/dirty.txt"))).rejects.toThrow();
-    // Suppress host delivery to exercise focus and explicit recovery independently.
-    await app.evaluate(({ webContents }) => {
-      for (const contents of webContents.getAllWebContents()) {
-        const send = contents.send.bind(contents);
-        contents.send = (channel, ...args) => { if (channel !== "files-changed") send(channel, ...args); };
-      }
-    });
+    // Suppress native watch delivery to exercise focus and explicit recovery independently.
+    await app.evaluate((_electron, root) => {
+      const fs = process.getBuiltinModule("fs") as any;
+      const probe = fs.watch(root), prototype = Object.getPrototypeOf(probe), emit = prototype.emit;
+      probe.close();
+      prototype.emit = function(event: string, ...args: any[]) {
+        if (event === "change") {
+          return false;
+        }
+        return emit.call(this, event, ...args);
+      };
+    }, root);
     await writeFile(join(root, "missed.txt"), "missed");
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(row("missed.txt")).toBeVisible();
@@ -87,6 +92,7 @@ test("external restoration, loaded/collapsed updates, focus recovery and dirty m
     await expect(row("manual.txt")).toBeVisible();
     await expect.poll(async () => (await readFile(join(user, "workspace.json"), "utf8"))).toContain("retained external deletion edits");
     await app.evaluate(({ app }) => app.exit(0));
+    await rm(join(user, "foundation/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(page.locator(".monaco-editor")).toContainText("retained external deletion edits");
@@ -142,6 +148,14 @@ test("generated tree loads only expanded directories and stays navigable", async
     await writeFile(join(root, "folder-000/external.txt"), "external");
     await expect(page.getByRole("treeitem", { name: "external.txt", exact: true })).toBeVisible();
     console.log(`LARGE external notification to visible ${(performance.now() - external).toFixed(0)}ms`);
+    await rename(join(root, "folder-000"), join(root, "replaced-folder"));
+    await mkdir(join(root, "folder-000"));
+    await writeFile(join(root, "folder-000/replacement.txt"), "replacement");
+    await expect(page.getByRole("treeitem", { name: "replacement.txt", exact: true })).toBeVisible();
+    await writeFile(join(root, "folder-000/after-replacement.txt"), "new identity");
+    await expect(page.getByRole("treeitem", { name: "after-replacement.txt", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await expect.poll(() => app.evaluate(() => [...(globalThis as any).watched])).toEqual([]);
   } finally {
     await app.evaluate(({ app }) => app.exit(0));
     await rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -177,20 +191,27 @@ test("watch failure stays usable, focus retries, checkout switch disposes, repla
     await expect(page.getByText(/Automatic Files updates unavailable:/)).toHaveCount(0);
     await writeFile(join(root, "automatic.txt"), "automatic");
     await expect(page.getByRole("treeitem", { name: "automatic.txt", exact: true })).toBeVisible();
-    await app.evaluate(({ webContents }) => {
+    await app.evaluate((_electron, root) => {
+      const fs = process.getBuiltinModule("fs") as any;
+      const probe = fs.watch(root), prototype = Object.getPrototypeOf(probe), emit = prototype.emit;
+      probe.close();
       (globalThis as any).heldChanges = [];
-      for (const contents of webContents.getAllWebContents()) {
-        const send = contents.send.bind(contents);
-        contents.send = (channel, ...args) => {
-          if (channel === "files-changed") (globalThis as any).heldChanges.push(() => send(channel, ...args));
-          else send(channel, ...args);
-        };
-      }
-    });
+      (globalThis as any).restoreWatchEvents = () => { prototype.emit = emit; };
+      prototype.emit = function(event: string, ...args: any[]) {
+        if (event === "change") {
+          (globalThis as any).heldChanges.push(() => emit.call(this, event, ...args));
+          return false;
+        }
+        return emit.call(this, event, ...args);
+      };
+    }, root);
     await writeFile(join(root, "delayed-origin.txt"), "delayed");
     await expect.poll(() => app.evaluate(() => (globalThis as any).heldChanges.length)).toBeGreaterThan(0);
     await open(other);
-    await app.evaluate(() => { for (const send of (globalThis as any).heldChanges.splice(0)) send(); });
+    await app.evaluate(() => {
+      (globalThis as any).restoreWatchEvents();
+      for (const send of (globalThis as any).heldChanges.splice(0)) send();
+    });
     await expect(page.getByRole("treeitem", { name: "delayed-origin.txt", exact: true })).toHaveCount(0);
     await writeFile(join(root, "old-checkout.txt"), "old");
     await expect(page.getByRole("treeitem", { name: "old-checkout.txt", exact: true })).toHaveCount(0);
@@ -200,6 +221,19 @@ test("watch failure stays usable, focus retries, checkout switch disposes, repla
     await page.locator(".monaco-editor textarea").focus();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("keep work across root replacement");
+    // Destroy only this fixture's established local RPC sockets, retaining Electron IPC.
+    await app.evaluate(() => {
+      for (const handle of (process as any)._getActiveHandles()) {
+        if (handle.constructor.name === "Socket" && handle.localAddress === "127.0.0.1" &&
+            handle.remoteAddress === "127.0.0.1" && handle.server) handle.destroy();
+      }
+    });
+    await expect(page.getByText(/Automatic Files updates unavailable:/)).toBeVisible();
+    await expect(page.locator(".monaco-editor")).toContainText("keep work across root replacement");
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(page.getByText(/Automatic Files updates unavailable:/)).toHaveCount(0);
+    await writeFile(join(root, "after-disconnect.txt"), "recovered connection");
+    await expect(page.getByRole("treeitem", { name: "after-disconnect.txt", exact: true })).toBeVisible();
     await rename(root, root + "-original");
     await mkdir(root);
     await writeFile(join(root, "foreign.txt"), "outside replacement");
