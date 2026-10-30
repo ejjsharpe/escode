@@ -7,7 +7,8 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node", "vite-plus/client"]
+    "types": ["node", "vite-plus/client"],
+    "allowImportingTsExtensions": true
   },
-  "include": ["src", "host", "tests", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "host", "tests", "probe/main.ts", "vite.config.ts", "playwright.config.ts"]
 }
