@@ -30,3 +30,14 @@ Composition adapts the qualified disposable probe at `36ed63490fa2fa3e1fd0573540
 ## Evidence and limits
 
 Recorded installation is the same macOS 26.3.1 arm64, Electron 45.1.0 / Node 24.22.1 / Chromium 156.0.8078.49 installation qualified in the prerequisite probe. No live provider turn is required by this read-only slice. New manual VoiceOver evidence is not claimed; unchanged native Finder/clipboard and user-owned manual limits remain in the Files acceptance record. Keyboard/focus checks are automated, not VoiceOver validation. Broad provider/platform, multi-client/revocation and capacity qualification remain deferred. Existing legacy stores and external resources are neither imported into the foundation store nor deleted by this slice.
+
+Verification on 2026-10-30 at `b203007`:
+
+- Typecheck, desktop/workspace lint, diff whitespace, frozen Bun 1.4.4 install, build and package passed.
+- Full serial host suite: **168 passed, four existing opt-in skips** (63.21 seconds).
+- Five focused protocol tests passed, including request admission while the adapter stalls and output exhaustion while a receiver pauses reading. Healthy clients still complete after exhaustion.
+- All sixteen focused development desktop tests passed (44.6 seconds), exercising the actual WebSocket, twenty simultaneous listing calls, path/root denial, IPC removal, reveal/filter memory and focus, explicit-recovery relaunch, protected state and Files preservation.
+- All seven focused packaged ASAR/restricted-PATH tests passed (19.2 seconds), including actual directory contracts, reveal/filter controls, unavailable/replaced checkout and quit handling, and persistent identities across relaunch.
+- Independent final Standards and Spec reviews each reported zero findings. Initial Spec findings about rescan fanout and stalled delivery were fixed and covered before acceptance.
+
+Runtime changes do not introduce new controls or keyboard interactions. Existing automated focus/reveal assertions were rerun through the new path; new manual VoiceOver operation remains unverified. Generated test outputs and abandoned disposable test processes/directories were cleaned; current build/package outputs remain available for inspection.
