@@ -181,3 +181,24 @@ test("legacy Files navigation migrates through a fresh store while drafts and ap
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("fresh client recovery retains ownership and rejects unsupported or other-client stores", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-client-recovery-"));
+  try {
+    const file = join(dir, "client-workspace-v1.json");
+    const owner = { hostId: "host", clientId: "client" };
+    const store = new Workspace(file, owner);
+    await store.write({ projects: [], selected: "", views: {}, drafts: [{
+      root: dir, path: "a", text: "available edit", disk: { text: "loaded disk", version: "loaded hash" },
+    }] });
+    expect((await new Workspace(file, owner).read()).drafts[0]).toMatchObject({
+      text: "available edit", disk: { text: "loaded disk", version: "loaded hash" },
+    });
+    await expect(new Workspace(file, { ...owner, clientId: "other" }).read()).rejects.toThrow("wrongly owned");
+    const { readFile, writeFile } = await import("node:fs/promises");
+    const bytes = await readFile(file, "utf8");
+    await writeFile(file, JSON.stringify({ ...JSON.parse(bytes), storageVersion: 2 }));
+    await expect(new Workspace(file, owner).read()).rejects.toThrow("Unsupported");
+    expect((await readFile(file, "utf8"))).toContain("available edit");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

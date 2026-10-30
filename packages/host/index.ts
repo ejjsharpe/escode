@@ -5,10 +5,21 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult } from "@escode/contracts";
+import { maximumFileFrameBytes, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult } from "@escode/contracts";
 
 // Guard parser/error writes too; they bypass the RPC response budget.
 class BoundedWebSocket extends WebSocket {
+  override emit(event: string | symbol, ...args: any[]): boolean {
+    if (event === "message" && Buffer.byteLength(args[0]) > maximumFrameBytes) {
+      try {
+        const request = JSON.parse(String(args[0]));
+        if (request?._tag !== "Request" || !["readFile", "saveFile", "loadWorkspace", "persistWorkspace"].includes(request.tag)) {
+          this.terminate(); return false;
+        }
+      } catch { this.terminate(); return false; }
+    }
+    return super.emit(event, ...args);
+  }
   override send(
     data: Parameters<WebSocket["send"]>[0],
     options?: Parameters<WebSocket["send"]>[1] | ((error?: Error) => void),
@@ -34,6 +45,10 @@ export async function startDirectoryHost(options: {
   sendState?: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
   sendMessage?: (command: SendCommand) => Promise<SendReceipt>;
   sendStatus?: (commandId: string) => Promise<SendReceipt | null>;
+  readFile?: (root: string, path: string) => Promise<typeof import("@escode/contracts").FileDocument.Type>;
+  saveFile?: (root: string, path: string, text: string, version: string) => Promise<typeof import("@escode/contracts").FileSaveResult.Type>;
+  loadWorkspace?: () => Promise<typeof import("@escode/contracts").WorkspaceLoad.Type>;
+  persistWorkspace?: (state: typeof import("@escode/contracts").WorkspaceState.Type) => Promise<void>;
   now?: () => number;
 }) {
   const epoch = randomUUID();
@@ -46,7 +61,7 @@ export async function startDirectoryHost(options: {
   const started = new Promise<void>((resolve, reject) => { ready = resolve; failed = reject; });
   const program = Effect.gen(function* () {
     const server = yield* NodeHttpServer.make(createServer, {
-      host: "127.0.0.1", port: 0, websocket: { maxPayload: maximumFrameBytes, perMessageDeflate: false, WebSocket: BoundedWebSocket },
+      host: "127.0.0.1", port: 0, websocket: { maxPayload: maximumFileFrameBytes, perMessageDeflate: false, WebSocket: BoundedWebSocket },
     });
     if (server.address._tag !== "InetAddressV4") throw Error("Expected loopback address");
     port = server.address.port;
@@ -72,6 +87,7 @@ export async function startDirectoryHost(options: {
       sentBytes.set(id, Math.max(0, (sentBytes.get(id) ?? 0) - entry.bytes));
       unacknowledged.get(id)?.delete(requestId);
     };
+    const fileRequests = new Map<number, Set<string | number>>();
     const pending = new Map<number, Set<string | number>>();
     const liveRequests = new Map<number, Set<string | number>>();
     let interrupt: (id: number, requestId: string | number) => Effect.Effect<void> = () => Effect.void;
@@ -81,7 +97,7 @@ export async function startDirectoryHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -95,6 +111,9 @@ export async function startDirectoryHost(options: {
           const requests = pending.get(id) ?? new Set<string | number>();
           if (!Schema.is(requestEnvelope)(data) || data.isNotification || data.discard ||
               requests.size >= 16 || requests.has(data.id)) return reject(id);
+          const file = ["readFile", "saveFile", "loadWorkspace", "persistWorkspace"].includes(data.tag);
+          if (Buffer.byteLength(JSON.stringify(data)) > (file ? maximumFileFrameBytes : maximumFrameBytes)) return reject(id);
+          if (file) { const files = fileRequests.get(id) ?? new Set(); files.add(data.id); fileRequests.set(id, files); }
           requests.add(data.id); pending.set(id, requests);
           if (data.tag === "chatLive") {
             const live = liveRequests.get(id) ?? new Set<string | number>();
@@ -112,7 +131,7 @@ export async function startDirectoryHost(options: {
         const bytes = (sentBytes.get(id) ?? 0) + Buffer.byteLength(JSON.stringify(response));
         if (response._tag === "Chunk" && liveRequests.get(id)?.has(response.requestId) && bytes > 1.5 * maximumFrameBytes)
           return stall(id, response.requestId);
-        if (bytes > 2 * maximumFrameBytes) return reject(id);
+        if (bytes > ("requestId" in response && fileRequests.get(id)?.has(response.requestId) ? maximumFileFrameBytes : 2 * maximumFrameBytes)) return reject(id);
         if (response._tag === "Chunk") sentBytes.set(id, bytes);
         if (response._tag === "Chunk") {
           const chunks = unacknowledged.get(id) ?? new Map();
@@ -121,17 +140,30 @@ export async function startDirectoryHost(options: {
           unacknowledged.set(id, chunks);
         }
         if (response._tag === "Exit") {
+          fileRequests.get(id)?.delete(response.requestId);
           pending.get(id)?.delete(response.requestId);
           liveRequests.get(id)?.delete(response.requestId);
         }
         return protocol.send(id, response, transferables);
       },
     };
-    yield* RpcServer.make(HostQueries, { concurrency: 16, onDisconnect: (id) => Effect.sync(() => { pending.delete(id); liveRequests.delete(id); rejected.delete(id); sentBytes.delete(id);
+    yield* RpcServer.make(HostQueries, { concurrency: 16, onDisconnect: (id) => Effect.sync(() => { pending.delete(id); fileRequests.delete(id); liveRequests.delete(id); rejected.delete(id); sentBytes.delete(id);
       for (const chunk of unacknowledged.get(id)?.values() ?? []) clearTimeout(chunk.timer);
       unacknowledged.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
       Effect.provide(HostQueries.toLayer({
+        readFile: ({ root, path }) => Effect.tryPromise({ try: async () => {
+          if (!options.readFile) throw Error("Files unavailable"); return options.readFile(root, path);
+        }, catch: String }),
+        saveFile: ({ root, path, text, version }) => Effect.tryPromise({ try: async () => {
+          if (!options.saveFile) throw Error("Files unavailable"); return options.saveFile(root, path, text, version);
+        }, catch: String }),
+        loadWorkspace: () => Effect.tryPromise({ try: async () => {
+          if (!options.loadWorkspace) throw Error("Recovery unavailable"); return options.loadWorkspace();
+        }, catch: String }),
+        persistWorkspace: ({ state }) => Effect.tryPromise({ try: async () => {
+          if (!options.persistWorkspace) throw Error("Recovery unavailable"); return options.persistWorkspace(state);
+        }, catch: String }),
         draftAction: ({ action }) => Effect.tryPromise({ try: async () => {
           if (!options.draftAction) throw Error("Draft editing unavailable");
           return Schema.decodeUnknownSync(DraftRecord)({ ...await options.draftAction(action) as object, draft: "" });

@@ -126,7 +126,14 @@ function validate(value: unknown): asserts value is WorkspaceState {
 }
 export class Workspace {
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(private file: string) {}
+  constructor(private file: string, private owner?: { hostId: string; clientId: string }) {}
+  private decode(value: unknown) {
+    if (!this.owner) return value;
+    const stored = value as { storageVersion?: number; hostId?: string; clientId?: string };
+    if (stored?.storageVersion !== 1 || stored.hostId !== this.owner.hostId || stored.clientId !== this.owner.clientId)
+      throw Error("Unsupported or wrongly owned client recovery store; retained for inspection.");
+    return value;
+  }
   private async readApprovals(): Promise<{ project: string; root: string }[]> {
     try {
       const value = JSON.parse(
@@ -167,7 +174,7 @@ export class Workspace {
   async read(): Promise<WorkspaceState> {
     await this.queue;
     try {
-      const state: unknown = JSON.parse(await readFile(this.file, "utf8"));
+      const state: unknown = this.decode(JSON.parse(await readFile(this.file, "utf8")));
       validate(state);
       for (const view of Object.values(state.views)) {
         if (!view.files) {
@@ -204,8 +211,8 @@ export class Workspace {
   async readIntent(): Promise<import("./file-operations").Intent | null> {
     await this.queue;
     try {
-      const v = JSON.parse(await readFile(this.file, "utf8"));
-      if (v === null) return null;
+      const v = this.decode(JSON.parse(await readFile(this.file, "utf8"))) as any;
+      if (v === null || (this.owner && v.intent === null)) return null;
       if (
         !v ||
         !isAbsolute(v.root) ||
@@ -266,7 +273,9 @@ export class Workspace {
     const temporary = file + ".tmp";
     const fd = await open(temporary, "w", 0o600);
     try {
-      await fd.writeFile(JSON.stringify(value));
+      await fd.writeFile(JSON.stringify(this.owner && file === this.file
+        ? { ...(value === null ? { intent: null } : value as object), storageVersion: 1, ...this.owner }
+        : value));
       await fd.sync();
     } finally {
       await fd.close();

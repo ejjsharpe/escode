@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/rpc";
 
 export const wireRevision = "1";
+export const maximumFileFrameBytes = 32 * 1024 * 1024;
 export const maximumFrameBytes = 1024 * 1024;
 export const Listing = Schema.Struct({
   entries: Schema.Array(Schema.Struct({ path: Schema.String, directory: Schema.Boolean })),
@@ -100,6 +101,34 @@ export const DraftAction = Schema.Struct({
 });
 export type DraftAction = typeof DraftAction.Type;
 
-export const HostQueries = Directories.merge(RpcGroup.make(Rpc.make("draftAction", { payload: { action: DraftAction }, success: DraftRecord, error: Schema.String }), Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
+
+export const FileDocument = Schema.Struct({ text: Schema.String, version: Schema.String });
+export const FileSaveResult = Schema.Struct({ kind: Schema.Literals(["saved", "conflict"]), disk: FileDocument,
+  persistencePending: Schema.optionalKey(Schema.Boolean), message: Schema.optionalKey(Schema.String) });
+export const WorkspaceState = Schema.Struct({
+  projects: Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String })),
+  savedProjects: Schema.optionalKey(Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String }))),
+  agentsChat: Schema.optionalKey(Schema.String), selected: Schema.String,
+  views: Schema.Record(Schema.String, Schema.Struct({
+    files: Schema.optionalKey(Schema.Struct({ expanded: Schema.Array(Schema.String), selected: Schema.Array(Schema.String),
+      focus: Schema.String, scroll: Schema.Number, hideIgnored: Schema.optionalKey(Schema.Boolean) })),
+    mode: Schema.optionalKey(Schema.String), checkout: Schema.optionalKey(Schema.String), roots: Schema.optionalKey(Schema.Array(Schema.String)),
+    path: Schema.optionalKey(Schema.String), directory: Schema.optionalKey(Schema.String), chat: Schema.optionalKey(Schema.String),
+    change: Schema.optionalKey(Schema.Struct({ path: Schema.String, area: Schema.Literals(["staged", "unstaged", "untracked"]) })),
+  })),
+  drafts: Schema.Array(Schema.Struct({ root: Schema.String, path: Schema.String, text: Schema.String, disk: FileDocument })),
+});
+export const WorkspaceLoad = Schema.Struct({ state: WorkspaceState, errors: Schema.Array(Schema.String),
+  restored: Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String, branch: Schema.String,
+    changes: Schema.Array(Schema.Struct({ path: Schema.String, area: Schema.Literals(["staged", "unstaged", "untracked"]) })),
+    gitError: Schema.optionalKey(Schema.String), approvalRequired: Schema.optionalKey(Schema.Boolean) })) });
+export const Files = RpcGroup.make(
+  Rpc.make("readFile", { payload: { root: Schema.String, path: Schema.String }, success: FileDocument, error: Schema.String }),
+  Rpc.make("saveFile", { payload: { root: Schema.String, path: Schema.String, text: Schema.String, version: Schema.String }, success: FileSaveResult, error: Schema.String }),
+  Rpc.make("loadWorkspace", { success: WorkspaceLoad, error: Schema.String }),
+  Rpc.make("persistWorkspace", { payload: { state: WorkspaceState }, success: Schema.Void, error: Schema.String }),
+);
+
+export const HostQueries = Directories.merge(Files).merge(RpcGroup.make(Rpc.make("draftAction", { payload: { action: DraftAction }, success: DraftRecord, error: Schema.String }), Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
   success: ChatSummaries, error: Schema.String, stream: true,
 }), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));

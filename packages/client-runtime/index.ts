@@ -54,6 +54,10 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
     } finally { queued--; }
   }
   return {
+    readFile: (root: string, path: string) => chatQuery(client => client.readFile({ root, path })),
+    saveFile: (root: string, path: string, text: string, version: string) => chatQuery(client => client.saveFile({ root, path, text, version })),
+    loadWorkspace: () => chatQuery(client => client.loadWorkspace()),
+    persistWorkspace: (state: typeof import("@escode/contracts").WorkspaceState.Type) => chatQuery(client => client.persistWorkspace({ state })),
     draftAction: (action: import("@escode/contracts").DraftAction) => chatQuery(client => client.draftAction({ action })),
     sendState: (project: string | null, id: string) => chatQuery(client => client.sendState({ project, id })),
     sendMessage: (command: SendCommand) => chatQuery(client => client.sendMessage({ command })),

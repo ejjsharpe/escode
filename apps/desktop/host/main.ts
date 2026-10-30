@@ -97,14 +97,17 @@ app.whenReady().then(async () => {
   const removing = new Set<string>();
   let quitting = false;
   let mutationOrigin: string | undefined;
-  const workspace = new Workspace(join(app.getPath("userData"), "workspace.json"));
+  const workspace = new Workspace(join(app.getPath("userData"), "client-workspace-v1.json"), foundation.read());
   const operations = new FileOperations(
     workspace,
-    join(app.getPath("userData"), "file-operation.json"),
+    join(app.getPath("userData"), "client-file-operation-v1.json"),
+    foundation.read(),
   );
   mkdirSync(app.getPath("userData"), { recursive: true, mode: 0o700 });
   const stateFiles = [
     "workspace.json",
+    "client-workspace-v1.json",
+    "client-file-operation-v1.json",
     "approved-projects.json",
     "host-chats-v1.json",
     "file-operation.json",
@@ -232,13 +235,7 @@ app.whenReady().then(async () => {
     window.focus();
     window.webContents.send("close-request");
   });
-  ipcMain.handle("lifecycle", async (event, operation: unknown, ...args: unknown[]) => {
-    if (
-      event.sender !== window.webContents ||
-      event.senderFrame !== window.webContents.mainFrame ||
-      event.senderFrame.url !== documentURL
-    )
-      throw Error("Invalid sender");
+  const workspaceAction = async (operation: "load" | "persist", ...args: unknown[]) => {
     if (operation === "load" && !args.length) {
       const state = await workspace.read();
       const approved = await workspace.approved();
@@ -299,6 +296,15 @@ app.whenReady().then(async () => {
     if (operation === "persist" && args.length === 1) {
       return operations.persist(args[0]);
     }
+    throw Error("Invalid workspace request");
+  };
+  ipcMain.handle("lifecycle", async (event, operation: unknown, ...args: unknown[]) => {
+    if (
+      event.sender !== window.webContents ||
+      event.senderFrame !== window.webContents.mainFrame ||
+      event.senderFrame.url !== documentURL
+    )
+      throw Error("Invalid sender");
     if (operation === "dirty" && args.length === 1 && typeof args[0] === "string") {
       return (
         await dialog.showMessageBox(window, {
@@ -521,6 +527,17 @@ app.whenReady().then(async () => {
     }
     throw Error("Invalid draft action");
   };
+  const fileContext = async (root: string, path: string) => {
+    if (!projects.has(root)) throw Error("Open and approve this checkout first.");
+    const project = await checkout(root), identity = project.repository(), owner = projectSessions.get(identity);
+    const check = () => {
+      if (!owner || projectSessions.get(identity) !== owner || projects.get(root) !== project || quitting || removing.has(identity))
+        throw Error("Originating project unavailable or app quitting.");
+      if (isAppState(resolve(root, path))) throw Error("App state is unavailable through project file operations.");
+      project.checkoutIdentity();
+    };
+    check(); return { project, check };
+  };
   const directoryHost = await startDirectoryHost({
     draftAction,
     sendState: async (root, id) => ({ admissionEpoch: foundation.admissionEpoch, expected: await expectedSend(root, id) }),
@@ -554,6 +571,14 @@ app.whenReady().then(async () => {
           createdAt: c.createdAt, legacyOrder: c.legacyOrder, phase: c.phase, initialSend: c.initialSend,
           removed: c.removed, scratch: c.scratch, hasSent: c.hasSent, worktree: c.worktree, ...activity, unavailable: !!(c.removed || contextError || activity.unavailable) };
       }));
+    },
+    loadWorkspace: () => workspaceAction("load") as Promise<typeof import("@escode/contracts").WorkspaceLoad.Type>,
+    persistWorkspace: async (state) => { await workspaceAction("persist", state); },
+    readFile: async (root, path) => { const { project } = await fileContext(root, path); return project.read(path); },
+    saveFile: async (root, path, text, version) => {
+      const { project, check } = await fileContext(root, path);
+      if (mutationOrigin) throw Error("File operation awaiting confirmation.");
+      return operations.save(project, path, text, version, check);
     },
     ...foundation.read(), origin: dev ? developmentOrigin : "file://",
     watch: (root, paths, notify) => {
@@ -639,7 +664,7 @@ app.whenReady().then(async () => {
       await store.migrate(opened.repository(), opened.checkouts());
       return opened.status();
     }
-    if (operation === "files" || operation === "files-filter") throw Error("Invalid project request");
+    if (["read", "save", "files", "files-filter"].includes(String(operation))) throw Error("Invalid project request");
     const requestedRoot = args.shift();
     if (
       [
@@ -1332,10 +1357,6 @@ app.whenReady().then(async () => {
         ]);
       return;
     }
-    if (operation === "read" && args.length === 1 && typeof args[0] === "string")
-      return project.read(args[0]);
-    if (operation === "save" && args.length === 3 && args.every((a) => typeof a === "string"))
-      return project.save(args[0] as string, args[1] as string, args[2] as string);
     if (
       operation === "diff" &&
       args.length === 2 &&

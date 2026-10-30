@@ -71,7 +71,9 @@ contextBridge.exposeInMainWorld(
       return ipcRenderer.invoke("native-import-capture", paths);
     },
     lifecycle: (operation: string, ...args: unknown[]) =>
-      ipcRenderer.invoke("lifecycle", operation, ...args),
+      operation === "load" ? directories.loadWorkspace()
+      : operation === "persist" ? directories.persistWorkspace(args[0] as typeof import("@escode/contracts").WorkspaceState.Type)
+      : ipcRenderer.invoke("lifecycle", operation, ...args),
     onClose: (callback: () => void) => {
       const listener = () => callback();
       ipcRenderer.on("close-request", listener);
@@ -103,6 +105,8 @@ contextBridge.exposeInMainWorld(
       : ipcRenderer.invoke("chat", operation, ...args),
     toolStatus: () => ipcRenderer.invoke("tools:status"),
     project: (operation: string, ...args: string[]) =>
-      ipcRenderer.invoke("project", operation, ...args),
+      operation === "read" ? directories.readFile(args[0], args[1])
+      : operation === "save" ? directories.saveFile(args[0], args[1], args[2], args[3])
+      : ipcRenderer.invoke("project", operation, ...args),
   }),
 );

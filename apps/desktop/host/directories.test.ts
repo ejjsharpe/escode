@@ -306,3 +306,28 @@ test("live handoff sends bounded append batches, retains ACK charge and releases
     healthy.terminate();
   } finally { socket.terminate(); await host.close(); }
 }, 22000);
+
+test("authenticated Files accepts a full editor document and rejects invalid save payloads", async () => {
+  const text = "a".repeat(2 * 1024 * 1024);
+  let saves = 0;
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "unused" }),
+    readFile: async () => ({ text, version: "loaded" }),
+    saveFile: async (_root, _path, value, version) => {
+      saves++; expect(value).toBe(text); expect(version).toBe("loaded");
+      return { kind: "saved", disk: { text: value, version: "saved" } };
+    },
+  });
+  const socket = await connect(host.bootstrap().url);
+  const query = (id: string, tag: string, payload: unknown) => new Promise<string>(resolve => {
+    socket.once("message", data => resolve(String(data)));
+    socket.send(JSON.stringify({ _tag: "Request", id, tag, payload, headers: [] }));
+  });
+  try {
+    expect(await query("1", "readFile", { root: "/approved", path: "a" })).toContain(text);
+    expect(await query("2", "saveFile", { root: "/approved", path: "a", text, version: "loaded" })).toContain('"saved"');
+    expect(saves).toBe(1);
+    expect(await query("3", "saveFile", { root: "/approved", path: "a", text: 1, version: "loaded" })).toContain("Failure");
+    expect(saves).toBe(1);
+  } finally { const done = closed(socket); socket.close(); await done; await host.close(); }
+});

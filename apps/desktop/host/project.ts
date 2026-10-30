@@ -25,7 +25,7 @@ const directoryFlags = constants.O_RDONLY | constants.O_DIRECTORY | 0x20000000;
 export const limit = 2 * 1024 * 1024;
 export type Document = { text: string; version: string };
 export type Change = { path: string; area: "staged" | "unstaged" | "untracked" };
-export type SaveResult = { kind: "saved"; disk: Document } | { kind: "conflict"; disk: Document };
+export type SaveResult = ({ kind: "saved"; disk: Document } | { kind: "conflict"; disk: Document }) & { persistencePending?: boolean; message?: string };
 export class Project {
   private directory: number | undefined;
   private gitDirectory = "";

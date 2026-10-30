@@ -318,6 +318,10 @@ function CheckoutView({
         setConflict({ path: target, disk: result.disk });
         setMessage("Disk changed. Compare, overwrite this disk version, or reload.");
       } else {
+        if (result.persistencePending) {
+          setMessage(result.message ?? "Saved on disk; recovery requires restart. Available edits retained.");
+          return false;
+        }
         b.disk = result.disk;
         setDirty(b.model.getValue() !== b.disk.text);
         setConflict(null);
