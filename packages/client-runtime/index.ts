@@ -81,7 +81,7 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
           const detail = Schema.decodeUnknownSync(ChatDetail)({ ...batch.detail, items: next });
           if (new TextEncoder().encode(JSON.stringify(detail)).length > 512 * 1024) throw Error("Live cache exhausted");
           apply(detail);
-          if (warning) error(warning);
+          if (warning && revision === 0) error(warning);
           items = next; epoch = batch.epoch; revision = batch.revision;
         })));
       });

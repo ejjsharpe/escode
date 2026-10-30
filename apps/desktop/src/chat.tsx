@@ -266,12 +266,12 @@ export function ChatView({
               )}
             <div className="chat-actions">
               <Button
-                disabled={working || snapshot?.busy}
+                disabled={working}
                 onClick={() => void store.reconnect(selected)}
               >
                 Retry connection / reload history
               </Button>
-              <Button disabled={working || snapshot?.busy} onClick={() => void window.escode.chat("resolveSend", project, selected)}>
+              <Button disabled={working || snapshot?.busy} onClick={() => void window.escode.chat("resolveSend", project, selected).then(() => store.reconnect(selected))}>
                 Resolve previous Send…
               </Button>
               <Button
