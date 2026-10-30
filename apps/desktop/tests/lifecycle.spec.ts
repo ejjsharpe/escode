@@ -214,7 +214,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       await page.getByLabel("Message Codex").fill("composer retained through close");
       const before = await page.evaluate(() => window.escode.lifecycle("load"));
       const chatId = (await page.evaluate(readChats, root))[0].id;
-      const snapshot = await page.evaluate(({ root, chatId }) => window.escode.chat("snapshot", root, chatId), { root, chatId });
+      const snapshot = await page.evaluate(({ root, chatId }) => window.escode.chat("open", root, chatId), { root, chatId });
       const windowId = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].id);
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
       await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible())).toBe(false);
@@ -227,7 +227,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       await expect(page.getByRole("status")).toHaveText("Running");
       const after = await page.evaluate(() => window.escode.lifecycle("load"));
       expect(after.state.drafts).toEqual(before.state.drafts);
-      expect(await page.evaluate(({ root, chatId }) => window.escode.chat("snapshot", root, chatId), { root, chatId })).toEqual(snapshot);
+      expect(await page.evaluate(({ root, chatId }) => window.escode.chat("open", root, chatId), { root, chatId })).toEqual(snapshot);
       expect(await readFile(join(root, "turns"), "utf8")).toBe("sent\n");
 
       const managed = closeProject
