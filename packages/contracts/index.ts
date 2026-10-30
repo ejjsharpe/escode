@@ -138,7 +138,19 @@ export const TrashBatch = Schema.Struct({
   saves: Schema.Array(Schema.Struct({ path: Schema.String, disk: FileDocument })),
   requiresAck: Schema.Boolean, message: Schema.String,
 });
+const TransferPaths = Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(10000));
+export const TransferAction = Schema.Union([
+  Schema.Struct({ root: Schema.String, operation: Schema.Literal("drag-capture"), paths: TransferPaths }),
+  Schema.Struct({ root: Schema.String, operation: Schema.Literal("clipboard-capture"), kind: Schema.Literals(["copy", "cut"]), paths: TransferPaths }),
+  Schema.Struct({ root: Schema.String, operation: Schema.Literal("transfer"), kind: Schema.Literals(["paste", "duplicate", "drag-move", "drag-copy", "import"]), parent: Schema.String, paths: Schema.Array(Schema.String).check(Schema.isMaxLength(10000)) }),
+]);
+export type TransferAction = typeof TransferAction.Type;
+export const TransferResult = Schema.Union([Schema.String, Schema.Struct({
+  results: TrashBatch.fields.results, open: Schema.Array(Schema.String),
+  requiresAck: Schema.Boolean, message: Schema.String,
+})]);
 export const Files = RpcGroup.make(
+  Rpc.make("transferAction", { payload: { action: TransferAction }, success: TransferResult, error: Schema.String }),
   Rpc.make("createEntry", { payload: { command: CreateCommand }, success: CreateReceipt, error: Schema.String }),
   Rpc.make("createState", { success: Schema.String, error: Schema.String }),
   Rpc.make("trashEntries", { payload: { root: Schema.String, paths: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(10000)) }, success: TrashBatch, error: Schema.String }),

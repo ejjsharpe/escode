@@ -131,6 +131,7 @@ test("dirty destination blocks Replace; duplicate text survives a fresh Electron
     const exit = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exit;
+    await rm(join(user, "foundation/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await page.locator('[data-path="a copy.ts"] > .tree-row').click();
@@ -292,6 +293,17 @@ test("explicit clean Replace uses native recovery and forged clipboard data gran
       (root) => window.escode.project("transfer", root, "paste", "target", []),
       root,
     );
+    for (const operation of ["clipboard-capture", "drag-capture", "transfer"]) {
+      expect(await app.evaluate(async ({ ipcMain, BrowserWindow }, { operation, root }) => {
+        const contents = BrowserWindow.getAllWindows()[0].webContents;
+        try {
+          await (ipcMain as any)._invokeHandlers.get("project")(
+            { sender: contents, senderFrame: contents.mainFrame }, operation, root,
+          );
+          return "unexpected success";
+        } catch (error) { return String(error); }
+      }, { operation, root })).toContain("Invalid project request");
+    }
     expect(result.results.map((r) => r.intent?.kind)).toEqual(["trash", "copy"]);
     expect(result.results.every((r) => r.applied)).toBe(true);
     expect(await readFile(join(root, "target/a.txt"), "utf8")).toBe("source bytes");
@@ -440,6 +452,7 @@ test("copy delivery updates an early-open clean destination after a second-item 
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
+    await rm(join(user, "foundation/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await page.locator('[data-path="target/a.ts"] > .tree-row').click();
@@ -560,7 +573,16 @@ for (const change of [
       } else {
         expect(await readFile(join(root, "target/a copy.ts"), "utf8")).toBe("source disk");
         expect(result.results[0].intent.root).toBe(root);
-        await page.evaluate((root) => window.escode.project("file-operation-ack", root), root);
+        // Direct bridge callers must reconcile returned drafts before acknowledging batch facts.
+        await page.evaluate(async ({ root, copies }) => {
+          const loaded = await window.escode.lifecycle("load");
+          for (const draft of copies) {
+            loaded.state.drafts = loaded.state.drafts.filter(d => d.root !== draft.root || d.path !== draft.path);
+            loaded.state.drafts.push(draft);
+          }
+          await window.escode.lifecycle("persist", loaded.state);
+          await window.escode.project("file-operation-ack", root);
+        }, { root, copies: result.results.flatMap((r: any) => r.intent?.copies ?? []) });
       }
       const original = change === "root replacement" ? root + "-original" : root;
       expect(await readFile(join(original, "a.ts"), "utf8")).toBe("source disk");

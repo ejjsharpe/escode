@@ -115,7 +115,10 @@ contextBridge.exposeInMainWorld(
       : ipcRenderer.invoke("chat", operation, ...args),
     toolStatus: () => ipcRenderer.invoke("tools:status"),
     project: (operation: string, ...args: string[]) =>
-      operation === "create-entry" ? createEntry(args[0], args[1], args[2], args[3] as "file" | "folder")
+      operation === "drag-capture" ? directories.transferAction({ root: args[0], operation, paths: args[1] as unknown as string[] })
+      : operation === "clipboard-capture" ? directories.transferAction({ root: args[0], operation, kind: args[1] as "copy" | "cut", paths: args[2] as unknown as string[] })
+      : operation === "transfer" ? directories.transferAction({ root: args[0], operation, kind: args[1] as "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", parent: args[2], paths: args[3] as unknown as string[] })
+      : operation === "create-entry" ? createEntry(args[0], args[1], args[2], args[3] as "file" | "folder")
       : operation === "read" ? directories.readFile(args[0], args[1])
       : operation === "trash-selection" ? directories.trashEntries(args[0], args[1] as unknown as string[])
       : operation === "save" ? directories.saveFile(args[0], args[1], args[2], args[3])

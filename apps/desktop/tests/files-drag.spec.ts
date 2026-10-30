@@ -111,6 +111,7 @@ test("real drag hover, Option copy and confirmed dirty move retain disk, drafts 
       "aria-expanded",
       "true",
     ); // active moved file is revealed
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Moved.");
     await row(page, "target/nested/a.ts").click();
     await expect(page.locator(".editor:visible")).toHaveAttribute(
       "data-model-uri",

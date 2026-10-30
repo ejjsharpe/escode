@@ -491,7 +491,15 @@ for (const change of [
         });
       }
       await f.app.evaluate(() => (globalThis as any).confirmBatch());
-      const result = await f.page.evaluate(() => (window as any).pendingBatch);
+      const result = await f.page.evaluate(() => (window as any).pendingBatch.catch((error: unknown) => ({ error: String(error) })));
+      if (result.error) {
+        expect(change).toBe("quit");
+        expect(result.error).toContain("Project session closed");
+        expect(await f.app.evaluate(() => (globalThis as any).trashFixtures)).toEqual([]);
+        expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe("disk a.txt");
+        expect(await readFile(join(f.root, "b.txt"), "utf8")).toBe("origin sibling");
+        return;
+      }
       expect(result.results).toHaveLength(2);
       expect(await readFile(join(other, "a.txt"), "utf8")).toBe("other checkout");
       if (change === "checkout replaced" || change === "quit") {
