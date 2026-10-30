@@ -26,7 +26,15 @@ test("Files uses authenticated directory contracts with denied paths and no list
     });
     for (const path of ["../", "/tmp", ".git", "folder/../../", "outside"])
       expect((await page.evaluate(({ root, path }) => window.escode.listDirectory(root, path), { root, path })).kind).not.toBe("available");
+    const rescan = await page.evaluate((root) => Promise.all(
+      Array.from({ length: 20 }, () => window.escode.listDirectory(root, "folder")),
+    ), root);
+    expect(rescan.every((result) => result.kind === "available")).toBe(true);
     const oldRoute = await page.evaluate((root) => (window.escode.project as any)("files-filter", root, "").then(() => "accepted", String), root);
     expect(oldRoute).toContain("Invalid project request");
-  } finally { await app.close(); await rm(base, { recursive: true, force: true }); }
+  } finally {
+    const exited = new Promise((resolve) => app.process().once("exit", resolve));
+    app.process().kill("SIGKILL"); await exited;
+    await rm(base, { recursive: true, force: true });
+  }
 });

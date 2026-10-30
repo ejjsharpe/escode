@@ -13,7 +13,7 @@ async function connect(url: string, headers = { Origin: "null" }): Promise<WebSo
     });
   });
 }
-const closed = (socket: WebSocket) => new Promise<void>((resolve) => socket.once("close", () => resolve()));
+const closed = (socket: WebSocket) => new Promise<void>((resolve) => { if (socket.readyState === WebSocket.CLOSED) resolve(); else socket.once("close", () => resolve()); });
 test("local trust checks reject before dispatch; credentials expire and cannot be replayed", async () => {
   let clock = Date.now(), calls = 0;
   const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null", now: () => clock,
@@ -80,6 +80,51 @@ test("malformed envelopes and payloads never reach the adapter; a healthy client
     healthy.send(JSON.stringify({ _tag: "Request", id: "1", tag: "listDirectory", headers: [], payload: { root: "/repo", path: "" } }));
     expect(await reply).toContain("available");
     expect(calls).toBe(1);
+    const end = closed(healthy); healthy.close(); await end;
+  } finally { await host.close(); }
+});
+
+test("request admission stays bounded while an adapter is stalled", async () => {
+  const releases: (() => void)[] = [];
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: () => new Promise((resolve) => releases.push(() => resolve({ kind: "available", listing: { entries: [], ignored: [] } }))) });
+  try {
+    const socket = await connect(host.bootstrap().url);
+    const rejection = new Promise<string>((resolve) => socket.on("message", (data) => {
+      if (String(data).includes("admission exhausted")) resolve(String(data));
+    }));
+    for (let i = 0; i < 40; i++) socket.send(JSON.stringify({ _tag: "Request", id: String(i), tag: "listDirectory", headers: [], payload: { root: "/repo", path: "" } }));
+    expect(await rejection).toContain("admission exhausted");
+    expect(releases.length).toBeLessThanOrEqual(16);
+    releases.forEach((release) => release());
+    const done = closed(socket); socket.close(); await done;
+  } finally { releases.forEach((release) => release()); await host.close(); }
+});
+
+test("stalled delivery exhausts a finite response budget without blocking a healthy client", async () => {
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "available", listing: { entries: [{ path: "x".repeat(400000), directory: false }], ignored: [] } }) });
+  try {
+    const socket = await connect(host.bootstrap().url);
+    let responses = 0;
+    const rejected = new Promise<void>((resolve) => {
+      socket.once("close", () => resolve());
+      socket.on("message", (data) => {
+        responses++;
+        if (String(data).includes("admission exhausted")) resolve();
+      });
+    });
+    socket.pause();
+    for (let i = 0; i < 20; i++) socket.send(JSON.stringify({ _tag: "Request", id: i, tag: "listDirectory", headers: [], payload: { root: "/repo", path: "" } }));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    socket.resume();
+    await rejected;
+    expect(responses).toBeLessThanOrEqual(6);
+    const done = closed(socket); socket.close(); await done;
+    const healthy = await connect(host.bootstrap().url);
+    const response = new Promise<string>((resolve) => healthy.once("message", (data) => resolve(String(data))));
+    healthy.send(JSON.stringify({ _tag: "Request", id: 1, tag: "listDirectory", headers: [], payload: { root: "/repo", path: "" } }));
+    expect(await response).toContain("available");
     const end = closed(healthy); healthy.close(); await end;
   } finally { await host.close(); }
 });

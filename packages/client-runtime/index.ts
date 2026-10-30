@@ -1,10 +1,20 @@
-import { Effect, Layer, Schedule, Schema } from "effect";
+import { Effect, Layer, Schedule, Schema, Semaphore } from "effect";
 import { RpcClient, RpcSerialization } from "effect/rpc";
 import { Socket } from "effect/socket";
 import { Bootstrap, Directories, type DirectoryResult } from "@escode/contracts";
 
-// A query scope releases its socket on success, failure or deadline; reads never fall back to IPC.
+const queries = Semaphore.makeUnsafe(4);
+let queued = 0;
+
 export async function listDirectory(bootstrap: () => Promise<unknown>, root: string, path: string): Promise<DirectoryResult> {
+  if (queued >= 10000) throw Error("Directory query admission exhausted. Refresh to retry.");
+  queued++;
+  try { return await Effect.runPromise(queries.withPermit(Effect.tryPromise({ try: () => query(bootstrap, root, path), catch: (error) => error }))); }
+  finally { queued--; }
+}
+
+// A query scope releases its socket on success, failure or deadline; reads never fall back to IPC.
+async function query(bootstrap: () => Promise<unknown>, root: string, path: string): Promise<DirectoryResult> {
   const target = Schema.decodeUnknownSync(Bootstrap)(await bootstrap());
   const url = new URL(target.url);
   if (url.protocol !== "ws:" || url.hostname !== "127.0.0.1" || !url.port ||

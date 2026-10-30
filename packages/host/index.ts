@@ -1,3 +1,4 @@
+import WebSocket from "ws";
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { NodeHttpServer } from "@effect/platform-node";
@@ -5,6 +6,20 @@ import { Effect, Fiber, Schema } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { Directories, maximumFrameBytes, wireRevision, type Bootstrap, type DirectoryResult } from "@escode/contracts";
+
+// Guard parser/error writes too; they bypass the RPC response budget.
+class BoundedWebSocket extends WebSocket {
+  override send(
+    data: Parameters<WebSocket["send"]>[0],
+    options?: Parameters<WebSocket["send"]>[1] | ((error?: Error) => void),
+    callback?: (error?: Error) => void,
+  ): void {
+    if (this.bufferedAmount > maximumFrameBytes) { this.terminate(); return; }
+    if (typeof options === "function") super.send(data, options);
+    else if (options) super.send(data, options, callback);
+    else super.send(data, callback);
+  }
+}
 
 // One host scope; no provider or project resource belongs to a socket.
 export async function startDirectoryHost(options: {
@@ -20,7 +35,7 @@ export async function startDirectoryHost(options: {
   const started = new Promise<void>((resolve, reject) => { ready = resolve; failed = reject; });
   const program = Effect.gen(function* () {
     const server = yield* NodeHttpServer.make(createServer, {
-      host: "127.0.0.1", port: 0, websocket: { maxPayload: maximumFrameBytes, perMessageDeflate: false },
+      host: "127.0.0.1", port: 0, websocket: { maxPayload: maximumFrameBytes, perMessageDeflate: false, WebSocket: BoundedWebSocket },
     });
     if (server.address._tag !== "InetAddressV4") throw Error("Expected loopback address");
     port = server.address.port;
@@ -30,8 +45,9 @@ export async function startDirectoryHost(options: {
       rejected.add(id);
       return protocol.send(id, { _tag: "Defect", defect: "Invalid request or request admission exhausted" });
     };
+    const sentBytes = new Map<number, number>();
     const pending = new Map<number, Set<string | number>>();
-    const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.String,
+    const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
       tag: Schema.Literal("listDirectory"), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
@@ -45,15 +61,21 @@ export async function startDirectoryHost(options: {
           if (!Schema.is(requestEnvelope)(data) || data.isNotification || data.discard ||
               requests.size >= 16 || requests.has(data.id)) return reject(id);
           requests.add(data.id); pending.set(id, requests);
-        } else if (!["Ping", "Eof", "Ack", "Interrupt"].includes(data._tag)) return reject(id);
+        } else if (data._tag === "Ack" || data._tag === "Interrupt") {
+          if (typeof data.requestId !== "string" && typeof data.requestId !== "number") return reject(id);
+        } else if (data._tag !== "Ping" && data._tag !== "Eof") return reject(id);
         return receive(id, data);
       })),
       send: (id, response, transferables) => {
+        if (rejected.has(id)) return Effect.void;
+        const bytes = (sentBytes.get(id) ?? 0) + Buffer.byteLength(JSON.stringify(response));
+        if (bytes > 2 * maximumFrameBytes) return reject(id);
+        sentBytes.set(id, bytes);
         if (response._tag === "Exit") pending.get(id)?.delete(response.requestId);
         return protocol.send(id, response, transferables);
       },
     };
-    yield* RpcServer.make(Directories, { concurrency: 16, onDisconnect: (id) => Effect.sync(() => { pending.delete(id); rejected.delete(id); }) }).pipe(
+    yield* RpcServer.make(Directories, { concurrency: 16, onDisconnect: (id) => Effect.sync(() => { pending.delete(id); rejected.delete(id); sentBytes.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
       Effect.provide(Directories.toLayer({ listDirectory: ({ root, path }) =>
         Effect.tryPromise(() => options.list(root, path)).pipe(Effect.catch(() =>
@@ -73,7 +95,8 @@ export async function startDirectoryHost(options: {
         return HttpServerResponse.empty({ status: 401 });
       tickets.delete(token);
       connections++;
-      return yield* httpEffect.pipe(Effect.ensuring(Effect.sync(() => { connections--; })));
+      return yield* httpEffect.pipe(Effect.timeoutOption("15 seconds"),
+        Effect.as(HttpServerResponse.empty()), Effect.ensuring(Effect.sync(() => { connections--; })));
     }));
     ready();
     yield* Effect.never;
