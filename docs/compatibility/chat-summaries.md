@@ -10,7 +10,7 @@ Summary schemas contain identities, checkout/preparation metadata and activity b
 
 Initial bounds reuse the directory host's 1 MiB frame limit, eight authenticated connections, sixteen admitted requests per connection, and 2 MiB delivery budget. A summary projection above 512 KiB fails visibly. Stream chunks retain their byte charge until acknowledgement; a missing ACK ends that connection after fifteen seconds. Healthy acknowledged streams have no fixed lifetime. The client retries summary reads after 500 ms; mutations are never replayed. Projections run every 300 ms. These are initial implementation limits, not measured production capacity. Broad multi-client/revocation and capacity qualification remain deferred.
 
-Verification on the [recorded local installation](effect-local-target.md):
+Verification passed on the [recorded local installation](effect-local-target.md):
 
 - `bun run typecheck`, `bun run lint`, `bun run test`, `bun run build`, `bun run package`.
 - `bun run --cwd apps/desktop test -- host/directories.test.ts`: authenticated transport regression, live activity, increasing epoch-scoped revisions, cancellation cleanup, oversized summary rejection, and healthy acknowledged delivery beyond fifteen seconds and 2 MiB cumulative traffic.
@@ -20,3 +20,5 @@ Verification on the [recorded local installation](effect-local-target.md):
 The existing Agents fixture's forced-crash restart explicitly removes the abandoned foundation owner lock after observing process exit. This is fixture-owned recovery; automatic stale-lock recovery is not claimed. The new-format version rejection check confirms exact-byte retention. No live provider turn is used by these fixtures.
 
 Keyboard focus, accessible labels and row controls are unchanged. Existing keyboard activation in the Agents fixture is reused; no new manual VoiceOver acceptance is claimed. The full cross-domain desktop suite, broad capacity benchmark, multi-client recovery and manual accessibility qualification are not claimed by this slice.
+
+After merging the remote directory-watch slice, all nine desktop checks in chat-summaries, project-drafts, concurrency, directory-host and files-watch passed, including the A → B → A composer edit regression. Packaged restricted-PATH checks for chat-summaries and directory-host both passed. The full host suite, lint and typecheck passed again. Separate final Standards and Spec reviews returned zero findings against the integrated diff.
