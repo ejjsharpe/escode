@@ -2,6 +2,8 @@
 
 Status: accepted by the user, 2026-10-30. Planning only; no implementation or runtime acceptance is implied. Decision owner: [What bounded first slice and phased plan establish the foundation while preserving accepted behaviour?](https://github.com/ejjsharpe/escode/issues/58). Destination: [Establish escode’s Effect host and client foundation](https://github.com/ejjsharpe/escode/issues/49).
 
+Subsequent delivery amendment: the [local runtime target and approved delivery scope](../compatibility/effect-local-target.md) links the approved fresh-state prerelease amendment and records this installation. That amendment supersedes conflicting legacy migration, broad qualification and separate domain-acceptance gates below and in pinned investigations. Unaffected architecture and preservation requirements remain in force; deferred checks are not accepted or passed.
+
 ## Evidence and authority
 
 This specification selects recommendations from the following pinned investigations. Their source inventories, dependency ledgers and executable-check matrices are part of the handoff; their unexecuted experiments remain unexecuted.
