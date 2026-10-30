@@ -22,6 +22,7 @@ for (const failure of [
   "replaced-directory",
   "lost-persistence",
   "provider",
+  "cancelled",
 ] as const) {
   test(`deferred worktree first Send and durable failures: ${failure}`, async () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "escode-worktree-draft-")));
@@ -100,7 +101,14 @@ for (const failure of [
           chat.id,
           "keep prompt",
           async () => {},
-          (snapshot) => store.prepareWorktree(snapshot, project, managed),
+          async (snapshot) => {
+            const prepared = await store.prepareWorktree(snapshot, project, managed);
+            if (failure === "cancelled") {
+              expect(service.snapshot(root, chat.id).preparing).toBe(true);
+              await service.stop(root, chat.id);
+            }
+            return prepared;
+          },
         ),
       ).rejects.toThrow();
       const saved = await new Chats(file).get(root, chat.id);
@@ -137,6 +145,12 @@ for (const failure of [
         }
         expect((await new Chats(file).get(root, chat.id)).checkout).toBe(saved.checkout);
       }
+      if (failure === "cancelled") {
+        expect(connections).toBe(0);
+        const restarted = new Chats(file);
+        expect(await restarted.prepareWorktree(saved, project, managed)).toEqual(saved);
+        expect((await restarted.get(root, chat.id)).draft).toBe("keep prompt");
+      }
       if (failure === "provider") expect(connections).toBe(1);
     } finally {
       service.close();
@@ -151,6 +165,8 @@ for (const outcome of [
   "creation-rejected",
   "creation-uncertain",
   "accepted-lost-ack",
+  "cancelled-creation",
+  "cancelled-acceptance",
   "live",
 ] as const) {
   test.skipIf(outcome === "live" && process.env.ESCODE_LIVE_CHAT !== "1")(
@@ -191,6 +207,7 @@ for (const outcome of [
                 if (method === "account/read") return { account: {} };
                 if (method === "thread/start") {
                   starts++;
+                  if (outcome === "cancelled-creation") await service.stop(root, chat.id);
                   if (outcome.startsWith("creation"))
                     throw Object.assign(Error("creation failed"), {
                       rejected: outcome === "creation-rejected",
@@ -206,6 +223,7 @@ for (const outcome of [
                   };
                 if (method === "turn/start") {
                   accepted++;
+                  if (outcome === "cancelled-acceptance") await service.stop(root, chat.id);
                   throw Error("accepted; acknowledgement lost");
                 }
                 if (method === "thread/turns/list")
@@ -264,6 +282,13 @@ for (const outcome of [
           await expect(restart.open(root, chat.id)).rejects.toThrow("uncertain");
         else await restart.open(root, chat.id);
         expect((await new Chats(file).get(root, chat.id)).checkout).toBe(saved.checkout);
+        if (outcome.startsWith("cancelled-")) {
+          expect(saved.threadId).toBe("known");
+          expect(saved.draft).toBe("retained initial message");
+          expect(starts).toBe(1);
+          expect(accepted).toBe(outcome === "cancelled-creation" ? 0 : 1);
+          expect((await new Chats(file).get(root, chat.id)).worktree).toEqual(saved.worktree);
+        }
         if (outcome === "accepted-lost-ack") {
           expect(accepted).toBe(1);
           expect(starts).toBe(1);

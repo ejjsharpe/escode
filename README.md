@@ -84,8 +84,7 @@ absolute paths can be copied; setup, commits and integration stay external.
 Worktrees live under Electron user data, separated by repository identity. Failed
 creation reports possible leftovers. Project drafts durably reserve their branch/path
 before Git creation; incomplete reservations remain attached and are never silently
-replaced on Retry. The older immediate-creation action reserves a fresh destination
-for each explicit attempt.
+replaced on Retry. Managed allocation is available only through a saved draft’s first Send; preparation Stop retains the reservation and never submits the prompt.
 
 Unsaved file buffers are persisted as local recovery drafts. Closing files or projects and explicit Quit offer Save/Discard/Cancel. Closing the macOS window hides it and retains its edits and host work; Dock activation reopens it. Closing a project editor leaves chat work running; quitting with active work requires Stop and Close.
 Quit interrupts active turns and terminates app-owned process groups. Restart

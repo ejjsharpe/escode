@@ -51,3 +51,40 @@ The unsigned arm64 package uses Electron 45.1.0. The build retains the existing 
 - `apps/desktop/src/chat.tsx`, `apps/desktop/src/worktrees.tsx`: draft choices, committed-base disclosure and copyable context within the existing layout.
 - `apps/desktop/host/worktree-drafts.test.ts`, `apps/desktop/tests/worktree-drafts.spec.ts`: host/failure/live and Electron workflow evidence.
 - `README.md`, `GLOSSARY.md`, this file: bounded behavior and evidence updates.
+
+
+## Foundation delivery — Create chats in reserved managed worktrees (#77)
+
+Managed allocation now occurs only in the durable Send path. The immediate
+`worktree-create` IPC handler, its renderer action and public overload are removed.
+Explicit discovered reuse and Stop use the validated authenticated host commands delivered by the parallel project-draft and durable-control slices; their
+replaced IPC handlers are removed. The existing removal authority, confirmation,
+no-force Git operation and dirty/recovery checks remain in place.
+
+Preparation is visible through the shared preparing/control-target state and Stop cancels that exact preparation.
+Already reserved resources remain attached to the saved chat. Synchronous Git
+creation completes before the host can process Stop; cancellation prevents the
+subsequent provider handoff rather than rolling back Git effects.
+
+Real-repository/fake-provider tests retain staged, unstaged, untracked and ignored
+originals, the exact absolute checkout/branch/base reservation, chat ID, composer
+and known provider thread across failures and restart. Added cancellation cases
+cover completed Git preparation, provider thread creation and accepted turn with
+lost acknowledgement. The creation case retains thread `known` and composer
+`retained initial message` with zero submitted turns; the acceptance case retains
+that same thread, composer and reservation with exactly one submitted turn.
+Restart opens history explicitly without starting a replacement thread or turn.
+
+The obsolete immediate-allocation Electron scenario is superseded by the draft
+workflow, including successful removal confirmation and retained chat identity.
+Lifecycle and retained-project fixtures now allocate through draft first Send.
+
+Local checks on 2026-10-30: typecheck, lint and build pass. The host suite passes
+192 tests with 4 opt-in skips using two workers; the first unrestricted run hit
+native-build/process timing limits, so those results are not claimed as passes.
+The expanded worktree test file passes 11 tests with one live-provider skip.
+Development/packaged Electron results are recorded below after final verification.
+No live provider turn or manual VoiceOver check was performed for this change.
+The Stop button is now enabled during preparation; it retains its native button
+keyboard behavior and does not move focus. Broader accessibility qualification
+and multi-client/capacity matrices remain deferred under the delivery amendment.

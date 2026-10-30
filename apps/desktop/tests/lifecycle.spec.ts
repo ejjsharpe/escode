@@ -236,14 +236,10 @@ createInterface({input:process.stdin}).on('line',line=>{
         ? await page.evaluate(async (root) => {
             const options = await window.escode.project("worktree-options", root);
             const base = options.bases.find((b) => b.ref === options.defaultRef)!;
-            const result = await window.escode.project(
-              "worktree-create",
-              root,
-              base.ref,
-              base.commit,
-            );
-            if (result.error) throw Error(result.error);
-            const chat = await window.escode.chat("create", root, result.root);
+            const chat = await window.escode.chat("createDraft", root);
+            await window.escode.chat("execution", root, chat.id, "new", base.ref, base.commit);
+            await window.escode.chat("send", root, chat.id, "run managed");
+            const result = (await window.escode.project("worktree-managed", root))[0];
             await window.escode.chat("draft", root, chat.id, "retained worktree draft");
             return result;
           }, root)

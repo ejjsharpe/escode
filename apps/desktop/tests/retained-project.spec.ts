@@ -69,11 +69,10 @@ send({id:m.id,result});});`,
     const managed = await page.evaluate(async (a) => {
       const options = await window.escode.project("worktree-options", a);
       const base = options.bases.find((b) => b.ref === options.defaultRef)!;
-      const result = await window.escode.project("worktree-create", a, base.ref, base.commit);
-      if (result.error) throw Error(result.error);
-      const chat = await window.escode.chat("create", a, result.root);
-      await window.escode.chat("open", a, chat.id);
-      await window.escode.chat("send", a, chat.id, "run alpha");
+      const chat = await window.escode.chat("createDraft", a);
+      await window.escode.chat("execution", a, chat.id, "new", base.ref, base.commit);
+      await window.escode.chat("send", a, chat.id, "run managed");
+      const result = (await window.escode.project("worktree-managed", a))[0];
       return { ...result, chat };
     }, a);
     await open(b);

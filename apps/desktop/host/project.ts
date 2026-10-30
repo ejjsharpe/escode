@@ -615,7 +615,7 @@ export class Project {
         root,
         branch,
         commit,
-        error: `Creation failed. No chat started. Inspect possible residual branch ${branch} and directory ${container} externally; both are retained. Refresh and retry creates a new destination. ${error instanceof Error ? error.message : String(error)}`,
+        error: `Creation failed. No chat started. Inspect possible residual branch ${branch} and directory ${container} externally; both are retained. The reservation is retained; Retry never replaces it. ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
@@ -881,12 +881,6 @@ export interface ProjectBridge {
     operation: "worktree-options",
     checkout: string,
   ): Promise<ReturnType<Project["worktreeOptions"]>>;
-  (
-    operation: "worktree-create",
-    checkout: string,
-    ref: string,
-    commit: string,
-  ): Promise<ReturnType<Project["createWorktree"]>>;
   (operation: "status", checkout: string): ReturnType<Project["status"]>;
   (
     operation: "entry-action",

@@ -215,6 +215,15 @@ send({id:m.id,result});});`,
       (await readFile(join(dir, "calls"), "utf8")).split("\n").filter((x) => x === "turn/start"),
     ).toHaveLength(1);
     expect((await records())[1].draft).toBe("Another nonempty draft");
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options?: any) => {
+        if (!options.detail.includes("Retained branch:") || !options.detail.includes("Affected chats:"))
+          throw Error("Missing removal confirmation context");
+        return { response: 0, checkboxChecked: false };
+      };
+    });
+    expect(await page.evaluate(({ beta, root }) => window.escode.project("worktree-remove", beta, root), { beta, root: prepared.checkout })).toBe(true);
+    expect((await records())[0]).toMatchObject({ id: original.id, checkout: prepared.checkout, threadId: "draft-thread", removed: true });
     await page.screenshot({ path: "test-results/escode-35-bound.png" });
     await app.evaluate(({ dialog }, root) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });

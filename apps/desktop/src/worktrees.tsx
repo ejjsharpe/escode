@@ -3,7 +3,6 @@ import { Button } from "@base-ui/react/button";
 import { persist, flush } from "./workspace";
 import type { Project } from "../host/project";
 type Options = ReturnType<Project["worktreeOptions"]>;
-type Created = ReturnType<Project["createWorktree"]>;
 export function WorktreeChoices({
   createChat,
   project,
@@ -15,9 +14,7 @@ export function WorktreeChoices({
 }) {
   const [managed, setManaged] = useState<ReturnType<Project["managedWorktrees"]>>([]);
   const [options, setOptions] = useState<Options>();
-  const [ref, setRef] = useState("");
   const [reuse, setReuse] = useState("");
-  const [created, setCreated] = useState<Created[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const run = async (action: () => Promise<void>) => {
@@ -35,7 +32,6 @@ export function WorktreeChoices({
     const value = await window.escode.project("worktree-options", project);
     setOptions(value);
     setManaged(await window.escode.project("worktree-managed", project));
-    setRef(value.defaultRef);
     setReuse("");
   };
   return (
@@ -50,48 +46,7 @@ export function WorktreeChoices({
             New worktrees start from the committed state only. Staged, unstaged, untracked, ignored
             and unsaved edits stay in the original checkout. No fetch, setup or integration runs.
           </p>
-          {options.bases.length ? (
-            <>
-              <label>
-                Local base
-                <select
-                  aria-label="Local base"
-                  value={ref}
-                  onChange={(e) => setRef(e.target.value)}
-                >
-                  {options.bases.map((b) => (
-                    <option key={b.ref} value={b.ref}>
-                      {b.ref}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p>
-                Resolved commit: <code>{options.bases.find((b) => b.ref === ref)?.commit}</code>
-              </p>
-              <Button
-                onClick={() =>
-                  void run(async () => {
-                    const commit = options.bases.find((b) => b.ref === ref)!.commit;
-                    const result = await window.escode.project(
-                      "worktree-create",
-                      project,
-                      ref,
-                      commit,
-                    );
-                    setCreated((previous) => [...previous, result]);
-                    if (result.error) throw Error(result.error);
-                    await refresh();
-                    await createChat(result.root);
-                  })
-                }
-              >
-                Create worktree and chat
-              </Button>
-            </>
-          ) : (
-            <p>Create a first commit externally, then refresh bases.</p>
-          )}
+          <p>Create a chat draft and choose its managed worktree before first Send.</p>
           <Button onClick={() => void run(refresh)}>Refresh bases and worktrees</Button>
           <label>
             Existing project worktree
@@ -141,33 +96,6 @@ export function WorktreeChoices({
             Remove managed worktree…
           </Button>
         </section>
-      ))}
-      {created.map((result) => (
-        <div key={result.root}>
-          <p>{result.error ? "Possible leftovers" : "Created worktree"}</p>
-          {result.error && <p role="alert">{result.error}</p>}
-          <Button
-            onClick={() =>
-              setCreated((previous) => previous.filter((item) => item.root !== result.root))
-            }
-          >
-            Dismiss result
-          </Button>
-          <label>
-            Worktree branch
-            <input readOnly value={result.branch} />
-          </label>
-          <Button onClick={() => void run(() => navigator.clipboard.writeText(result.branch))}>
-            Copy branch
-          </Button>
-          <label>
-            Worktree path
-            <input readOnly value={result.root} />
-          </label>
-          <Button onClick={() => void run(() => navigator.clipboard.writeText(result.root))}>
-            Copy path
-          </Button>
-        </div>
       ))}
       {busy && <p role="status">Preparing checkout…</p>}
       {error && <p role="alert">{error}</p>}

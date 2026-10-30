@@ -165,3 +165,5 @@ clipboard transfers.
 Integrated Files acceptance and its user-owned manual follow-up are recorded in
 [Files acceptance evidence](docs/compatibility/files-acceptance.md); the implemented
 Files terminology above does not certify those unverified native and VoiceOver checks.
+
+Managed worktree allocation occurs only on a saved draft’s first Send. Stopping preparation retains its reserved branch/path and prompt; Retry never allocates a replacement.
