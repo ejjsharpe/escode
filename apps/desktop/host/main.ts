@@ -155,6 +155,7 @@ app.whenReady().then(async () => {
       throw Error("Protected app state is inside this import.");
   };
   const captureImport = (paths: string[]) => {
+    if (imports.size >= 16) throw Error("Too many pending native imports. Wait for references to expire.");
     if (!paths.length || paths.length > 10000) throw Error("No native file references.");
     const entries: NativeImport[] = [];
     try {
@@ -211,6 +212,20 @@ app.whenReady().then(async () => {
       paths.some((p) => typeof p !== "string")
     )
       throw Error("Invalid native import sender or references.");
+    const entries = captureImport(paths);
+    const token = randomUUID();
+    imports.set(token, { entries, expires: Date.now() + 60000 });
+    return token;
+  });
+  ipcMain.handle("native-clipboard-capture", async (event) => {
+    if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
+        event.senderFrame.url !== documentURL) throw Error("Invalid sender");
+    const items = await clipboard.read();
+    if (items.some(item => item.types.includes(clipboardFormat))) return null;
+    const item = items.find(item => item.types.includes("text/uri-list"));
+    if (!item) return null;
+    const paths = (await (await item.getType("text/uri-list")).text()).split(/\r?\n/)
+      .filter(path => path && !path.startsWith("#")).map(path => fileURLToPath(path));
     const entries = captureImport(paths);
     const token = randomUUID();
     imports.set(token, { entries, expires: Date.now() + 60000 });
@@ -810,17 +825,6 @@ app.whenReady().then(async () => {
           throw Error("Native references expired. Drop again.");
         imports.delete(String(paths[0]));
         nativeEntries = captured.entries;
-      } else if (action.kind === "paste" && !item) {
-        const native = (await clipboard.read()).find((item) =>
-          item.types.includes("text/uri-list"),
-        );
-        if (native)
-          nativeEntries = captureImport(
-            (await (await native.getType("text/uri-list")).text())
-              .split(/\r?\n/)
-              .filter((p) => p && !p.startsWith("#"))
-              .map((p) => fileURLToPath(p)),
-          );
       }
       if (
         !duplicate &&

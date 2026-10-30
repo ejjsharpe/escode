@@ -62,6 +62,13 @@ async function control(operation: "stop" | "answer", project: string | null, id:
   if (receipt.status !== "accepted") throw Error(`${operation} ${receipt.status}: ${receipt.message}`);
   localStorage.removeItem(key);
 }
+async function transfer(root: string, kind: "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", parent: string, paths: string[]) {
+  if (kind === "paste") {
+    const token = await ipcRenderer.invoke("native-clipboard-capture");
+    if (token) return directories.transferAction({ root, operation: "transfer", kind: "import", parent, paths: [token] });
+  }
+  return directories.transferAction({ root, operation: "transfer", kind, parent, paths });
+}
 window.addEventListener("unload", () => { void directories.close(); });
 contextBridge.exposeInMainWorld(
   "escode",
@@ -117,7 +124,7 @@ contextBridge.exposeInMainWorld(
     project: (operation: string, ...args: string[]) =>
       operation === "drag-capture" ? directories.transferAction({ root: args[0], operation, paths: args[1] as unknown as string[] })
       : operation === "clipboard-capture" ? directories.transferAction({ root: args[0], operation, kind: args[1] as "copy" | "cut", paths: args[2] as unknown as string[] })
-      : operation === "transfer" ? directories.transferAction({ root: args[0], operation, kind: args[1] as "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", parent: args[2], paths: args[3] as unknown as string[] })
+      : operation === "transfer" ? transfer(args[0], args[1] as "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", args[2], args[3] as unknown as string[])
       : operation === "create-entry" ? createEntry(args[0], args[1], args[2], args[3] as "file" | "folder")
       : operation === "read" ? directories.readFile(args[0], args[1])
       : operation === "trash-selection" ? directories.trashEntries(args[0], args[1] as unknown as string[])

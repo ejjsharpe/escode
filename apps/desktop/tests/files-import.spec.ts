@@ -150,6 +150,9 @@ test("isolated preload rejects forged paths and JS Files; native-backed File dro
         Array.from((document.querySelector("#native-fixture") as HTMLInputElement).files!),
       ),
     );
+    await f.page.evaluate(({ root, token }) => window.escode.project("transfer", root, "import", "", [token]), { root: f.root, token });
+    await expect(f.page.evaluate(({ root, token }) => window.escode.project("transfer", root, "import", "", [token]), { root: f.root, token })).rejects.toThrow("expired");
+    expect(await readFile(join(f.root, "a.ts"), "utf8")).toBe("source disk");
     await f.page.reload();
     await expect(row(f.page, "a.ts")).toBeVisible();
     await expect(
