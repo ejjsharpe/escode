@@ -8,7 +8,7 @@ Integrated behavior and acceptance boundaries are recorded in [Agents acceptance
 
 ## Language
 
-The host, connection and lifecycle terms below reflect the [agreed lifecycle planning amendment](https://github.com/ejjsharpe/escode/issues/53) and [agreed device trust rules](https://github.com/ejjsharpe/escode/issues/59#issuecomment-6521010880); these changes are not yet implemented. The [multi-client planning decision](https://github.com/ejjsharpe/escode/issues/57) additionally distinguishes per-client unsent text and recovery drafts; it is not yet implemented.
+The host, connection and lifecycle terms below reflect the [agreed lifecycle planning amendment](https://github.com/ejjsharpe/escode/issues/53) and [agreed device trust rules](https://github.com/ejjsharpe/escode/issues/59#issuecomment-6521010880); the macOS window close/reopen portion is implemented; remaining lifecycle and trust changes are subsequent work. The [multi-client planning decision](https://github.com/ejjsharpe/escode/issues/57) additionally distinguishes per-client unsent text and recovery drafts; it is not yet implemented.
 
 **Execution host**:
 The escode runtime on one machine that owns its projects, files, saved chats and agent execution. Its work can continue without an open client connection or view.
@@ -32,7 +32,7 @@ The verified identity to which clients and chats bind an execution host, indepen
 A client's interest in updates for a displayed chat, directory or other surface. Ending it releases that interest without ending the underlying chat or host.
 
 **Desktop window**:
-An escode desktop interface containing Agents and project tabs. Closing the last window on macOS leaves the app and its bundled local execution host running, retaining unsaved edits for reopening.
+An escode desktop interface containing Agents and project tabs. Closing the last window on macOS leaves the app and its bundled local execution host running, retaining unsaved edits for reopening. The local desktop retains the hidden window, renderer models and connection; Dock activation shows and focuses that same client.
 
 **Quit**:
 The explicit action that exits the desktop app and stops its bundled local execution host, with confirmation before stopping active local work and Save/Discard/Cancel for unsaved edits.

@@ -20,7 +20,7 @@ The [accepted Effect foundation handoff](docs/specifications/effect-foundation.m
 
 The [prerelease delivery amendment](docs/specifications/effect-foundation.md#prerelease-delivery-amendment) starts the new foundation with fresh escode state and directly replaces internal feature paths. Legacy-state import, upgrade/downgrade support and compatibility adapters are excluded. Qualification targets the actual installation with focused packaged and recovery checks; broad compatibility, exhaustive multi-client/revocation and full capacity qualification are deferred. Existing prerelease state is not imported or deleted, and project files/provider history remain intact. These are planning changes, not implemented behavior.
 
-The [agreed host/client lifecycle amendment](https://github.com/ejjsharpe/escode/issues/53) specifies that closing the last macOS window will keep the app, local execution host and unsaved edits available; explicit Quit will retain active-work confirmation and Save/Discard/Cancel. Client loss will not stop host-owned work, and host restart will require explicit action before another turn. These are planning decisions for the Effect foundation, not implemented behavior; the run and acceptance records below describe the current app.
+The [agreed host/client lifecycle amendment](https://github.com/ejjsharpe/escode/issues/53) specifies that closing the last macOS window will keep the app, local execution host and unsaved edits available; explicit Quit will retain active-work confirmation and Save/Discard/Cancel. Client loss will not stop host-owned work, and host restart will require explicit action before another turn. The macOS close/reopen portion is now implemented by retaining the hidden window and its client state; see [window lifecycle evidence](docs/compatibility/window-lifecycle.md). Remaining lifecycle changes are subsequent work.
 
 The [agreed multi-client planning decision](https://github.com/ejjsharpe/escode/issues/57) specifies shared chat control with host-arbitrated commands, independent per-client unsent text and file buffers, and preservation of each client's recovery state across conflicting saves and file operations. These are foundation constraints, not implemented multi-client behavior.
 
@@ -87,8 +87,7 @@ before Git creation; incomplete reservations remain attached and are never silen
 replaced on Retry. The older immediate-creation action reserves a fresh destination
 for each explicit attempt.
 
-Unsaved file buffers are persisted as local recovery drafts. Closing files, projects
-or the app offers Save/Discard/Cancel. Closing a project editor leaves chat work running; quitting with active work requires Stop and Close.
+Unsaved file buffers are persisted as local recovery drafts. Closing files or projects and explicit Quit offer Save/Discard/Cancel. Closing the macOS window hides it and retains its edits and host work; Dock activation reopens it. Closing a project editor leaves chat work running; quitting with active work requires Stop and Close.
 Quit interrupts active turns and terminates app-owned process groups. Restart
 restores tabs, view selections and available drafts; agents do not resume turns.
 Saved roots from older builds need one approval through **Open project…**; available drafts are retained.

@@ -217,11 +217,19 @@ app.whenReady().then(async () => {
   window.on("close", (event) => {
     if (mayClose) return;
     event.preventDefault();
-    window.webContents.send("close-request");
+    if (process.platform === "darwin") window.hide();
+    else window.webContents.send("close-request");
+  });
+  app.on("activate", () => {
+    if (window.isDestroyed()) return;
+    window.show();
+    window.focus();
   });
   app.on("before-quit", (event) => {
     if (mayClose) return;
     event.preventDefault();
+    window.show();
+    window.focus();
     window.webContents.send("close-request");
   });
   ipcMain.handle("lifecycle", async (event, operation: unknown, ...args: unknown[]) => {
@@ -1405,4 +1413,6 @@ app.whenReady().then(async () => {
   });
   void window.loadURL(documentURL);
 });
-app.on("window-all-closed", () => app.quit());
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});

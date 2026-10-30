@@ -210,6 +210,26 @@ createInterface({input:process.stdin}).on('line',line=>{
       pids.push(...JSON.parse(await readFile(join(scratch.checkout, "pids"), "utf8")));
       await writeFile(join(scratch.checkout, "retained.txt"), "scratch bytes");
 
+      // Native Close retains this client, its provider process and unsent text.
+      await page.getByLabel("Message Codex").fill("composer retained through close");
+      const before = await page.evaluate(() => window.escode.lifecycle("load"));
+      const chatId = (await page.evaluate(readChats, root))[0].id;
+      const snapshot = await page.evaluate(({ root, chatId }) => window.escode.chat("snapshot", root, chatId), { root, chatId });
+      const windowId = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].id);
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+      await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible())).toBe(false);
+      for (const pid of pids) process.kill(pid, 0);
+      expect(await readFile(join(root, "interrupts"), "utf8").catch(() => "")).toBe("");
+      await app.evaluate(({ app }) => { app.emit("activate"); });
+      await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible())).toBe(true);
+      expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].id)).toBe(windowId);
+      await expect(page.getByLabel("Message Codex")).toHaveValue("composer retained through close");
+      await expect(page.getByRole("status")).toHaveText("Running");
+      const after = await page.evaluate(() => window.escode.lifecycle("load"));
+      expect(after.state.drafts).toEqual(before.state.drafts);
+      expect(await page.evaluate(({ root, chatId }) => window.escode.chat("snapshot", root, chatId), { root, chatId })).toEqual(snapshot);
+      expect(await readFile(join(root, "turns"), "utf8")).toBe("sent\n");
+
       const managed = closeProject
         ? await page.evaluate(async (root) => {
             const options = await window.escode.project("worktree-options", root);
@@ -240,9 +260,9 @@ createInterface({input:process.stdin}).on('line',line=>{
       if (closeProject) {
         // A failed save must also cancel app quit before interrupting live work.
         await rm(join(root, "a.txt"));
-        await app.evaluate(({ dialog, BrowserWindow }) => {
+        await app.evaluate(({ dialog, app }) => {
           dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
-          BrowserWindow.getAllWindows()[0].close();
+          app.quit();
         });
         await expect(page.locator(".content:visible > [role=status]")).toContainText("ENOENT");
         await expect(page.locator(".monaco-editor:visible")).toContainText("save on close");
@@ -281,9 +301,9 @@ createInterface({input:process.stdin}).on('line',line=>{
         expect(await readFile(join(root, "interrupts"), "utf8").catch(() => "")).toBe("");
         for (const pid of pids) process.kill(pid, 0);
         // Quit confirmation still includes work belonging to a closed editor.
-        await app.evaluate(({ dialog, BrowserWindow }) => {
+        await app.evaluate(({ dialog, app }) => {
           dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
-          BrowserWindow.getAllWindows()[0].close();
+          app.quit();
         });
         await expect(page.getByRole("button", { name: "Agents", exact: true })).toBeEnabled();
         for (const pid of pids) process.kill(pid, 0);
