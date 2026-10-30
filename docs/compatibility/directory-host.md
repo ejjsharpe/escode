@@ -99,3 +99,37 @@ The Spec review also identified cumulative unary response accounting and missing
 client disconnect recovery coverage; both were corrected and given regression checks.
 The Standards review found no rule violations and one optional suggestion to share
 small native-event suppression fixtures; those remain local to their scenarios.
+
+Verification on 2026-10-30, runtime source `44076ef` with the final test-fixture
+emitter-restoration correction committed alongside this record:
+
+- Typecheck, lint, whitespace checks, build and unsigned macOS arm64 package passed.
+- Full serial host suite: **170 passed, four existing opt-in skips**, 65.65 seconds.
+- Seven protocol tests passed, including healthy cumulative unary traffic over 2 MiB;
+  combined protocol/native-watch checks passed before that final regression was added.
+- All **eleven focused development** scenarios passed, 58.6 seconds, and all
+  **eleven packaged** scenarios passed, 40.8 seconds.
+- Final Files watch suite reruns after restoring the fixture's suppressed native
+  emitter: **three development passes** (12.1 seconds) and **three packaged passes**
+  (11.9 seconds). These include actual forced-disconnect recovery with retained
+  dirty text and subsequent automatic listing convergence, replacement-directory
+  delivery and final-view physical-watch release. The earlier fixture attempt failed
+  its post-disconnect convergence assertion; it is not counted as acceptance.
+- The final development generated fixture (200 folders / 20,000 files) observed root
+  display at 676 ms, expansion at 48 ms, two arrow keys at 63 ms, external convergence
+  at 171 ms; packaged observations were 678/110/9/251 ms respectively. These single
+  observations are diagnostics, not performance budgets or improvement claims.
+
+### Standards review
+
+No documented-rule violations. One P3 judgement call suggested sharing duplicated
+native-event suppression setup; the small process-local fault injections remain in
+scenario fixtures. No outstanding required Standards correction.
+
+### Spec review
+
+The initial cumulative-unary-budget and missing-disconnect-coverage findings are
+resolved. Follow-up review found no additional production-code defects and identified
+that the disconnect fixture must restore native delivery first; the final committed
+fixture does so, with development and packaged reruns above. No outstanding Spec
+correction. Manual VoiceOver and deferred qualification remain unverified.

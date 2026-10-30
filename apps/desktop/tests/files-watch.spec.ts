@@ -196,6 +196,7 @@ test("watch failure stays usable, focus retries, checkout switch disposes, repla
       const probe = fs.watch(root), prototype = Object.getPrototypeOf(probe), emit = prototype.emit;
       probe.close();
       (globalThis as any).heldChanges = [];
+      (globalThis as any).restoreWatchEvents = () => { prototype.emit = emit; };
       prototype.emit = function(event: string, ...args: any[]) {
         if (event === "change") {
           (globalThis as any).heldChanges.push(() => emit.call(this, event, ...args));
@@ -207,7 +208,10 @@ test("watch failure stays usable, focus retries, checkout switch disposes, repla
     await writeFile(join(root, "delayed-origin.txt"), "delayed");
     await expect.poll(() => app.evaluate(() => (globalThis as any).heldChanges.length)).toBeGreaterThan(0);
     await open(other);
-    await app.evaluate(() => { for (const send of (globalThis as any).heldChanges.splice(0)) send(); });
+    await app.evaluate(() => {
+      (globalThis as any).restoreWatchEvents();
+      for (const send of (globalThis as any).heldChanges.splice(0)) send();
+    });
     await expect(page.getByRole("treeitem", { name: "delayed-origin.txt", exact: true })).toHaveCount(0);
     await writeFile(join(root, "old-checkout.txt"), "old");
     await expect(page.getByRole("treeitem", { name: "old-checkout.txt", exact: true })).toHaveCount(0);
