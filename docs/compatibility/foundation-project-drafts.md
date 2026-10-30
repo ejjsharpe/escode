@@ -23,6 +23,6 @@ Keyboard/focus controls and view structure are unchanged. No new manual VoiceOve
 
 ## Integrated baseline limits
 
-After rebasing onto main at `6e4bc2e`, the broader availability suite reports 2 passing and 3 failing scenarios. The same scenarios were run against an untouched detached checkout of `6e4bc2e` to distinguish inherited failures from this delivery. These checks are not certified by this ticket. The project-draft flow passes in development and packaged execution; Retry retains provider identity and does not send again, and may reuse an existing connection rather than issue thread/resume.
+After rebasing onto main at `6e4bc2e`, the broader availability suite reports 2 passing and 3 failing scenarios. An untouched detached checkout of `6e4bc2e` reproduces the same 2 passing and 3 failing scenarios, confirming these failures are inherited. These checks are not certified by this ticket. The project-draft flow passes in development and packaged execution; Retry retains provider identity and does not send again, and may reuse an existing connection rather than issue thread/resume.
 
 Standards and specification reviews identified persisted accepted-text clearing, typed draft responses, checkout-scoped settings lookup, replaced IPC removal, and shared-connection churn after context moves; all were addressed. The shared-connection regression has an authenticated transport test.
