@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { symlink, mkdtemp, mkdir, realpath, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { launchDesktop } from "./desktop";
+import { launchDesktop, readChats } from "./desktop";
 
 test("worktree draft prepares only on Send from closed-project Agents, retains edits and protects active removal", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-draft-ui-")));
@@ -218,6 +218,7 @@ send({id:m.id,result});});`,
       (await readFile(join(dir, "calls"), "utf8")).split("\n").filter((x) => x === "turn/start"),
     ).toHaveLength(1);
     expect((await records())[1].draft).toBe("Another nonempty draft");
+    await expect.poll(async () => (await page.evaluate(readChats, beta) as any[]).find(chat => chat.id === original.id)?.busy).toBe(false);
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async (_window: unknown, options?: any) => {
         if (!options.detail.includes("Retained branch:") || !options.detail.includes("Affected chats:"))

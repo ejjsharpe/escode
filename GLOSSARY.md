@@ -71,7 +71,7 @@ A chat associated with one project and attached to one of its checkout directori
 A chat with no user-project association, attached to its own persistent scratch folder. It appears in Agents without a project tab.
 
 **Chat draft**:
-A locally saved, unsent conversation whose context can change before first Send. Its metadata belongs to the host; unsent composer text belongs to its client and follows the stable chat ID across context changes. Authenticated context edits and first Send share host serialization and revision checks. Project drafts retain a resolved Current checkout path, explicitly selected discovered checkout, or displayed local base for a new managed worktree until explicitly changed. First Send prepares and binds the conversation while preserving its identity and creation time. Prepared worktrees retain their reserved branch, absolute path and directory identity, including on partial failure. Failed or uncertain sends retain the prompt and known provider identity; Retry reconnects without resending or replacing reserved resources.
+A locally saved, unsent conversation whose context can change before first Send. Its metadata belongs to the host; unsent composer text belongs to its client and follows the stable chat ID across context changes. Authenticated context edits and first Send share host serialization and revision checks. Project drafts retain a resolved Current checkout path, explicitly selected discovered checkout, or displayed local base for a new managed worktree until explicitly changed. First Send prepares and binds the conversation while preserving its identity and creation time. Prepared worktrees retain their reserved branch, absolute path and directory identity, including on partial failure. Managed worktree allocation occurs only on a saved draft’s first Send. Stopping preparation retains its reserved branch/path and prompt; Retry never allocates a replacement. Failed or uncertain sends retain the prompt and known provider identity; Retry reconnects without resending or replacing reserved resources.
 
 **Send receipt**:
 A host-persisted record binding one Send command ID to its authenticated host/client,
@@ -166,4 +166,3 @@ Integrated Files acceptance and its user-owned manual follow-up are recorded in
 [Files acceptance evidence](docs/compatibility/files-acceptance.md); the implemented
 Files terminology above does not certify those unverified native and VoiceOver checks.
 
-Managed worktree allocation occurs only on a saved draft’s first Send. Stopping preparation retains its reserved branch/path and prompt; Retry never allocates a replacement.

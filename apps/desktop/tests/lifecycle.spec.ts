@@ -292,7 +292,7 @@ createInterface({input:process.stdin}).on('line',line=>{
         ).toContain(managed!.branch);
         const saved = await page.evaluate(readChats, root);
         expect(saved).toHaveLength(3);
-        expect(saved.find((chat: any) => chat.checkout === managed!.root).draft).toBe(
+        expect(saved.find((chat) => chat.checkout === managed!.root)!.draft).toBe(
           "retained worktree draft",
         );
         expect(await readFile(join(root, "turns"), "utf8")).toBe("sent\n");

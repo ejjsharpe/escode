@@ -99,3 +99,15 @@ No live provider turn or manual VoiceOver check was performed for this change.
 The Stop button is now enabled during preparation; it retains its native button
 keyboard behavior and does not move focus. Broader accessibility qualification
 and multi-client/capacity matrices remain deferred under the delivery amendment.
+
+
+Final packaged checks: `ESCODE_PACKAGED=1 bun run smoke --
+tests/worktree-drafts.spec.ts` passes (1 test), and the packaged
+`tests/retained-project.spec.ts` passes (1 test). The draft check restarts
+before first Send, retains the client composer and chosen local base, verifies
+`draft-thread` and the exact reserved checkout, reloads history with one
+`turn/start`, blocks active/recovery-protected removal, then confirms successful
+removal and retained chat/provider identities. It waits for the host's history
+transition to settle before removal. Fixture reads use the client composer;
+configuration probes before Send are allowed, thread/turn creation is not.
+Final typecheck and lint pass after these fixture corrections.
