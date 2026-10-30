@@ -56,8 +56,8 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       .click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("recover these edits");
     await expect
-      .poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected)
-      .toBe(root);
+      .poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")))
+      .toMatchObject({ selected: root, projects: [{ root }, { root: other }] });
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
