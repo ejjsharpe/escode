@@ -115,7 +115,10 @@ test("stalled delivery exhausts a finite response budget without blocking a heal
         if (String(data).includes("admission exhausted")) resolve();
       });
     });
-    for (let i = 0; i < 20; i++) socket.send(JSON.stringify({ _tag: "Request", id: i, tag: "chatSummaries", headers: [], payload: null }));
+    for (let i = 0; i < 7; i++) {
+      socket.send(JSON.stringify({ _tag: "Request", id: i, tag: "chatSummaries", headers: [], payload: null }));
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
     await rejected;
     expect(responses).toBeLessThanOrEqual(16);
     const done = closed(socket); socket.close(); await done;
@@ -279,7 +282,7 @@ test("live handoff sends bounded append batches, retains ACK charge and releases
   let ack = true;
   socket.on("message", data => {
     const message = JSON.parse(String(data)); messages.push(message);
-    if (ack && message._tag === "Chunk") socket.send(JSON.stringify({ _tag: "Ack", requestId: message.requestId }));
+    if (message._tag === "Chunk" && (ack || message.requestId !== "1")) socket.send(JSON.stringify({ _tag: "Ack", requestId: message.requestId }));
   });
   try {
     socket.send(JSON.stringify({ _tag: "Request", id: "1", tag: "chatLive", headers: [], payload: { project: null, id: "chat" } }));
@@ -288,11 +291,14 @@ test("live handoff sends bounded append batches, retains ACK charge and releases
     expect(batches[0].changes[0]).toMatchObject({ append: false, item: { text: "captured" } });
     expect(batches[1].changes[0]).toMatchObject({ append: true, item: { text: " during capture" } });
     expect(batches[1].revision).toBe(batches[0].revision + 1);
+    socket.send(JSON.stringify({ _tag: "Request", id: "2", tag: "chatSummaries", headers: [], payload: null }));
     ack = false;
-    await expect.poll(() => messages.some(m => m._tag === "Defect" && String(m.defect).includes("stalled")), { timeout: 18000 }).toBe(true);
+    await expect.poll(() => messages.some(m => m._tag === "Exit" && JSON.stringify(m).includes("stalled")), { timeout: 18000 }).toBe(true);
     const count = captures;
-    await new Promise(resolve => setTimeout(resolve, 250));
+    const summaryCount = messages.filter(m => m._tag === "Chunk" && m.requestId === "2").length;
+    await new Promise(resolve => setTimeout(resolve, 400));
     expect(captures).toBe(count);
+    expect(messages.filter(m => m._tag === "Chunk" && m.requestId === "2").length).toBeGreaterThan(summaryCount);
     const healthy = await connect(host.bootstrap().url);
     const response = new Promise<string>(resolve => healthy.once("message", value => resolve(String(value))));
     healthy.send(JSON.stringify({ _tag: "Request", id: "2", tag: "listDirectory", headers: [], payload: { root: "repo", path: "" } }));

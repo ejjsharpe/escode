@@ -94,8 +94,10 @@ test("a live loaded parent swapped for a symlink cannot expose outside contents 
   project.watchFiles(["", "parent"], changed);
   try {
     // Establish native watcher readiness before the parent replacement burst.
-    await writeFile(join(root, "watch-ready"), "ready");
-    await vi.waitFor(() => expect(changed).toHaveBeenCalled(), { timeout: 5000 });
+    await vi.waitFor(async () => {
+      await writeFile(join(root, "watch-ready"), String(Date.now()));
+      expect(changed).toHaveBeenCalled();
+    }, { timeout: 5000 });
     changed.mockClear();
     await rename(join(root, "parent"), join(root, "original-parent"));
     await symlink(outside, join(root, "parent"));

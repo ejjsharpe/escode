@@ -41,7 +41,7 @@ test("saved history pages preserve binding without Git, immutable revisions and 
     expect(second.items[0].text).toContain("safe unknown");
     emit({ method: "turn/started", params: { threadId: "exact-provider", turn: { id: "t1" } } });
     emit({ method: "item/agentMessage/delta", params: { threadId: "exact-provider", turnId: "t1", itemId: "a", delta: " live" } });
-    expect(service.snapshot(root, chat.id).items[0]).toMatchObject({ text: "first page live" });
+    await expect.poll(() => service.snapshot(root, chat.id).items[0]).toMatchObject({ text: "first page live" });
     expect(service.snapshot(root, chat.id).items[0].revision).toBeUndefined();
     expect(initial.items[0].text).toBe("first page");
     emit({ method: "turn/completed", params: { threadId: "exact-provider", turn: { id: "t1" } } });
@@ -80,9 +80,19 @@ test("live output stays bounded on spool failure without cancelling provider wor
     await service.open(dir, chat.id);
     emit({ method: "turn/started", params: { threadId: "provider", turn: { id: "turn" } } });
     emit({ method: "item/agentMessage/delta", params: { threadId: "provider", turnId: "turn", itemId: "body", delta: "durable text" } });
+    await expect.poll(() => service.snapshot(dir, chat.id).items[0]?.text).toBe("durable text");
     const before = service.snapshot(dir, chat.id);
-    const recovered = new ChatService(store);
+    const recovered = new ChatService(store, async () => ({ async request(method) {
+      if (method === "account/read") return { account: {} };
+      if (method === "thread/resume") return { thread: { id: "provider" }, cwd: dir, model: "fixture", sandbox: {}, approvalPolicy: "on-request" };
+      if (method === "thread/turns/list") return { data: [], nextCursor: null };
+      throw Error(method);
+    }, respond() {}, close() {} }));
     expect((await recovered.inspect(dir, chat.id)).items[0].text).toBe("durable text");
+    await recovered.open(dir, chat.id).catch(() => {});
+    // Recovery must remain available even while provider history has not caught up.
+    expect((await recovered.inspect(dir, chat.id)).items[0].text).toBe("durable text");
+    recovered.close();
     await rm(store.spoolDirectory, { recursive: true });
     const { writeFile } = await import("node:fs/promises");
     await writeFile(store.spoolDirectory, "disk failure fixture");
@@ -96,4 +106,36 @@ test("live output stays bounded on spool failure without cancelling provider wor
     await service.stop(dir, chat.id);
     expect(stopped).toBe(1);
   } finally { service.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("slow durable output coalesces ingress while Stop remains responsive", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-slow-spool-"));
+  const store = new Chats(join(dir, "chats.json"));
+  const chat = await store.createDraft(dir, dir);
+  await store.update(dir, chat.id, { phase: "bound", threadId: "provider" });
+  let emit = (_event: any) => {}, writes = 0, stopped = 0;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const service = new ChatService(store, async (_cwd, receive) => {
+    emit = receive;
+    return { async request(method) {
+      if (method === "account/read") return { account: {} };
+      if (method === "thread/resume") return { thread: { id: "provider" }, cwd: dir, model: "fixture", sandbox: {}, approvalPolicy: "on-request" };
+      if (method === "thread/turns/list") return { data: [], nextCursor: null };
+      if (method === "turn/interrupt") { stopped++; return {}; }
+      throw Error(method);
+    }, respond() {}, close() {} };
+  }, { read: async () => undefined, write: async () => { writes++; await held; } });
+  try {
+    await service.open(dir, chat.id);
+    emit({ method: "turn/started", params: { threadId: "provider", turn: { id: "turn" } } });
+    for (let n = 0; n < 100; n++) emit({ method: "item/agentMessage/delta", params: { threadId: "provider", turnId: "turn", itemId: "body", delta: "x" } });
+    expect(writes).toBe(1);
+    expect(service.snapshot(dir, chat.id).items).toEqual([]);
+    await Promise.race([service.stop(dir, chat.id), new Promise((_, reject) => setTimeout(() => reject(Error("Stop blocked by storage")), 500))]);
+    expect(stopped).toBe(1);
+    release();
+    await expect.poll(() => service.snapshot(dir, chat.id).items[0]?.text).toBe("x".repeat(100));
+    expect(writes).toBe(2);
+  } finally { release(); await service.shutdown(); await rm(dir, { recursive: true, force: true }); }
 });

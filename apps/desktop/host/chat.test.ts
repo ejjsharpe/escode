@@ -102,7 +102,7 @@ test("turns, approvals and Stop stay scoped; reconnect invalidates old callbacks
       checkout: dir,
     });
   } finally {
-    service.close();
+    await service.shutdown();
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -211,7 +211,7 @@ test("setup failures retain drafts; exact input requests cannot answer another t
     expect(reply).toEqual({ action: "accept", content: { name: "Elliot" }, _meta: null });
     expect((await service.list(dir))[0].draft).toBe("");
   } finally {
-    service.close();
+    await service.shutdown();
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -250,7 +250,7 @@ createInterface({input: process.stdin}).on("line", line => {
     await expect.poll(() => service.snapshot(dir, c.id).connected, { timeout: 1000 }).toBe(false);
     expect(service.snapshot(dir, c.id).busy).toBe(false);
   } finally {
-    service.close();
+    await service.shutdown();
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -318,7 +318,7 @@ test.each(["missing", "replaced"])(
         /checkout.*unavailable|checkout.*changed/i,
       );
       expect(sends).toBe(1);
-      expect(service.snapshot(dir, chat.id).items[0].text).toBe("retained history");
+      await expect.poll(() => service.snapshot(dir, chat.id).items[0]?.text).toBe("retained history");
       expect((await service.list(dir))[0].draft).toBe("keep this draft");
       const other = await service.create(dir);
       await service.open(dir, other.id);
@@ -328,10 +328,10 @@ test.each(["missing", "replaced"])(
       await rename(root + "-original", root);
       await service.open(dir, chat.id);
       expect(sends).toBe(2);
-      expect(service.snapshot(dir, chat.id).items[0].text).toBe("retained history");
+      await expect.poll(() => service.snapshot(dir, chat.id).items[0]?.text).toBe("retained history");
       expect((await service.list(dir))[0].draft).toBe("keep this draft");
     } finally {
-      service.close();
+      await service.shutdown();
       await rm(dir, { recursive: true, force: true });
     }
   },

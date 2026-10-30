@@ -51,10 +51,13 @@ export async function startDirectoryHost(options: {
     const reject = (id: number) => {
       rejected.add(id);
       return protocol.send(id, { _tag: "Defect", defect: "Invalid request or request admission exhausted; output coverage reset" }).pipe(
-        Effect.ensuring(Effect.suspend(() => Effect.all([...(pending.get(id) ?? [])].map(requestId => {
-          acknowledge(id, requestId);
-          return interrupt(id, requestId);
-        })).pipe(Effect.asVoid))));
+        Effect.ensuring(Effect.sync(() => {
+          for (const requestId of pending.get(id) ?? []) {
+            acknowledge(id, requestId);
+            Effect.runFork(interrupt(id, requestId));
+          }
+          pending.delete(id); liveRequests.delete(id);
+        })));
     };
     const sentBytes = new Map<number, number>();
     const unacknowledged = new Map<number, Map<string | number, { bytes: number; timer: ReturnType<typeof setTimeout> }>>();
@@ -66,11 +69,12 @@ export async function startDirectoryHost(options: {
       unacknowledged.get(id)?.delete(requestId);
     };
     const pending = new Map<number, Set<string | number>>();
+    const liveRequests = new Map<number, Set<string | number>>();
     let interrupt: (id: number, requestId: string | number) => Effect.Effect<void> = () => Effect.void;
     const stall = (id: number, requestId: string | number) => {
       acknowledge(id, requestId);
-      return protocol.send(id, { _tag: "Defect", defect: "Live delivery stalled. Output coverage reset; reopen the view. Provider work and control retained." })
-        .pipe(Effect.andThen(interrupt(id, requestId)));
+      return protocol.send(id, { _tag: "Exit", requestId, exit: { _tag: "Failure", cause: [{ _tag: "Fail", error: "Live delivery stalled. Output coverage reset; reopen the view. Provider work and control retained." }] } })
+        .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
       tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive"]), payload: Schema.Unknown,
@@ -88,6 +92,10 @@ export async function startDirectoryHost(options: {
           if (!Schema.is(requestEnvelope)(data) || data.isNotification || data.discard ||
               requests.size >= 16 || requests.has(data.id)) return reject(id);
           requests.add(data.id); pending.set(id, requests);
+          if (data.tag === "chatLive") {
+            const live = liveRequests.get(id) ?? new Set<string | number>();
+            live.add(data.id); liveRequests.set(id, live);
+          }
         } else if (data._tag === "Ack" || data._tag === "Interrupt") {
           if (typeof data.requestId !== "string" && typeof data.requestId !== "number") return reject(id);
           acknowledge(id, data.requestId);
@@ -98,6 +106,8 @@ export async function startDirectoryHost(options: {
       send: (id, response, transferables) => {
         if (rejected.has(id)) return Effect.void;
         const bytes = (sentBytes.get(id) ?? 0) + Buffer.byteLength(JSON.stringify(response));
+        if (response._tag === "Chunk" && liveRequests.get(id)?.has(response.requestId) && bytes > 1.5 * maximumFrameBytes)
+          return stall(id, response.requestId);
         if (bytes > 2 * maximumFrameBytes) return reject(id);
         if (response._tag === "Chunk") sentBytes.set(id, bytes);
         if (response._tag === "Chunk") {
@@ -106,11 +116,14 @@ export async function startDirectoryHost(options: {
             timer: setTimeout(() => { Effect.runFork(stall(id, response.requestId)); }, 15000) });
           unacknowledged.set(id, chunks);
         }
-        if (response._tag === "Exit") pending.get(id)?.delete(response.requestId);
+        if (response._tag === "Exit") {
+          pending.get(id)?.delete(response.requestId);
+          liveRequests.get(id)?.delete(response.requestId);
+        }
         return protocol.send(id, response, transferables);
       },
     };
-    yield* RpcServer.make(HostQueries, { concurrency: 16, onDisconnect: (id) => Effect.sync(() => { pending.delete(id); rejected.delete(id); sentBytes.delete(id);
+    yield* RpcServer.make(HostQueries, { concurrency: 16, onDisconnect: (id) => Effect.sync(() => { pending.delete(id); liveRequests.delete(id); rejected.delete(id); sentBytes.delete(id);
       for (const chunk of unacknowledged.get(id)?.values() ?? []) clearTimeout(chunk.timer);
       unacknowledged.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),

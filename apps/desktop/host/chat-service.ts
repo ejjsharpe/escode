@@ -28,6 +28,9 @@ type Session = ChatSnapshot & {
   stopping: boolean;
   outputFailed?: boolean;
   recovered?: boolean;
+  recovering?: Promise<void>;
+  outputItems?: ChatItem[];
+  writing?: Promise<void>;
   sending?: boolean;
   checkoutIdentity?: { path: string; dev: number; ino: number };
 };
@@ -48,8 +51,27 @@ export class ChatService {
   constructor(
     private store: Chats,
     private connect = connectCodex,
+    private spool: Pick<LiveSpool, "read" | "write"> = new LiveSpool(store.spoolDirectory),
   ) {}
-  private get spool() { return new LiveSpool(this.store.spoolDirectory); }
+  private writers = 0;
+  private persistOutput(s: Session) {
+    if (s.writing) return;
+    if (this.writers >= 16) { s.outputItems = undefined; s.outputFailed = true; s.error = "Live output partial: persistence admission exhausted. Stop remains available."; return; }
+    this.writers++;
+    s.writing = (async () => {
+      try {
+        while (s.outputItems) {
+          const items = s.outputItems;
+          if (s.threadId) await this.spool.write(s.chatId, s.threadId, items, false);
+          s.items = items;
+          if (s.outputItems === items) s.outputItems = undefined;
+        }
+      } catch (error) {
+        s.outputItems = undefined; s.outputFailed = true;
+        s.error = `Live output partial/unavailable: ${String(error)}. Provider work continues; Stop remains available. Reload saved history after completion.`;
+      } finally { this.writers--; s.writing = undefined; }
+    })();
+  }
   list(project: string | null) {
     return this.store.list(project);
   }
@@ -106,14 +128,7 @@ export class ChatService {
   async inspect(project: string | null, id: string) {
     const chat = await this.store.get(project, id);
     const s = this.session(project, id);
-    if (!s.recovered && !s.rpc && chat.threadId) {
-      s.recovered = true;
-      s.threadId = chat.threadId;
-      try {
-        const saved = this.spool.read(id, chat.threadId);
-        if (saved) { s.items = [...saved.items]; s.error = "Recovered live output; Retry to inspect provider history. Work was not resumed."; }
-      } catch { s.error = "Live output unavailable: incomplete spool. Provider identity retained; Retry explicitly."; }
-    }
+    if (!s.rpc && chat.threadId) await this.recoverOutput(s, chat.threadId);
     const snapshot = this.snapshot(project, id);
     snapshot.contextError =
       chat.phase === "draft" &&
@@ -121,6 +136,19 @@ export class ChatService {
         ? chat.availabilityError
         : await this.store.validateDirectory(chat);
     return snapshot;
+  }
+  private async recoverOutput(s: Session, threadId: string) {
+    if (s.recovering) return s.recovering;
+    if (s.recovered) return;
+    s.recovered = true;
+    s.threadId = threadId;
+    s.recovering = (async () => {
+      try {
+        const saved = await this.spool.read(s.chatId, threadId);
+        if (saved) { s.items = [...saved.items]; s.error = "Recovered live output; Retry to inspect provider history. Work was not resumed."; }
+      } catch { s.error = "Live output unavailable: incomplete spool. Provider identity retained; Retry explicitly."; }
+    })();
+    try { await s.recovering; } finally { s.recovering = undefined; }
   }
   private validateCheckout(s: Session, checkout: string) {
     try {
@@ -208,6 +236,7 @@ export class ChatService {
           const error = await this.store.validateDirectory(chat, true);
           if (error) throw Error(error);
         }
+        if (chat.threadId) await this.recoverOutput(s, chat.threadId);
         rpc = await this.connect(
           chat.checkout,
           (event) => {
@@ -285,10 +314,12 @@ export class ChatService {
           sandbox: result.sandbox,
         };
         if (resume) {
-          const captured = new Map(s.items.map(item => [item.turnId + "/" + item.id, item]));
+          await s.writing;
           const page = await this.readHistory(s, null);
-          const live = s.items.filter(item => captured.get(item.turnId + "/" + item.id) !== item);
-          s.items = [...page.items.filter(item => !live.some(value => value.id === item.id && value.turnId === item.turnId)), ...live];
+          await s.writing;
+          const retained = s.items.filter(item => !page.items.some(saved => saved.id === item.id && saved.turnId === item.turnId && saved.text.startsWith(item.text)));
+          s.items = [...page.items.filter(item => !retained.some(value => value.id === item.id && value.turnId === item.turnId)), ...retained];
+          if (!retained.length) s.error = null;
           s.outputFailed = false;
           s.history = { nextCursor: page.nextCursor, revision: page.revision };
         }
@@ -436,7 +467,7 @@ export class ChatService {
     if (p.turnId !== s.turnId) return;
     if (s.outputFailed && (p.item || typeof p.delta === "string")) return;
     const previous = s.items;
-    s.items = s.items.map(item => ({ ...item }));
+    s.items = [...(s.outputItems ?? s.items)];
     if (message.method === "item/started" || message.method === "item/completed") {
       const value = this.item(p.turnId, p.item);
       const index = s.items.findIndex((i) => i.id === value.id && i.turnId === value.turnId);
@@ -453,15 +484,18 @@ export class ChatService {
         };
         s.items.push(item);
       }
-      delete item.revision;
-      item.text += p.delta;
+      const index = s.items.indexOf(item);
+      s.items[index] = { ...item, text: item.text + p.delta };
+      delete s.items[index].revision;
     } else if (message.method === "error")
       s.error = p.error?.message ?? "Codex turn failed. Send a new message to continue.";
     if (p.item || typeof p.delta === "string") {
       try {
         if (s.items.length > 1000 || Buffer.byteLength(JSON.stringify(s.items)) > 128 * 1024)
           throw Error("Live display capacity exhausted");
-        if (s.threadId) this.spool.write(s.chatId, s.threadId, s.items, false);
+        s.outputItems = s.items;
+        s.items = previous;
+        this.persistOutput(s);
       } catch (error) {
         s.items = previous;
         s.outputFailed = true;
@@ -689,6 +723,7 @@ export class ChatService {
         await s.opening?.catch(() => {});
         s.rpc?.close();
         await s.rpc?.finished;
+        await s.writing;
         s.connected = false;
         s.busy = false;
         s.turnId = null;
