@@ -1,3 +1,4 @@
+import { coalesceObservation } from "./observation";
 import WebSocket from "ws";
 import { createServer } from "node:http";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -39,6 +40,8 @@ export async function startDirectoryHost(options: {
   hostId: string; clientId: string; origin: string;
   list(root: string, path: string): Promise<DirectoryResult>;
   watch?(root: string, paths: readonly string[], notify: (error?: string) => void): () => void;
+  gitStatus?: (root: string) => Promise<typeof import("@escode/contracts").GitStatus.Type>;
+  worktreeOptions?: (root: string) => Promise<typeof import("@escode/contracts").WorktreeOptions.Type>;
   summaries?: () => Promise<ChatSummaries["chats"]>;
   chatSnapshot?: (project: string | null, id: string) => Promise<ChatDetail>;
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
@@ -62,6 +65,14 @@ export async function startDirectoryHost(options: {
 }) {
   const epoch = randomUUID();
   let revision = 0;
+  const statusObservation = coalesceObservation(async (root: string) => {
+    if (!options.gitStatus) throw Error("Git observations unavailable");
+    return options.gitStatus(root);
+  });
+  const worktreeObservation = coalesceObservation(async (root: string) => {
+    if (!options.worktreeOptions) throw Error("Worktree observations unavailable");
+    return options.worktreeOptions(root);
+  });
   const now = options.now ?? Date.now;
   const tickets = new Map<string, number>();
   let port = 0;
@@ -106,7 +117,7 @@ export async function startDirectoryHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -161,6 +172,8 @@ export async function startDirectoryHost(options: {
       unacknowledged.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
       Effect.provide(HostQueries.toLayer({
+        gitStatus: ({ root }) => Effect.tryPromise({ try: () => statusObservation(root), catch: String }),
+        worktreeOptions: ({ root }) => Effect.tryPromise({ try: () => worktreeObservation(root), catch: String }),
         transferAction: ({ action }) => Effect.tryPromise({ try: async () => {
           if (!options.transferAction) throw Error("Transfers unavailable"); return options.transferAction(action);
         }, catch: String }),

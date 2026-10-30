@@ -131,12 +131,16 @@ function CheckoutView({
   const saveAction = useRef<() => void>(() => {});
   const report = (error: unknown) =>
     setMessage(error instanceof Error ? error.message : String(error));
+  const statusRequest = useRef(0);
   const refresh = async () => {
+    const request = ++statusRequest.current;
     let value: Status;
     try {
       value = await projectCall("status", root);
+      if (request !== statusRequest.current) return;
       setCheckoutError("");
     } catch (error) {
+      if (request !== statusRequest.current) return;
       setCheckoutError(
         "Checkout unavailable. Restore access to the original directory, then Retry checkout. Edits and chat associations are retained. " +
           String(error),
@@ -194,6 +198,7 @@ function CheckoutView({
   );
   useEffect(() => {
     void refresh().catch(report);
+    return () => { statusRequest.current++; };
   }, []);
   useLayoutEffect(() => {
     presentation.current++;

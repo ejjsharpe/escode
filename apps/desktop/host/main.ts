@@ -1085,6 +1085,8 @@ app.whenReady().then(async () => {
     throw Error("Invalid transfer request");
   }
   const directoryHost = await startDirectoryHost({
+    gitStatus: async root => (await checkout(root)).status(),
+    worktreeOptions: async root => (await checkout(root)).worktreeOptions(),
     transferAction,
     trashEntries,
     moveEntry,
@@ -1264,7 +1266,7 @@ app.whenReady().then(async () => {
       await store.migrate(opened.repository(), opened.checkouts());
       return opened.status();
     }
-    if (["diff", "read", "save", "files", "files-filter", "create-entry", "trash-selection", "drag-capture", "clipboard-capture", "transfer"].includes(String(operation))) throw Error("Invalid project request");
+    if (["status", "worktree-options", "diff", "read", "save", "files", "files-filter", "create-entry", "trash-selection", "drag-capture", "clipboard-capture", "transfer"].includes(String(operation))) throw Error("Invalid project request");
     const requestedRoot = args.shift();
     if (
       [
@@ -1354,8 +1356,6 @@ app.whenReady().then(async () => {
         removing.delete(identity);
       }
     }
-    if (operation === "worktree-options" && !args.length) return project.worktreeOptions();
-    if (operation === "status" && !args.length) return project.status();
     if (
       operation === "entry-action" &&
       args.length === 2 &&

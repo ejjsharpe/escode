@@ -56,6 +56,8 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
     } finally { queued--; }
   }
   return {
+    gitStatus: (root: string) => chatQuery(client => client.gitStatus({ root })),
+    worktreeOptions: (root: string) => chatQuery(client => client.worktreeOptions({ root })),
     createState: () => chatQuery(client => client.createState()),
     createEntry: (command: typeof import("@escode/contracts").CreateCommand.Type) => chatQuery(client => client.createEntry({ command })),
     transferAction: (action: import("@escode/contracts").TransferAction) => chatQuery(client => client.transferAction({ action }), true),

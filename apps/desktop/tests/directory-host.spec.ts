@@ -30,6 +30,11 @@ test("Files uses authenticated directory contracts with denied paths and no list
       Array.from({ length: 20 }, () => window.escode.listDirectory(root, "folder")),
     ), root);
     expect(rescan.every((result) => result.kind === "available")).toBe(true);
+    const status = await page.evaluate(root => window.escode.project("status", root), root);
+    expect(status.root).toBe(root);
+    expect(status.changes).toContainEqual({ path: "folder/a.txt", area: "untracked" });
+    const options = await page.evaluate(root => window.escode.project("worktree-options", root), root);
+    expect(options.checkouts).toContain(root);
     const oldRoute = await page.evaluate((root) => (window.escode.project as any)("files-filter", root, "").then(() => "accepted", String), root);
     expect(oldRoute).toContain("Invalid project request");
   } finally {

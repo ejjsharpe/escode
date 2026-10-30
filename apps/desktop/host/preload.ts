@@ -122,7 +122,9 @@ contextBridge.exposeInMainWorld(
       : ipcRenderer.invoke("chat", operation, ...args),
     toolStatus: () => ipcRenderer.invoke("tools:status"),
     project: (operation: string, ...args: string[]) =>
-      operation === "drag-capture" ? directories.transferAction({ root: args[0], operation, paths: args[1] as unknown as string[] })
+      operation === "status" ? directories.gitStatus(args[0])
+      : operation === "worktree-options" ? directories.worktreeOptions(args[0])
+      : operation === "drag-capture" ? directories.transferAction({ root: args[0], operation, paths: args[1] as unknown as string[] })
       : operation === "clipboard-capture" ? directories.transferAction({ root: args[0], operation, kind: args[1] as "copy" | "cut", paths: args[2] as unknown as string[] })
       : operation === "transfer" ? transfer(args[0], args[1] as "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", args[2], args[3] as unknown as string[])
       : operation === "create-entry" ? createEntry(args[0], args[1], args[2], args[3] as "file" | "folder")
