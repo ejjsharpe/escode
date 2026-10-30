@@ -130,7 +130,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await rows.filter({ hasText: "beta" }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("beta text");
     await expect(
-      page.getByRole("navigation", { name: "Projects" }).getByRole("button"),
+      page.getByRole("navigation", { name: "Projects" }).locator("button[aria-pressed]"),
     ).toHaveCount(2);
     await expect(page.locator(".transcript:visible")).toContainText("Saved history line 149");
     await page.setViewportSize({ width: 1100, height: 768 });

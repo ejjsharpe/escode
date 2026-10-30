@@ -48,7 +48,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     await expect(page.locator(".monaco-diff-editor:visible")).toContainText("secondary project");
     const tabs = page
       .getByRole("navigation", { name: "Projects", exact: true })
-      .getByRole("button");
+      .locator("button[aria-pressed]");
     await expect(tabs).toHaveText(["Agents", "repo", "other"]);
     await page
       .getByRole("navigation", { name: "Projects", exact: true })
@@ -65,7 +65,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     app = await launch();
     page = await app.firstWindow();
     await expect(
-      page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
+      page.getByRole("navigation", { name: "Projects", exact: true }).locator("button[aria-pressed]"),
     ).toHaveText(["Agents", "repo", "other"]);
     await expect(page.locator("header")).toContainText(root);
     await expect(page.locator(".monaco-editor:visible")).toContainText("recover these edits");
@@ -76,7 +76,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async () => ({ response: 2, checkboxChecked: false });
     });
-    await page.getByRole("button", { name: "Close project", exact: true }).click();
+    await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("recover these edits");
     // Save failure during close must leave the project usable and draft retained.
     await rm(join(root, "a.txt"));
@@ -115,7 +115,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     );
     await expect(page.locator(".monaco-diff-editor:visible")).toContainText("external");
     await expect(
-      page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
+      page.getByRole("navigation", { name: "Projects", exact: true }).locator("button[aria-pressed]"),
     ).toHaveText(["Agents", "repo", "other"]);
     await page
       .getByRole("navigation", { name: "Projects", exact: true })
@@ -229,7 +229,7 @@ createInterface({input:process.stdin}).on('line',line=>{
         await app.evaluate(({ dialog }) => {
           dialog.showMessageBox = async () => ({ response: 2, checkboxChecked: false });
         });
-        await page.getByRole("button", { name: "Close project", exact: true }).click();
+        await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
         await expect(page.getByRole("status")).toHaveText("Running");
         expect(await readFile(join(root, "a.txt"), "utf8")).toBe("committed");
         expect(
@@ -255,8 +255,8 @@ createInterface({input:process.stdin}).on('line',line=>{
         dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
       });
       if (closeProject) {
-        await page.getByRole("button", { name: "Close project", exact: true }).click();
-        await expect(page.getByRole("button", { name: "Close project", exact: true })).toHaveCount(
+        await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
+        await expect(page.locator('.project-tab[data-active="true"] .project-tab-close')).toHaveCount(
           0,
         );
         await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
@@ -319,7 +319,7 @@ createInterface({input:process.stdin}).on('line',line=>{
           "true",
         );
         await expect(
-          page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
+          page.getByRole("navigation", { name: "Projects", exact: true }).locator("button[aria-pressed]"),
         ).toHaveCount(1);
         await app.evaluate(({ dialog }, root) => {
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });

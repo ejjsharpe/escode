@@ -59,7 +59,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(
       page
         .getByRole("navigation", { name: "Projects" })
-        .getByRole("button")
+        .locator("button[aria-pressed]")
         .filter({ hasNotText: "Agents" }),
     ).toHaveCount(2);
     // A related checkout belongs to the existing repository tab. Seed saved chats without connecting to Codex.
@@ -67,7 +67,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(
       page
         .getByRole("navigation", { name: "Projects" })
-        .getByRole("button")
+        .locator("button[aria-pressed]")
         .filter({ hasNotText: "Agents" }),
     ).toHaveCount(2);
     const ids = await page.evaluate(

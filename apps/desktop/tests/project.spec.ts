@@ -70,7 +70,7 @@ for (const packaged of [false, true]) {
         "true",
       );
       await expect(page.locator(".monaco-diff-editor")).toHaveCount(0);
-      await expect(page.locator(".monaco-editor")).toContainText("reload this");
+      await expect(page.locator(".monaco-editor")).toContainText("new external");
       await page.getByRole("button", { name: "Source Control", exact: true }).click();
       await expect(page.locator(".monaco-diff-editor")).toContainText("new external");
       await page.getByRole("button", { name: "Files", exact: true }).click();

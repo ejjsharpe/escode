@@ -274,7 +274,7 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
       }, root);
       await expect.poll(() => app.evaluate(() => typeof (globalThis as any).releaseContext)).toBe("function");
       if (change === "editor close") {
-        await page.getByRole("button", { name: "Close project", exact: true }).click();
+        await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
         await expect(page.getByRole("button", { name: "repo", exact: true })).toHaveCount(0);
       } else {
         await page.evaluate((root) => window.escode.lifecycle("finish", root), root);

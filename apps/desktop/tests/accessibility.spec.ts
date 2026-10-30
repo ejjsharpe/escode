@@ -87,7 +87,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await activate(page.getByRole("button", { name: "Source Control", exact: true }));
     await activate(page.getByRole("button", { name: "a.txt", exact: true }));
     const diff = page.getByRole("textbox", { name: "unstaged · a.txt modified", exact: true });
-    await expect(diff).not.toBeEditable();
+    await expect(diff).toBeEditable();
     await reach(diff);
     await page.keyboard.press("F7");
     await expect(

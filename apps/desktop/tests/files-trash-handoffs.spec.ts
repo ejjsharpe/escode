@@ -450,7 +450,7 @@ for (const change of [
       }, f.root);
       await expect.poll(() => f.app.evaluate(() => !!(globalThis as any).confirmBatch)).toBe(true);
       if (change === "editor close") {
-        await f.page.getByRole("button", { name: "Close project", exact: true }).click();
+        await f.page.locator('.project-tab[data-active="true"] .project-tab-close').click();
         await expect(f.page.getByRole("button", { name: "repo", exact: true })).toHaveCount(0);
       } else {
         // Host editor finish retains the session even with recovery work still in memory.

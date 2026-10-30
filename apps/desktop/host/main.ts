@@ -28,6 +28,9 @@ app.whenReady().then(() => {
   const dev = !app.isPackaged && process.env.ESCODE_DEV_URL === developmentOrigin;
   const documentURL = dev ? developmentOrigin + "/" : page;
   const window = new BrowserWindow({
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 14, y: 17 },
+    backgroundColor: "#18191c",
     width: 1100,
     height: 800,
     webPreferences: {

@@ -144,11 +144,11 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect
       .poll(() => app.evaluate(() => (globalThis as any).metadataReads))
       .toBeGreaterThan(0);
-    await page.getByRole("button", { name: "Close project", exact: true }).click();
+    await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
     await expect(
-      page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
+      page.getByRole("navigation", { name: "Projects", exact: true }).locator("button[aria-pressed]"),
     ).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Close project", exact: true })).toHaveCount(0);
+    await expect(page.locator('.project-tab[data-active="true"] .project-tab-close')).toHaveCount(0);
     await app.evaluate(() => {
       (globalThis as any).releaseMetadata();
       delete (globalThis as any).releaseMetadata;
@@ -157,7 +157,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     const { readdir } = await import("node:fs/promises");
     expect(await readdir(root)).toContain("server-pid");
     await expect(
-      page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button"),
+      page.getByRole("navigation", { name: "Projects", exact: true }).locator("button[aria-pressed]"),
     ).toHaveCount(1);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header")).toContainText(root);

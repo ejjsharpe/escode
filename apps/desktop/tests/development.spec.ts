@@ -24,8 +24,8 @@ test("StyleX updates during development", async () => {
   });
   try {
     const page = await app.firstWindow();
-    await expect(page.locator("main")).toHaveCSS("background-color", "rgb(24, 32, 43)");
-    await writeFile(source, original.replace("#18202b", "#203040"));
+    await expect(page.locator("main")).toHaveCSS("background-color", "rgb(19, 20, 22)");
+    await writeFile(source, original.replace('backgroundColor: "#131416"', 'backgroundColor: "#203040"'));
     await expect(page.locator("main")).toHaveCSS("background-color", "rgb(32, 48, 64)");
   } finally {
     await writeFile(source, original);
