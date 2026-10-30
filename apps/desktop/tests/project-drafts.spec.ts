@@ -49,7 +49,7 @@ createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line)
 fs.appendFileSync(${JSON.stringify(join(dir, "calls"))},m.method+'\\n');
 let result={}; if(m.method==='initialize')result={userAgent:'codex/0.165.0'};
 if(m.method==='account/read')result={account:{}};
-if(m.method==='config/read')result={config:{model:'fixture',approval_policy:'on-request',sandbox_mode:'read-only'}};
+if(m.method==='config/read' && m.params.cwd===process.cwd())result={config:{model:'fixture',approval_policy:'on-request',sandbox_mode:'read-only'}};
 if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:'draft-thread'},cwd:process.cwd(),model:'fixture',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
 if(m.method==='thread/turns/list')result={data:[],nextCursor:null};
 if(m.method==='turn/start') { result={turn:{id:'turn'}}; send({method:'turn/started',params:{threadId:'draft-thread',turn:{id:'turn'}}}); }
@@ -129,14 +129,8 @@ send({id:m.id,result});});`,
       page.getByRole("button", { name: "Retry connection / reload history" }),
     ).toBeEnabled();
     await page.getByRole("button", { name: "Retry connection / reload history" }).click();
-    await expect
-      .poll(
-        async () =>
-          (await readFile(join(dir, "calls"), "utf8"))
-            .split("\n")
-            .filter((x) => x === "thread/resume").length,
-      )
-      .toBe(1);
+    await expect(message()).toHaveValue("");
+    expect((await records())[0].threadId).toBe("draft-thread");
     expect(
       (await readFile(join(dir, "calls"), "utf8")).split("\n").filter((x) => x === "turn/start"),
     ).toHaveLength(1);

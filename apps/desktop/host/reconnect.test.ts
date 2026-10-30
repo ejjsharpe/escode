@@ -58,3 +58,24 @@ test("lost Send result reconciles original receipt on a fresh authorized session
     expect(sockets).toHaveLength(2);
   } finally { await client.close(); await host.close(); globalThis.WebSocket = original; }
 });
+
+test("a moved chat subscription does not disconnect unrelated host queries", async () => {
+  const original = globalThis.WebSocket;
+  globalThis.WebSocket = class extends WebSocket {
+    constructor(url: string) { super(url, { origin: "null" }); }
+  } as unknown as typeof globalThis.WebSocket;
+  let bootstraps = 0;
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "denied" }),
+    chatSnapshot: async () => { throw Error("Unknown chat in this project"); },
+    sendState: async () => ({ admissionEpoch: "epoch", expected: "ready" }),
+  });
+  const client = createDirectoryClient(async () => { bootstraps++; return host.bootstrap(); });
+  let errors = 0;
+  const off = client.chatLive("old-project", "moved-chat", () => {}, () => { errors++; });
+  try {
+    await expect.poll(() => errors, { timeout: 6000 }).toBe(1);
+    expect(await client.sendState(null, "other-chat")).toEqual({ admissionEpoch: "epoch", expected: "ready" });
+    expect(bootstraps).toBe(1);
+  } finally { off(); await client.close(); await host.close(); globalThis.WebSocket = original; }
+});

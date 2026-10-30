@@ -1399,7 +1399,7 @@ app.whenReady().then(async () => {
       if (!owner || projectSessions.get(root) !== owner || quitting)
         throw Error("Open this project first. Use Open project… to approve its saved directory.");
     };
-    if (!["snapshot", "draft", "composer"].includes(String(operation))) requireOpen();
+    requireOpen();
 
     if (root !== null && operation === "create" && args.length === 1) {
       const target = await checkout(args[0]);
@@ -1409,20 +1409,13 @@ app.whenReady().then(async () => {
       if (target.repository() !== root) throw Error("Checkout belongs to another project.");
       return chats.create(root, target.root);
     }
-    const [id, value] = args;
+    const [id] = args;
     if (typeof id !== "string" || id.length > 100) throw Error("Invalid chat identity");
     await chats.list(root).then((list) => {
       if (!list.some((c) => c.id === id)) throw Error("Unknown project/chat");
     });
-    if (!["snapshot", "draft", "composer"].includes(String(operation))) requireOpen();
-    if (args.length === 1) {
-      if (operation === "composer") return (await store.get(root, id)).draft;
-
-      if (operation === "disconnect") return chats.disconnect(root, id);
-    }
-    if (args.length === 2 && typeof value === "string" && value.length <= 100000) {
-      if (operation === "draft") return chats.draft(root, id, value);
-    }
+    requireOpen();
+    if (args.length === 1 && operation === "disconnect") return chats.disconnect(root, id);
     throw Error("Invalid chat request");
   });
   void window.loadURL(documentURL);

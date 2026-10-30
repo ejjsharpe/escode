@@ -91,7 +91,10 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
           const current = connect();
           const result = yield* Effect.exit(attempt());
           if (!active) return;
-          if (session?.client === current) yield* Effect.tryPromise(close);
+          const failure = Exit.isFailure(result) ? Cause.findError(result.cause) : undefined;
+          const domainError = failure && Result.isSuccess(failure) && typeof failure.success === "string";
+          // A moved chat invalidates its old subscription, not the shared connection.
+          if (!domainError && session?.client === current) yield* Effect.tryPromise(close);
           if (retry >= 3) {
             error(`Live output unavailable; Retry to reload status/history. ${Exit.isFailure(result) ? String(result.cause) : "Stream ended"}`);
             return;
@@ -130,7 +133,6 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
       });
       void Effect.runPromise(effect, { signal: controller.signal }).catch(async (error) => {
         if (disposed) return;
-        if (session?.client === current) await close();
         if (!disposed) notify(String(error));
       });
       return () => { disposed = true; controller.abort(); };

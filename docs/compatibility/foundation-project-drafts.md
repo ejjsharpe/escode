@@ -13,9 +13,16 @@ Before first Send, Codex config/read supplies model, reasoning, approval and san
 - Agents project drafts, context changes, linked checkout selection, settings preview, restart, first-Send binding and closed-project activity: `tests/project-drafts.spec.ts`, adapted to client-owned composers and fresh host associations.
 - Native selection, repository identity/deduplication and navigation: `tests/navigation.spec.ts`.
 - Missing directories, independent file recovery, provider/authentication failures and retry without resend: `tests/availability.spec.ts`.
+- A moved chat’s stale live subscription retains the shared socket; `host/reconnect.test.ts` checks unrelated queries remain connected.
 - Stale context revisions and competing first Send: `host/project-drafts.test.ts`; supersedes old IPC interception race fixtures.
 - Existing exact-directory binding, preserved prompt/identity on failure and no automatic replay: existing project-draft, availability and Send unit tests.
 
-Validation: typecheck and lint passed; full unit suite 190 passed, 4 skipped (opt-in live-provider checks). Focused Electron project-draft/availability/navigation checks passed; build/package passed; `ESCODE_PACKAGED=1` project-draft check passed using the packaged app and restricted PATH. Provider behavior in UI checks uses a protocol fixture. Reuse the actual installation inventory in foundation baseline evidence; no new provider-version compatibility claim.
+Validation: typecheck and lint passed; full unit suite 195 passed, 4 skipped (opt-in live-provider checks). Focused Electron project-draft and navigation checks passed, as did unavailable-checkout composer recovery and repeated project reopening. Three broader availability checks fail after integration (legacy recovery reapproval, secondary-checkout recovery without Git, and provider-failure retry guidance); these are separately recorded below. build/package passed; `ESCODE_PACKAGED=1` project-draft check passed using the packaged app and restricted PATH. Provider behavior in UI checks uses a protocol fixture. Reuse the actual installation inventory in foundation baseline evidence; no new provider-version compatibility claim.
 
 Keyboard/focus controls and view structure are unchanged. No new manual VoiceOver validation, exhaustive multi-client arbitration, live-provider turn, or broad capacity qualification is claimed. Old stores, provider history, project files and existing worktrees are untouched.
+
+## Integrated baseline limits
+
+After rebasing onto main at `6e4bc2e`, the broader availability suite reports 2 passing and 3 failing scenarios. The same scenarios were run against an untouched detached checkout of `6e4bc2e` to distinguish inherited failures from this delivery. These checks are not certified by this ticket. The project-draft flow passes in development and packaged execution; Retry retains provider identity and does not send again, and may reuse an existing connection rather than issue thread/resume.
+
+Standards and specification reviews identified persisted accepted-text clearing, typed draft responses, checkout-scoped settings lookup, replaced IPC removal, and shared-connection churn after context moves; all were addressed. The shared-connection regression has an authenticated transport test.
