@@ -31,7 +31,13 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 function validate(value: unknown): asserts value is State {
   const state = value as State;
   if (!state || state.version !== 1) throw Error("Unsupported foundation storage version");
-  if (!uuid.test(state.hostId) || !uuid.test(state.clientId) || !Array.isArray(state.records))
+  if (
+    typeof state.hostId !== "string" ||
+    typeof state.clientId !== "string" ||
+    !uuid.test(state.hostId) ||
+    !uuid.test(state.clientId) ||
+    !Array.isArray(state.records)
+  )
     throw Error("Invalid foundation identities or records");
   const ids = new Set<string>();
   for (const record of state.records) {
@@ -170,6 +176,7 @@ export class FoundationState {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    if (this.failed) return;
     unlinkSync(join(this.directory, "owner.lock"));
     syncDirectory(this.directory);
   }

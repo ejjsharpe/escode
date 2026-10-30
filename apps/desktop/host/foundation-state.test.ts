@@ -50,6 +50,7 @@ test("incomplete initialization, writes, unsupported versions and unreadable rec
       "{",
       JSON.stringify({ ...identity, version: 2 }),
       JSON.stringify({ ...identity, hostId: "wrong" }),
+      JSON.stringify({ ...identity, hostId: [identity.hostId], clientId: [identity.clientId] }),
     ]) {
       writeFileSync(file, bytes);
       expect(() => FoundationState.open(root)).toThrow();
@@ -57,7 +58,7 @@ test("incomplete initialization, writes, unsupported versions and unreadable rec
     }
     writeFileSync(file, original);
     writeFileSync(join(root, "state.json.tmp"), "partial write");
-    expect(() => FoundationState.open(root)).toThrow("Incomplete");
+    expect(() => FoundationState.open(root)).toThrow();
     expect(readFileSync(file)).toEqual(original);
     rmSync(join(root, "state.json.tmp"));
     rmSync(file);
@@ -92,7 +93,7 @@ test("failed persistence blocks subsequent effects, preserves previous bytes and
     expect(() => store.put(record)).toThrow("unavailable");
     expect(readFileSync(file)).toEqual(original);
     store.close();
-    expect(() => FoundationState.open(join(directory, "foundation"))).toThrow("Incomplete");
+    expect(() => FoundationState.open(join(directory, "foundation"))).toThrow();
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -126,7 +127,7 @@ test("disk failure after temporary-file creation retains identity and blocks res
     expect(readFileSync(join(root, "state.json"))).toEqual(before);
     expect(() => store.read()).toThrow("unavailable");
     store.close();
-    expect(() => FoundationState.open(root)).toThrow("Incomplete");
+    expect(() => FoundationState.open(root)).toThrow();
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -154,3 +155,41 @@ test("missing, unreadable, linked and ambiguous stores are not initialized afres
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test.each([1, 2, 3])(
+  "sync failure at publication step %i retains blocking recovery evidence",
+  async (step) => {
+    const actual = await vi.importActual<typeof fs>("node:fs");
+    const directory = mkdtempSync(join(tmpdir(), "escode-foundation-sync-"));
+    try {
+      const root = join(directory, "foundation");
+      const store = FoundationState.open(root);
+      const state = store.read();
+      let calls = 0;
+      const fault = vi.spyOn(fs, "fsyncSync").mockImplementation((fd) => {
+        if (++calls === step) throw Error("sync failed");
+        actual.fsyncSync(fd);
+      });
+      try {
+        expect(() =>
+          store.put({
+            id: "chat",
+            hostId: state.hostId,
+            clientId: state.clientId,
+            path: "/exact/path",
+            filesystemIdentity: { dev: "1", ino: "2" },
+            providerId: "thread",
+            ownership: "scratch",
+          }),
+        ).toThrow("sync failed");
+      } finally {
+        fault.mockRestore();
+      }
+      expect(JSON.parse(readFileSync(join(root, "state.json"), "utf8")).hostId).toBe(state.hostId);
+      store.close();
+      expect(() => FoundationState.open(root)).toThrow();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
