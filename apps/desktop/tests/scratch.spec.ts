@@ -46,7 +46,12 @@ send({id:m.id,result});});`,
     { mode: 0o700 },
   );
   let app = await launchDesktop(user, dir);
-  const records = async () => JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+  const records = async () => {
+    const saved = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+    return (await app.firstWindow()).evaluate(async chats => Promise.all(chats.map(async (chat: any) => ({
+      ...chat, draft: await window.escode.chat("composer", chat.project, chat.id),
+    }))), saved);
+  };
   try {
     let page = await app.firstWindow();
     await app.evaluate(() => {
@@ -166,7 +171,12 @@ test("one repository offers No project and text-bearing local drafts move throug
     const message = page.getByRole("textbox", { name: "Message Codex" });
     await expect(message).toBeVisible();
     await message.fill("move this prompt");
-    const records = async () => JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+    const records = async () => {
+    const saved = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+    return (await app.firstWindow()).evaluate(async chats => Promise.all(chats.map(async (chat: any) => ({
+      ...chat, draft: await window.escode.chat("composer", chat.project, chat.id),
+    }))), saved);
+  };
     await expect.poll(async () => (await records())[0].draft).toBe("move this prompt");
     const original = (await records())[0];
     await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption("");

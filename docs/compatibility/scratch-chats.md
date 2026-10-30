@@ -131,3 +131,12 @@ The initial packaged draft-context switching scenario timed out before integrati
 with concurrent `main` changes; it is not counted as a pass. The first packaged
 fixture attempt also exposed an obsolete response to `initialized` notifications;
 after correcting that fixture, the first-Send/restart scenario passed.
+
+After rebasing onto concurrent foundation deliveries, typecheck/lint and the
+focused scratch/chat tests passed (19 passed, two opt-in checks skipped).
+Rebuilt/repackaged first-Send/restart passed with exact observations retained in
+[scratch restart identities](scratch-restart-identities.json). Composer assertions
+now use the authenticated per-client composer reader introduced by project-draft
+delivery rather than the obsolete association `draft` field. The separate
+project/No project context-switching packaged scenario still times out at 45
+seconds, including worker teardown; it remains an outstanding integrated UI check.
