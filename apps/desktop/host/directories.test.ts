@@ -173,3 +173,24 @@ test("summary snapshots stream metadata and activity, cancel cleanly, and bound 
     const end = closed(exhausted); exhausted.close(); await end;
   } finally { sockets.forEach(s => s.terminate()); await host.close(); }
 });
+
+test("acknowledged summaries stay connected beyond the directory deadline and cumulative budget", async () => {
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "unused" }),
+    summaries: async () => [{ id: "x".repeat(50000), project: null, checkout: "", threadId: null, busy: false, needsInput: false, unavailable: false }],
+  });
+  const socket = await connect(host.bootstrap().url);
+  let chunks = 0;
+  socket.on("message", data => {
+    if (JSON.parse(String(data))._tag === "Chunk") {
+      chunks++;
+      socket.send(JSON.stringify({ _tag: "Ack", requestId: "1" }));
+    }
+  });
+  try {
+    socket.send(JSON.stringify({ _tag: "Request", id: "1", tag: "chatSummaries", payload: null, headers: [] }));
+    await new Promise(resolve => setTimeout(resolve, 16000));
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    expect(chunks).toBeGreaterThan(45);
+  } finally { socket.terminate(); await host.close(); }
+}, 22000);

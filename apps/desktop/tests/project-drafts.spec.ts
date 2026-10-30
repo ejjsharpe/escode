@@ -223,14 +223,14 @@ send({id:m.id,result});});`,
           (globalThis as any).authorityGateReached = false;
           fs.readFile = async (...args: any[]) => {
             const result = await read(...args);
-            if (first === "send" && String(args[0]).endsWith("/chats.json") && ++reads === 3) {
+            if (first === "send" && String(args[0]).endsWith("/host-chats-v1.json") && ++reads === 3) {
               (globalThis as any).authorityGateReached = true;
               await gate;
             }
             return result;
           };
           fs.rename = async (...args: any[]) => {
-            if (first === "context" && String(args[1]).endsWith("/chats.json")) {
+            if (first === "context" && String(args[1]).endsWith("/host-chats-v1.json")) {
               fs.rename = rename;
               (globalThis as any).authorityGateReached = true;
               await gate;

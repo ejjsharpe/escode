@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { launchDesktop } from "./desktop";
+import { launchDesktop, readChats } from "./desktop";
 
 test("approved projects reopen across repeated restarts without choosing directories again", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-reopen-")));
@@ -273,12 +273,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
     await expect(page.getByRole("status").filter({ hasText: "Saved a.txt" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save ⌘S", exact: true })).toBeEnabled();
     expect(
-      (await page.evaluate((root) => new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
-      const off = window.escode.chatSummaries(async ({ chats }) => {
-        off();
-        try { resolve(await Promise.all(chats.filter(c => c.project === root).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
-      }, reject);
-    }), root))[0],
+      (await page.evaluate(readChats, root))[0],
     ).toMatchObject({ id: chat.id, checkout: root, draft: "retained chat draft", hasSent: false });
   } finally {
     await cleanup();
@@ -345,12 +340,7 @@ test("a saved secondary checkout can recover and save its buffer after restartin
     expect(await readFile(join(secondary, "a.txt"), "utf8")).toBe("secondary recovered edits");
     expect(await readFile(join(root, "a.txt"), "utf8")).toBe("original");
     expect(
-      (await page.evaluate((root) => new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
-      const off = window.escode.chatSummaries(async ({ chats }) => {
-        off();
-        try { resolve(await Promise.all(chats.filter(c => c.project === root).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
-      }, reject);
-    }), root))[0],
+      (await page.evaluate(readChats, root))[0],
     ).toMatchObject({ checkout: secondary, draft: "secondary chat draft" });
   } finally {
     await app.evaluate(({ dialog }) => {

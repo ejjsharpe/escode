@@ -129,6 +129,7 @@ test("legacy saved-project migration and interrupted move recovery survive toget
         const exit = new Promise((resolve) => app.process().once("exit", resolve));
         app.process().kill("SIGKILL");
         await exit;
+        await rm(join(user, "foundation/owner.lock"));
         app = await launchDesktop(user);
       }
     }
@@ -228,6 +229,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
         const exited = new Promise((resolve) => app.process().once("exit", resolve));
         app.process().kill("SIGKILL");
         await exited;
+        await rm(join(user, "foundation/owner.lock"));
         app = await launchDesktop(user);
       }
     }

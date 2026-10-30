@@ -268,6 +268,8 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     const exited = new Promise<void>((resolve) => app.process().once("exit", () => resolve()));
     app.process().kill("SIGKILL");
     await exited;
+    // Explicit recovery after this test has confirmed the crashed writer exited.
+    await rm(join(user, "foundation/owner.lock"));
     app = await launchDesktop(user, dir);
     page = await app.firstWindow();
     await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
@@ -480,7 +482,7 @@ send({id:m.id,result});});`,
   }
 });
 
-test("global creation keeps newest-first rows before the next catalogue poll", async () => {
+test("global creation keeps newest-first rows through live summaries", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-create-order-")));
   const user = join(dir, "user");
   const roots = ["Alpha", "Beta", "Gamma", "Delta"].map((name) => join(dir, name));
@@ -500,7 +502,7 @@ test("global creation keeps newest-first rows before the next catalogue poll", a
   );
   await writeFile(
     join(user, "host-chats-v1.json"),
-    JSON.stringify(
+    JSON.stringify({ version: 1, chats:
       roots
         .slice(0, 3)
         .map((project, index) => ({
@@ -512,15 +514,11 @@ test("global creation keeps newest-first rows before the next catalogue poll", a
           draft: "saved prompt",
           createdAt: index + 1,
         })),
-    ),
+    }),
   );
   const app = await launchDesktop(user);
   try {
     const page = await app.firstWindow();
-    await page.clock.install({ time: new Date("2026-10-29T12:00:00Z") });
-    // Pause before mounting Agents so no polling refresh can mask the creation result.
-    await page.clock.pauseAt(new Date("2026-10-29T12:01:00Z"));
-    await page.reload();
     const rows = page.locator(".agent-row span");
     await expect(rows).toHaveText(["Gamma", "Beta", "Alpha"]);
     await page.getByRole("button", { name: "New chat", exact: true }).click();

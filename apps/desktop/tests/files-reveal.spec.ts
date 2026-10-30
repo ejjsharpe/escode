@@ -262,7 +262,7 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
         const read = fs.readFile;
         fs.readFile = (...args: any[]) => {
           const result = read(...args);
-          if (!String(args[0]).endsWith("/chats.json")) return result;
+          if (!String(args[0]).endsWith("/host-chats-v1.json")) return result;
           fs.readFile = read;
           return new Promise((resolve, reject) => {
             (globalThis as any).releaseContext = () => result.then(resolve, reject);

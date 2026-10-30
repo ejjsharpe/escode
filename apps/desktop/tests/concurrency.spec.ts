@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, readFile, rm, realpath, rename } from "node:fs/prom
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { launchDesktop } from "./desktop";
+import { launchDesktop, readChats } from "./desktop";
 
 test("background requests keep focus; replies, stop and connection loss stay with their chat", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-concurrent-")));
@@ -91,12 +91,7 @@ createInterface({input:process.stdin}).on('line', line => {
       "true",
     );
     await page.getByRole("textbox", { name: "Message Codex" }).fill("second draft");
-    await page.evaluate((a) => new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
-      const off = window.escode.chatSummaries(async ({ chats }) => {
-        off();
-        try { resolve(await Promise.all(chats.filter(c => c.project === a).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
-      }, reject);
-    }), a);
+    await page.evaluate(readChats, a);
     const before = await page.evaluate(({ a, ids }) => window.escode.chat("snapshot", a, ids[1]), {
       a,
       ids,
@@ -155,7 +150,7 @@ createInterface({input:process.stdin}).on('line', line => {
         };
       });
       fs.readFile = async (...args: unknown[]) => {
-        if (String(args[0]).endsWith("/chats.json")) await gate;
+        if (String(args[0]).endsWith("/host-chats-v1.json")) await gate;
         return readFile(...args);
       };
     });
@@ -224,7 +219,7 @@ createInterface({input:process.stdin}).on('line', line => {
       const fs = process.getBuiltinModule("fs/promises") as any;
       const rename = fs.rename;
       fs.rename = async (...args: unknown[]) => {
-        if (!String(args[1]).endsWith("/chats.json")) return rename(...args);
+        if (!String(args[1]).endsWith("/host-chats-v1.json")) return rename(...args);
         fs.rename = rename;
         await new Promise<void>((resolve) => {
           (globalThis as any).releaseChatCreate = resolve;

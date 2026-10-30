@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { launchDesktop } from "./desktop";
+import { launchDesktop, readChats } from "./desktop";
 
 for (const dirty of [false, true]) {
   test(`file close locks editing and duplicate closes while ${dirty ? "discarding" : "closing a clean file"}`, async () => {
@@ -125,7 +125,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       };
       (globalThis as any).metadataReads = 0;
       fs.readFile = async (...args: unknown[]) => {
-        if (String(args[0]).endsWith("/chats.json")) {
+        if (String(args[0]).endsWith("/host-chats-v1.json")) {
           (globalThis as any).metadataReads++;
           await gate;
         }
@@ -161,12 +161,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     ).toHaveCount(1);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header")).toContainText(root);
-    expect(await page.evaluate((root) => new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
-      const off = window.escode.chatSummaries(async ({ chats }) => {
-        off();
-        try { resolve(await Promise.all(chats.filter(c => c.project === root).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
-      }, reject);
-    }), root)).toHaveLength(1);
+    expect(await page.evaluate(readChats, root)).toHaveLength(1);
   } finally {
     await app.evaluate(() => {
       (globalThis as any).releaseMetadata?.();

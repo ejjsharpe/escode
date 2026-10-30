@@ -58,6 +58,9 @@ The view inside a project tab showing only that project's chats and chat drafts.
 **Chat**:
 A saved Codex conversation, including the user's messages and the agent's work and responses, with an optional project association. Its project association and working directory are fixed by first Send; its history is shared across clients, while unsent message text is shared across views within its owning client. Host-persisted directory identity prevents a replaced checkout from becoming the conversation’s execution context after restart. An unavailable path retains the chat and draft; Retry validates the original path without replay, while active Stop remains available.
 
+**Chat summary**:
+The host's metadata and activity projection for one saved chat or chat draft, shared by Agents and project Chats. It excludes unsent message text, transcript bodies and live request payloads. Summary delivery does not subscribe to background conversation details. See [host summary evidence](docs/compatibility/chat-summaries.md).
+
 **Project-backed chat**:
 A chat associated with one project and attached to one of its checkout directories. Multiple chats may share a checkout.
 

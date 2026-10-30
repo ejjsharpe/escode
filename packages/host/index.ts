@@ -49,6 +49,14 @@ export async function startDirectoryHost(options: {
       return protocol.send(id, { _tag: "Defect", defect: "Invalid request or request admission exhausted" });
     };
     const sentBytes = new Map<number, number>();
+    const unacknowledged = new Map<number, Map<string | number, { bytes: number; timer: ReturnType<typeof setTimeout> }>>();
+    const acknowledge = (id: number, requestId: string | number) => {
+      const entry = unacknowledged.get(id)?.get(requestId);
+      if (!entry) return;
+      clearTimeout(entry.timer);
+      sentBytes.set(id, Math.max(0, (sentBytes.get(id) ?? 0) - entry.bytes));
+      unacknowledged.get(id)?.delete(requestId);
+    };
     const pending = new Map<number, Set<string | number>>();
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
       tag: Schema.Literals(["listDirectory", "chatSummaries"]), payload: Schema.Unknown,
@@ -66,6 +74,7 @@ export async function startDirectoryHost(options: {
           requests.add(data.id); pending.set(id, requests);
         } else if (data._tag === "Ack" || data._tag === "Interrupt") {
           if (typeof data.requestId !== "string" && typeof data.requestId !== "number") return reject(id);
+          acknowledge(id, data.requestId);
         } else if (data._tag !== "Ping" && data._tag !== "Eof") return reject(id);
         return receive(id, data);
       })),
@@ -74,11 +83,19 @@ export async function startDirectoryHost(options: {
         const bytes = (sentBytes.get(id) ?? 0) + Buffer.byteLength(JSON.stringify(response));
         if (bytes > 2 * maximumFrameBytes) return reject(id);
         sentBytes.set(id, bytes);
+        if (response._tag === "Chunk") {
+          const chunks = unacknowledged.get(id) ?? new Map();
+          chunks.set(response.requestId, { bytes: Buffer.byteLength(JSON.stringify(response)),
+            timer: setTimeout(() => { Effect.runFork(protocol.end(id)); }, 15000) });
+          unacknowledged.set(id, chunks);
+        }
         if (response._tag === "Exit") pending.get(id)?.delete(response.requestId);
         return protocol.send(id, response, transferables);
       },
     };
-    yield* RpcServer.make(HostQueries, { concurrency: 16, onDisconnect: (id) => Effect.sync(() => { pending.delete(id); rejected.delete(id); sentBytes.delete(id); }) }).pipe(
+    yield* RpcServer.make(HostQueries, { concurrency: 16, onDisconnect: (id) => Effect.sync(() => { pending.delete(id); rejected.delete(id); sentBytes.delete(id);
+      for (const chunk of unacknowledged.get(id)?.values() ?? []) clearTimeout(chunk.timer);
+      unacknowledged.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
       Effect.provide(HostQueries.toLayer({
         chatSummaries: () => Stream.fromEffectSchedule(Effect.tryPromise({ try: async () => {
@@ -103,7 +120,7 @@ export async function startDirectoryHost(options: {
         return HttpServerResponse.empty({ status: 401 });
       tickets.delete(token);
       connections++;
-      return yield* httpEffect.pipe(Effect.timeoutOption("15 seconds"),
+      return yield* httpEffect.pipe(
         Effect.as(HttpServerResponse.empty()), Effect.ensuring(Effect.sync(() => { connections--; })));
     }));
     ready();

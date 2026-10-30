@@ -21,3 +21,17 @@ export function launchDesktop(
     env,
   });
 }
+
+// Serializable browser-side fixture reader; production lists never fetch composers.
+export function readChats(project: string | null): Promise<import("../host/chat").SavedChat[]> {
+  return new Promise((resolve, reject) => {
+    const off = window.escode.chatSummaries(async ({ chats }) => {
+      off();
+      try {
+        resolve(await Promise.all(chats.filter(c => c.project === project).map(async c => ({
+          ...c, draft: await window.escode.chat("composer", c.project, c.id),
+        }))));
+      } catch (error) { reject(error); }
+    }, error => { off(); reject(Error(error)); });
+  });
+}

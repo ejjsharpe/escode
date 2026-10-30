@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { launchDesktop } from "./desktop";
+import { launchDesktop, readChats } from "./desktop";
 
 test("crash recovery preserves baseline; cancel and failed save retain edits; discard survives restart", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-lifecycle-")));
@@ -316,12 +316,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       expect(await readFile(join(scratch.checkout, "turns"), "utf8")).toBe("sent\n");
       expect(await page.evaluate((id) => window.escode.chat("snapshot", null, id), scratch.id))
         .toMatchObject({ busy: false });
-      expect((await page.evaluate(() => new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
-      const off = window.escode.chatSummaries(async ({ chats }) => {
-        off();
-        try { resolve(await Promise.all(chats.filter(c => c.project === null).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
-      }, reject);
-    })))[0])
+      expect((await page.evaluate(readChats, null))[0])
         .toMatchObject({ id: scratch.id, checkout: scratch.checkout, draft: "retained scratch draft" });
       if (closeProject) {
         await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
