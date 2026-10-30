@@ -123,6 +123,7 @@ export const WorkspaceLoad = Schema.Struct({ state: WorkspaceState, errors: Sche
     changes: Schema.Array(Schema.Struct({ path: Schema.String, area: Schema.Literals(["staged", "unstaged", "untracked"]) })),
     gitError: Schema.optionalKey(Schema.String), approvalRequired: Schema.optionalKey(Schema.Boolean) })) });
 export const Files = RpcGroup.make(
+  Rpc.make("createEntry", { payload: { root: Schema.String, parent: Schema.String, name: Schema.String, kind: Schema.Literals(["file", "folder"]) }, success: Schema.String, error: Schema.String }),
   Rpc.make("readFile", { payload: { root: Schema.String, path: Schema.String }, success: FileDocument, error: Schema.String }),
   Rpc.make("saveFile", { payload: { root: Schema.String, path: Schema.String, text: Schema.String, version: Schema.String }, success: FileSaveResult, error: Schema.String }),
   Rpc.make("loadWorkspace", { success: WorkspaceLoad, error: Schema.String }),

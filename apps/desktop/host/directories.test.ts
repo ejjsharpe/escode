@@ -310,8 +310,14 @@ test("live handoff sends bounded append batches, retains ACK charge and releases
 test("authenticated Files accepts a full editor document and rejects invalid save payloads", async () => {
   const text = "a".repeat(2 * 1024 * 1024);
   let saves = 0;
+  let creates = 0;
   const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "denied", message: "unused" }),
+    createEntry: async (root, parent, name, kind) => {
+      creates++;
+      expect([root, parent, name, kind]).toEqual(["/approved", "folder", "new.txt", "file"]);
+      return "folder/new.txt";
+    },
     readFile: async () => ({ text, version: "loaded" }),
     saveFile: async (_root, _path, value, version) => {
       saves++; expect(value).toBe(text); expect(version).toBe("loaded");
@@ -329,6 +335,9 @@ test("authenticated Files accepts a full editor document and rejects invalid sav
     expect(saves).toBe(1);
     expect(await query("3", "saveFile", { root: "/approved", path: "a", text: 1, version: "loaded" })).toContain("Failure");
     expect(saves).toBe(1);
+    expect(await query("4", "createEntry", { root: "/approved", parent: "folder", name: "new.txt", kind: "file" })).toContain("folder/new.txt");
+    expect(await query("5", "createEntry", { root: "/approved", parent: "", name: "bad", kind: "symlink" })).toContain("Failure");
+    expect(creates).toBe(1);
   } finally { const done = closed(socket); socket.close(); await done; await host.close(); }
 });
 

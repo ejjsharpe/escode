@@ -54,6 +54,7 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
     } finally { queued--; }
   }
   return {
+    createEntry: (root: string, parent: string, name: string, kind: "file" | "folder") => chatQuery(client => client.createEntry({ root, parent, name, kind })),
     readFile: (root: string, path: string) => chatQuery(client => client.readFile({ root, path })),
     saveFile: (root: string, path: string, text: string, version: string) => chatQuery(client => client.saveFile({ root, path, text, version })),
     loadWorkspace: () => chatQuery(client => client.loadWorkspace()),

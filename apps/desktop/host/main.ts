@@ -620,6 +620,38 @@ app.whenReady().then(async () => {
     },
     loadWorkspace: () => workspaceAction("load") as Promise<typeof import("@escode/contracts").WorkspaceLoad.Type>,
     persistWorkspace: async (state) => { await workspaceAction("persist", state); },
+    createEntry: async (root, parent, name, kind) => {
+      const { project, check } = await fileContext(root, parent);
+      if (mutationOrigin || quitting) throw Error("File operation unavailable.");
+      operations.assertIdle();
+      project.validateName(name);
+      const absolute = resolve(project.root, parent, name);
+      if (
+        isAppState(absolute) ||
+        stateFiles.some((file) =>
+          [absolute, ...(parent ? [resolve(project.root, parent)] : [])].some((path) =>
+            affected(file.normalize("NFC").toLowerCase(), path.normalize("NFC").toLowerCase()),
+          ),
+        )
+      )
+        throw Error("Protected app state is inside this operation.");
+      const state = await workspace.read();
+      if (
+        state.drafts.some(
+          (d) =>
+            d.root === project.root &&
+            affected(
+              d.path.normalize("NFC").toLowerCase(),
+              (parent ? parent + "/" + name : name).normalize("NFC").toLowerCase(),
+            ),
+        )
+      )
+        throw Error("Destination recovery drafts need preserving. Choose a free name.");
+      check();
+      if (mutationOrigin) throw Error("File operation awaiting confirmation.");
+      operations.assertIdle();
+      return project.create(parent, name, kind);
+    },
     readFile: async (root, path) => { const { project } = await fileContext(root, path); return project.read(path); },
     saveFile: async (root, path, text, version) => {
       if (Buffer.byteLength(text) > limit) throw Error("Invalid save: file exceeds 2 MiB.");
@@ -711,7 +743,7 @@ app.whenReady().then(async () => {
       await store.migrate(opened.repository(), opened.checkouts());
       return opened.status();
     }
-    if (["read", "save", "files", "files-filter"].includes(String(operation))) throw Error("Invalid project request");
+    if (["read", "save", "files", "files-filter", "create-entry"].includes(String(operation))) throw Error("Invalid project request");
     const requestedRoot = args.shift();
     if (
       [
@@ -720,7 +752,6 @@ app.whenReady().then(async () => {
         "clipboard-capture",
         "transfer",
         "trash-selection",
-        "create-entry",
       ].includes(String(operation)) &&
       (typeof requestedRoot !== "string" || !projects.has(requestedRoot))
     )
@@ -1097,49 +1128,6 @@ app.whenReady().then(async () => {
         operations.releaseEmptyBatch();
         mutationOrigin = undefined;
       }
-    }
-    if (
-      operation === "create-entry" &&
-      args.length === 3 &&
-      args.every((a) => typeof a === "string")
-    ) {
-      if (mutationOrigin || quitting) throw Error("File operation unavailable.");
-      operations.assertIdle();
-      const [parent, name, kind] = args as [string, string, "file" | "folder"];
-      project.validateName(name);
-      const absolute = resolve(project.root, parent, name);
-      if (
-        isAppState(absolute) ||
-        stateFiles.some((file) =>
-          [absolute, ...(parent ? [resolve(project.root, parent)] : [])].some((path) =>
-            affected(file.normalize("NFC").toLowerCase(), path.normalize("NFC").toLowerCase()),
-          ),
-        )
-      )
-        throw Error("Protected app state is inside this operation.");
-      const owner = projectSessions.get(identity);
-      const state = await workspace.read();
-      if (
-        state.drafts.some(
-          (d) =>
-            d.root === project.root &&
-            affected(
-              d.path.normalize("NFC").toLowerCase(),
-              (parent ? parent + "/" + name : name).normalize("NFC").toLowerCase(),
-            ),
-        )
-      )
-        throw Error("Destination recovery drafts need preserving. Choose a free name.");
-      if (
-        mutationOrigin ||
-        quitting ||
-        !projects.has(project.root) ||
-        !owner ||
-        projectSessions.get(identity) !== owner
-      )
-        throw Error("Originating project closed or operation pending.");
-      operations.assertIdle();
-      return project.create(parent, name, kind);
     }
     if (
       operation === "trash-selection" &&
