@@ -1,0 +1,5 @@
+# One execution-host authority with tracked upstream infrastructure
+
+Accepted 2026-10-30 through the [foundation handoff decision](https://github.com/ejjsharpe/escode/issues/58). Chats, Files and Source Control share one execution-host authority, initially composed inside Electron main behind authenticated loopback WebSocket contracts; separate host/provider/connection/view lifetimes preserve work after client loss while React, Monaco and pure logic remain independent of Effect. Adopt tracked T3 Codex transport and adapt coherent contracts/session/supervision/bounded synchronization instead of a whole-product fork or isolated throttling helpers: this preserves escode authority and recovery while accepting explicit upstream maintenance, attribution and unstable-API compatibility costs.
+
+The [accepted phased specification](../specifications/effect-foundation.md) defines the first chat plus directory-list/watch slice, runtime gates and later migration sequence. Effect 4.1.0 is the conditional runtime target, not proven compatibility; service installation and remote product delivery remain later efforts. No current application behavior changes with this decision.
