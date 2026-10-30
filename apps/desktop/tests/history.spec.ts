@@ -1,0 +1,54 @@
+import { test, expect } from "@playwright/test";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { launchDesktop } from "./desktop";
+
+test("saved new-format history pages over the host and evicts selected detail on navigation", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-history-ui-"));
+  const user = join(dir, "user"), root = join(dir, "project"), tools = join(dir, "tools");
+  await mkdir(user); await mkdir(tools); execFileSync("git", ["init", root]);
+  await writeFile(join(tools, "codex"), `#!/usr/bin/env node
+const {createInterface}=require('node:readline');
+if(process.argv.includes('--version')){console.log('codex-cli 0.165.0');process.exit(0);}
+createInterface({input:process.stdin}).on('line',line=>{
+ const m=JSON.parse(line); if(!m.id)return; let result={};
+ if(m.method==='initialize')result={userAgent:'fixture'};
+ if(m.method==='account/read')result={account:{}};
+ if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:m.params.threadId??'saved-provider'},cwd:process.cwd(),model:'fixture',sandbox:{type:'readOnly'},approvalPolicy:'on-request'};
+ if(m.method==='turn/start')result={turn:{id:'sent'}};
+ if(m.method==='thread/turns/list')result={data:[{id:'t',items:[{id:'i',type:'agentMessage',text:m.params.cursor===null?'first saved page':'second saved page'}]}],nextCursor:m.params.cursor===null?'second':null};
+ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');
+ if(m.method==='turn/start')for(const method of ['turn/started','turn/completed'])process.stdout.write(JSON.stringify({method,params:{threadId:'saved-provider',turn:{id:'sent'}}})+'\\n');
+});`, { mode: 0o700 });
+  const app = await launchDesktop(user, tools);
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await expect(page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "project", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await page.evaluate(async () => {
+      const draft = await window.escode.chat("createDraft", null);
+      await window.escode.chat("send", null, draft.id, "fixture first send");
+      await window.escode.chat("disconnect", null, draft.id);
+    });
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await page.locator(".agent-row").click();
+    await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
+    const next = page.getByRole("button", { name: "Next history page" });
+    await next.focus(); await page.keyboard.press("Enter");
+    await expect(page.getByText("second saved page", { exact: true })).toBeVisible();
+    await expect(page.getByText("first saved page", { exact: true })).toHaveCount(0);
+    await expect(next).toBeDisabled();
+    await expect(page.getByRole("status").filter({ hasText: "Other portions are not loaded" })).toBeVisible();
+    await page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "project", exact: true }).click();
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
+    await expect(page.getByText("second saved page", { exact: true })).toHaveCount(0);
+    await expect(app.evaluate(async ({ ipcMain }) => {
+      const handler = (ipcMain as any)._invokeHandlers.get("chat");
+      return handler({ senderFrame: null }, "open", null, "fake");
+    })).rejects.toThrow();
+  } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }
+});

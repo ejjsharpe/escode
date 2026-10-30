@@ -5,6 +5,7 @@ window.addEventListener("unload", () => { void directories.close(); });
 contextBridge.exposeInMainWorld(
   "escode",
   Object.freeze({
+    chatHistory: directories.chatHistory,
     chatSummaries: directories.chatSummaries,
     listDirectory: directories.listDirectory,
     watchFiles: directories.watchFiles,
@@ -21,7 +22,9 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("close-request", listener);
       return () => ipcRenderer.removeListener("close-request", listener);
     },
-    chat: (operation: string, ...args: unknown[]) => ipcRenderer.invoke("chat", operation, ...args),
+    chat: (operation: string, ...args: unknown[]) => operation === "open"
+      ? directories.openChat(args[0] as string | null, args[1] as string)
+      : ipcRenderer.invoke("chat", operation, ...args),
     toolStatus: () => ipcRenderer.invoke("tools:status"),
     project: (operation: string, ...args: string[]) =>
       ipcRenderer.invoke("project", operation, ...args),

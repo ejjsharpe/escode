@@ -238,3 +238,26 @@ test("consumed unary listings may exceed the aggregate stream delivery budget", 
     }
   } finally { socket.terminate(); await host.close(); }
 });
+
+test("saved history uses authenticated validated queries and bounded responses", async () => {
+  const calls: unknown[] = [];
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "denied" }),
+    history: async (project, id, cursor) => {
+      calls.push({ project, id, cursor });
+      if (id === "large") return { revision: "r", nextCursor: null, items: [{ id: "i", turnId: "t", type: "agentMessage", text: "x".repeat(maximumFrameBytes) }] };
+      return { revision: "immutable", nextCursor: "older", items: [{ id: "i", turnId: "t", type: "agentMessage", text: "saved text" }] };
+    },
+  });
+  try {
+    for (const payload of [{ project: null, id: "saved", cursor: null }, { project: null, id: "large", cursor: null }, { project: null, id: "bad", cursor: 3 }]) {
+      const socket = await connect(host.bootstrap().url);
+      const reply = new Promise<string>(resolve => socket.once("message", data => resolve(String(data))));
+      socket.send(JSON.stringify({ _tag: "Request", id: "1", tag: "chatHistory", payload, headers: [] }));
+      const result = await reply;
+      expect(result).toContain(payload.id === "saved" ? "saved text" : payload.id === "large" ? "capacity exhausted" : "Failure");
+      const done = closed(socket); socket.close(); await done;
+    }
+    expect(calls).toEqual([{ project: null, id: "saved", cursor: null }, { project: null, id: "large", cursor: null }]);
+  } finally { await host.close(); }
+});

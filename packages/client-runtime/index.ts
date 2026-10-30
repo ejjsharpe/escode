@@ -1,7 +1,7 @@
 import { Effect, Exit, Layer, Schedule, Schema, Scope, Semaphore, Stream, Fiber } from "effect";
 import { RpcClient, RpcSerialization } from "effect/rpc";
 import { Socket } from "effect/socket";
-import { Bootstrap, HostQueries, type ChatSummaries, type DirectoryResult } from "@escode/contracts";
+import { Bootstrap, HostQueries, type HistoryPage, type ChatSummaries, type DirectoryResult } from "@escode/contracts";
 
 export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
   const queries = Semaphore.makeUnsafe(4);
@@ -35,6 +35,22 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
     return client;
   }
   return {
+    async openChat(project: string | null, id: string) {
+      if (queued >= 16) throw Error("Chat query admission exhausted. Retry explicitly.");
+      queued++;
+      try {
+        const client = await connect();
+        return await Effect.runPromise(queries.withPermit(client.openChat({ project, id })).pipe(Effect.timeout("35 seconds")));
+      } finally { queued--; }
+    },
+    async chatHistory(project: string | null, id: string, cursor: string | null): Promise<HistoryPage> {
+      if (queued >= 16) throw Error("History query admission exhausted. Retry explicitly.");
+      queued++;
+      try {
+        const client = await connect();
+        return await Effect.runPromise(queries.withPermit(client.chatHistory({ project, id, cursor })).pipe(Effect.timeout("35 seconds")));
+      } finally { queued--; }
+    },
     async listDirectory(root: string, path: string): Promise<DirectoryResult> {
       if (queued >= 10000) throw Error("Directory query admission exhausted. Refresh to retry.");
       queued++;

@@ -5,7 +5,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { HostQueries, ChatSummaries, maximumFrameBytes, wireRevision, type Bootstrap, type DirectoryResult } from "@escode/contracts";
+import { HostQueries, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type Bootstrap, type DirectoryResult } from "@escode/contracts";
 
 // Guard parser/error writes too; they bypass the RPC response budget.
 class BoundedWebSocket extends WebSocket {
@@ -27,6 +27,8 @@ export async function startDirectoryHost(options: {
   list(root: string, path: string): Promise<DirectoryResult>;
   watch?(root: string, paths: readonly string[], notify: (error?: string) => void): () => void;
   summaries?: () => Promise<ChatSummaries["chats"]>;
+  openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
+  history?: (project: string | null, id: string, cursor: string | null) => Promise<HistoryPage>;
   now?: () => number;
 }) {
   const epoch = randomUUID();
@@ -60,7 +62,7 @@ export async function startDirectoryHost(options: {
     };
     const pending = new Map<number, Set<string | number>>();
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -99,6 +101,18 @@ export async function startDirectoryHost(options: {
       unacknowledged.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
       Effect.provide(HostQueries.toLayer({
+        openChat: ({ project, id }) => Effect.tryPromise({ try: async () => {
+          if (!options.openChat) throw Error("Chat unavailable");
+          const detail = await options.openChat(project, id);
+          if (Buffer.byteLength(JSON.stringify(detail)) > maximumFrameBytes / 2) throw Error("Chat detail unavailable: capacity exhausted");
+          return Schema.decodeUnknownSync(ChatDetail)(detail);
+        }, catch: String }),
+        chatHistory: ({ project, id, cursor }) => Effect.tryPromise({ try: async () => {
+          if (!options.history) throw Error("History unavailable");
+          const page = await options.history(project, id, cursor);
+          if (Buffer.byteLength(JSON.stringify(page)) > maximumFrameBytes / 2) throw Error("History page unavailable: capacity exhausted");
+          return Schema.decodeUnknownSync(HistoryPage)(page);
+        }, catch: String }),
         chatSummaries: () => Stream.fromEffectSchedule(Effect.tryPromise({ try: async () => {
           const chats = await options.summaries?.() ?? [];
           if (Buffer.byteLength(JSON.stringify(chats)) > maximumFrameBytes / 2) throw Error("Chat summary capacity exhausted");

@@ -370,7 +370,19 @@ app.whenReady().then(async () => {
     chats.close();
     for (const p of projects.values()) p.close();
   });
+  const authorizeHistory = async (root: string | null, id: string) => {
+    if (quitting || (root !== null && removing.has(root))) throw Error("Chat unavailable during shutdown or removal");
+    const chat = await store.get(root, id);
+    if (root !== null) {
+      const state = await workspace.read();
+      const saved = [...(state.savedProjects ?? []), ...state.projects, ...await workspace.approved()];
+      if (!saved.some(p => p.project === root)) throw Error("Approve this project using Open project… first.");
+    }
+    return chat;
+  };
   const directoryHost = await startDirectoryHost({
+    openChat: async (root, id) => { await authorizeHistory(root, id); return chats.open(root, id); },
+    history: async (root, id, cursor) => { await authorizeHistory(root, id); return chats.history(root, id, cursor); },
     summaries: async () => {
       const state = await workspace.read();
       const saved = [...(state.savedProjects ?? []), ...state.projects, ...await workspace.approved()];
@@ -1288,15 +1300,6 @@ app.whenReady().then(async () => {
     });
     if (!["snapshot", "draft", "composer"].includes(String(operation))) requireOpen();
     if (args.length === 1) {
-      if (operation === "open") {
-        const chat = await store.get(root, id);
-        if (root !== null) {
-          const target = await checkout(chat.checkout);
-          target.checkoutIdentity();
-          if (target.repository() !== root) throw Error("Wrong project checkout.");
-        }
-        return chats.open(root, id);
-      }
       if (operation === "composer") return (await store.get(root, id)).draft;
       if (operation === "snapshot") {
         if (root !== null && !owner)

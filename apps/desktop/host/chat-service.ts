@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+import type { HistoryPage } from "@escode/contracts";
+import { createHash, randomUUID } from "node:crypto";
 import { accessSync, constants, realpathSync, statSync } from "node:fs";
 import { Chats, type SavedChat } from "./chat";
 import { codexDiagnostic, connectCodex, type CodexConnection, type WireMessage } from "./tools";
-export type ChatItem = { id: string; turnId: string; type: string; text: string };
+export type ChatItem = { id: string; turnId: string; type: string; text: string; revision?: string };
 export type LiveRequest = { token: string; method: string; params: any };
 export type ChatSnapshot = {
   project: string | null;
@@ -16,6 +17,7 @@ export type ChatSnapshot = {
   requests: LiveRequest[];
   error: string | null;
   contextError?: string | null;
+  history?: { nextCursor: string | null; revision: string };
 };
 type Session = ChatSnapshot & {
   rpc?: CodexConnection;
@@ -94,6 +96,7 @@ export class ChatService {
       items: s.items,
       requests: s.requests,
       error: s.error,
+      history: s.history,
     });
   }
   async inspect(project: string | null, id: string) {
@@ -264,29 +267,14 @@ export class ChatService {
         });
         s.settings = {
           model: result.model,
-          reasoning: result.reasoningEffort,
+          reasoning: result.reasoningEffort ?? null,
           approval: result.approvalPolicy,
           sandbox: result.sandbox,
         };
         if (resume) {
-          const items: ChatItem[] = [];
-          let cursor: string | null = null;
-          const seen = new Set<string>();
-          do {
-            const page = await rpc.request("thread/turns/list", {
-              threadId: s.threadId,
-              cursor,
-              sortDirection: "asc",
-              itemsView: "full",
-            });
-            for (const turn of page.data)
-              for (const item of turn.items) items.push(this.item(turn.id, item));
-            cursor = page.nextCursor;
-            if (cursor && seen.has(cursor))
-              throw Error("Codex repeated a history cursor. Retry connection.");
-            if (cursor) seen.add(cursor);
-          } while (cursor);
-          s.items = items;
+          const page = await this.readHistory(s, null);
+          s.items = [...page.items];
+          s.history = { nextCursor: page.nextCursor, revision: page.revision };
         }
         if (s.epoch !== epoch) throw Error("Codex disconnected during setup. Retry connection.");
         this.store.validateWorktree(chat);
@@ -317,6 +305,44 @@ export class ChatService {
     }
     return this.snapshot(project, id);
   }
+  async history(project: string | null, id: string, cursor: string | null): Promise<HistoryPage> {
+    await this.store.get(project, id);
+    return this.inContext(project, id, async () => {
+      await this.connectSession(project, id);
+      const s = this.session(project, id);
+      const chat = await this.store.get(project, id);
+      const error = await this.store.validateDirectory(chat);
+      if (error) throw Error(error);
+      if (!chat.threadId) return { items: [], nextCursor: null, revision: "empty" };
+      if (s.threadId !== chat.threadId) throw Error("History provider binding changed");
+      return this.readHistory(s, cursor);
+    });
+  }
+  private async readHistory(s: Session, cursor: string | null): Promise<HistoryPage> {
+    if (!s.rpc) throw Error("History unavailable. Retry connection.");
+    const page = await s.rpc.request("thread/turns/list", {
+      threadId: s.threadId, cursor, limit: 20, sortDirection: "asc", itemsView: "full",
+    });
+    if (!page || !Array.isArray(page.data) || page.data.length > 20 ||
+        !(page.nextCursor === null || (typeof page.nextCursor === "string" && page.nextCursor.length <= 4096)) ||
+        (cursor !== null && cursor === page.nextCursor)) throw Error("Malformed or repeated history page. History unavailable.");
+    const items: ChatItem[] = [];
+    let bytes = 0;
+    for (const turn of page.data) {
+      if (typeof turn?.id !== "string" || !Array.isArray(turn.items)) throw Error("Malformed history turn");
+      for (const raw of turn.items) {
+        if (typeof raw?.id !== "string" || typeof raw.type !== "string") throw Error("Malformed history item");
+        const item = this.item(turn.id, raw);
+        if (typeof item.text !== "string") throw Error("Malformed history body");
+        bytes += Buffer.byteLength(JSON.stringify(item));
+        if (bytes > 128 * 1024 || items.length >= 1000) throw Error("History page exceeds display limit. This portion is unavailable.");
+        item.revision = createHash("sha256").update(JSON.stringify(item)).digest("hex");
+        items.push(item);
+      }
+    }
+    const body = JSON.stringify({ items, nextCursor: page.nextCursor });
+    return { items, nextCursor: page.nextCursor, revision: createHash("sha256").update(body).digest("hex") };
+  }
   private item(turnId: string, item: any): ChatItem {
     const text =
       item.text ??
@@ -324,7 +350,7 @@ export class ChatService {
         ? item.content.map((c: any) => c.text ?? "").join("\n")
         : item.type === "commandExecution"
           ? `${item.command}\n${item.aggregatedOutput ?? ""}`
-          : JSON.stringify(item, null, 2));
+          : JSON.stringify(item));
     return { id: item.id, turnId, type: item.type, text };
   }
   private event(s: Session, message: WireMessage) {
@@ -342,7 +368,7 @@ export class ChatService {
       const settings = p.threadSettings;
       s.settings = {
         model: settings.model,
-        reasoning: settings.effort,
+        reasoning: settings.effort ?? null,
         approval: settings.approvalPolicy,
         sandbox: settings.sandboxPolicy,
       };

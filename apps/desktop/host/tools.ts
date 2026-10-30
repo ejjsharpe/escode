@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { createInterface } from "node:readline";
+
 const execute = promisify(execFile);
 export const minimumCodexVersion = "0.163.0";
 export const testedCodexVersion = "0.165.0";
@@ -146,7 +146,7 @@ export async function connectCodex(
     terminationFailed = reject;
   });
   void finished.catch(() => {});
-  const lines = createInterface({ input: child.stdout });
+  let input = Buffer.alloc(0);
   let sequence = 0,
     closed = false;
   const pending = new Map<
@@ -166,7 +166,7 @@ export async function connectCodex(
       entry.reject(error);
     }
     pending.clear();
-    lines.close();
+    input = Buffer.alloc(0);
     try {
       killGroup("SIGTERM");
     } catch {
@@ -189,9 +189,7 @@ export async function connectCodex(
   child.on("error", fail);
   child.stdin.on("error", fail);
   child.stdout.on("error", fail);
-  lines.on("close", () =>
-    fail(Error("Codex protocol connection closed. Retry connection; work was not resent.")),
-  );
+  child.stdout.on("end", () => fail(Error("Codex protocol connection closed. Retry connection; work was not resent.")));
   child.on("exit", () =>
     fail(
       Error(
@@ -199,7 +197,7 @@ export async function connectCodex(
       ),
     ),
   );
-  lines.on("line", (line) => {
+  const line = (line: string) => {
     try {
       const message: WireMessage = JSON.parse(line);
       if (message.method) receive(message);
@@ -218,6 +216,25 @@ export async function connectCodex(
       }
     } catch {
       fail(Error("Incompatible Codex protocol. Check supported CLI and Retry connection."));
+    }
+  };
+  // Reject before concatenation/JSON decoding, including unknown provider payloads.
+  child.stdout.on("data", (chunk: Buffer) => {
+    if (closed) return;
+    let start = 0;
+    while (start < chunk.length && !closed) {
+      const newline = chunk.indexOf(10, start);
+      const end = newline < 0 ? chunk.length : newline;
+      if (input.length + end - start > 1024 * 1024) {
+        fail(Error("Provider frame exceeds 1 MiB. History unavailable; identity retained. Retry explicitly."));
+        return;
+      }
+      input = Buffer.concat([input, chunk.subarray(start, end)]);
+      if (newline < 0) return;
+      const frame = input.toString("utf8");
+      input = Buffer.alloc(0);
+      line(frame);
+      start = newline + 1;
     }
   });
   const rpc: CodexConnection = {

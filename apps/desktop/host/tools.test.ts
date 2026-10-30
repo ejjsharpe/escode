@@ -149,3 +149,18 @@ test("RPC error replies identify the executable and version", () =>
       rpc.close();
     }
   }));
+
+test.each(["oversize", "malformed", "split"])("bounded provider frame decoding: %s", kind =>
+  fixture("0.200.0", true, async path => {
+    let source = await readFile(path, "utf8");
+    const output = kind === "oversize" ? "process.stdout.write('x'.repeat(1048577));"
+      : kind === "malformed" ? "process.stdout.write('{bad json}\\n');"
+      : "const b=Buffer.from(JSON.stringify({id:m.id,result:{text:'£ saved'}})+'\\n'); const i=b.indexOf(194); process.stdout.write(b.subarray(0,i+1)); setTimeout(()=>process.stdout.write(b.subarray(i+1)),5);";
+    source = source.replace("let result={};", `if(m.method==='fixture/frame'){${output}return;} let result={};`);
+    await writeFile(path, source);
+    const rpc = await connectCodex(tmpdir(), () => {}, () => {}, path);
+    try {
+      if (kind === "split") expect(await rpc.request("fixture/frame", {})).toEqual({ text: "£ saved" });
+      else await expect(rpc.request("fixture/frame", {})).rejects.toThrow(kind === "oversize" ? "exceeds 1 MiB" : "Incompatible Codex protocol");
+    } finally { rpc.close(); await rpc.finished; }
+  }));

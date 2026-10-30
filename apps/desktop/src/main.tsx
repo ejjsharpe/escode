@@ -37,6 +37,7 @@ declare global {
       lifecycle: import("../host/workspace").LifecycleBridge;
       onClose(callback: () => void): () => void;
       chat: ChatBridge;
+      chatHistory: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").HistoryPage>;
       chatSummaries: (apply: (value: import("@escode/contracts").ChatSummaries) => void, error: (message: string) => void) => () => void;
       toolStatus(): Promise<unknown>;
       project: ProjectBridge;

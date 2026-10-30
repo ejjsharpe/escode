@@ -166,7 +166,7 @@ export function ChatView({
   createChat?: (root: string) => Promise<void>;
   global?: boolean;
 }) {
-  const [store, { chats, snapshots, drafts, pending, responding, errors }] =
+  const [store, { chats, snapshots, history, drafts, pending, responding, errors }] =
     useProjectChats(project);
   const [targets, setTargets] = useState<{ project: string | null; checkout: string }[]>([]);
   useEffect(() => {
@@ -323,7 +323,15 @@ export function ChatView({
                   <pre>{JSON.stringify(snapshot.settings, null, 2)}</pre>
                 </details>
               )}
-              {snapshot?.items.map((item) => (
+              {(history[selected] || snapshot?.history) && (
+                <nav aria-label="History pages">
+                  <Button disabled={working} onClick={() => store.history(selected, null)}>First history page</Button>
+                  <Button disabled={working || !(history[selected] ?? snapshot?.history)?.nextCursor}
+                    onClick={() => store.history(selected, (history[selected] ?? snapshot?.history)?.nextCursor ?? null)}>Next history page</Button>
+                  <p role="status">Showing one history page. Other portions are not loaded.</p>
+                </nav>
+              )}
+              {(history[selected] ? [...history[selected].items, ...(snapshot?.items ?? []).filter(i => !i.revision && !history[selected].items.some(saved => saved.id === i.id && saved.turnId === i.turnId))] : snapshot?.items ?? []).map((item) => (
                 <article key={item.turnId + item.id}>
                   <h2>
                     {item.type === "userMessage"

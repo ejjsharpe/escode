@@ -61,6 +61,9 @@ A saved Codex conversation, including the user's messages and the agent's work a
 **Chat summary**:
 The host's metadata and activity projection for one saved chat or chat draft, shared by Agents and project Chats. It excludes unsent message text, transcript bodies and live request payloads. Summary delivery does not subscribe to background conversation details. See [host summary evidence](docs/compatibility/chat-summaries.md).
 
+**History page**:
+A bounded portion of a saved chat's provider history, loaded explicitly through the execution host. Message bodies and pages carry content revisions; choosing another page replaces the displayed portion. Unloaded or unavailable portions are disclosed. See [saved history evidence](docs/compatibility/saved-history.md).
+
 **Project-backed chat**:
 A chat associated with one project and attached to one of its checkout directories. Multiple chats may share a checkout.
 

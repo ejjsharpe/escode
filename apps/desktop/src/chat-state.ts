@@ -30,6 +30,7 @@ class ProjectChats {
   private state = {
     chats: [] as ChatSummary[],
     drafts: {} as Record<string, string>,
+    history: {} as Record<string, import("@escode/contracts").HistoryPage>,
     snapshots: {} as Record<string, ChatSnapshot>,
     pending: {} as Record<string, boolean>,
     responding: {} as Record<string, boolean>,
@@ -89,7 +90,12 @@ class ProjectChats {
     return () => {
       const count = (this.observed.get(id) ?? 1) - 1;
       if (count) this.observed.set(id, count);
-      else this.observed.delete(id);
+      else {
+        this.observed.delete(id);
+        const snapshots = { ...this.state.snapshots }, history = { ...this.state.history };
+        delete snapshots[id]; delete history[id];
+        this.update({ snapshots, history });
+      }
     };
   }
   async refresh() {
@@ -113,6 +119,12 @@ class ProjectChats {
     } finally {
       this.polling = false;
     }
+  }
+  history(id: string, cursor: string | null) {
+    return this.run(id, async () => {
+      const page = await window.escode.chatHistory(this.project, id, cursor);
+      if (this.observed.has(id)) this.update({ history: { ...this.state.history, [id]: page } });
+    });
   }
   open(id: string) {
     const existing = this.opening.get(id);
