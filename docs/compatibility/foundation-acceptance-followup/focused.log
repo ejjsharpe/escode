@@ -1,0 +1,27 @@
+$ playwright test tests/project.spec.ts tests/files-reveal.spec.ts tests/development.spec.ts
+
+Running 8 tests using 1 worker
+
+(node:88125) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+7:45:40 PM [vite+] (client) hmr update /src/main.tsx
+7:45:40 PM [vite+] (client) hmr invalidate /src/main.tsx No exports
+7:45:40 PM [vite+] (client) page reload src/main.tsx
+7:45:41 PM [vite+] (client) hmr update /src/main.tsx
+  ✓  1 tests/development.spec.ts:7:1 › StyleX updates during development (2.6s)
+
+  ✓  2 tests/files-reveal.spec.ts:8:1 › reveal, collapse, ignored dirty file, failure recovery, context paths and restart (5.8s)
+
+  ✓  3 tests/files-reveal.spec.ts:227:3 › context authority and filter memory across editor close (2.8s)
+
+  ✓  4 tests/files-reveal.spec.ts:227:3 › context authority and filter memory across retained dirty editor (2.2s)
+
+  ✓  5 tests/files-reveal.spec.ts:227:3 › context authority and filter memory across root replacement (2.5s)
+
+  ✓  6 tests/files-reveal.spec.ts:227:3 › context authority and filter memory across quit (2.1s)
+
+  ✓  7 tests/project.spec.ts:8:3 › unpackaged: edit, navigate, cancel conflict, compare and explicitly overwrite (6.0s)
+
+  ✓  8 tests/project.spec.ts:8:3 › packaged: edit, navigate, cancel conflict, compare and explicitly overwrite (7.5s)
+
+  8 passed (32.5s)

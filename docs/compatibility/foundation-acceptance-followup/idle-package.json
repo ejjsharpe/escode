@@ -1,0 +1,112 @@
+{
+  "readyMs": 747,
+  "versions": {
+    "node": "24.22.1",
+    "acorn": "8.18.0",
+    "ada": "4.0.0",
+    "amaro": "1.1.11",
+    "ares": "1.34.9",
+    "brotli": "1.2.0",
+    "cldr": "48.0",
+    "icu": "78.2",
+    "llhttp": "9.4.3",
+    "merve": "1.2.2",
+    "modules": "150",
+    "napi": "10",
+    "nbytes": "0.1.4",
+    "ncrypto": "0.0.1",
+    "nghttp2": "1.70.0",
+    "nghttp3": "",
+    "ngtcp2": "",
+    "openssl": "0.0.0",
+    "simdjson": "4.6.11",
+    "simdutf": "7.7.0",
+    "sqlite": "3.53.4",
+    "tz": "2026e",
+    "undici": "7.30.1",
+    "unicode": "17.0",
+    "uv": "1.52.1",
+    "uvwasi": "0.0.23",
+    "v8": "15.6.75.19-electron.0",
+    "zlib": "1.3.2.1-motley",
+    "zstd": "1.6.0",
+    "electron": "45.1.0",
+    "chrome": "156.0.8078.49"
+  },
+  "metrics": [
+    {
+      "cpu": {
+        "cumulativeCPUUsage": 0.41638,
+        "percentCPUUsage": 0,
+        "idleWakeupsPerSecond": 0
+      },
+      "pid": 54002,
+      "type": "Browser",
+      "creationTime": 1793391074232.635,
+      "memory": {
+        "workingSetSize": 195808,
+        "peakWorkingSetSize": 195808
+      },
+      "sandboxed": false
+    },
+    {
+      "cpu": {
+        "cumulativeCPUUsage": 0.142154,
+        "percentCPUUsage": 0,
+        "idleWakeupsPerSecond": 0
+      },
+      "pid": 54003,
+      "type": "GPU",
+      "creationTime": 1793391074436.188,
+      "serviceName": "GPU",
+      "memory": {
+        "workingSetSize": 92480,
+        "peakWorkingSetSize": 92480
+      },
+      "sandboxed": true
+    },
+    {
+      "cpu": {
+        "cumulativeCPUUsage": 0.068319,
+        "percentCPUUsage": 0,
+        "idleWakeupsPerSecond": 0
+      },
+      "pid": 54004,
+      "type": "Utility",
+      "creationTime": 1793391074437.367,
+      "serviceName": "network.mojom.NetworkService",
+      "name": "Network Service",
+      "memory": {
+        "workingSetSize": 51632,
+        "peakWorkingSetSize": 51632
+      },
+      "sandboxed": true
+    },
+    {
+      "cpu": {
+        "cumulativeCPUUsage": 0.331841,
+        "percentCPUUsage": 0,
+        "idleWakeupsPerSecond": 0
+      },
+      "pid": 54005,
+      "type": "Tab",
+      "creationTime": 1793391074565.719,
+      "memory": {
+        "workingSetSize": 174736,
+        "peakWorkingSetSize": 174736
+      },
+      "sandboxed": true
+    }
+  ],
+  "memory": {
+    "rss": 200523776,
+    "heapTotal": 11698176,
+    "heapUsed": 8487532,
+    "external": 5283219,
+    "arrayBuffers": 0
+  },
+  "memoryInfo": {
+    "private": 62036,
+    "shared": 672
+  }
+}

@@ -1,0 +1,18 @@
+$ playwright test tests/accessibility.spec.ts "--repeat-each=3"
+
+Running 3 tests using 1 worker
+
+(node:96504) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 tests/accessibility.spec.ts:8:1 › keyboard can navigate projects, edit, review an accessible diff and answer scoped chat input (10.1s)
+(node:96852) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  2 tests/accessibility.spec.ts:8:1 › keyboard can navigate projects, edit, review an accessible diff and answer scoped chat input (10.2s)
+(node:97260) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  3 tests/accessibility.spec.ts:8:1 › keyboard can navigate projects, edit, review an accessible diff and answer scoped chat input (9.6s)
+
+  3 passed (31.5s)

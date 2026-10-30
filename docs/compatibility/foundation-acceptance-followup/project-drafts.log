@@ -1,0 +1,18 @@
+$ playwright test tests/project-drafts.spec.ts "--repeat-each=3"
+
+Running 3 tests using 1 worker
+
+(node:26331) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'linked')
+  ✓  1 tests/project-drafts.spec.ts:8:1 › saved project drafts move with text, survive restart and bind exactly once from closed-project Agents (8.9s)
+(node:26762) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'linked')
+  ✓  2 tests/project-drafts.spec.ts:8:1 › saved project drafts move with text, survive restart and bind exactly once from closed-project Agents (8.9s)
+(node:27218) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'linked')
+  ✓  3 tests/project-drafts.spec.ts:8:1 › saved project drafts move with text, survive restart and bind exactly once from closed-project Agents (8.8s)
+
+  3 passed (28.2s)

@@ -1,5 +1,9 @@
 # Integrated local foundation qualification
 
+See the [follow-up repairs and qualification](foundation-acceptance-followup.md)
+for the subsequent implementation fixes, rerun results and manual checklist.
+The record below preserves the original failed run.
+
 Tracks [Accept the complete local foundation](https://github.com/ejjsharpe/escode/issues/86).
 Qualification target: combined main commit `6a5e1d0`, 2026-10-30, isolated
 `acceptance/issue-86` worktree. **Acceptance remains pending.** This record does

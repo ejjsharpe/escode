@@ -1,0 +1,21 @@
+$ nx lint desktop "--output-style=stream"
+
+> nx run desktop:lint
+
+desktop: (node:40278) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+desktop: (Use `node --trace-warnings ...` to show where the warning was created)
+desktop: [0m[2m[35m$[0m [2m[1mvp lint[0m
+desktop: (node:40288) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+desktop: (Use `node --trace-warnings ...` to show where the warning was created)
+desktop: (node:40291) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+desktop: (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+
+ NX   Successfully ran target lint for project desktop
+
+
+  Run duration:      758ms
+  Cache:             0/1 hit (0%)
+  Critical path:     644ms (1 task)
+  Recoverable time:  <1ms
