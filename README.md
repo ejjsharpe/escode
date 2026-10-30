@@ -16,6 +16,8 @@ The completed [Specify the shared Agents view](https://github.com/ejjsharpe/esco
 
 The selected foundation is macOS, Electron, React, TypeScript, and Monaco, using installed Git and Codex directly. T3 Code remains a workflow reference.
 
+The [agreed host/client lifecycle amendment](https://github.com/ejjsharpe/escode/issues/53) specifies that closing the last macOS window will keep the app, local execution host and unsaved edits available; explicit Quit will retain active-work confirmation and Save/Discard/Cancel. Client loss will not stop host-owned work, and host restart will require explicit action before another turn. These are planning decisions for the Effect foundation, not implemented behavior; the run and acceptance records below describe the current app.
+
 The platform, editor, reuse boundary, and local-service architecture are recorded in [Choose the desktop foundation](https://github.com/ejjsharpe/escode/issues/4#issuecomment-6484074577). The completed maps index the supporting research, behaviour, interaction and specification decisions.
 
 See [GLOSSARY.md](GLOSSARY.md) for product terminology and [the tracker conventions](docs/agents/issue-tracker.md) for the planning workflow.

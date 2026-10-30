@@ -8,6 +8,32 @@ Integrated behavior and acceptance boundaries are recorded in [Agents acceptance
 
 ## Language
 
+The host, connection and lifecycle terms below reflect the [agreed lifecycle planning amendment](https://github.com/ejjsharpe/escode/issues/53); these changes are not yet implemented.
+
+**Execution host**:
+The escode runtime on one machine that owns its projects, files, saved chats and agent execution. Its work can continue without an open client connection or view.
+
+**Provider session**:
+A live connection between an execution host and a provider for a chat, distinct from the saved conversation. Replacing this session does not restore its old live requests or start another turn automatically.
+
+**Client connection**:
+An authenticated link through which a client controls an execution host and receives updates. Losing the link does not by itself stop host-owned work.
+
+**View subscription**:
+A client's interest in updates for a displayed chat, directory or other surface. Ending it releases that interest without ending the underlying chat or host.
+
+**Desktop window**:
+An escode desktop interface containing Agents and project tabs. Closing the last window on macOS leaves the app and its bundled local execution host running, retaining unsaved edits for reopening.
+
+**Quit**:
+The explicit action that exits the desktop app and stops its bundled local execution host, with confirmation before stopping active local work and Save/Discard/Cancel for unsaved edits.
+
+**Stop**:
+The action that interrupts the selected chat's active work on its execution host. It does not shut down the host.
+
+**Host shutdown**:
+The explicit action that stops an execution host and its active work. A remote client requires host-management permission and confirmation showing affected work to request it.
+
 **Project**:
 A saved local Git repository whose files, source changes, and project-backed chats belong together across branch switches. Linked worktrees of the same repository share one project identity.
 
