@@ -8,7 +8,7 @@ Integrated behavior and acceptance boundaries are recorded in [Agents acceptance
 
 ## Language
 
-The host, connection and lifecycle terms below reflect the [agreed lifecycle planning amendment](https://github.com/ejjsharpe/escode/issues/53) and [agreed device trust rules](https://github.com/ejjsharpe/escode/issues/59#issuecomment-6521010880); these changes are not yet implemented.
+The host, connection and lifecycle terms below reflect the [agreed lifecycle planning amendment](https://github.com/ejjsharpe/escode/issues/53) and [agreed device trust rules](https://github.com/ejjsharpe/escode/issues/59#issuecomment-6521010880); these changes are not yet implemented. The [multi-client planning decision](https://github.com/ejjsharpe/escode/issues/57) additionally distinguishes per-client unsent text and recovery drafts; it is not yet implemented.
 
 **Execution host**:
 The escode runtime on one machine that owns its projects, files, saved chats and agent execution. Its work can continue without an open client connection or view.
@@ -56,7 +56,7 @@ The permanent app-wide view of chats and chat drafts across all saved projects, 
 The view inside a project tab showing only that project's chats and chat drafts. It opens the same conversations and drafts as Agents.
 
 **Chat**:
-A saved Codex conversation, including the user's messages and the agent's work and responses, with an optional project association. Its project association and working directory are fixed by first Send; its history and unsent message are shared wherever it is opened. Host-persisted directory identity prevents a replaced checkout from becoming the conversation’s execution context after restart. An unavailable path retains the chat and draft; Retry validates the original path without replay, while active Stop remains available.
+A saved Codex conversation, including the user's messages and the agent's work and responses, with an optional project association. Its project association and working directory are fixed by first Send; its history is shared across clients, while unsent message text is shared across views within its owning client. Host-persisted directory identity prevents a replaced checkout from becoming the conversation’s execution context after restart. An unavailable path retains the chat and draft; Retry validates the original path without replay, while active Stop remains available.
 
 **Project-backed chat**:
 A chat associated with one project and attached to one of its checkout directories. Multiple chats may share a checkout.
@@ -66,6 +66,9 @@ A chat with no user-project association, attached to its own persistent scratch 
 
 **Chat draft**:
 A locally saved, unsent conversation whose context can change before first Send. Project drafts retain a resolved Current checkout path, explicitly selected discovered checkout, or displayed local base for a new managed worktree until explicitly changed. First Send prepares and binds the conversation while preserving its identity and creation time. Prepared worktrees retain their reserved branch, absolute path and directory identity, including on partial failure. Failed or uncertain sends retain the prompt and known provider identity; Retry reconnects without resending or replacing reserved resources.
+
+**Unsent message text**:
+A client’s unfinished message for a chat or chat draft, shared across that client’s views and retained independently of other clients’ composers. Sending from another client does not clear it.
 
 **Scratch folder**:
 A persistent working folder owned by one No project chat. It is allocated only on first Send, starts without Git and is retained independently of the chat's running state. Host ownership and directory identity are persisted; missing, replaced or incompletely recorded folders are never reconstructed or rebound.
@@ -92,8 +95,8 @@ A comparison with a read-only old side and an editable new side sharing the File
 A difference detected before saving between a file's loaded disk version and its current disk version. The user's edits remain available while they compare, explicitly overwrite, reload from disk, or cancel.
 
 **Recovery draft**:
-A locally persisted unsaved file buffer with its checkout/file identity and loaded disk
-baseline. Available drafts reopen as unsaved edits and use the ordinary save-conflict
+A persisted unsaved file buffer belonging to one client, with its checkout/file identity and loaded disk
+baseline. Another client’s Save or Discard does not remove it. Available drafts reopen as unsaved edits and use the ordinary save-conflict
 check. Explicit discard removes the draft; recovery is best effort, not a guarantee
 that the latest keystroke survives a crash.
 
