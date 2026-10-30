@@ -290,3 +290,5 @@ an isolated Save rerun: the initial Save assertion exceeded its five-second UI
 wait while still applying, then passed alone in 3.4 seconds. A concurrent full
 unit run had one unchanged shutdown descendant-start timeout (207 passed,
 4 skipped); this was investigated separately from Trash behavior.
+The final full-suite rerun passed: 208 tests passed, 4 opt-in tests skipped
+(22 test files passed, 1 skipped). No shutdown code or timing limits were changed.
