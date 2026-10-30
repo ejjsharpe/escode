@@ -1,9 +1,9 @@
-import { Effect, Exit, Layer, Schedule, Schema, Scope, Semaphore, Stream, Fiber } from "effect";
+import { Effect, Cause, Result, Exit, Layer, Schedule, Schema, Scope, Semaphore, Stream, Fiber } from "effect";
 import { RpcClient, RpcSerialization } from "effect/rpc";
 import { Socket } from "effect/socket";
 import { Bootstrap, ChatDetail, HostQueries, type SendCommand, type HistoryPage, type ChatSummaries, type DirectoryResult } from "@escode/contracts";
 
-export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
+export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconcile?: (project: string | null, id: string) => Promise<string | undefined>) {
   const queries = Semaphore.makeUnsafe(4);
   let queued = 0;
   type Client = Effect.Success<ReturnType<typeof makeClient>>;
@@ -38,8 +38,19 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
     if (queued >= 16) throw Error("Chat query admission exhausted. Retry explicitly.");
     queued++;
     try {
-      const client = await connect();
-      return await Effect.runPromise(queries.withPermit(request(client)).pipe(Effect.timeout("35 seconds")));
+      const current = connect();
+      try {
+        const client = await current;
+        const result = await Effect.runPromise(Effect.exit(queries.withPermit(request(client)).pipe(Effect.timeout("35 seconds"))));
+        if (Exit.isSuccess(result)) return result.value;
+        const failure = Cause.findError(result.cause);
+        if (Result.isSuccess(failure) && typeof failure.success === "string")
+          throw Object.assign(Error(failure.success), { domain: true });
+        throw Cause.squash(result.cause);
+      } catch (error) {
+        if (!(error as { domain?: boolean })?.domain && session?.client === current) await close();
+        throw error;
+      }
     } finally { queued--; }
   }
   return {
@@ -52,9 +63,11 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
       const controller = new AbortController();
       let epoch: string | undefined, revision = 0;
       let items: typeof ChatDetail.Type.items = [];
-      const effect = Effect.gen(function* () {
+      const attempt = () => Effect.gen(function* () {
+        epoch = undefined; revision = 0; items = [];
         const client = yield* Effect.tryPromise(connect);
-        yield* client.chatLive({ project, id }).pipe(Stream.runForEach(batch => Effect.sync(() => {
+        const warning = reconcile ? yield* Effect.tryPromise(() => reconcile(project, id)) : undefined;
+        yield* client.chatLive({ project, id }).pipe(Stream.timeout("3 seconds"), Stream.runForEach(batch => Effect.sync(() => {
           if (!active) return;
           if (batch.epoch === epoch && batch.revision <= revision) return;
           if (batch.revision !== revision + 1 || (epoch && epoch !== batch.epoch)) throw Error("Live coverage reset required. Reopen the view.");
@@ -68,10 +81,24 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
           const detail = Schema.decodeUnknownSync(ChatDetail)({ ...batch.detail, items: next });
           if (new TextEncoder().encode(JSON.stringify(detail)).length > 512 * 1024) throw Error("Live cache exhausted");
           apply(detail);
+          if (warning) error(warning);
           items = next; epoch = batch.epoch; revision = batch.revision;
         })));
       });
-      void Effect.runPromise(effect, { signal: controller.signal }).catch(value => { if (active) error(`Live output unavailable; reopen the view to reset. ${String(value)}`); });
+      const recover = Effect.gen(function* () {
+        for (let retry = 0; active; retry++) {
+          const current = connect();
+          const result = yield* Effect.exit(attempt());
+          if (!active) return;
+          if (session?.client === current) yield* Effect.tryPromise(close);
+          if (retry >= 3) {
+            error(`Live output unavailable; Retry to reload status/history. ${Exit.isFailure(result) ? String(result.cause) : "Stream ended"}`);
+            return;
+          }
+          yield* Effect.sleep("500 millis");
+        }
+      });
+      void Effect.runPromise(recover, { signal: controller.signal }).catch(value => { if (active) error(String(value)); });
       return () => { active = false; items = []; controller.abort(); };
     },
     chatHistory: (project: string | null, id: string, cursor: string | null): Promise<HistoryPage> =>

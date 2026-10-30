@@ -2,7 +2,22 @@ import { Schema } from "effect";
 import { SendReceipt } from "@escode/contracts";
 import { createDirectoryClient } from "@escode/client-runtime";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-const directories = createDirectoryClient(() => ipcRenderer.invoke("local-bootstrap"));
+const directories = createDirectoryClient(() => ipcRenderer.invoke("local-bootstrap"), reconcile);
+async function reconcile(project: string | null, id: string) {
+  const saved = localStorage.getItem(`escode-send:${JSON.stringify([project, id])}`);
+  if (saved) {
+    const command = JSON.parse(saved);
+    const receipt = await directories.sendStatus(command.commandId);
+    await directories.chatHistory(project, id, null);
+    if (!receipt || receipt.status !== "accepted")
+      return `Previous Send ${receipt?.status ?? "unavailable or expired"}; identity and text retained. Review history before Resolve previous Send…`;
+  }
+}
+async function open(project: string | null, id: string) {
+  const detail = await directories.openChat(project, id);
+  await reconcile(project, id);
+  return detail;
+}
 async function send(project: string | null, id: string, text: string) {
   const key = `escode-send:${JSON.stringify([project, id])}`;
   const saved = localStorage.getItem(key);
@@ -49,7 +64,7 @@ contextBridge.exposeInMainWorld(
       return () => ipcRenderer.removeListener("close-request", listener);
     },
     chat: (operation: string, ...args: unknown[]) => operation === "open"
-      ? directories.openChat(args[0] as string | null, args[1] as string)
+      ? open(args[0] as string | null, args[1] as string)
       : operation === "composer" ? ipcRenderer.invoke("chat", operation, ...args).then(text => {
         const saved = localStorage.getItem(`escode-send:${JSON.stringify([args[0], args[1]])}`);
         return text || (saved ? JSON.parse(saved).text : "");

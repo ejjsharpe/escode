@@ -128,10 +128,9 @@ class ProjectChats {
   }
   reconnect(id: string) {
     return this.run(id, async () => {
-      await window.escode.chat("disconnect", this.project, id);
       await window.escode.chat("open", this.project, id);
       const history = { ...this.state.history };
-      delete history[id];
+      history[id] = await window.escode.chatHistory(this.project, id, null);
       this.update({ history });
       this.streams.get(id)?.();
       this.streams.delete(id);
