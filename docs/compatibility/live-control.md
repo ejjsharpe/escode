@@ -35,6 +35,10 @@ and answer validation are retained.
 - Packaged workflow fixtures now allocate distinct wire IDs and await asynchronous
   Stop completion. The packaged API-surface assertion includes the existing socket methods.
 
+Integration with reconnect defers history reads while a Send receipt is admitted or
+dispatching, so live requests remain observable before Send acknowledgement. The
+packaged delayed-Send/remount workflow exercises this boundary.
+
 Independent Standards review found no required changes. Spec review identified and
 resolved preparation self-invalidation of Send, request-ID reuse at capacity, missing
 cancellation disclosure and recovery of unadmitted control identities; re-review

@@ -8,6 +8,7 @@ async function reconcile(project: string | null, id: string) {
   if (saved) {
     const command = JSON.parse(saved);
     const receipt = await directories.sendStatus(command.commandId);
+    if (receipt?.status === "admitted" || receipt?.status === "dispatching") return;
     await directories.chatHistory(project, id, null);
     if (!receipt || receipt.status !== "accepted")
       return `Previous Send ${receipt?.status ?? "unavailable or expired"}; identity and text retained. Review history before Resolve previous Send…`;
