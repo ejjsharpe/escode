@@ -36,6 +36,8 @@ type Session = ChatSnapshot & {
 };
 export class ChatService {
   private sessions = new Map<string, Session>();
+  private revisions = new Map<string, number>();
+  revision(id: string) { return this.revisions.get(id) ?? 0; }
   private transitions = new Map<string, string | null>();
   // Hold identity stable from host authorization through binding; live responses stay independent.
   private async inContext<T>(project: string | null, id: string, action: () => Promise<T>) {
@@ -45,6 +47,7 @@ export class ChatService {
     try {
       return await action();
     } finally {
+      this.revisions.set(id, (this.revisions.get(id) ?? 0) + 1);
       this.transitions.delete(id);
     }
   }
@@ -595,7 +598,7 @@ export class ChatService {
         (launched && !rejected
           ? " Message acceptance is uncertain. Prompt and provider identity are retained. Retry reloads history without resending; inspect history before explicitly sending another message."
           : " Message was not submitted. Prompt and any known provider identity are retained.");
-      throw Error(s.error);
+      throw Object.assign(Error(s.error), { rejected: !!rejected });
     } finally {
       s.sending = false;
     }

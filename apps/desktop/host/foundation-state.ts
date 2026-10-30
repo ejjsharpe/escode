@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+import { SendReceipt, type SendCommand } from "@escode/contracts";
 import {
   closeSync,
   constants,
@@ -25,7 +27,7 @@ export type FoundationRecord = {
   providerId: string | null;
   ownership: "external" | "managed-worktree" | "scratch";
 };
-type State = { version: 1; hostId: string; clientId: string; records: FoundationRecord[] };
+type State = { version: 1; hostId: string; clientId: string; records: FoundationRecord[]; receipts?: SendReceipt[] };
 const maximumBytes = 1024 * 1024;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 function validate(value: unknown): asserts value is State {
@@ -39,6 +41,10 @@ function validate(value: unknown): asserts value is State {
     !Array.isArray(state.records)
   )
     throw Error("Invalid foundation identities or records");
+  if (state.receipts !== undefined) {
+    Schema.decodeUnknownSync(Schema.Array(SendReceipt))(state.receipts);
+    if (state.receipts.some(r => r.hostId !== state.hostId || r.clientId !== state.clientId)) throw Error("Invalid receipt owner");
+  }
   const ids = new Set<string>();
   for (const record of state.records) {
     if (
@@ -124,7 +130,12 @@ export class FoundationState {
       } finally {
         closeSync(input);
       }
-      return new FoundationState(directory, state);
+      const store = new FoundationState(directory, state);
+      for (const receipt of state.receipts ?? []) {
+        if (receipt.status === "admitted" || receipt.status === "dispatching")
+          store.record({ ...receipt, status: "uncertain", message: "Host restarted; inspect provider history. Work was not resent." });
+      }
+      return store;
     } catch (error) {
       if (!fresh) unlinkSync(lock);
       throw error;
@@ -145,6 +156,38 @@ export class FoundationState {
     validate(state);
     this.persist(state);
     this.state = state;
+  }
+
+  readonly admissionEpoch = randomUUID();
+
+  receipt(commandId: string): SendReceipt | null {
+    return this.read().receipts?.find(r => r.command.commandId === commandId) ?? null;
+  }
+
+  record(receipt: SendReceipt): void {
+    this.requireAvailable();
+    Schema.decodeUnknownSync(SendReceipt)(receipt);
+    const state = this.read();
+    state.receipts ??= [];
+    const index = state.receipts.findIndex(r => r.command.commandId === receipt.command.commandId);
+    if (index < 0) state.receipts.push(receipt); else state.receipts[index] = receipt;
+    validate(state);
+    this.persist(state);
+    this.state = state;
+  }
+
+  admit(command: SendCommand): SendReceipt {
+    command = { commandId: command.commandId, admissionEpoch: command.admissionEpoch,
+      project: command.project, id: command.id, expected: command.expected, text: command.text };
+    const previous = this.receipt(command.commandId);
+    if (previous) {
+      if (JSON.stringify(previous.command) !== JSON.stringify(command)) throw Error("Command identity conflict");
+      return previous;
+    }
+    if (command.admissionEpoch !== this.admissionEpoch) throw Error("Expired admission epoch; inspect status. Work was not resent.");
+    const receipt: SendReceipt = { hostId: this.state.hostId, clientId: this.state.clientId, command, status: "admitted", message: "" };
+    this.record(receipt);
+    return receipt;
   }
 
   private requireAvailable() {

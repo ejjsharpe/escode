@@ -145,6 +145,7 @@ test("RPC error replies identify the executable and version", () =>
       expect(String(error)).toContain(path);
       expect(String(error)).toContain("codex-cli 0.200.0");
       expect(String(error)).toContain("Unknown method");
+      expect((error as Error & { rejected?: boolean }).rejected).toBe(true);
     } finally {
       rpc.close();
     }

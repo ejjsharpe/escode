@@ -29,7 +29,7 @@ export interface ChatBridge {
   (operation: "create", project: string, checkout: string): Promise<SavedChat>;
   (operation: "open", project: string | null, id: string): Promise<ChatSnapshot>;
   (operation: "send" | "draft", project: string | null, id: string, text: string): Promise<unknown>;
-  (operation: "stop" | "disconnect", project: string | null, id: string): Promise<void>;
+  (operation: "stop" | "disconnect" | "resolveSend", project: string | null, id: string): Promise<void>;
   (
     operation: "answer",
     project: string | null,
@@ -270,6 +270,9 @@ export function ChatView({
                 onClick={() => void store.reconnect(selected)}
               >
                 Retry connection / reload history
+              </Button>
+              <Button disabled={working || snapshot?.busy} onClick={() => void window.escode.chat("resolveSend", project, selected)}>
+                Resolve previous Send…
               </Button>
               <Button
                 disabled={!snapshot?.busy || !snapshot.turnId}

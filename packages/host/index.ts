@@ -5,7 +5,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type Bootstrap, type DirectoryResult } from "@escode/contracts";
+import { HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult } from "@escode/contracts";
 
 // Guard parser/error writes too; they bypass the RPC response budget.
 class BoundedWebSocket extends WebSocket {
@@ -30,6 +30,9 @@ export async function startDirectoryHost(options: {
   chatSnapshot?: (project: string | null, id: string) => Promise<ChatDetail>;
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
   history?: (project: string | null, id: string, cursor: string | null) => Promise<HistoryPage>;
+  sendState?: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
+  sendMessage?: (command: SendCommand) => Promise<SendReceipt>;
+  sendStatus?: (commandId: string) => Promise<SendReceipt | null>;
   now?: () => number;
 }) {
   const epoch = randomUUID();
@@ -77,7 +80,7 @@ export async function startDirectoryHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -128,6 +131,18 @@ export async function startDirectoryHost(options: {
       unacknowledged.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
       Effect.provide(HostQueries.toLayer({
+        sendState: ({ project, id }) => Effect.tryPromise({ try: async () => {
+          if (!options.sendState) throw Error("Send unavailable");
+          return options.sendState(project, id);
+        }, catch: String }),
+        sendMessage: ({ command }) => Effect.tryPromise({ try: async () => {
+          if (!options.sendMessage) throw Error("Send unavailable");
+          return options.sendMessage(command);
+        }, catch: String }),
+        sendStatus: ({ commandId }) => Effect.tryPromise({ try: async () => {
+          if (!options.sendStatus) throw Error("Send unavailable");
+          return options.sendStatus(commandId);
+        }, catch: String }),
         chatLive: ({ project, id }) => Stream.suspend(() => {
           let previous: ChatDetail | undefined, revision = 0;
           return Stream.fromEffectSchedule(Effect.tryPromise({ try: async () => {

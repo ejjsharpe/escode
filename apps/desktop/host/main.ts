@@ -1,3 +1,6 @@
+import { executeSend } from "./send";
+import { Schema } from "effect";
+import { SendCommand } from "@escode/contracts";
 import {
   app,
   BrowserWindow,
@@ -379,7 +382,80 @@ app.whenReady().then(async () => {
     }
     return chat;
   };
+  const expectedSend = async (root: string | null, id: string) => {
+    const chat = await authorizeHistory(root, id);
+    const detail = chats.snapshot(root, id);
+    return JSON.stringify([chats.revision(id), chat.checkout, chat.threadId, chat.phase, chat.directoryIdentity,
+      chat.worktree, chat.scratch, detail.connected, detail.busy, detail.turnId]);
+  };
+  const dispatchSend = async (command: SendCommand) => {
+    const { project: root, id } = command;
+    const owner = root === null ? undefined : projectSessions.get(root);
+    const requireOpen = () => {
+      if (quitting || (root !== null && (removing.has(root) || !owner || projectSessions.get(root) !== owner)))
+        throw Error("Chat unavailable during shutdown, removal or lost project approval");
+    };
+    requireOpen();
+    return chats.send(
+          root,
+          id,
+          command.text,
+          async (chat) => {
+            if (await expectedSend(root, id) !== command.expected) throw Error("Chat/context state changed. Inspect before sending again.");
+            if (chat.project === null) {
+              requireOpen();
+              return;
+            }
+            const target = await checkout(chat.checkout);
+            requireOpen();
+            target.checkoutIdentity();
+            if (
+              chat.phase === "draft" &&
+              !chat.directoryIdentity &&
+              !chat.worktree?.reservation &&
+              !target.validateRepository().includes(target.root)
+            )
+              throw Error("Choose an available Git checkout before first Send. Prompt retained.");
+            if (target.repository() !== root)
+              throw Error(
+                "Saved checkout is unavailable or no longer belongs to this project. Prompt retained; restore this exact path and Retry.",
+              );
+          },
+          async (chat) => {
+            if (!chat.worktree) return chat;
+            if (chat.worktree.reservation) {
+              store.validateWorktree(chat);
+              return chat;
+            }
+            const source = await checkout(chat.worktree.source);
+            requireOpen();
+            if (source.repository() !== root) throw Error("Wrong project checkout.");
+            const prepared = await store.prepareWorktree(
+              chat,
+              source,
+              join(app.getPath("userData"), "worktrees"),
+            );
+            requireOpen();
+            const target = await checkout(prepared.checkout);
+            requireOpen();
+            if (target.repository() !== root || !target.validateRepository().includes(target.root))
+              throw Error("Prepared checkout is no longer registered with this project.");
+            return prepared;
+          },
+        ).then(() => undefined);
+  };
   const directoryHost = await startDirectoryHost({
+    sendState: async (root, id) => ({ admissionEpoch: foundation.admissionEpoch, expected: await expectedSend(root, id) }),
+    sendStatus: async commandId => {
+      const receipt = foundation.receipt(commandId);
+      if (receipt) await authorizeHistory(receipt.command.project, receipt.command.id);
+      return receipt;
+    },
+    sendMessage: async input => {
+      const command = Schema.decodeUnknownSync(SendCommand)(input);
+      await authorizeHistory(command.project, command.id);
+      return executeSend(foundation, command, () => dispatchSend(command));
+    },
     chatSnapshot: async (root, id) => { await authorizeHistory(root, id); return chats.inspect(root, id); },
     openChat: async (root, id) => { await authorizeHistory(root, id); return chats.open(root, id); },
     history: async (root, id, cursor) => { await authorizeHistory(root, id); return chats.history(root, id, cursor); },
@@ -1202,6 +1278,17 @@ app.whenReady().then(async () => {
       event.senderFrame.url !== documentURL
     )
       throw Error("Invalid sender");
+    if (operation === "resolveSend" && args.length === 2) {
+      const [root, id] = args;
+      if ((root !== null && typeof root !== "string") || typeof id !== "string") throw Error("Invalid chat");
+      await authorizeHistory(root, id);
+      const result = await dialog.showMessageBox(window, {
+        type: "warning", buttons: ["Cancel", "I inspected history; allow a new Send"], defaultId: 0, cancelId: 0,
+        message: "Resolve the previous Send locally?",
+        detail: "Inspect reloaded provider history first. The previous command receipt remains on the host. This only releases this composer's pending identity; it does not resend or undo any work. Your text stays available. A later explicit Send may repeat effects if the previous result remains uncertain.",
+      });
+      return result.response === 1;
+    }
     if (operation === "targets" && !args.length) {
       const state = await workspace.read();
       const approved = await workspace.approved();
@@ -1306,53 +1393,6 @@ app.whenReady().then(async () => {
     }
     if (args.length === 2 && typeof value === "string" && value.length <= 100000) {
       if (operation === "draft") return chats.draft(root, id, value);
-      if (operation === "send")
-        return chats.send(
-          root,
-          id,
-          value,
-          async (chat) => {
-            if (chat.project === null) {
-              requireOpen();
-              return;
-            }
-            const target = await checkout(chat.checkout);
-            requireOpen();
-            target.checkoutIdentity();
-            if (
-              chat.phase === "draft" &&
-              !chat.directoryIdentity &&
-              !chat.worktree?.reservation &&
-              !target.validateRepository().includes(target.root)
-            )
-              throw Error("Choose an available Git checkout before first Send. Prompt retained.");
-            if (target.repository() !== root)
-              throw Error(
-                "Saved checkout is unavailable or no longer belongs to this project. Prompt retained; restore this exact path and Retry.",
-              );
-          },
-          async (chat) => {
-            if (!chat.worktree) return chat;
-            if (chat.worktree.reservation) {
-              store.validateWorktree(chat);
-              return chat;
-            }
-            const source = await checkout(chat.worktree.source);
-            requireOpen();
-            if (source.repository() !== root) throw Error("Wrong project checkout.");
-            const prepared = await store.prepareWorktree(
-              chat,
-              source,
-              join(app.getPath("userData"), "worktrees"),
-            );
-            requireOpen();
-            const target = await checkout(prepared.checkout);
-            requireOpen();
-            if (target.repository() !== root || !target.validateRepository().includes(target.root))
-              throw Error("Prepared checkout is no longer registered with this project.");
-            return prepared;
-          },
-        ).then(() => undefined);
     }
     if (
       operation === "answer" &&

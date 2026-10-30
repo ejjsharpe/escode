@@ -38,6 +38,9 @@ declare global {
       onClose(callback: () => void): () => void;
       chat: ChatBridge;
       chatLive: (project: string | null, id: string, apply: (value: import("@escode/contracts").ChatDetail) => void, error: (message: string) => void) => () => void;
+      sendState: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
+      sendMessage: (command: import("@escode/contracts").SendCommand) => Promise<unknown>;
+      sendStatus: (commandId: string) => Promise<unknown>;
       chatHistory: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").HistoryPage>;
       chatSummaries: (apply: (value: import("@escode/contracts").ChatSummaries) => void, error: (message: string) => void) => () => void;
       toolStatus(): Promise<unknown>;

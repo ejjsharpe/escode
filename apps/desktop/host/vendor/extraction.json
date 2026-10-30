@@ -1,0 +1,88 @@
+{
+  "upstream": "https://github.com/pingdotgg/t3code",
+  "commit": "305a90dce44b8b7813d951662f13ce8510a3c669",
+  "codexSchemaSource": "https://github.com/openai/codex/tree/687a119f0fcaace47e1f1abcc77cec6c813fd6da/codex-rs/app-server-protocol",
+  "files": [
+    {
+      "upstream": "packages/effect-codex-app-server/scripts/generate.ts",
+      "local": "apps/desktop/host/vendor/codex/scripts/generate.ts",
+      "sha256": "6d1434c62b87dbbed0d7d64061c52de3c82e948af12aeb3a7314b13fa5e10054",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/_generated/meta.gen.ts",
+      "local": "apps/desktop/host/vendor/codex/src/_generated/meta.gen.ts",
+      "sha256": "0f5279ea09d7dc6270280afc133ce0ff14cc24f94cca6454fe581e651b9bc850",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/_generated/namespaces.gen.ts",
+      "local": "apps/desktop/host/vendor/codex/src/_generated/namespaces.gen.ts",
+      "sha256": "aa0f868b897c2cbfe9768a63840c76f40a35c40befe1328ce02a8a7054d69255",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/_generated/schema.gen.ts",
+      "local": "apps/desktop/host/vendor/codex/src/_generated/schema.gen.ts",
+      "sha256": "14f7109a61f45d56552b4c53ccc7bbd4a5536ff4c716d47e898c8497f21159b6",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/_internal/shared.ts",
+      "local": "apps/desktop/host/vendor/codex/src/_internal/shared.ts",
+      "sha256": "19f2415cc7ed54ae94481e70ae6fcb374c3d9770d47265ec960153d33a578ec4",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/_internal/stdio.ts",
+      "local": "apps/desktop/host/vendor/codex/src/_internal/stdio.ts",
+      "sha256": "fc6103f6dae012d365445a2ef3e6aa0db458fcbe73a6c481f6cdd962d7aee56d",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/client.ts",
+      "local": "apps/desktop/host/vendor/codex/src/client.ts",
+      "sha256": "a64373145e2210082915ad10420df5680d92f422f5e2c40a4b31fa91b68e5e31",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/errors.ts",
+      "local": "apps/desktop/host/vendor/codex/src/errors.ts",
+      "sha256": "fe476d8b94679902140a65ee3dd167fadf97bc3c72f6791cf4b30b63f557bf16",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/protocol.ts",
+      "local": "apps/desktop/host/vendor/codex/src/protocol.ts",
+      "sha256": "d5f966f9a43514678193227bb67935847fa3fb671b5f5e974d3f0fccf66e345e",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/replay.ts",
+      "local": "apps/desktop/host/vendor/codex/src/replay.ts",
+      "sha256": "53e355208b2852c8c395199d0dc1641c2a52f163449de3d36fdf29a00c579e85",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/rpc.ts",
+      "local": "apps/desktop/host/vendor/codex/src/rpc.ts",
+      "sha256": "dbdf0b0b97382f9021643304c6a02bfa1e8c3b27b543155d32a2e1803b1bb526",
+      "adaptations": []
+    },
+    {
+      "upstream": "packages/effect-codex-app-server/src/schema.ts",
+      "local": "apps/desktop/host/vendor/codex/src/schema.ts",
+      "sha256": "d648c1ab3be1cb0ecce22ab5f3caa79db50d0ba8b575c5788416a9bc767db6c5",
+      "adaptations": []
+    }
+  ],
+  "notes": [
+    "Production extraction from the qualified disposable probe; Send and all Codex sessions use the extracted protocol.",
+    "Source unchanged; upstream tests excluded to use existing vite-plus runner without @effect/vitest.",
+    "Generator retained as provenance, not installed or run; it requires @effect/openapi-generator if regenerated.",
+    "Production composes the extracted protocol with native streams and escode process ownership; local authentication stays outside provider transport.",
+    "T3 handwritten generated-schema compatibility widenings are retained unchanged.",
+    "T3 effect/Crypto and vitest patch not used by this source unit."
+  ],
+  "productionIntegration": "tools.ts uses the extracted protocol with existing escode domain compatibility checks, a 1 MiB frame limit, native stream backpressure and explicit process-group cleanup. Typed generated client/schema remain tracked; raw protocol preserves supported provider-version domain shapes."
+}

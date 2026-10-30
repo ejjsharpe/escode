@@ -1,7 +1,7 @@
 import { Effect, Exit, Layer, Schedule, Schema, Scope, Semaphore, Stream, Fiber } from "effect";
 import { RpcClient, RpcSerialization } from "effect/rpc";
 import { Socket } from "effect/socket";
-import { Bootstrap, ChatDetail, HostQueries, type HistoryPage, type ChatSummaries, type DirectoryResult } from "@escode/contracts";
+import { Bootstrap, ChatDetail, HostQueries, type SendCommand, type HistoryPage, type ChatSummaries, type DirectoryResult } from "@escode/contracts";
 
 export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
   const queries = Semaphore.makeUnsafe(4);
@@ -43,6 +43,9 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
     } finally { queued--; }
   }
   return {
+    sendState: (project: string | null, id: string) => chatQuery(client => client.sendState({ project, id })),
+    sendMessage: (command: SendCommand) => chatQuery(client => client.sendMessage({ command })),
+    sendStatus: (commandId: string) => chatQuery(client => client.sendStatus({ commandId })),
     openChat: (project: string | null, id: string) => chatQuery(client => client.openChat({ project, id })),
     chatLive(project: string | null, id: string, apply: (detail: typeof ChatDetail.Type) => void, error: (message: string) => void) {
       let active = true;

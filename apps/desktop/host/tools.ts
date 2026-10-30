@@ -1,3 +1,8 @@
+import { fromReadable } from "@effect/platform-node/NodeStream";
+import { fromWritable } from "@effect/platform-node/NodeSink";
+import { systemError } from "effect/PlatformError";
+import { Effect, Exit, Scope, Sink, Stdio, Deferred } from "effect";
+import { makeCodexAppServerPatchedProtocol } from "./vendor/codex/src/protocol";
 import { access, open } from "node:fs/promises";
 import { constants } from "node:fs";
 import { homedir } from "node:os";
@@ -146,27 +151,14 @@ export async function connectCodex(
     terminationFailed = reject;
   });
   void finished.catch(() => {});
-  let input = Buffer.alloc(0);
-  let sequence = 0,
-    closed = false;
-  const pending = new Map<
-    number,
-    {
-      resolve: (value: any) => void;
-      reject: (error: Error) => void;
-      timer: ReturnType<typeof setTimeout>;
-    }
-  >();
+  const scope = Scope.makeUnsafe();
+  let closed = false;
+  const replies = new Map<string | number, Deferred.Deferred<unknown>>();
   const fail = (error: Error) => {
     if (closed) return;
     closed = true;
     error = Error(codexDiagnostic(path, version, error.message));
-    for (const entry of pending.values()) {
-      clearTimeout(entry.timer);
-      entry.reject(error);
-    }
-    pending.clear();
-    input = Buffer.alloc(0);
+    void Effect.runPromise(Scope.close(scope, Exit.void));
     try {
       killGroup("SIGTERM");
     } catch {
@@ -182,87 +174,49 @@ export async function connectCodex(
     }, 300);
     disconnected(error);
   };
-  const write = (value: unknown) => {
-    if (closed) throw Error("Codex disconnected. Retry connection; send work explicitly.");
-    child.stdin.write(JSON.stringify(value) + "\n");
-  };
   child.on("error", fail);
   child.stdin.on("error", fail);
-  child.stdout.on("error", fail);
-  child.stdout.on("end", () => fail(Error("Codex protocol connection closed. Retry connection; work was not resent.")));
-  child.on("exit", () =>
-    fail(
-      Error(
-        "Codex disconnected. Check installation/authentication, then Retry connection. Work was not resent.",
-      ),
-    ),
-  );
-  const line = (line: string) => {
-    try {
-      const message: WireMessage = JSON.parse(line);
-      if (message.method) receive(message);
-      else if (typeof message.id === "number") {
-        const entry = pending.get(message.id);
-        if (!entry) return;
-        pending.delete(message.id);
-        clearTimeout(entry.timer);
-        if (message.error)
-          entry.reject(
-            Object.assign(Error(codexDiagnostic(path, version, message.error.message)), {
-              rejected: true,
-            }),
-          );
-        else entry.resolve(message.result);
-      }
-    } catch {
-      fail(Error("Incompatible Codex protocol. Check supported CLI and Retry connection."));
-    }
-  };
-  // Reject before concatenation/JSON decoding, including unknown provider payloads.
-  child.stdout.on("data", (chunk: Buffer) => {
-    if (closed) return;
-    let start = 0;
-    while (start < chunk.length && !closed) {
-      const newline = chunk.indexOf(10, start);
-      const end = newline < 0 ? chunk.length : newline;
-      if (input.length + end - start > 1024 * 1024) {
-        fail(Error("Provider frame exceeds 1 MiB. History unavailable; identity retained. Retry explicitly."));
-        return;
-      }
-      input = Buffer.concat([input, chunk.subarray(start, end)]);
-      if (newline < 0) return;
-      const frame = input.toString("utf8");
-      input = Buffer.alloc(0);
-      line(frame);
-      start = newline + 1;
-    }
+  child.on("exit", () => fail(Error("Codex disconnected. Retry connection; work was not resent.")));
+  const stdio = Stdio.make({
+    args: Effect.succeed([]),
+    stdin: fromReadable({ evaluate: () => child.stdout, onError: cause => systemError({ module: "Stdio", method: "stdin", _tag: "Unknown", cause }) }),
+    stdout: () => fromWritable({ evaluate: () => child.stdin, endOnDone: false,
+      onError: cause => systemError({ module: "Stdio", method: "stdout", _tag: "Unknown", cause }) }),
+    stderr: () => Sink.drain,
   });
+  const protocol = await Effect.runPromise(makeCodexAppServerPatchedProtocol({
+    stdio, maxIncomingMessageBytes: 1024 * 1024,
+    onNotification: event => Effect.sync(() => receive(event)),
+    onRequest: event => Effect.gen(function* () {
+      const reply = yield* Deferred.make<unknown>();
+      replies.set(event.id, reply);
+      receive(event);
+      return yield* Deferred.await(reply).pipe(Effect.ensuring(Effect.sync(() => { replies.delete(event.id); })));
+    }),
+    onTermination: error => Effect.sync(() => fail(Error(String(error)))),
+  }).pipe(Effect.provideService(Scope.Scope, scope)));
   const rpc: CodexConnection = {
     finished,
     installation: { path, version },
-    request(method, params) {
-      return new Promise((resolve, reject) => {
-        const id = ++sequence;
-        const timer = setTimeout(
-          () => fail(Error("Codex request timed out. Retry connection; work was not resent.")),
-          30000,
-        );
-        pending.set(id, { resolve, reject, timer });
-        try {
-          write({ id, method, params });
-        } catch (error) {
-          clearTimeout(timer);
-          pending.delete(id);
-          reject(error);
-        }
-      });
+    async request(method, params) {
+      if (closed) throw Error("Codex disconnected. Retry connection; work was not resent.");
+      try {
+        return await Effect.runPromise(protocol.request(method, params).pipe(Effect.timeout("30 seconds")));
+      } catch (error) {
+        const problem = error as { _tag?: string; operation?: string; cause?: unknown };
+        const detail = problem.operation === "decode-wire-message" ? "Incompatible Codex protocol" :
+          String(problem.cause).includes("exceeded 1048576") ? "Provider frame exceeds 1 MiB" : String(error);
+        const failure = Object.assign(Error(codexDiagnostic(path, version, detail)), { rejected: problem._tag === "CodexAppServerRequestError" });
+        fail(failure);
+        throw failure;
+      }
     },
     respond(id, result) {
-      write({ id, result });
+      const reply = replies.get(id);
+      if (!reply || closed) throw Error("Expired provider request");
+      Effect.runSync(Deferred.succeed(reply, result));
     },
-    close() {
-      fail(Error("Connection closed. Reopen to load saved history."));
-    },
+    close() { fail(Error("Connection closed. Reopen to load saved history.")); },
   };
   try {
     const initialized = await rpc.request("initialize", {
@@ -271,7 +225,7 @@ export async function connectCodex(
     });
     if (typeof initialized?.userAgent !== "string")
       throw Error("Incompatible Codex initialize response. Update Codex or escode and retry.");
-    write({ method: "initialized" });
+    await Effect.runPromise(protocol.notify("initialized"));
     return rpc;
   } catch (error) {
     rpc.close();

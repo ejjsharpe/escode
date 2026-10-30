@@ -70,6 +70,19 @@ export const LiveBatch = Schema.Struct({
 export type LiveBatch = typeof LiveBatch.Type;
 export const HistoryQuery = { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)),
   cursor: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096))) };
-export const HostQueries = Directories.merge(RpcGroup.make(Rpc.make("chatSummaries", {
+export const SendCommand = Schema.Struct({
+  commandId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+  admissionEpoch: Schema.String, project: Schema.NullOr(Schema.String), id: Schema.String,
+  expected: Schema.String, text: Schema.String.check(Schema.isMaxLength(100000)),
+});
+export type SendCommand = typeof SendCommand.Type;
+export const SendReceipt = Schema.Struct({ hostId: Schema.String, clientId: Schema.String, command: SendCommand,
+  status: Schema.Literals(["admitted", "dispatching", "accepted", "uncertain", "rejected"]),
+  message: Schema.String,
+});
+export type SendReceipt = typeof SendReceipt.Type;
+export const SendState = Schema.Struct({ admissionEpoch: Schema.String, expected: Schema.String });
+
+export const HostQueries = Directories.merge(RpcGroup.make(Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
   success: ChatSummaries, error: Schema.String, stream: true,
 }), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));

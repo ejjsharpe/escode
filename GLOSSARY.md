@@ -73,6 +73,13 @@ A chat with no user-project association, attached to its own persistent scratch 
 **Chat draft**:
 A locally saved, unsent conversation whose context can change before first Send. Project drafts retain a resolved Current checkout path, explicitly selected discovered checkout, or displayed local base for a new managed worktree until explicitly changed. First Send prepares and binds the conversation while preserving its identity and creation time. Prepared worktrees retain their reserved branch, absolute path and directory identity, including on partial failure. Failed or uncertain sends retain the prompt and known provider identity; Retry reconnects without resending or replacing reserved resources.
 
+**Send receipt**:
+A host-persisted record binding one Send command ID to its authenticated host/client,
+chat/context expectation and message. It records admission, dispatch intent and known
+or uncertain acceptance. Repeating that identity returns status without another
+provider turn. Explicit local resolution releases a pending composer identity without
+deleting the receipt or resending work. See [durable Send evidence](docs/compatibility/durable-send.md).
+
 **Unsent message text**:
 A client’s unfinished message for a chat or chat draft, shared across that client’s views and retained independently of other clients’ composers. Sending from another client does not clear it.
 
