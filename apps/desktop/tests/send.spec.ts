@@ -18,18 +18,34 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:m.params.threadId??'saved-provider'},cwd:process.cwd(),model:'fixture',sandbox:{type:'readOnly'},approvalPolicy:'on-request'};
  if(m.method==='turn/start'){require('node:fs').appendFileSync(${JSON.stringify(join(dir, "effects"))},'turn\\n');result={turn:{id:'sent'}};}
  if(m.method==='thread/turns/list')result={data:[{id:'t',items:[{id:'i',type:'agentMessage',text:m.params.cursor===null?'first saved page':'second saved page'}]}],nextCursor:m.params.cursor===null?'second':null};
- const reply=()=>{process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');
+ const reply=()=>{
+  process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');
+  if(m.method==='turn/start')for(const method of ['turn/started','turn/completed'])process.stdout.write(JSON.stringify({method,params:{threadId:'saved-provider',turn:{id:'sent'}}})+'\\n');
  };
- reply();
- if(m.method==='turn/start')for(const method of ['turn/started','turn/completed'])process.stdout.write(JSON.stringify({method,params:{threadId:'saved-provider',turn:{id:'sent'}}})+'\\n');
+ if(m.method==='turn/start' && m.params.input[0].text==='first') {
+  const timer=setInterval(()=>{if(require('node:fs').existsSync(${JSON.stringify(join(dir, "release"))})){clearInterval(timer);reply();}},10);
+ } else reply();
 });`, { mode: 0o700 });
 
-  const app = await launchDesktop(user, tools);
+  let app = await launchDesktop(user, tools);
   try {
-    const page = await app.firstWindow();
-    const result = await page.evaluate(async () => {
-      const chat = await window.escode.chat("createDraft", null);
-      await window.escode.chat("send", null, chat.id, "first");
+    let page = await app.firstWindow();
+    await page.getByRole("button", { name: "Start without a project", exact: true }).click();
+    const message = () => page.getByRole("textbox", { name: "Message Codex" });
+    await message().fill("first");
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect.poll(() => readFile(join(dir, "effects"), "utf8").catch(() => "")).toBe("turn\n");
+    const chat = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats[0];
+    await page.evaluate(id => window.escode.chat("draft", null, id, "newer unsent text"), chat.id);
+    await writeFile(join(dir, "release"), "accept");
+    await expect(message()).toBeEnabled();
+    await expect(message()).toHaveValue("newer unsent text");
+    await app.close();
+    app = await launchDesktop(user, tools);
+    page = await app.firstWindow();
+    await expect(message()).toHaveValue("newer unsent text");
+    await expect(message()).toBeEnabled();
+    const result = await page.evaluate(async (chat) => {
       await window.escode.chat("disconnect", null, chat.id);
       await window.escode.chat("open", null, chat.id);
       const state = await window.escode.sendState(null, chat.id);
@@ -47,7 +63,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       localStorage.setItem(key, JSON.stringify(command));
       await window.escode.chat("draft", null, chat.id, "keep independent text");
       return { first: first.status, repeated: repeated.status, status: status.status, conflict, id: chat.id };
-    });
+    }, chat);
     await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });
     expect(await page.evaluate(async id => {
       await window.escode.chat("resolveSend", null, id);
@@ -62,5 +78,9 @@ createInterface({input:process.stdin}).on('line',line=>{
         return "unexpected success";
       } catch (error) { return String(error); }
     }, result.id)).toContain("Invalid chat request");
-  } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); });
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });

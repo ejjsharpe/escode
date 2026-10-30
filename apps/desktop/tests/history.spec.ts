@@ -40,7 +40,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await page.locator(".agent-row").click();
     await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
-    expect(await page.evaluate(id => window.escode.chat("send", null, id, "fixture follow-up"), chatId)).toBeUndefined();
+    expect(await page.evaluate(id => window.escode.chat("send", null, id, "fixture follow-up"), chatId)).toBe("");
     const next = page.getByRole("button", { name: "Next history page" });
     await next.focus(); await page.keyboard.press("Enter");
     if (mode === "streaming") {

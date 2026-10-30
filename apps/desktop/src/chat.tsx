@@ -28,7 +28,8 @@ export interface ChatBridge {
 
   (operation: "create", project: string, checkout: string): Promise<SavedChat>;
   (operation: "open", project: string | null, id: string): Promise<ChatSnapshot>;
-  (operation: "send" | "draft", project: string | null, id: string, text: string): Promise<unknown>;
+  (operation: "send", project: string | null, id: string, text: string): Promise<string>;
+  (operation: "draft", project: string | null, id: string, text: string): Promise<void>;
   (operation: "stop", project: string | null, id: string, target?: string): Promise<void>;
   (operation: "disconnect" | "resolveSend", project: string | null, id: string): Promise<void>;
   (

@@ -1,6 +1,4 @@
-import { Schema } from "effect";
-import { SendReceipt } from "@escode/contracts";
-import { createHostClient } from "@escode/client-runtime";
+import { createChatClient, createHostClient } from "@escode/client-runtime";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 type ProjectArguments =
   | ["drag-capture" | "trash-selection", string, string[]]
@@ -24,7 +22,12 @@ type ChatArguments =
   | [operation: "send" | "draft", project: string | null, id: string, text: string]
   | [operation: "stop", project: string | null, id: string, target?: string]
   | [operation: "answer", project: string | null, id: string, token: string, answer: unknown];
-const hostClient = createHostClient(() => ipcRenderer.invoke("local-bootstrap"), reconcile);
+const hostClient = createHostClient(() => ipcRenderer.invoke("local-bootstrap"));
+const chatClient = createChatClient(hostClient, {
+  storage: localStorage,
+  flush: () => ipcRenderer.invoke("lifecycle", "flushClientStorage"),
+  confirmResolve: (project, id) => ipcRenderer.invoke("chat", "resolveSend", project, id),
+});
 async function createEntry(root: string, parent: string, name: string, kind: "file" | "folder") {
   const key = `escode-create:${JSON.stringify([root, parent, name, kind])}`;
   const saved = localStorage.getItem(key);
@@ -34,45 +37,6 @@ async function createEntry(root: string, parent: string, name: string, kind: "fi
   if (receipt.status === "accepted" || receipt.status === "rejected") localStorage.removeItem(key);
   if (receipt.status !== "accepted") throw Error(receipt.message);
   return receipt.path;
-}
-async function reconcile(project: string | null, id: string) {
-  const saved = localStorage.getItem(`escode-send:${JSON.stringify([project, id])}`);
-  if (saved) {
-    const command = JSON.parse(saved);
-    const receipt = await hostClient.sendStatus(command.commandId);
-    if (receipt?.status === "admitted" || receipt?.status === "dispatching") return;
-    await hostClient.chatHistory(project, id, null);
-    if (!receipt || receipt.status !== "accepted")
-      return `Previous Send ${receipt?.status ?? "unavailable or expired"}; identity and text retained. Review history before Resolve previous Send…`;
-  }
-}
-async function open(project: string | null, id: string) {
-  const detail = await hostClient.openChat(project, id);
-  await reconcile(project, id);
-  return detail;
-}
-async function send(project: string | null, id: string, text: string) {
-  const key = `escode-send:${JSON.stringify([project, id])}`;
-  const saved = localStorage.getItem(key);
-  let command;
-  let result;
-  if (saved) {
-    command = JSON.parse(saved);
-    result = await hostClient.sendStatus(command.commandId);
-  } else {
-    const state = await hostClient.sendState(project, id);
-    command = { ...state, commandId: crypto.randomUUID(), project, id, text };
-    localStorage.setItem(key, JSON.stringify(command));
-    result = await hostClient.sendMessage(command);
-  }
-  if (result === null) throw Error("Send status unavailable; identity and text retained. Inspect history, then Resolve previous Send…");
-  const receipt = Schema.decodeUnknownSync(SendReceipt)(result);
-  if (receipt.status !== "accepted") throw Error(`Send ${receipt.status}. ${receipt.message} Inspect history; work was not resent.`);
-  localStorage.removeItem(key);
-  const composerKey = `escode-composer:${id}`;
-  if (localStorage.getItem(composerKey) === command.text) localStorage.setItem(composerKey, "");
-  await ipcRenderer.invoke("lifecycle", "flushClientStorage");
-  if (text !== command.text) throw Error("Previous Send accepted. Current text retained; Send again explicitly.");
 }
 async function control(operation: "stop" | "answer", project: string | null, id: string, target: string | undefined, token = "", answer: unknown = null) {
   const key = `escode-control:${JSON.stringify([project, id, operation, target, token])}`;
@@ -99,7 +63,7 @@ contextBridge.exposeInMainWorld(
     sendState: hostClient.sendState,
     sendMessage: hostClient.sendMessage,
     sendStatus: hostClient.sendStatus,
-    chatLive: hostClient.chatLive,
+    chatLive: chatClient.live,
     chatHistory: hostClient.chatHistory,
     chatSummaries: hostClient.chatSummaries,
     listDirectory: hostClient.listDirectory,
@@ -135,23 +99,14 @@ contextBridge.exposeInMainWorld(
           return hostClient.draftAction({ operation: call[0], project, id, expected, mode, value, commit });
         }
       })()
-      : call[0] === "draft" ? Promise.resolve().then(() => {
-        localStorage.setItem(`escode-composer:${String(call[2])}`, String(call[3]));
-        return ipcRenderer.invoke("lifecycle", "flushClientStorage");
-      })
+      : call[0] === "draft" ? chatClient.draft(call[2], call[3])
       : call[0] === "open"
-      ? open(call[1], call[2])
-      : call[0] === "composer" ? Promise.resolve().then(() => {
-        const text = localStorage.getItem(`escode-composer:${String(call[2])}`);
-        const saved = localStorage.getItem(`escode-send:${JSON.stringify([call[1], call[2]])}`);
-        return text || (saved ? JSON.parse(saved).text : "");
-      })
-      : call[0] === "resolveSend" ? ipcRenderer.invoke("chat", operation, ...args).then(confirmed => {
-        if (confirmed) localStorage.removeItem(`escode-send:${JSON.stringify([call[1], call[2]])}`);
-      })
+      ? chatClient.open(call[1], call[2])
+      : call[0] === "composer" ? Promise.resolve().then(() => chatClient.composer(call[1], call[2]))
+      : call[0] === "resolveSend" ? chatClient.resolveSend(call[1], call[2])
       : call[0] === "stop" ? control("stop", call[1], call[2], call[3])
       : call[0] === "answer" ? control("answer", call[1], call[2], "", call[3], call[4])
-      : call[0] === "send" ? send(call[1], call[2], call[3])
+      : call[0] === "send" ? chatClient.send(call[1], call[2], call[3])
       : ipcRenderer.invoke("chat", operation, ...args);
     },
     toolStatus: () => ipcRenderer.invoke("tools:status"),

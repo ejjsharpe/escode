@@ -202,9 +202,9 @@ class ProjectChats {
   send(id: string) {
     const text = this.state.drafts[id] ?? "";
     return this.run(id, async () => {
-      await window.escode.chat("draft", this.project, id, text);
-      await window.escode.chat("send", this.project, id, text);
-      this.update({ drafts: { ...this.state.drafts, [id]: "" } });
+      const remaining = await window.escode.chat("send", this.project, id, text);
+      if (this.state.drafts[id] === text)
+        this.update({ drafts: { ...this.state.drafts, [id]: remaining } });
     });
   }
 }

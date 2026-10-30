@@ -2,8 +2,9 @@ import { Effect, Cause, Result, Exit, Layer, Schedule, Schema, Scope, Semaphore,
 import { RpcClient, RpcSerialization } from "effect/rpc";
 import { Socket } from "effect/socket";
 import { Bootstrap, ChatDetail, HostQueries, type SendCommand, type HistoryPage, type ChatSummaries, type DirectoryResult } from "@escode/contracts";
+export { createChatClient } from "./chat";
 
-export function createHostClient(bootstrap: () => Promise<unknown>, reconcile?: (project: string | null, id: string) => Promise<string | undefined>) {
+export function createHostClient(bootstrap: () => Promise<unknown>) {
   const queries = Semaphore.makeUnsafe(4);
   let queued = 0;
   type Client = Effect.Success<ReturnType<typeof makeClient>>;
@@ -74,7 +75,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>, reconcile?: 
     sendMessage: (command: SendCommand) => chatQuery(client => client.sendMessage({ command })),
     sendStatus: (commandId: string) => chatQuery(client => client.sendStatus({ commandId })),
     openChat: (project: string | null, id: string) => chatQuery(client => client.openChat({ project, id })),
-    chatLive(project: string | null, id: string, apply: (detail: typeof ChatDetail.Type) => void, error: (message: string) => void) {
+    chatLive(project: string | null, id: string, apply: (detail: typeof ChatDetail.Type) => void, error: (message: string) => void, reconcile?: () => Promise<string | undefined>) {
       let active = true;
       const controller = new AbortController();
       let epoch: string | undefined, revision = 0;
@@ -82,7 +83,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>, reconcile?: 
       const attempt = () => Effect.gen(function* () {
         epoch = undefined; revision = 0; items = [];
         const client = yield* Effect.tryPromise(connect);
-        const warning = reconcile ? yield* Effect.tryPromise(() => reconcile(project, id)) : undefined;
+        const warning = reconcile ? yield* Effect.tryPromise(reconcile) : undefined;
         yield* client.chatLive({ project, id }).pipe(Stream.timeout("3 seconds"), Stream.runForEach(batch => Effect.sync(() => {
           if (!active) return;
           if (batch.epoch === epoch && batch.revision <= revision) return;

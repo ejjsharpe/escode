@@ -20,9 +20,9 @@ epoch. No recovery path dispatches stored work. Receipts are never pruned: the s
 1 MiB store ceiling rejects new admission before effects. Capacity management beyond
 that ceiling is deferred; uncertainty is never evicted to make room.
 
-The preload persists the command ID and payload in the owning desktop origin's local
-storage before submitting. Failed status/transport results retain this identity and
-composer text. A later Send checks the existing ID rather than replacing it. After
+The client Chat module persists the command ID and payload through the preload's
+owning-origin local-storage adapter before submitting. Failed status/transport results
+retain this identity and composer text. A later Send checks the existing ID rather than replacing it. After
 inspecting reloaded history, **Resolve previous Send…** offers native confirmation
 before releasing that local pending identity. It retains host receipts and unsent
 text, dispatches nothing, and warns that a subsequent explicit Send can duplicate
@@ -97,3 +97,41 @@ self-invalidation and lost provider-rejection classification. The final independ
 review found no remaining substantive Spec defects and approved shipping within the
 amended scope. Test execution and manual accessibility limits remain separately
 reported above; static review does not establish runtime acceptance.
+
+## Client recovery deepening (2026-10-30)
+
+[`createChatClient`](../../packages/client-runtime/chat.ts) owns pending Send identity,
+composer persistence, receipt/history reconciliation and explicit local resolution.
+Preload supplies storage, Electron flushing and native confirmation; the shared
+transport invokes the module's reconciliation before each live subscription attempt.
+Storage keys and command formats are unchanged. Stop, replies and Files commands
+retain their existing paths.
+
+Send returns the remaining composer text to React, which preserves any newer local
+edit rather than clearing unconditionally. Accepted identity release waits for the
+composer flush request to succeed; a failed flush retains the original identity for
+a status-only retry. Resolution preserves text recovered solely from an existing
+stored Send. Overlapping Send/resolution calls and invalid retained commands fail
+without redispatch or deletion of the retained identity.
+
+Resolution also preserves an explicitly empty saved composer; pending text is used
+only when the composer key is absent. The regression test first reproduced deleted
+text returning, then passed with the shared composer fallback corrected. All 26
+focused client Chat and host Send tests, typecheck and lint passed after this fix;
+the broader checks below were not repeated.
+
+Verification: typecheck, lint, build and packaging passed; the full host suite passed
+248 tests with four opt-in skips. Seventeen `host/client-chat.test.ts` cases exercise
+the module interface with storage/transport failures and delayed results. The real
+socket tests in `host/reconnect.test.ts` now exercise module-owned recovery, including
+receipt/history lookup on automatic reconnect and a lost accepted Send response.
+Seven focused Electron scenarios passed across Send, history, project drafts, scratch
+chats and concurrent controls; Send and both history scenarios also passed packaged.
+The Send scenario retains newer text through delayed acceptance and app restart and
+still observes exactly two fixture-provider turns despite repeated receipt queries.
+
+The initial Electron run found outdated void-return assertions and a test racing the
+restored chat's startup. Updating the return assertions and awaiting composer readiness
+resolved those failures. Real-provider opt-in checks and manual VoiceOver were not run.
+Electron flushing remains best effort; these checks do not establish crash-latest-text
+or exactly-once external-effect guarantees.
