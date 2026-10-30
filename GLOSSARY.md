@@ -26,7 +26,7 @@ A device trusted with owner-equivalent control of a particular execution host, i
 Withdrawal of a device's trust on an execution host, invalidating its connections and derived sessions and requesting Stop for its still-running work. It does not undo completed effects or guarantee termination of external side effects.
 
 **Host identity**:
-The verified identity to which clients and chats bind an execution host, independent of its display name or project paths. Recovery or replacement requires explicit verification and rebinding rather than silently redirecting existing chats or uncertain work. The fresh foundation store now persists the local host and desktop-client identities before desktop startup; transport and domain binding remain subsequent work.
+The verified identity to which clients and chats bind an execution host, independent of its display name or project paths. Recovery or replacement requires explicit verification and rebinding rather than silently redirecting existing chats or uncertain work. The fresh foundation store now persists the local host and desktop-client identities before desktop startup; authenticated local directory queries now bind this identity through validated bootstrap and exact wire revision. Other domains remain subsequent work.
 
 **View subscription**:
 A client's interest in updates for a displayed chat, directory or other surface. Ending it releases that interest without ending the underlying chat or host.

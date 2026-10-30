@@ -894,8 +894,6 @@ export interface ProjectBridge {
     path: string,
     action: "copy-path" | "copy-relative" | "finder",
   ): Promise<void>;
-  (operation: "files-filter", checkout: string, path: string): ReturnType<Project["filteredFiles"]>;
-  (operation: "files", checkout: string, path: string): ReturnType<Project["files"]>;
   (operation: "read", checkout: string, path: string): ReturnType<Project["read"]>;
   (
     operation: "save",

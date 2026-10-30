@@ -39,6 +39,7 @@ declare global {
       chat: ChatBridge;
       toolStatus(): Promise<unknown>;
       project: ProjectBridge;
+      listDirectory(root: string, path: string): Promise<import("@escode/contracts").DirectoryResult>;
       watchFiles(root: string, paths: string[], callback: (error?: string) => void): () => void;
       nativeFiles(files: File[]): Promise<string>;
     };

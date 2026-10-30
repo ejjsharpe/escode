@@ -79,6 +79,8 @@ test("dirty descendants move through Monaco and bridge, undo, save conflict and 
     await expect(page.locator(".conflict")).toContainText("moved/a.ts changed on disk");
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
+    // Explicit recovery of the test-owned store after confirmed process death.
+    await rm(join(user, "foundation/owner.lock"));
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(page.locator(".monaco-editor:visible")).toContainText("dirty a");
@@ -252,7 +254,7 @@ test("mutation IPC rejects other senders, unopened checkouts and protected app s
       const error = await page.evaluate(
         async ({ root, operation }) => {
           try {
-            if (operation === "files") await window.escode.project("files", root, "app-state");
+            if (operation === "files") await window.escode.listDirectory(root, "app-state").then((result) => { if (result.kind !== "available") throw Error(result.message); return result.listing.entries; });
             else if (operation === "read")
               await window.escode.project("read", root, "app-state/workspace.json");
             else
@@ -289,7 +291,8 @@ test("mutation IPC rejects other senders, unopened checkouts and protected app s
     expect(
       await page.evaluate(async (root) => {
         try {
-          await window.escode.project("files-filter", root, "app-state");
+          const result = await window.escode.listDirectory(root, "app-state");
+          if (result.kind !== "available") throw Error(result.message);
           return "accepted";
         } catch (error) {
           return String(error);

@@ -12,6 +12,8 @@ import { join, resolve, dirname, basename, extname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, realpathSync, statSync } from "node:fs";
 import { NativeImport } from "./native-import";
+import { startDirectoryHost } from "@escode/host";
+import { maximumFrameBytes, type DirectoryResult } from "@escode/contracts";
 import { FoundationState } from "./foundation-state";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { toolStatus } from "./tools";
@@ -24,7 +26,7 @@ import { affected } from "./file-operation-state";
 const developmentOrigin = /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.ESCODE_DEV_URL ?? "")
   ? process.env.ESCODE_DEV_URL!
   : "http://127.0.0.1:5173";
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   mkdirSync(app.getPath("userData"), { recursive: true, mode: 0o700 });
   let foundation: FoundationState;
   try {
@@ -54,6 +56,7 @@ app.whenReady().then(() => {
       nodeIntegration: false,
     },
   });
+  let directoryOrigin = "";
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
     callback(false),
   );
@@ -63,8 +66,8 @@ app.whenReady().then(() => {
         ...details.responseHeaders,
         "Content-Security-Policy": [
           dev
-            ? `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ${developmentOrigin.replace("http:", "ws:")}; worker-src 'self' blob:; font-src 'self' data:`
-            : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; font-src 'self' data:",
+            ? `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ${developmentOrigin.replace("http:", "ws:")} ${directoryOrigin}; worker-src 'self' blob:; font-src 'self' data:`
+            : `default-src 'self'; connect-src ${directoryOrigin}; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; font-src 'self' data:`,
         ],
       },
     }),
@@ -400,6 +403,49 @@ app.whenReady().then(() => {
         window.webContents.send("files-changed", { id, root, error });
     }));
   });
+  const directoryHost = await startDirectoryHost({
+    ...foundation.read(), origin: dev ? developmentOrigin : "file://",
+    list: async (root, path): Promise<DirectoryResult> => {
+      // Only native-approved, already-open checkouts can reach filesystem adapters.
+      if (!projects.has(root)) return { kind: "denied", message: "Open and approve this checkout first." };
+      const project = await checkout(root);
+      const identity = project.repository(), owner = projectSessions.get(identity);
+      const check = () => {
+        if (!owner || projectSessions.get(identity) !== owner || projects.get(root) !== project || quitting || removing.has(identity))
+          throw Error("Originating project unavailable or app quitting.");
+        project.checkoutIdentity();
+      };
+      const protectedPath = (path: string) => {
+        const absolute = resolve(project.root, path);
+        return isAppState(absolute) || stateFiles.some((file) => file.startsWith(absolute + "/"));
+      };
+      if (path && protectedPath(path))
+        return { kind: "denied", message: "App state is unavailable in Files." };
+      if (path && (path.startsWith("/") || path.includes("\0") || path.split("/").some((p) => p === ".." || p.toLowerCase() === ".git")))
+        return { kind: "denied", message: "Directory path denied." };
+      try {
+        check();
+        const result = await project.filteredFiles(path);
+        check();
+        const entries = result.entries.filter((entry) => !protectedPath(entry.path));
+        const paths = new Set(entries.map((entry) => entry.path));
+        const listing = { ...result, entries, ignored: result.ignored.filter((entry) => paths.has(entry)) };
+        if (Buffer.byteLength(JSON.stringify(listing)) > maximumFrameBytes / 2)
+          return { kind: "overflow", message: "Directory listing exceeds the connection limit." };
+        return { kind: "available", listing };
+      } catch (error) {
+        return { kind: "unavailable", message: String(error) };
+      }
+    },
+  });
+  directoryOrigin = directoryHost.origin;
+  ipcMain.handle("local-bootstrap", (event, ...args) => {
+    if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
+        event.senderFrame.url !== documentURL || args.length) throw Error("Invalid local bootstrap request");
+    if (quitting) throw Error("App is quitting.");
+    return directoryHost.bootstrap();
+  });
+  app.once("will-quit", () => { void directoryHost.close(); });
   ipcMain.handle("project", async (event, operation: unknown, ...args: unknown[]) => {
     if (
       event.sender !== window.webContents ||
@@ -426,11 +472,11 @@ app.whenReady().then(() => {
       await store.migrate(opened.repository(), opened.checkouts());
       return opened.status();
     }
+    if (operation === "files" || operation === "files-filter") throw Error("Invalid project request");
     const requestedRoot = args.shift();
     if (
       [
         "entry-action",
-        "files-filter",
         "drag-capture",
         "clipboard-capture",
         "transfer",
@@ -461,7 +507,7 @@ app.whenReady().then(() => {
         throw Error("Originating project unavailable or app quitting.");
       project.checkoutIdentity();
     };
-    if (["entry-action", "files-filter"].includes(String(operation))) checkFilesSession();
+    if (operation === "entry-action") checkFilesSession();
     if (removing.has(identity)) throw Error("Worktree removal is in progress. Retry afterward.");
     if (operation === "file-operation-ack" && !args.length) {
       if (mutationOrigin) throw Error("File operation is still delivering results.");
@@ -1128,23 +1174,6 @@ app.whenReady().then(() => {
           }),
         ]);
       return;
-    }
-    if (
-      (operation === "files" || operation === "files-filter") &&
-      args.length === 1 &&
-      typeof args[0] === "string"
-    ) {
-      const protectedPath = (path: string) => {
-        const absolute = resolve(project.root, path);
-        return isAppState(absolute) || stateFiles.some((file) => file.startsWith(absolute + "/"));
-      };
-      if (args[0] && protectedPath(args[0])) throw Error("App state is unavailable in Files.");
-      if (operation === "files-filter") {
-        const result = await project.filteredFiles(args[0]);
-        checkFilesSession();
-        return { ...result, entries: result.entries.filter((entry) => !protectedPath(entry.path)) };
-      }
-      return (await project.files(args[0])).filter((entry) => !protectedPath(entry.path));
     }
     if (operation === "read" && args.length === 1 && typeof args[0] === "string")
       return project.read(args[0]);

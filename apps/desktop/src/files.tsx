@@ -348,7 +348,10 @@ export function FilesTree({
     const pending = loaded.current.get(path);
     if (pending) return pending;
     const generation = epoch.current;
-    const task = window.escode.project("files-filter", root, path).then(
+    const task = window.escode.listDirectory(root, path).then((result) => {
+      if (result.kind !== "available") throw Error(result.message);
+      return { ...result.listing, entries: [...result.listing.entries], ignored: [...result.listing.ignored] };
+    }).then(
       (listing) => {
         if (generation === epoch.current && loaded.current.get(path) === task) {
           setCache((c) => ({ ...c, [path]: listing }));

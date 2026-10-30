@@ -1,0 +1,10 @@
+{
+  "name": "@escode/client-runtime",
+  "private": true,
+  "type": "module",
+  "exports": "./index.ts",
+  "dependencies": {
+    "@escode/contracts": "workspace:*",
+    "effect": "4.1.0"
+  }
+}

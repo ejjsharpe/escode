@@ -158,6 +158,8 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
       .toBe(true);
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
+    // Explicit recovery of the test-owned store after confirmed process death.
+    await rm(join(user, "foundation/owner.lock"));
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(
@@ -298,7 +300,7 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
       const denied = change === "root replacement" || change === "quit";
       expect(result).toMatch(denied ? /replaced|quitting/ : /^ok$/);
       expect(await app.evaluate(() => (globalThis as any).finderTargets)).toEqual(denied ? [] : [join(root, "context.txt")]);
-      const listing = await page.evaluate((root) => window.escode.project("files-filter", root, "").then(
+      const listing = await page.evaluate((root) => window.escode.listDirectory(root, "").then((result) => { if (result.kind !== "available") throw Error(result.message); return result.listing; }).then(
         (value) => value, (error) => String(error)), root);
       if (denied) expect(listing).toMatch(/replaced|quitting/);
       else {

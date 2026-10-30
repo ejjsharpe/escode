@@ -1,7 +1,10 @@
+import { listDirectory } from "@escode/client-runtime";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 contextBridge.exposeInMainWorld(
   "escode",
   Object.freeze({
+    listDirectory: (root: string, path: string) =>
+      listDirectory(() => ipcRenderer.invoke("local-bootstrap"), root, path),
     watchFiles: (root: string, paths: string[], callback: (error?: string) => void) => {
       const id = crypto.randomUUID();
       let disposed = false;
