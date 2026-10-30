@@ -124,9 +124,24 @@ export const WorkspaceLoad = Schema.Struct({ state: WorkspaceState, errors: Sche
     gitError: Schema.optionalKey(Schema.String), approvalRequired: Schema.optionalKey(Schema.Boolean) })) });
 export const CreateCommand = Schema.Struct({ commandId: Schema.String, admissionEpoch: Schema.String, root: Schema.String, parent: Schema.String, name: Schema.String, kind: Schema.Literals(["file", "folder"]) });
 export const CreateReceipt = Schema.Struct({ command: CreateCommand, status: Schema.Literals(["dispatching", "accepted", "rejected", "uncertain"]), message: Schema.String, path: Schema.String });
+export const TrashBatch = Schema.Struct({
+  results: Schema.Array(Schema.Struct({ source: Schema.String, applied: Schema.Boolean, message: Schema.String,
+    persistencePending: Schema.optionalKey(Schema.Boolean),
+    intent: Schema.optionalKey(Schema.Struct({ root: Schema.String, checkoutIdentity: Schema.String,
+      source: Schema.String, destination: Schema.String, kind: Schema.Literals(["move", "trash", "save", "copy"]),
+      identity: Schema.String, completed: Schema.optionalKey(Schema.Boolean), temporary: Schema.optionalKey(Schema.String),
+      copies: Schema.optionalKey(WorkspaceState.fields.drafts), saveText: Schema.optionalKey(Schema.String),
+      savedDisk: Schema.optionalKey(FileDocument),
+    })),
+    conflict: Schema.optionalKey(Schema.Struct({ path: Schema.String, disk: FileDocument })),
+  })),
+  saves: Schema.Array(Schema.Struct({ path: Schema.String, disk: FileDocument })),
+  requiresAck: Schema.Boolean, message: Schema.String,
+});
 export const Files = RpcGroup.make(
   Rpc.make("createEntry", { payload: { command: CreateCommand }, success: CreateReceipt, error: Schema.String }),
   Rpc.make("createState", { success: Schema.String, error: Schema.String }),
+  Rpc.make("trashEntries", { payload: { root: Schema.String, paths: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(10000)) }, success: TrashBatch, error: Schema.String }),
   Rpc.make("readFile", { payload: { root: Schema.String, path: Schema.String }, success: FileDocument, error: Schema.String }),
   Rpc.make("saveFile", { payload: { root: Schema.String, path: Schema.String, text: Schema.String, version: Schema.String }, success: FileSaveResult, error: Schema.String }),
   Rpc.make("loadWorkspace", { success: WorkspaceLoad, error: Schema.String }),

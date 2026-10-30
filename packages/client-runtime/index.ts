@@ -56,6 +56,7 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
   return {
     createState: () => chatQuery(client => client.createState()),
     createEntry: (command: typeof import("@escode/contracts").CreateCommand.Type) => chatQuery(client => client.createEntry({ command })),
+    trashEntries: (root: string, paths: readonly string[]) => chatQuery(client => client.trashEntries({ root, paths })),
     readFile: (root: string, path: string) => chatQuery(client => client.readFile({ root, path })),
     saveFile: (root: string, path: string, text: string, version: string) => chatQuery(client => client.saveFile({ root, path, text, version })),
     loadWorkspace: () => chatQuery(client => client.loadWorkspace()),

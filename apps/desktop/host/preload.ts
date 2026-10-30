@@ -117,6 +117,7 @@ contextBridge.exposeInMainWorld(
     project: (operation: string, ...args: string[]) =>
       operation === "create-entry" ? createEntry(args[0], args[1], args[2], args[3] as "file" | "folder")
       : operation === "read" ? directories.readFile(args[0], args[1])
+      : operation === "trash-selection" ? directories.trashEntries(args[0], args[1] as unknown as string[])
       : operation === "save" ? directories.saveFile(args[0], args[1], args[2], args[3])
       : operation === "file-operation"
         ? directories.moveEntry({ root: args[0] as string, action: args[1] as "move" | "rename", source: args[2] as string, target: args[3] as string })

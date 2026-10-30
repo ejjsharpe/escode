@@ -582,7 +582,159 @@ app.whenReady().then(async () => {
     if (mutationOrigin) throw Error("File operation is still delivering results.");
     await operations.ack(project.root);
   }
+  const trashEntries = async (root: string, selection: readonly string[]) => {
+    const { project, check } = await fileContext(root, "");
+    check();
+    const identity = project.repository();
+      if (mutationOrigin) throw Error("Another file operation is pending.");
+      mutationOrigin = project.root;
+      try {
+        operations.beginBatch(project.root);
+        const owner = projectSessions.get(identity);
+        const checkoutIdentity = project.checkoutIdentity();
+        const checkOrigin = () => {
+          if (project.checkoutIdentity() !== checkoutIdentity || removing.has(identity))
+            throw Error("Originating checkout unavailable.");
+          if (
+            !owner ||
+            projectSessions.get(identity) !== owner ||
+            quitting ||
+            projects.get(project.root) !== project
+          )
+            throw Error("Originating project unavailable or app quitting.");
+        };
+        // Only validated native identities grant authority; hidden selection is still input.
+        const paths = [...new Set(selection)];
+        const entries = paths
+          .map((source) => {
+            try {
+              const absolute = resolve(project.root, source);
+              if (
+                isAppState(absolute) ||
+                stateFiles.some((file) =>
+                  affected(
+                    file.normalize("NFC").toLowerCase(),
+                    absolute.normalize("NFC").toLowerCase(),
+                  ),
+                )
+              )
+                throw Error("Protected app state is inside this operation.");
+              return {
+                source,
+                identity: project.operationIdentity(source),
+                directory: statSync(absolute).isDirectory(),
+                error: "",
+              };
+            } catch (error) {
+              return { source, identity: "", directory: false, error: String(error) };
+            }
+          })
+          .filter(
+            (entry, _, all) =>
+              !all.some(
+                (parent) =>
+                  parent !== entry &&
+                  parent.directory &&
+                  !parent.error &&
+                  affected(entry.source, parent.source),
+              ),
+          );
+        const state = await workspace.read();
+        const dirty = state.drafts.filter(
+          (d) => d.root === project.root && entries.some((entry) => affected(d.path, entry.source)),
+        );
+        const answer = await dialog.showMessageBox(window, {
+          message: `Move ${entries.length} item${entries.length === 1 ? "" : "s"} to macOS Trash?`,
+          detail:
+            entries.map((e) => `${project.root}/${e.source}`).join("\n") +
+            `\nDirty descendants (${dirty.length}): ${dirty.map((d) => project.root + "/" + d.path).join(", ") || "None"}\nDisk files can be recovered in Finder Trash.`,
+          buttons: dirty.length
+            ? ["Save and Move to Trash", "Discard and Move to Trash", "Cancel"]
+            : ["Move to Trash", "Cancel"],
+          defaultId: dirty.length ? 2 : 1,
+          cancelId: dirty.length ? 2 : 1,
+        });
+        if (answer.response !== 0 && !(dirty.length && answer.response === 1))
+          return {
+            results: [],
+            saves: [],
+            requiresAck: false,
+            message: "Cancelled; edits retained.",
+          };
+        const results: import("./file-operations").TrashResult[] = [];
+        const saves: import("./file-operations").SavedFile[] = [];
+        for (const entry of entries) {
+          const { source } = entry;
+          try {
+            checkOrigin();
+            if (entry.error) throw Error(entry.error);
+            const check = () => {
+              checkOrigin();
+              if (project.operationIdentity(source) !== entry.identity)
+                throw Error("Source changed after confirmation. Refresh and inspect actual paths.");
+            };
+            check();
+            if (dirty.length && answer.response === 0) {
+              let conflicted = false;
+              for (const d of dirty.filter((d) => affected(d.path, source))) {
+                check();
+                const saved = await operations.save(project, d.path, d.text, d.disk.version, check);
+                if (saved.kind !== "saved") {
+                  results.push({
+                    source,
+                    applied: false,
+                    message: `Save conflict: ${d.path}. Edits retained; resolve the conflict before retrying Trash.`,
+                    conflict: { path: d.path, disk: saved.disk },
+                  });
+                  conflicted = true;
+                  break;
+                }
+                saves.push({ path: d.path, disk: saved.disk });
+                if (saved.persistencePending) {
+                  results.push({
+                    source,
+                    applied: false,
+                    persistencePending: true,
+                    message: saved.message!,
+                  });
+                  conflicted = true;
+                  break;
+                }
+                if (d.path === source) entry.identity = project.operationIdentity(source);
+              }
+              if (conflicted) continue;
+            }
+            const result = await operations.run(project, "trash", source, "", check);
+            // A fully persisted item can release the shared journal for the next item.
+            if (!result.persistencePending) {
+              try {
+                await operations.ack();
+              } catch (error) {
+                result.persistencePending = true;
+                result.message += ` Recovery journal needs retry: ${String(error)}`;
+              }
+            }
+            results.push({ source, ...result });
+          } catch (error) {
+            results.push({ source, applied: false, message: String(error) });
+          }
+        }
+        return {
+          results,
+          saves,
+          requiresAck: operations.hasBatchFacts(project.root),
+          message: [
+            ...saves.map((saved) => `${project.root}/${saved.path}: Saved.`),
+            ...results.map((r) => `${project.root}/${r.source}: ${r.message}`),
+          ].join("\n"),
+        };
+      } finally {
+        operations.releaseEmptyBatch();
+        mutationOrigin = undefined;
+      }
+  };
   const directoryHost = await startDirectoryHost({
+    trashEntries,
     moveEntry,
     ackFileOperation,
     draftAction,
@@ -754,7 +906,7 @@ app.whenReady().then(async () => {
       await store.migrate(opened.repository(), opened.checkouts());
       return opened.status();
     }
-    if (["read", "save", "files", "files-filter", "create-entry"].includes(String(operation))) throw Error("Invalid project request");
+    if (["read", "save", "files", "files-filter", "create-entry", "trash-selection"].includes(String(operation))) throw Error("Invalid project request");
     const requestedRoot = args.shift();
     if (
       [
@@ -1136,158 +1288,6 @@ app.whenReady().then(async () => {
         };
       } finally {
         nativeEntries?.forEach((e) => e.close());
-        operations.releaseEmptyBatch();
-        mutationOrigin = undefined;
-      }
-    }
-    if (
-      operation === "trash-selection" &&
-      args.length === 1 &&
-      Array.isArray(args[0]) &&
-      args[0].length > 0 &&
-      args[0].length <= 10000 &&
-      args[0].every((path) => typeof path === "string")
-    ) {
-      if (mutationOrigin) throw Error("Another file operation is pending.");
-      mutationOrigin = project.root;
-      try {
-        operations.beginBatch(project.root);
-        const owner = projectSessions.get(identity);
-        const checkOrigin = () => {
-          if (
-            !owner ||
-            projectSessions.get(identity) !== owner ||
-            quitting ||
-            projects.get(project.root) !== project
-          )
-            throw Error("Originating project unavailable or app quitting.");
-        };
-        // Only validated native identities grant authority; hidden selection is still input.
-        const paths = [...new Set(args[0] as string[])];
-        const entries = paths
-          .map((source) => {
-            try {
-              const absolute = resolve(project.root, source);
-              if (
-                isAppState(absolute) ||
-                stateFiles.some((file) =>
-                  affected(
-                    file.normalize("NFC").toLowerCase(),
-                    absolute.normalize("NFC").toLowerCase(),
-                  ),
-                )
-              )
-                throw Error("Protected app state is inside this operation.");
-              return {
-                source,
-                identity: project.operationIdentity(source),
-                directory: statSync(absolute).isDirectory(),
-                error: "",
-              };
-            } catch (error) {
-              return { source, identity: "", directory: false, error: String(error) };
-            }
-          })
-          .filter(
-            (entry, _, all) =>
-              !all.some(
-                (parent) =>
-                  parent !== entry &&
-                  parent.directory &&
-                  !parent.error &&
-                  affected(entry.source, parent.source),
-              ),
-          );
-        const state = await workspace.read();
-        const dirty = state.drafts.filter(
-          (d) => d.root === project.root && entries.some((entry) => affected(d.path, entry.source)),
-        );
-        const answer = await dialog.showMessageBox(window, {
-          message: `Move ${entries.length} item${entries.length === 1 ? "" : "s"} to macOS Trash?`,
-          detail:
-            entries.map((e) => `${project.root}/${e.source}`).join("\n") +
-            `\nDirty descendants (${dirty.length}): ${dirty.map((d) => project.root + "/" + d.path).join(", ") || "None"}\nDisk files can be recovered in Finder Trash.`,
-          buttons: dirty.length
-            ? ["Save and Move to Trash", "Discard and Move to Trash", "Cancel"]
-            : ["Move to Trash", "Cancel"],
-          defaultId: dirty.length ? 2 : 1,
-          cancelId: dirty.length ? 2 : 1,
-        });
-        if (answer.response !== 0 && !(dirty.length && answer.response === 1))
-          return {
-            results: [],
-            saves: [],
-            requiresAck: false,
-            message: "Cancelled; edits retained.",
-          };
-        const results: import("./file-operations").TrashResult[] = [];
-        const saves: import("./file-operations").SavedFile[] = [];
-        for (const entry of entries) {
-          const { source } = entry;
-          try {
-            checkOrigin();
-            if (entry.error) throw Error(entry.error);
-            const check = () => {
-              checkOrigin();
-              if (project.operationIdentity(source) !== entry.identity)
-                throw Error("Source changed after confirmation. Refresh and inspect actual paths.");
-            };
-            check();
-            if (dirty.length && answer.response === 0) {
-              let conflicted = false;
-              for (const d of dirty.filter((d) => affected(d.path, source))) {
-                check();
-                const saved = await operations.save(project, d.path, d.text, d.disk.version, check);
-                if (saved.kind !== "saved") {
-                  results.push({
-                    source,
-                    applied: false,
-                    message: `Save conflict: ${d.path}. Edits retained; resolve the conflict before retrying Trash.`,
-                    conflict: { path: d.path, disk: saved.disk },
-                  });
-                  conflicted = true;
-                  break;
-                }
-                saves.push({ path: d.path, disk: saved.disk });
-                if (saved.persistencePending) {
-                  results.push({
-                    source,
-                    applied: false,
-                    persistencePending: true,
-                    message: saved.message!,
-                  });
-                  conflicted = true;
-                  break;
-                }
-                if (d.path === source) entry.identity = project.operationIdentity(source);
-              }
-              if (conflicted) continue;
-            }
-            const result = await operations.run(project, "trash", source, "", check);
-            // A fully persisted item can release the shared journal for the next item.
-            if (!result.persistencePending) {
-              try {
-                await operations.ack();
-              } catch (error) {
-                result.persistencePending = true;
-                result.message += ` Recovery journal needs retry: ${String(error)}`;
-              }
-            }
-            results.push({ source, ...result });
-          } catch (error) {
-            results.push({ source, applied: false, message: String(error) });
-          }
-        }
-        return {
-          results,
-          saves,
-          requiresAck: operations.hasBatchFacts(project.root),
-          message: [
-            ...saves.map((saved) => `${project.root}/${saved.path}: Saved.`),
-            ...results.map((r) => `${project.root}/${r.source}: ${r.message}`),
-          ].join("\n"),
-        };
-      } finally {
         operations.releaseEmptyBatch();
         mutationOrigin = undefined;
       }

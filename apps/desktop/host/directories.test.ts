@@ -371,3 +371,35 @@ test("authenticated moves validate commands and retain results until explicit ac
     const done = closed(socket); socket.close(); await done;
   } finally { await host.close(); }
 });
+
+test("authenticated Trash validates selections and retains partial outcomes and reconciliation identities", async () => {
+  let calls = 0;
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "unused" }),
+    trashEntries: async (root, paths) => {
+      calls++; expect(root).toBe("/approved"); expect(paths).toEqual(["folder", "failed"]);
+      return { results: [
+        { source: "folder", applied: true, message: "Moved to macOS Trash.", intent: {
+          root, checkoutIdentity: "checkout", source: "folder", destination: "", kind: "trash", identity: "object", completed: true,
+        } },
+        { source: "failed", applied: false, message: "Native Trash unavailable; no permanent deletion attempted" },
+      ], saves: [{ path: "failed", disk: { text: "saved text", version: "saved" } }], requiresAck: true, message: "Partial success" };
+    },
+  });
+  const socket = await connect(host.bootstrap().url);
+  const query = (id: string, paths: unknown) => new Promise<string>(resolve => {
+    socket.once("message", data => resolve(String(data)));
+    socket.send(JSON.stringify({ _tag: "Request", id, tag: "trashEntries", payload: { root: "/approved", paths }, headers: [] }));
+  });
+  try {
+    expect(await query("1", [])).toContain("Failure");
+    expect(await query("2", [42])).toContain("Failure");
+    expect(calls).toBe(0);
+    const result = await query("3", ["folder", "failed"]);
+    expect(result).toContain('"checkoutIdentity":"checkout"');
+    expect(result).toContain('"requiresAck":true');
+    expect(result).toContain('"text":"saved text"');
+    expect(result).toContain("no permanent deletion attempted");
+    expect(calls).toBe(1);
+  } finally { const done = closed(socket); socket.close(); await done; await host.close(); }
+});

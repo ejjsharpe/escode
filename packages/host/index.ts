@@ -7,7 +7,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult } from "@escode/contracts";
 
-const fileMethods = ["readFile", "saveFile", "loadWorkspace", "persistWorkspace"];
+const fileMethods = ["trashEntries", "readFile", "saveFile", "loadWorkspace", "persistWorkspace"];
 
 // Guard parser/error writes too; they bypass the RPC response budget.
 class BoundedWebSocket extends WebSocket {
@@ -51,6 +51,7 @@ export async function startDirectoryHost(options: {
   sendStatus?: (commandId: string) => Promise<SendReceipt | null>;
   createEntry?: (command: typeof import("@escode/contracts").CreateCommand.Type) => Promise<typeof import("@escode/contracts").CreateReceipt.Type>;
   createState?: () => string;
+  trashEntries?: (root: string, paths: readonly string[]) => Promise<typeof import("@escode/contracts").TrashBatch.Type>;
   readFile?: (root: string, path: string) => Promise<typeof import("@escode/contracts").FileDocument.Type>;
   saveFile?: (root: string, path: string, text: string, version: string) => Promise<typeof import("@escode/contracts").FileSaveResult.Type>;
   loadWorkspace?: () => Promise<typeof import("@escode/contracts").WorkspaceLoad.Type>;
@@ -103,7 +104,7 @@ export async function startDirectoryHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -164,6 +165,10 @@ export async function startDirectoryHost(options: {
         }, catch: String }),
         readFile: ({ root, path }) => Effect.tryPromise({ try: async () => {
           if (!options.readFile) throw Error("Files unavailable"); return options.readFile(root, path);
+        }, catch: String }),
+        trashEntries: ({ root, paths }) => Effect.tryPromise({ try: async () => {
+          if (!options.trashEntries) throw Error("Native Trash unavailable; no permanent deletion attempted");
+          return options.trashEntries(root, paths);
         }, catch: String }),
         saveFile: ({ root, path, text, version }) => Effect.tryPromise({ try: async () => {
           if (!options.saveFile) throw Error("Files unavailable"); return options.saveFile(root, path, text, version);
