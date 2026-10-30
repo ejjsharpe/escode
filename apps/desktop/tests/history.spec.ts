@@ -20,7 +20,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='turn/start')result={turn:{id:'sent'}};
  if(m.method==='thread/turns/list')result={data:[{id:'t',items:[{id:'i',type:'agentMessage',text:m.params.cursor===null?'first saved page':'second saved page'}]}],nextCursor:m.params.cursor===null?'second':null};
  const reply=()=>{process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');
- if(${mode === 'streaming'} && m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(()=>{for(const event of [{method:'turn/started',params:{threadId:'saved-provider',turn:{id:'t'}}},{method:'item/completed',params:{threadId:'saved-provider',turnId:'t',item:{id:'i',type:'agentMessage',text:'newest live body'}}},{method:'turn/completed',params:{threadId:'saved-provider',turn:{id:'t'}}}])process.stdout.write(JSON.stringify(event)+'\\n');},200);
+ if(${mode === 'streaming'} && m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(()=>{for(const event of [{method:'turn/started',params:{threadId:'saved-provider',turn:{id:'t'}}},{method:'item/agentMessage/delta',params:{threadId:'saved-provider',turnId:'t',itemId:'i',delta:' live delta'}}])process.stdout.write(JSON.stringify(event)+'\\n');setTimeout(()=>{for(const event of [{method:'item/completed',params:{threadId:'saved-provider',turnId:'t',item:{id:'i',type:'agentMessage',text:'newest live body'}}},{method:'turn/completed',params:{threadId:'saved-provider',turn:{id:'t'}}}])process.stdout.write(JSON.stringify(event)+'\\n');},1200);},200);
  };
  if(m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(reply,1000);else reply();
  if(m.method==='turn/start')for(const method of ['turn/started','turn/completed'])process.stdout.write(JSON.stringify({method,params:{threadId:'saved-provider',turn:{id:'sent'}}})+'\\n');
@@ -40,9 +40,11 @@ createInterface({input:process.stdin}).on('line',line=>{
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await page.locator(".agent-row").click();
     await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
+    expect(await page.evaluate(id => window.escode.chat("send", null, id, "fixture follow-up"), chatId)).toBeUndefined();
     const next = page.getByRole("button", { name: "Next history page" });
     await next.focus(); await page.keyboard.press("Enter");
     if (mode === "streaming") {
+      await expect(page.getByText("first saved page live delta", { exact: true })).toBeVisible();
       await expect(page.getByText("newest live body", { exact: true })).toBeVisible();
       await expect(page.getByText("second saved page", { exact: true })).toHaveCount(0);
       return;

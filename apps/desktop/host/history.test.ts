@@ -14,7 +14,10 @@ test("saved history pages preserve binding without Git, immutable revisions and 
   await store.update(root, chat.id, { phase: "bound", threadId: "exact-provider" });
   const calls: { method: string; params: any }[] = [];
   let body: unknown = { data: [{ id: "t2", items: [{ id: "a", type: "future-safe-kind", payload: "safe unknown" }] }], nextCursor: null };
-  const service = new ChatService(store, async () => ({
+  let emit = (_event: any) => {};
+  const service = new ChatService(store, async (_cwd, receive) => {
+    emit = receive;
+    return {
     async request(method, params: any) {
       calls.push({ method, params });
       if (method === "account/read") return { account: {} };
@@ -24,7 +27,7 @@ test("saved history pages preserve binding without Git, immutable revisions and 
         : body;
       throw Error("Unexpected command");
     }, respond() {}, close() {},
-  }));
+  }; });
   try {
     const initial = await service.open(root, chat.id);
     expect(initial.items.map(i => i.text)).toEqual(["first page"]);
@@ -36,6 +39,12 @@ test("saved history pages preserve binding without Git, immutable revisions and 
     body = { data: [{ id: "t2", items: [{ id: "a", type: "agentMessage", text: "changed" }] }], nextCursor: null };
     expect((await service.history(root, chat.id, "second")).revision).not.toBe(second.revision);
     expect(second.items[0].text).toContain("safe unknown");
+    emit({ method: "turn/started", params: { threadId: "exact-provider", turn: { id: "t1" } } });
+    emit({ method: "item/agentMessage/delta", params: { threadId: "exact-provider", turnId: "t1", itemId: "a", delta: " live" } });
+    expect(service.snapshot(root, chat.id).items[0]).toMatchObject({ text: "first page live" });
+    expect(service.snapshot(root, chat.id).items[0].revision).toBeUndefined();
+    expect(initial.items[0].text).toBe("first page");
+    emit({ method: "turn/completed", params: { threadId: "exact-provider", turn: { id: "t1" } } });
     for (const malformed of [{ data: {}, nextCursor: null }, { data: [], nextCursor: "second" },
       { data: [{ id: "t", items: [{ id: "a", type: "agentMessage", text: "x".repeat(131073) }] }], nextCursor: null }]) {
       body = malformed;

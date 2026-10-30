@@ -1352,7 +1352,7 @@ app.whenReady().then(async () => {
               throw Error("Prepared checkout is no longer registered with this project.");
             return prepared;
           },
-        );
+        ).then(() => undefined);
     }
     if (
       operation === "answer" &&

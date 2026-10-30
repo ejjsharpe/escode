@@ -430,6 +430,7 @@ export class ChatService {
         };
         s.items.push(item);
       }
+      delete item.revision;
       item.text += p.delta;
     } else if (message.method === "error")
       s.error = p.error?.message ?? "Codex turn failed. Send a new message to continue.";
