@@ -13,9 +13,11 @@ Files/recovery frames have a separate 32 MiB encoded ceiling to accommodate JSON
 Verification on the actual local macOS installation (Electron 45.1.0, Node 26.13.0, Bun 1.4.4):
 
 - Typecheck, lint and build pass.
-- Full unit suite: 197 passed, 4 opt-in tests skipped before final review fixes; focused additions cover coalesced flush and late-snapshot save reconciliation.
+- Final full unit suite after rebasing onto parallel work: 204 passed, 4 opt-in tests skipped. This includes coalesced flush and late-snapshot save reconciliation.
 - Native/file-operation tests cover stale saves, descriptor/replacement races, denied persistence and fresh-store journal recovery, checking actual disk bytes, available text and baselines.
 - Authenticated transport test round-trips a full 2 MiB document, saves it and rejects malformed payloads; existing authentication, ordinary oversized-frame and exhaustion tests pass.
 - Development and packaged restricted-PATH `tests/lifecycle.spec.ts --grep 'crash recovery|cancelled Quit'`: 2/2 pass each. These exercise durable crash recovery, conflict baseline, failed Save, Cancel, Discard/restart and cancelled Quit preserving earlier Discard choices. Packaged recovery acknowledged the draft about 434 ms after typing began in this run.
+
+Standards review found no documented-standard breach; its duplicate transport allowlist finding was resolved. Specification review verified the stale-snapshot correction and found no remaining concrete blockers.
 
 No new manual VoiceOver claim is made. Existing controls and focus behavior are retained; manual accessibility qualification, broader installation matrices, exhaustive multi-client checks and full capacity benchmarking remain deferred.

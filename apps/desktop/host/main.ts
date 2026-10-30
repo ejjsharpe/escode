@@ -23,7 +23,7 @@ import { draftSettings, toolStatus } from "./tools";
 import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
 import { Workspace } from "./workspace";
-import { Project } from "./project";
+import { Project, limit } from "./project";
 import { FileOperations } from "./file-operations";
 import { affected } from "./file-operation-state";
 const developmentOrigin = /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.ESCODE_DEV_URL ?? "")
@@ -576,6 +576,7 @@ app.whenReady().then(async () => {
     persistWorkspace: async (state) => { await workspaceAction("persist", state); },
     readFile: async (root, path) => { const { project } = await fileContext(root, path); return project.read(path); },
     saveFile: async (root, path, text, version) => {
+      if (Buffer.byteLength(text) > limit) throw Error("Invalid save: file exceeds 2 MiB.");
       const { project, check } = await fileContext(root, path);
       if (mutationOrigin) throw Error("File operation awaiting confirmation.");
       return operations.save(project, path, text, version, check);
