@@ -1,0 +1,296 @@
+{
+  "mode": "packaged",
+  "recordedAt": "2026-10-30T12:39:47.546Z",
+  "source": "e83a757b455b09bf44716d27d231e79c2e565efc",
+  "macOS": "ProductName:\t\tmacOS\nProductVersion:\t\t26.3.1\nBuildVersion:\t\t25D2128",
+  "cpu": "Apple M1 Pro",
+  "logicalCores": 10,
+  "ramBytes": 17179869184,
+  "bun": "1.4.4",
+  "fixture": "100 tracked UTF-8 files in 10 folders; one commit; one live chat",
+  "observations": [
+    {
+      "step": "fresh launch to Open project visible (server already listening)",
+      "ms": 617.5640000000001
+    },
+    {
+      "step": "open project to root listing visible",
+      "ms": 242.86374999999998
+    },
+    {
+      "step": "external create to loaded directory row visible",
+      "ms": 187.7081250000001
+    },
+    {
+      "step": "external edit and Source Control selection to status visible",
+      "ms": 2321.887833
+    },
+    {
+      "step": "select changed file to diff visible",
+      "ms": 154.9572079999998
+    },
+    {
+      "step": "external edit to selected diff refreshed",
+      "ms": 1820.5465839999997
+    },
+    {
+      "step": "new chat to Draft visible",
+      "ms": 165.60100000000057
+    },
+    {
+      "step": "Send to assistant text visible",
+      "ms": 4958.004708
+    },
+    {
+      "step": "Send to Ready",
+      "ms": 4960.026707999999
+    },
+    {
+      "step": "Retry to Ready with one conversation turn",
+      "ms": 806.6509160000005
+    },
+    {
+      "step": "restored launch to saved chat Ready",
+      "ms": 1893.8464590000003
+    }
+  ],
+  "memory": [
+    {
+      "step": "fresh idle",
+      "processes": [
+        {
+          "pid": 27780,
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 175152,
+            "peakWorkingSetSize": 175520
+          }
+        },
+        {
+          "pid": 27781,
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 91808,
+            "peakWorkingSetSize": 91840
+          }
+        },
+        {
+          "pid": 27782,
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 48800,
+            "peakWorkingSetSize": 48816
+          }
+        },
+        {
+          "pid": 27783,
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 163856,
+            "peakWorkingSetSize": 163856
+          }
+        }
+      ]
+    },
+    {
+      "step": "files and diff loaded",
+      "processes": [
+        {
+          "pid": 27780,
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 180128,
+            "peakWorkingSetSize": 180336
+          }
+        },
+        {
+          "pid": 27781,
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 95760,
+            "peakWorkingSetSize": 95760
+          }
+        },
+        {
+          "pid": 27782,
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 48848,
+            "peakWorkingSetSize": 48896
+          }
+        },
+        {
+          "pid": 27783,
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 209104,
+            "peakWorkingSetSize": 209104
+          }
+        }
+      ]
+    },
+    {
+      "step": "chat completed",
+      "processes": [
+        {
+          "pid": 27780,
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 181792,
+            "peakWorkingSetSize": 181792
+          }
+        },
+        {
+          "pid": 27781,
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 97456,
+            "peakWorkingSetSize": 97488
+          }
+        },
+        {
+          "pid": 27782,
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 48976,
+            "peakWorkingSetSize": 48976
+          }
+        },
+        {
+          "pid": 27783,
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 218976,
+            "peakWorkingSetSize": 218976
+          }
+        }
+      ]
+    },
+    {
+      "step": "reconnected",
+      "processes": [
+        {
+          "pid": 27780,
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 181968,
+            "peakWorkingSetSize": 181968
+          }
+        },
+        {
+          "pid": 27781,
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 97616,
+            "peakWorkingSetSize": 97632
+          }
+        },
+        {
+          "pid": 27782,
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 48976,
+            "peakWorkingSetSize": 48976
+          }
+        },
+        {
+          "pid": 27783,
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 219424,
+            "peakWorkingSetSize": 219504
+          }
+        }
+      ]
+    },
+    {
+      "step": "restored chat",
+      "processes": [
+        {
+          "pid": 28618,
+          "type": "Browser",
+          "memory": {
+            "workingSetSize": 176048,
+            "peakWorkingSetSize": 176048
+          }
+        },
+        {
+          "pid": 28627,
+          "type": "GPU",
+          "memory": {
+            "workingSetSize": 84848,
+            "peakWorkingSetSize": 84896
+          }
+        },
+        {
+          "pid": 28628,
+          "type": "Utility",
+          "memory": {
+            "workingSetSize": 48016,
+            "peakWorkingSetSize": 48032
+          }
+        },
+        {
+          "pid": 28629,
+          "type": "Tab",
+          "memory": {
+            "workingSetSize": 170320,
+            "peakWorkingSetSize": 170320
+          }
+        }
+      ]
+    }
+  ],
+  "runtime": {
+    "node": "24.22.1",
+    "acorn": "8.18.0",
+    "ada": "4.0.0",
+    "amaro": "1.1.11",
+    "ares": "1.34.9",
+    "brotli": "1.2.0",
+    "cldr": "48.0",
+    "icu": "78.2",
+    "llhttp": "9.4.3",
+    "merve": "1.2.2",
+    "modules": "150",
+    "napi": "10",
+    "nbytes": "0.1.4",
+    "ncrypto": "0.0.1",
+    "nghttp2": "1.70.0",
+    "nghttp3": "",
+    "ngtcp2": "",
+    "openssl": "0.0.0",
+    "simdjson": "4.6.11",
+    "simdutf": "7.7.0",
+    "sqlite": "3.53.4",
+    "tz": "2026e",
+    "undici": "7.30.1",
+    "unicode": "17.0",
+    "uv": "1.52.1",
+    "uvwasi": "0.0.23",
+    "v8": "15.6.75.19-electron.0",
+    "zlib": "1.3.2.1-motley",
+    "zstd": "1.6.0",
+    "electron": "45.1.0",
+    "chrome": "156.0.8078.49"
+  },
+  "tools": {
+    "git": {
+      "path": "/usr/bin/git",
+      "version": "git version 2.50.1 (Apple Git-155)"
+    },
+    "codex": {
+      "path": "/Users/elliotsharpe/.bun/bin/codex",
+      "version": "codex-cli 0.165.0",
+      "authenticated": true,
+      "settings": {
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "approval": null,
+        "sandbox": null
+      },
+      "guidance": null
+    }
+  },
+  "result": "passed"
+}

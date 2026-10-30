@@ -100,11 +100,14 @@ for (const mode of ["development", "packaged"] as const) {
       await sample("chat completed");
       start = performance.now();
       await page.getByRole("button", { name: "Retry connection / reload history" }).click();
+      await expect(page.getByRole("button", { name: "Retry connection / reload history" })).toBeEnabled({ timeout: 45000 });
       await expect(page.getByRole("status")).toHaveText("Ready", { timeout: 45000 });
       await expect(page.getByLabel("Conversation history").getByRole("heading", { name: "You", exact: true })).toHaveCount(1);
       await expect(page.getByLabel("Conversation history").getByRole("heading", { name: "Codex", exact: true })).toHaveCount(1);
       record("Retry to Ready with one conversation turn", start);
       await sample("reconnected");
+      console.log(mode, "exiting before restored launch");
+      await app.evaluate(({ app }) => app.exit(0));
       await app.close();
       start = performance.now();
       app = await launch();
@@ -116,12 +119,15 @@ for (const mode of ["development", "packaged"] as const) {
       expect(git("diff", "--name-only")).toBe("folder-0/file-0.txt");
       expect(git("ls-files", "--others", "--exclude-standard")).toBe("folder-0/external.txt");
       output.result = "passed";
+    } catch (error) {
+      output.error = String(error);
+      throw error;
     } finally {
+      output.result ??= "incomplete";
+      await writeFile(testInfo.outputPath("baseline.json"), JSON.stringify(output, null, 2) + "\n");
       await app?.evaluate(({ app }) => app.exit(0)).catch(() => {});
       await server?.close();
       await rm(base, { recursive: true, force: true });
-      output.result ??= "incomplete";
-      await writeFile(testInfo.outputPath("baseline.json"), JSON.stringify(output, null, 2) + "\n");
     }
   });
 }
