@@ -72,13 +72,18 @@ test("external restoration, loaded/collapsed updates, focus recovery and dirty m
     await page.keyboard.press("Meta+s");
     await expect(page.locator(".monaco-editor")).toContainText("retained external deletion edits");
     await expect(readFile(join(root, "folder/dirty.txt"))).rejects.toThrow();
-    // Suppress host delivery to exercise focus and explicit recovery independently.
-    await app.evaluate(({ webContents }) => {
-      for (const contents of webContents.getAllWebContents()) {
-        const send = contents.send.bind(contents);
-        contents.send = (channel, ...args) => { if (channel !== "files-changed") send(channel, ...args); };
-      }
-    });
+    // Suppress native watch delivery to exercise focus and explicit recovery independently.
+    await app.evaluate((_electron, root) => {
+      const fs = process.getBuiltinModule("fs") as any;
+      const probe = fs.watch(root), prototype = Object.getPrototypeOf(probe), emit = prototype.emit;
+      probe.close();
+      prototype.emit = function(event: string, ...args: any[]) {
+        if (event === "change") {
+          return false;
+        }
+        return emit.call(this, event, ...args);
+      };
+    }, root);
     await writeFile(join(root, "missed.txt"), "missed");
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(row("missed.txt")).toBeVisible();
@@ -87,6 +92,7 @@ test("external restoration, loaded/collapsed updates, focus recovery and dirty m
     await expect(row("manual.txt")).toBeVisible();
     await expect.poll(async () => (await readFile(join(user, "workspace.json"), "utf8"))).toContain("retained external deletion edits");
     await app.evaluate(({ app }) => app.exit(0));
+    await rm(join(user, "foundation/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(page.locator(".monaco-editor")).toContainText("retained external deletion edits");
@@ -177,16 +183,19 @@ test("watch failure stays usable, focus retries, checkout switch disposes, repla
     await expect(page.getByText(/Automatic Files updates unavailable:/)).toHaveCount(0);
     await writeFile(join(root, "automatic.txt"), "automatic");
     await expect(page.getByRole("treeitem", { name: "automatic.txt", exact: true })).toBeVisible();
-    await app.evaluate(({ webContents }) => {
+    await app.evaluate((_electron, root) => {
+      const fs = process.getBuiltinModule("fs") as any;
+      const probe = fs.watch(root), prototype = Object.getPrototypeOf(probe), emit = prototype.emit;
+      probe.close();
       (globalThis as any).heldChanges = [];
-      for (const contents of webContents.getAllWebContents()) {
-        const send = contents.send.bind(contents);
-        contents.send = (channel, ...args) => {
-          if (channel === "files-changed") (globalThis as any).heldChanges.push(() => send(channel, ...args));
-          else send(channel, ...args);
-        };
-      }
-    });
+      prototype.emit = function(event: string, ...args: any[]) {
+        if (event === "change") {
+          (globalThis as any).heldChanges.push(() => emit.call(this, event, ...args));
+          return false;
+        }
+        return emit.call(this, event, ...args);
+      };
+    }, root);
     await writeFile(join(root, "delayed-origin.txt"), "delayed");
     await expect.poll(() => app.evaluate(() => (globalThis as any).heldChanges.length)).toBeGreaterThan(0);
     await open(other);

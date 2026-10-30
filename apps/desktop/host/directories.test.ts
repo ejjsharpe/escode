@@ -128,3 +128,33 @@ test("stalled delivery exhausts a finite response budget without blocking a heal
     const end = closed(healthy); healthy.close(); await end;
   } finally { await host.close(); }
 });
+
+test("watch streams share the query connection, report failures, and release on interrupt and disconnect", async () => {
+  const listeners = new Set<(error?: string) => void>();
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "available", listing: { entries: [{ path: "external.txt", directory: false }], ignored: [] } }),
+    watch: (_root, _paths, notify) => { listeners.add(notify); return () => { listeners.delete(notify); }; },
+  });
+  const socket = await connect(host.bootstrap().url);
+  const messages: any[] = [];
+  socket.on("message", (data) => {
+    const message = JSON.parse(String(data)); messages.push(message);
+    if (message._tag === "Chunk") socket.send(JSON.stringify({ _tag: "Ack", requestId: message.requestId }));
+  });
+  const request = (id: string, tag: string, payload: unknown) => socket.send(JSON.stringify({ _tag: "Request", id, tag, payload, headers: [] }));
+  try {
+    request("watch", "watchDirectories", { root: "/repo", paths: [""] });
+    await expect.poll(() => messages.some((m) => m._tag === "Chunk")).toBe(true);
+    expect(listeners.size).toBe(1);
+    listeners.forEach((notify) => notify("EMFILE injected"));
+    await expect.poll(() => JSON.stringify(messages)).toContain("EMFILE injected");
+    request("list", "listDirectory", { root: "/repo", path: "" });
+    await expect.poll(() => JSON.stringify(messages)).toContain("external.txt");
+    socket.send(JSON.stringify({ _tag: "Interrupt", requestId: "watch" }));
+    await expect.poll(() => listeners.size).toBe(0);
+    request("again", "watchDirectories", { root: "/repo", paths: [""] });
+    await expect.poll(() => listeners.size).toBe(1);
+    socket.terminate();
+    await expect.poll(() => listeners.size).toBe(0);
+  } finally { socket.terminate(); await host.close(); }
+});

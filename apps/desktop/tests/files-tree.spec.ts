@@ -85,6 +85,7 @@ test("lazy tree keyboard, independent selection, menus, refresh and restart reco
       .toBe("b.txt");
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
+    await rm(join(user, "foundation/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     tree = page.getByRole("tree", { name: "Files", exact: true });
@@ -146,18 +147,18 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
     };
     await open(root);
     await expect(page.getByRole("treeitem")).toHaveCount(101);
-    expect(await app.evaluate(() => (globalThis as any).lists)).toEqual(["."]);
+    expect(new Set(await app.evaluate(() => (globalThis as any).lists))).toEqual(new Set(["."]));
     const folder = page
       .getByRole("treeitem", { name: "folder", exact: true })
       .locator(":scope > .tree-row");
     await folder.click();
     await expect(page.getByRole("treeitem", { name: "deep", exact: true })).toBeVisible();
-    expect(await app.evaluate(() => (globalThis as any).lists)).toEqual([".", "folder"]);
+    expect(new Set(await app.evaluate(() => (globalThis as any).lists))).toEqual(new Set([".", "folder"]));
     await folder.click();
     await folder.click();
     await expect(page.getByRole("treeitem", { name: "deep", exact: true })).toBeVisible();
     // Reopening a cached collapsed directory revalidates even after a missed notification.
-    expect(await app.evaluate(() => (globalThis as any).lists)).toEqual([".", "folder", "folder"]);
+    expect((await app.evaluate(() => (globalThis as any).lists as string[])).filter((path) => path === "folder").length).toBeGreaterThanOrEqual(2);
     await app.evaluate(() => {
       (globalThis as any).denyFolder = true;
     });
@@ -171,12 +172,17 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByRole("treeitem", { name: "deep", exact: true })).toBeVisible();
     // Deliberately miss notifications to exercise explicit recovery and directory errors.
-    await app.evaluate(({ webContents }) => {
-      for (const contents of webContents.getAllWebContents()) {
-        const send = contents.send.bind(contents);
-        contents.send = (channel, ...args) => { if (channel !== "files-changed") send(channel, ...args); };
-      }
-    });
+    await app.evaluate((_electron, root) => {
+      const fs = process.getBuiltinModule("fs") as any;
+      const probe = fs.watch(root), prototype = Object.getPrototypeOf(probe), emit = prototype.emit;
+      probe.close();
+      prototype.emit = function(event: string, ...args: any[]) {
+        if (event === "change") {
+          return false;
+        }
+        return emit.call(this, event, ...args);
+      };
+    }, root);
     await rm(join(root, "folder/deep"), { recursive: true });
     await page.getByRole("treeitem", { name: "deep", exact: true }).click();
     await expect(treeStatus()).toContainText("Use Refresh to retry");
@@ -225,6 +231,7 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
       .toBe(true);
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
+    await rm(join(user, "foundation/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect
