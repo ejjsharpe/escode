@@ -1,8 +1,10 @@
-import { listDirectory } from "@escode/client-runtime";
+import { listDirectory, subscribeChatSummaries } from "@escode/client-runtime";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 contextBridge.exposeInMainWorld(
   "escode",
   Object.freeze({
+    chatSummaries: (apply: Parameters<typeof subscribeChatSummaries>[1], error: (message: string) => void) =>
+      subscribeChatSummaries(() => ipcRenderer.invoke("local-bootstrap"), apply, error),
     listDirectory: (root: string, path: string) =>
       listDirectory(() => ipcRenderer.invoke("local-bootstrap"), root, path),
     watchFiles: (root: string, paths: string[], callback: (error?: string) => void) => {

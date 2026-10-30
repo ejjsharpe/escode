@@ -84,7 +84,7 @@ send({id:m.id,result});});`,
     await page.getByRole("combobox", { name: "New chat project", exact: true }).selectOption(alpha);
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
     await message().fill("Retain this draft");
-    const records = async () => JSON.parse(await readFile(join(user, "chats.json"), "utf8"));
+    const records = async () => JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
     await expect.poll(async () => (await records())[0]?.draft).toBe("Retain this draft");
     const original = (await records())[0];
     await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(beta);

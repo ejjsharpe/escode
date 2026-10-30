@@ -1,12 +1,34 @@
 import { useSyncExternalStore } from "react";
-import type { SavedChat } from "../host/chat";
+import type { ChatSummary } from "@escode/contracts";
 import type { ChatSnapshot } from "../host/chat-service";
 
+// All visible summary consumers share one socket; the last consumer releases it.
+let catalogue: ChatSummary[] = [];
+let summaryError = "";
+const consumers = new Set<() => void>();
+let release: (() => void) | undefined;
+function subscribe(listener: () => void) {
+  consumers.add(listener);
+  release ??= window.escode.chatSummaries(value => {
+    catalogue = [...value.chats];
+    summaryError = "";
+    for (const consumer of consumers) consumer();
+  }, error => {
+    summaryError = error;
+    for (const consumer of consumers) consumer();
+  });
+  return () => { consumers.delete(listener); if (!consumers.size) { release?.(); release = undefined; } };
+}
+export function useChatSummaries() {
+  const chats = useSyncExternalStore(subscribe, () => catalogue);
+  const error = useSyncExternalStore(subscribe, () => summaryError);
+  return { chats, error };
+}
 // Renderer lifetime, independent of any conversation view. Sessions remain host-owned.
 class ProjectChats {
   private listeners = new Set<() => void>();
   private state = {
-    chats: [] as SavedChat[],
+    chats: [] as ChatSummary[],
     drafts: {} as Record<string, string>,
     snapshots: {} as Record<string, ChatSnapshot>,
     pending: {} as Record<string, boolean>,
@@ -15,10 +37,16 @@ class ProjectChats {
   };
   private opening = new Map<string, Promise<void>>();
   private polling = false;
+  private observed = new Map<string, number>();
+  private release?: () => void;
   private timer?: ReturnType<typeof setInterval>;
   constructor(private project: string | null) {}
   subscribe = (listener: () => void) => {
-    if (!this.listeners.size) void this.load().catch((e) => this.report("", e));
+    if (!this.listeners.size) {
+      const apply = () => this.update({ chats: catalogue.filter(c => c.project === this.project), errors: { ...this.state.errors, "": summaryError } });
+      this.release = subscribe(apply);
+      apply();
+    }
     this.listeners.add(listener);
     this.timer ??= setInterval(() => void this.refresh(), 300);
     return () => {
@@ -26,6 +54,7 @@ class ProjectChats {
       if (!this.listeners.size) {
         clearInterval(this.timer);
         this.timer = undefined;
+        this.release?.();
       }
     };
   };
@@ -43,20 +72,30 @@ class ProjectChats {
     });
   }
   async load() {
-    const chats = await window.escode.chat("list", this.project);
-    const drafts = Object.fromEntries(
-      Object.entries(this.state.drafts).filter(([id]) => chats.some((c) => c.id === id)),
-    );
-    for (const chat of chats) if (!(chat.id in drafts)) drafts[chat.id] = chat.draft;
-    this.update({ chats, drafts, errors: { ...this.state.errors, "": "" } });
+    // Mutations converge on the next complete host projection.
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { stop(); reject(Error("Chat summaries unavailable. Retry connection.")); }, 10000);
+      const stop = subscribe(() => { clearTimeout(timer); stop(); resolve(); });
+    });
+  }
+  observe(id: string) {
+    this.observed.set(id, (this.observed.get(id) ?? 0) + 1);
+    void this.refresh();
+    return () => {
+      const count = (this.observed.get(id) ?? 1) - 1;
+      if (count) this.observed.set(id, count);
+      else { this.observed.delete(id); const snapshots = { ...this.state.snapshots }; delete snapshots[id]; this.update({ snapshots }); }
+    };
   }
   async refresh() {
     if (this.polling) return;
     this.polling = true;
     try {
       await Promise.all(
-        this.state.chats.map(async (chat) => {
+        [...this.observed.keys()].map(async (id) => {
+          const chat = { id };
           const snapshot = await window.escode.chat("snapshot", this.project, chat.id);
+          if (!this.observed.has(chat.id)) return;
           const responding = { ...this.state.responding };
           for (const request of this.state.snapshots[chat.id]?.requests ?? [])
             if (!snapshot.requests.some((r) => r.token === request.token))
@@ -74,6 +113,10 @@ class ProjectChats {
     const existing = this.opening.get(id);
     if (existing) return existing;
     const operation = this.run(id, async () => {
+      if (!(id in this.state.drafts)) {
+        const text = await window.escode.chat("composer", this.project, id);
+        if (!(id in this.state.drafts)) this.update({ drafts: { ...this.state.drafts, [id]: text } });
+      }
       await window.escode.chat("open", this.project, id);
     }).finally(() => this.opening.delete(id));
     this.opening.set(id, operation);

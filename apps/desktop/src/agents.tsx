@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "@base-ui/react/button";
-import type { SavedChat } from "../host/chat";
+import type { ChatSummary } from "@escode/contracts";
 import { compareChats } from "./chat-order";
 import { ChatView } from "./chat";
-import { useProjectChats } from "./chat-state";
+import { useChatSummaries } from "./chat-state";
 import { memory, persist } from "./workspace";
 
 function ChatRow({
@@ -11,23 +11,12 @@ function ChatRow({
   selected,
   select,
 }: {
-  chat: SavedChat;
+  chat: ChatSummary;
   selected: boolean;
   select: () => void;
 }) {
-  const [, { chats, snapshots, errors }] = useProjectChats(chat.project);
-  const snapshot = snapshots[chat.id];
-  const status = snapshot?.requests.length
-    ? "Needs input"
-    : snapshot?.busy
-      ? "Running"
-      : chat.removed || snapshot?.contextError || snapshot?.error || errors[chat.id] || errors[""]
-        ? "Unavailable"
-        : chat.phase === "draft"
-          ? "Draft"
-          : chat.initialSend === "uncertain" || chat.initialSend === "creating"
-            ? "Uncertain"
-            : "Stopped";
+  const { chats } = useChatSummaries();
+  const status = chat.needsInput ? "Needs input" : chat.busy ? "Running" : chat.unavailable ? "Unavailable" : chat.phase === "draft" ? "Draft" : chat.initialSend === "uncertain" || chat.initialSend === "creating" ? "Uncertain" : "Stopped";
   return (
     <li>
       <Button className="agent-row" aria-pressed={selected} onClick={select}>
@@ -35,7 +24,7 @@ function ChatRow({
           Chat{" "}
           {Math.max(
             0,
-            chats.findIndex((c) => c.id === chat.id),
+            chats.filter(c => c.project === chat.project).findIndex((c) => c.id === chat.id),
           ) + 1}
         </strong>
         <span>{chat.project?.split("/").at(-1) ?? "No project"}</span>
@@ -45,7 +34,8 @@ function ChatRow({
   );
 }
 export function AgentsView() {
-  const [chats, setChats] = useState<SavedChat[] | null>(null);
+  const { chats: catalogue, error: summaryError } = useChatSummaries();
+  const chats = [...catalogue].sort(compareChats);
   const [selected, setSelected] = useState(memory.agentsChat ?? "");
   const [error, setError] = useState("");
   const [targets, setTargets] = useState<{ project: string | null; checkout: string }[]>([]);
@@ -53,7 +43,6 @@ export function AgentsView() {
   const create = async (project: string | null) => {
     try {
       const draft = await window.escode.chat("createDraft", project);
-      setChats((await window.escode.chat("catalogue")).sort(compareChats));
       memory.agentsChat = draft.id;
       await persist();
       setTargets(await window.escode.chat("targets"));
@@ -67,13 +56,9 @@ export function AgentsView() {
     let live = true;
     const load = async () => {
       try {
-        const list = await window.escode.chat("catalogue");
         const available = await window.escode.chat("targets");
         if (live) setTargets(available);
-        if (live) {
-          setChats(list.sort(compareChats));
-          setError("");
-        }
+        if (live) setError("");
       } catch (e) {
         if (live) setError(String(e));
       }
@@ -159,7 +144,7 @@ export function AgentsView() {
               />
             ))}
           </ul>
-          {error && <p role="alert">{error}</p>}
+          {(error || summaryError) && <p role="alert">{error || summaryError}</p>}
         </aside>
         <section className="content" aria-label="Agent conversation">
           <div className="chat-conversation">

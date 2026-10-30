@@ -45,7 +45,7 @@ test("Agents restores closed saved projects and shares conversations without mov
     { id: "beta-chat", project: b, checkout: b, threadId: "saved-beta", draft: "beta text" },
     { id: "forged-chat", project: "/unapproved", checkout: b, threadId: null, draft: "keep me" },
   ];
-  await writeFile(join(user, "chats.json"), JSON.stringify(records));
+  await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
   await writeFile(
     join(user, "workspace.json"),
     JSON.stringify({
@@ -377,7 +377,7 @@ test("Agents and local Chats keep newest-first order and original labels through
       createdAt: 200,
     },
   ];
-  await writeFile(join(user, "chats.json"), JSON.stringify(records));
+  await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
   await writeFile(
     join(dir, "codex"),
     `#!/usr/bin/env node
@@ -499,7 +499,7 @@ test("global creation keeps newest-first rows before the next catalogue poll", a
     }),
   );
   await writeFile(
-    join(user, "chats.json"),
+    join(user, "host-chats-v1.json"),
     JSON.stringify(
       roots
         .slice(0, 3)

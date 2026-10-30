@@ -16,7 +16,7 @@ test("legacy append order survives persistence without invented creation dates",
       threadId: `thread-${id}`,
       draft: id,
     }));
-    await writeFile(file, JSON.stringify(legacy));
+    await writeFile(file, JSON.stringify({ version: 1, chats: legacy }));
     const store = new Chats(file);
     await store.draft(dir, "old", "retained text");
     const fresh = await store.create(dir);

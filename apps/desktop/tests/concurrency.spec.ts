@@ -91,7 +91,12 @@ createInterface({input:process.stdin}).on('line', line => {
       "true",
     );
     await page.getByRole("textbox", { name: "Message Codex" }).fill("second draft");
-    await page.evaluate((a) => window.escode.chat("list", a), a);
+    await page.evaluate((a) => new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
+      const off = window.escode.chatSummaries(async ({ chats }) => {
+        off();
+        try { resolve(await Promise.all(chats.filter(c => c.project === a).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
+      }, reject);
+    }), a);
     const before = await page.evaluate(({ a, ids }) => window.escode.chat("snapshot", a, ids[1]), {
       a,
       ids,

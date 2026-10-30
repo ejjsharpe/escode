@@ -76,6 +76,11 @@ export class ChatService {
     }
     return s;
   }
+  summary(project: string | null, id: string) {
+    const s = this.sessions.get(id);
+    return { busy: !!(s?.busy || s?.sending || s?.opening || this.transitions.has(id)),
+      needsInput: !!s?.requests.length, unavailable: !!s?.error };
+  }
   snapshot(project: string | null, id: string): ChatSnapshot {
     const s = this.session(project, id, false);
     return structuredClone({

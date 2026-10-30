@@ -22,3 +22,25 @@ export const Bootstrap = Schema.Struct({
   url: Schema.String, expires: Schema.Number,
 });
 export type Bootstrap = typeof Bootstrap.Type;
+
+// Summary projection deliberately excludes composer text, transcript bodies and live request payloads.
+export const ChatSummary = Schema.Struct({
+  id: Schema.String, project: Schema.NullOr(Schema.String), checkout: Schema.String,
+  threadId: Schema.NullOr(Schema.String),
+  createdAt: Schema.optional(Schema.Number), legacyOrder: Schema.optional(Schema.Number),
+  phase: Schema.optional(Schema.Literals(["draft", "bound"])),
+  initialSend: Schema.optional(Schema.Literals(["preparing", "creating", "unaccepted", "uncertain", "accepted"])),
+  scratch: Schema.optional(Schema.Struct({ path: Schema.String, dev: Schema.optional(Schema.Number), ino: Schema.optional(Schema.Number) })),
+  hasSent: Schema.optional(Schema.Boolean),
+  removed: Schema.optional(Schema.Boolean),
+  worktree: Schema.optional(Schema.Struct({ ref: Schema.String, commit: Schema.String, source: Schema.String,
+    reservation: Schema.optional(Schema.Struct({ root: Schema.String, branch: Schema.String, commit: Schema.String,
+      dev: Schema.optional(Schema.Number), ino: Schema.optional(Schema.Number), error: Schema.optional(Schema.NullOr(Schema.String)) })) })),
+  busy: Schema.Boolean, needsInput: Schema.Boolean, unavailable: Schema.Boolean,
+});
+export type ChatSummary = typeof ChatSummary.Type;
+export const ChatSummaries = Schema.Struct({ epoch: Schema.String, revision: Schema.Number, chats: Schema.Array(ChatSummary) });
+export type ChatSummaries = typeof ChatSummaries.Type;
+export const HostQueries = Directories.merge(RpcGroup.make(Rpc.make("chatSummaries", {
+  success: ChatSummaries, error: Schema.String, stream: true,
+})));

@@ -37,7 +37,9 @@ export class Chats {
   constructor(private file: string) {}
   private async read(): Promise<SavedChat[]> {
     try {
-      const chats: SavedChat[] = JSON.parse(await readFile(this.file, "utf8"));
+      const value = JSON.parse(await readFile(this.file, "utf8"));
+      if (value.version !== 1 || !Array.isArray(value.chats)) throw Error("Unsupported chat association store");
+      const chats: SavedChat[] = value.chats;
       return chats.map((chat, index) => ({
         ...chat,
         ...(chat.createdAt === undefined ? { legacyOrder: chat.legacyOrder ?? index } : {}),
@@ -61,7 +63,7 @@ export class Chats {
       const result = edit(chats);
       await mkdir(dirname(this.file), { recursive: true, mode: 0o700 });
       const temporary = this.file + ".tmp";
-      await writeFile(temporary, JSON.stringify(chats), { mode: 0o600 });
+      await writeFile(temporary, JSON.stringify({ version: 1, chats }), { mode: 0o600 });
       await rename(temporary, this.file);
       return result;
     });

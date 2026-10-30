@@ -114,7 +114,17 @@ test("installed Codex accepts scratch and deferred worktree drafts through Elect
       expect(snapshot.settings.model).toBeTruthy();
       console.log("Integrated installed-Codex settings", JSON.stringify(snapshot.settings));
     }
-    const saved = await page.evaluate(async (root) => [...await window.escode.chat("list", root), ...await window.escode.chat("list", null)], root);
+    const saved = await page.evaluate(async (root) => [...await new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
+      const off = window.escode.chatSummaries(async ({ chats }) => {
+        off();
+        try { resolve(await Promise.all(chats.filter(c => c.project === root).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
+      }, reject);
+    }), ...await new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
+      const off = window.escode.chatSummaries(async ({ chats }) => {
+        off();
+        try { resolve(await Promise.all(chats.filter(c => c.project === null).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
+      }, reject);
+    })], root);
     expect(new Set(saved.map((c) => c.checkout)).size).toBe(3);
     expect(saved[0].checkout).not.toBe(root);
     await page.getByRole("button", { name: "Agents", exact: true }).click();

@@ -180,7 +180,7 @@ export function DraftWorktreeChoices({
   busy,
   choose,
 }: {
-  chat: import("../host/chat").SavedChat;
+  chat: import("@escode/contracts").ChatSummary;
   busy: boolean;
   choose: (mode: "new" | "reuse", value: string, commit: string) => Promise<unknown>;
 }) {

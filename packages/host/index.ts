@@ -1,11 +1,11 @@
 import WebSocket from "ws";
 import { createServer } from "node:http";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Effect, Fiber, Schema } from "effect";
+import { Effect, Fiber, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { Directories, maximumFrameBytes, wireRevision, type Bootstrap, type DirectoryResult } from "@escode/contracts";
+import { HostQueries, ChatSummaries, maximumFrameBytes, wireRevision, type Bootstrap, type DirectoryResult } from "@escode/contracts";
 
 // Guard parser/error writes too; they bypass the RPC response budget.
 class BoundedWebSocket extends WebSocket {
@@ -25,8 +25,11 @@ class BoundedWebSocket extends WebSocket {
 export async function startDirectoryHost(options: {
   hostId: string; clientId: string; origin: string;
   list(root: string, path: string): Promise<DirectoryResult>;
+  summaries?: () => Promise<ChatSummaries["chats"]>;
   now?: () => number;
 }) {
+  const epoch = randomUUID();
+  let revision = 0;
   const now = options.now ?? Date.now;
   const tickets = new Map<string, number>();
   let port = 0;
@@ -48,7 +51,7 @@ export async function startDirectoryHost(options: {
     const sentBytes = new Map<number, number>();
     const pending = new Map<number, Set<string | number>>();
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literal("listDirectory"), payload: Schema.Unknown,
+      tag: Schema.Literals(["listDirectory", "chatSummaries"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -75,9 +78,14 @@ export async function startDirectoryHost(options: {
         return protocol.send(id, response, transferables);
       },
     };
-    yield* RpcServer.make(Directories, { concurrency: 16, onDisconnect: (id) => Effect.sync(() => { pending.delete(id); rejected.delete(id); sentBytes.delete(id); }) }).pipe(
+    yield* RpcServer.make(HostQueries, { concurrency: 16, onDisconnect: (id) => Effect.sync(() => { pending.delete(id); rejected.delete(id); sentBytes.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
-      Effect.provide(Directories.toLayer({ listDirectory: ({ root, path }) =>
+      Effect.provide(HostQueries.toLayer({
+        chatSummaries: () => Stream.fromEffectSchedule(Effect.tryPromise({ try: async () => {
+          const chats = await options.summaries?.() ?? [];
+          if (Buffer.byteLength(JSON.stringify(chats)) > maximumFrameBytes / 2) throw Error("Chat summary capacity exhausted");
+          return Schema.decodeUnknownSync(ChatSummaries)({ epoch, revision: ++revision, chats });
+        }, catch: String }), Schedule.spaced("300 millis")), listDirectory: ({ root, path }) =>
         Effect.tryPromise(() => options.list(root, path)).pipe(Effect.catch(() =>
           Effect.succeed({ kind: "unavailable" as const, message: "Directory unavailable. Refresh to retry." }))),
       })), Effect.forkScoped,

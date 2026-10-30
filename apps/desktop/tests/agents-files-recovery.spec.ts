@@ -42,7 +42,7 @@ test("legacy saved-project migration and interrupted move recovery survive toget
       draft: "unapproved retained text",
     },
   ];
-  await writeFile(join(user, "chats.json"), JSON.stringify(records));
+  await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
   // Legacy workspace deliberately has no savedProjects registration yet.
   const legacy: WorkspaceState = {
     projects: [approved[0]],
@@ -114,7 +114,7 @@ test("legacy saved-project migration and interrupted move recovery survive toget
         approved,
       );
       expect(
-        JSON.parse(await readFile(join(user, "chats.json"), "utf8")).map((c: any) => c.draft),
+        JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats.map((c: any) => c.draft),
       ).toEqual(records.map((c) => c.draft));
       await page
         .getByRole("navigation", { name: "Projects" })

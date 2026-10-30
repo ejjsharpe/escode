@@ -8,7 +8,7 @@ import { Button } from "@base-ui/react/button";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
-  (operation: "catalogue"): Promise<SavedChat[]>;
+  (operation: "composer", project: string | null, id: string): Promise<string>;
   (operation: "targets"): Promise<{ project: string | null; checkout: string }[]>;
   (operation: "createDraft", project: string | null): Promise<SavedChat>;
   (
@@ -25,7 +25,7 @@ export interface ChatBridge {
     value: string,
     commit: string,
   ): Promise<SavedChat>;
-  (operation: "list", project: string | null): Promise<SavedChat[]>;
+
   (operation: "create", project: string, checkout: string): Promise<SavedChat>;
   (operation: "open" | "snapshot", project: string | null, id: string): Promise<ChatSnapshot>;
   (operation: "send" | "draft", project: string | null, id: string, text: string): Promise<unknown>;
@@ -178,7 +178,10 @@ export function ChatView({
   const working = !!pending[selected];
   const draft = drafts[selected] ?? "";
   useEffect(() => {
-    if (selected) void store.open(selected);
+    if (!selected) return;
+    const release = store.observe(selected);
+    void store.open(selected);
+    return release;
   }, [store, selected]);
   const run = (action: () => Promise<unknown>) => store.run(selected, action);
   const snapshot = snapshots[selected];
@@ -214,9 +217,9 @@ export function ChatView({
                 <li key={c.id}>
                   <Button aria-pressed={selected === c.id} onClick={() => void select(c.id)}>
                     Chat {chats.findIndex((chat) => chat.id === c.id) + 1}
-                    {snapshots[c.id]?.requests.length
+                    {c.needsInput
                       ? " · Needs input"
-                      : snapshots[c.id]?.busy
+                      : c.busy
                         ? " · Running"
                         : ""}
                   </Button>

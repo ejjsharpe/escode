@@ -86,7 +86,7 @@ app.whenReady().then(async () => {
       throw new Error("Invalid tools request");
     return toolStatus();
   });
-  const store = new Chats(join(app.getPath("userData"), "chats.json"));
+  const store = new Chats(join(app.getPath("userData"), "host-chats-v1.json"));
   const chats = new ChatService(store);
   const projects = new Map<string, Project>();
   const projectSessions = new Map<string, object>();
@@ -103,7 +103,7 @@ app.whenReady().then(async () => {
   const stateFiles = [
     "workspace.json",
     "approved-projects.json",
-    "chats.json",
+    "host-chats-v1.json",
     "file-operation.json",
     "foundation/state.json",
     "foundation/owner.lock",
@@ -404,6 +404,18 @@ app.whenReady().then(async () => {
     }));
   });
   const directoryHost = await startDirectoryHost({
+    summaries: async () => {
+      const state = await workspace.read();
+      const saved = [...(state.savedProjects ?? []), ...state.projects, ...await workspace.approved()];
+      return Promise.all((await store.all()).filter(c => c.project === null || saved.some(p => p.project === c.project)).map(async c => {
+        const activity = chats.summary(c.project, c.id);
+        const contextError = c.phase === "draft" && ((c.project === null && !c.scratch) || (c.worktree && !c.worktree.reservation))
+          ? c.availabilityError : await store.validateDirectory(c);
+        return { id: c.id, project: c.project, checkout: c.checkout, threadId: c.threadId,
+          createdAt: c.createdAt, legacyOrder: c.legacyOrder, phase: c.phase, initialSend: c.initialSend,
+          removed: c.removed, scratch: c.scratch, hasSent: c.hasSent, worktree: c.worktree, ...activity, unavailable: !!(c.removed || contextError || activity.unavailable) };
+      }));
+    },
     ...foundation.read(), origin: dev ? developmentOrigin : "file://",
     list: async (root, path): Promise<DirectoryResult> => {
       // Only native-approved, already-open checkouts can reach filesystem adapters.
@@ -1195,17 +1207,6 @@ app.whenReady().then(async () => {
       event.senderFrame.url !== documentURL
     )
       throw Error("Invalid sender");
-    if (operation === "catalogue" && !args.length) {
-      const state = await workspace.read();
-      const approved = await workspace.approved();
-      const saved = [...(state.savedProjects ?? []), ...state.projects, ...approved];
-      for (const item of saved)
-        if (approved.some((p) => p.project === item.project && p.root === item.root))
-          projectSessions.set(item.project, projectSessions.get(item.project) ?? {});
-      return (await store.all()).filter(
-        (c) => c.project === null || saved.some((p) => p.project === c.project),
-      );
-    }
     if (operation === "targets" && !args.length) {
       const state = await workspace.read();
       const approved = await workspace.approved();
@@ -1235,19 +1236,6 @@ app.whenReady().then(async () => {
     };
     const root = args.shift();
     if (root !== null && typeof root !== "string") throw Error("Invalid project");
-    if (root === null && operation === "list" && !args.length) return chats.list(null);
-    if (operation === "list" && !args.length) {
-      const state = await workspace.read();
-      const approved = await workspace.approved();
-      if (
-        ![...state.projects, ...(state.savedProjects ?? []), ...approved].some(
-          (p) => p.project === root,
-        ) &&
-        !(root !== null && projectSessions.has(root))
-      )
-        throw Error("Unknown saved project");
-      return chats.list(root);
-    }
     const owner = root === null ? undefined : projectSessions.get(root);
     const requireOpen = () => {
       if (quitting) throw Error("App is quitting.");
@@ -1256,8 +1244,8 @@ app.whenReady().then(async () => {
       if (!owner || projectSessions.get(root) !== owner || quitting)
         throw Error("Open this project first. Use Open project… to approve its saved directory.");
     };
-    if (!["snapshot", "draft"].includes(String(operation))) requireOpen();
-    if (operation === "list" && !args.length) return chats.list(root);
+    if (!["snapshot", "draft", "composer"].includes(String(operation))) requireOpen();
+
     if (operation === "createDraft" && !args.length)
       return store.createDraft(root, root === null ? "" : await currentTarget(root));
     if (
@@ -1315,7 +1303,7 @@ app.whenReady().then(async () => {
     await chats.list(root).then((list) => {
       if (!list.some((c) => c.id === id)) throw Error("Unknown project/chat");
     });
-    if (!["snapshot", "draft"].includes(String(operation))) requireOpen();
+    if (!["snapshot", "draft", "composer"].includes(String(operation))) requireOpen();
     if (args.length === 1) {
       if (operation === "open") {
         const chat = await store.get(root, id);
@@ -1326,6 +1314,7 @@ app.whenReady().then(async () => {
         }
         return chats.open(root, id);
       }
+      if (operation === "composer") return (await store.get(root, id)).draft;
       if (operation === "snapshot") {
         if (root !== null && !owner)
           return {

@@ -447,3 +447,17 @@ test("legacy worktree chats migrate without changing checkout, thread, draft or 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("unsupported chat association versions retain their exact bytes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "escode-chat-version-"));
+  try {
+    const file = join(directory, "host-chats-v1.json");
+    const bytes = JSON.stringify({ version: 2, chats: [] });
+    const { writeFile, readFile } = await import("node:fs/promises");
+    await writeFile(file, bytes);
+    const store = new Chats(file);
+    await expect(store.all()).rejects.toThrow("Unsupported chat association store");
+    await expect(store.createDraft(null, "")).rejects.toThrow("Unsupported chat association store");
+    expect(await readFile(file, "utf8")).toBe(bytes);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

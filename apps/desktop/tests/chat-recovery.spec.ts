@@ -91,7 +91,12 @@ send({id:m.id,result});});`,
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await page.locator(".agent-row").filter({ hasText: "No project" }).click();
     await page.getByLabel("Message Codex").fill("keep scratch draft");
-    const scratch = (await page.evaluate(() => window.escode.chat("list", null)))[0].checkout;
+    const scratch = (await page.evaluate(() => new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
+      const off = window.escode.chatSummaries(async ({ chats }) => {
+        off();
+        try { resolve(await Promise.all(chats.filter(c => c.project === null).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
+      }, reject);
+    })))[0].checkout;
     await rename(scratch, scratch + "-away");
     await retry.click();
     await expect(page.getByRole("alert")).toContainText(scratch);

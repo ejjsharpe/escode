@@ -128,3 +128,48 @@ test("stalled delivery exhausts a finite response budget without blocking a heal
     const end = closed(healthy); healthy.close(); await end;
   } finally { await host.close(); }
 });
+
+test("summary snapshots stream metadata and activity, cancel cleanly, and bound oversized projections", async () => {
+  let busy = false, calls = 0, oversized = false;
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "unused" }),
+    summaries: async () => { calls++; return [{ id: oversized ? "x".repeat(maximumFrameBytes) : "chat", project: null, checkout: "", threadId: null, busy, needsInput: false, unavailable: false }]; },
+  });
+  const sockets: WebSocket[] = [];
+  try {
+    const socket = await connect(host.bootstrap().url);
+    sockets.push(socket);
+    const chunks: any[] = [];
+    socket.on("message", data => {
+      const frames = JSON.parse(String(data));
+      for (const frame of Array.isArray(frames) ? frames : [frames]) {
+        if (frame._tag === "Chunk") {
+          chunks.push(...frame.values);
+          socket.send(JSON.stringify({ _tag: "Ack", requestId: "1" }));
+        }
+      }
+    });
+    socket.send(JSON.stringify({ _tag: "Request", id: "1", tag: "chatSummaries", payload: null, headers: [] }));
+    await expect.poll(() => chunks.length).toBeGreaterThan(0);
+    expect(chunks[0].chats[0]).toMatchObject({ id: "chat", busy: false });
+    busy = true;
+    await expect.poll(() => chunks.at(-1)?.chats[0].busy).toBe(true);
+    expect(chunks.at(-1).epoch).toBe(chunks[0].epoch);
+    expect(chunks.at(-1).revision).toBeGreaterThan(chunks[0].revision);
+    const interrupted = new Promise<void>(resolve => socket.on("message", data => { if (String(data).includes('"Exit"')) resolve(); }));
+    socket.send(JSON.stringify({ _tag: "Interrupt", requestId: "1" }));
+    await interrupted;
+    const done = closed(socket); socket.close(); await done;
+    await new Promise(resolve => setTimeout(resolve, 400));
+    const stopped = calls;
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(calls).toBe(stopped);
+    oversized = true;
+    const exhausted = await connect(host.bootstrap().url);
+    sockets.push(exhausted);
+    const response = new Promise<string>(resolve => exhausted.once("message", data => resolve(String(data))));
+    exhausted.send(JSON.stringify({ _tag: "Request", id: "1", tag: "chatSummaries", payload: null, headers: [] }));
+    expect(await response).toContain("capacity exhausted");
+    const end = closed(exhausted); exhausted.close(); await end;
+  } finally { sockets.forEach(s => s.terminate()); await host.close(); }
+});

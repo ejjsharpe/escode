@@ -37,6 +37,7 @@ declare global {
       lifecycle: import("../host/workspace").LifecycleBridge;
       onClose(callback: () => void): () => void;
       chat: ChatBridge;
+      chatSummaries: (apply: (value: import("@escode/contracts").ChatSummaries) => void, error: (message: string) => void) => () => void;
       toolStatus(): Promise<unknown>;
       project: ProjectBridge;
       listDirectory(root: string, path: string): Promise<import("@escode/contracts").DirectoryResult>;
@@ -850,7 +851,7 @@ function ProjectView({
     window.addEventListener("reveal-file", reveal);
     return () => window.removeEventListener("reveal-file", reveal);
   }, []);
-  const [chatStore, { snapshots, chats }] = useProjectChats(initial.project);
+  const [chatStore, { chats }] = useProjectChats(initial.project);
   const [selectedChat, setSelectedChat] = useMemory(initial.project, "chat", "");
   const chatNavigation = useRef(0);
   useEffect(() => {
@@ -875,15 +876,15 @@ function ProjectView({
     await selectChat(chat.id);
   };
   useEffect(() => {
-    const all = Object.values(snapshots);
-    const value = all.some((s) => s.requests.length)
+    const all = chats;
+    const value = all.some((s) => s.needsInput)
       ? "Needs input"
       : all.some((s) => s.busy)
         ? "Running"
         : "";
     setActivity(value);
     onActivity(value);
-  }, [snapshots, onActivity]);
+  }, [chats, onActivity]);
   return (
     <section hidden={!active} aria-label={initial.project}>
       <nav className="view-nav" aria-label="Project views">

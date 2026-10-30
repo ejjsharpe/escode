@@ -34,6 +34,7 @@
         "electron-builder": "26.18.0",
         "esbuild": "0.28.2",
         "vite-plus": "1.4.0",
+        "ws": "8.22.0",
       },
     },
     "packages/client-runtime": {

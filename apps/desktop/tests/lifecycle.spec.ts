@@ -204,7 +204,12 @@ createInterface({input:process.stdin}).on('line',line=>{
         const chat = await window.escode.chat("createDraft", null);
         await window.escode.chat("send", null, chat.id, "run scratch");
         await window.escode.chat("draft", null, chat.id, "retained scratch draft");
-        return (await window.escode.chat("list", null)).find((c) => c.id === chat.id)!;
+        return (await new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
+      const off = window.escode.chatSummaries(async ({ chats }) => {
+        off();
+        try { resolve(await Promise.all(chats.filter(c => c.project === null).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
+      }, reject);
+    })).find((c) => c.id === chat.id)!;
       });
       pids.push(...JSON.parse(await readFile(join(scratch.checkout, "pids"), "utf8")));
       await writeFile(join(scratch.checkout, "retained.txt"), "scratch bytes");
@@ -271,7 +276,7 @@ createInterface({input:process.stdin}).on('line',line=>{
         expect(
           execFileSync("git", ["-C", root, "branch", "--list", managed!.branch]).toString(),
         ).toContain(managed!.branch);
-        const saved = JSON.parse(await readFile(join(user, "chats.json"), "utf8"));
+        const saved = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
         expect(saved).toHaveLength(3);
         expect(saved.find((chat: any) => chat.checkout === managed!.root).draft).toBe(
           "retained worktree draft",
@@ -311,7 +316,12 @@ createInterface({input:process.stdin}).on('line',line=>{
       expect(await readFile(join(scratch.checkout, "turns"), "utf8")).toBe("sent\n");
       expect(await page.evaluate((id) => window.escode.chat("snapshot", null, id), scratch.id))
         .toMatchObject({ busy: false });
-      expect((await page.evaluate(() => window.escode.chat("list", null)))[0])
+      expect((await page.evaluate(() => new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
+      const off = window.escode.chatSummaries(async ({ chats }) => {
+        off();
+        try { resolve(await Promise.all(chats.filter(c => c.project === null).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
+      }, reject);
+    })))[0])
         .toMatchObject({ id: scratch.id, checkout: scratch.checkout, draft: "retained scratch draft" });
       if (closeProject) {
         await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(

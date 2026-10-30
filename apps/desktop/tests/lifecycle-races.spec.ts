@@ -161,7 +161,12 @@ createInterface({input:process.stdin}).on('line',line=>{
     ).toHaveCount(1);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header")).toContainText(root);
-    expect(await page.evaluate((root) => window.escode.chat("list", root), root)).toHaveLength(1);
+    expect(await page.evaluate((root) => new Promise<import("../host/chat").SavedChat[]>((resolve, reject) => {
+      const off = window.escode.chatSummaries(async ({ chats }) => {
+        off();
+        try { resolve(await Promise.all(chats.filter(c => c.project === root).map(async c => ({ ...c, draft: await window.escode.chat("composer", c.project, c.id) })))); } catch (error) { reject(error); }
+      }, reject);
+    }), root)).toHaveLength(1);
   } finally {
     await app.evaluate(() => {
       (globalThis as any).releaseMetadata?.();
