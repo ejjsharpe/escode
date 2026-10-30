@@ -12,7 +12,7 @@ Initial limits are 1,000 retained creation receipts and the existing 1 MiB found
 
 Verification on the local installation uses Bun 1.4.4 and Electron 45.1.0 with the existing native helper:
 
-- Typecheck, lint, build and package passed. Final full unit suite passed (206 passed, 4 opt-in tests skipped), without rebuilding the native helper concurrently.
+- Typecheck, lint, build and package passed. Final full unit suite passed (208 passed, 4 opt-in tests skipped), after rebasing onto the parallel issue #80 delivery, without rebuilding the native helper concurrently. The seven packaged creation checks also pass on the combined code.
 - Packaged restricted-PATH focused inline creation suite: 7/7 passed, including the lost native result check.
 - Development focused inline creation suite: 7/7 passed. Covers file/folder creation, basename/collision feedback, retained rejected input, keyboard/focus, successful editor opening, collapsed/nested targets, missing parent and failed listing, plus injected lost native result with retained input and unchanged bytes on Retry.
 - Authenticated transport tests exercise create payload decoding and reject invalid kinds without invoking the adapter.
@@ -20,5 +20,7 @@ Verification on the local installation uses Bun 1.4.4 and Electron 45.1.0 with t
 - Existing native create tests retain actual-disk invalid-name/collision and effect-time checkout/parent replacement coverage.
 
 The exploratory full inline suite had two failures outside creation (uncertain rename recovery and restored hidden selection); focused creation checks pass. An initial full unit run had a descendant-cleanup timing failure; a subsequent run overlapping helper compilation hit `ENOEXEC`. These do not establish passing broader acceptance.
+
+Standards and Spec reviews found the initial missing durable outcomes and failed-probe uncertainty classification; both were corrected and the correction review found no remaining blockers.
 
 No new manual VoiceOver claim is made. Controls and focus behavior are unchanged; manual accessibility qualification, broader installations, exhaustive multi-client/revocation and full capacity benchmarking remain deferred.
