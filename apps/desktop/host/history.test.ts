@@ -130,6 +130,7 @@ test("slow durable output coalesces ingress while Stop remains responsive", asyn
     await service.open(dir, chat.id);
     emit({ method: "turn/started", params: { threadId: "provider", turn: { id: "turn" } } });
     for (let n = 0; n < 100; n++) emit({ method: "item/agentMessage/delta", params: { threadId: "provider", turnId: "turn", itemId: "body", delta: "x" } });
+    emit({ method: "turn/plan/updated", params: { threadId: "provider", turnId: "turn", plan: [] } });
     expect(writes).toBe(1);
     expect(service.snapshot(dir, chat.id).items).toEqual([]);
     await Promise.race([service.stop(dir, chat.id), new Promise((_, reject) => setTimeout(() => reject(Error("Stop blocked by storage")), 500))]);

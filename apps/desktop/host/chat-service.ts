@@ -466,15 +466,14 @@ export class ChatService {
     }
     if (p.turnId !== s.turnId) return;
     if (s.outputFailed && (p.item || typeof p.delta === "string")) return;
-    const previous = s.items;
-    s.items = [...(s.outputItems ?? s.items)];
+    const items = [...(s.outputItems ?? s.items)];
     if (message.method === "item/started" || message.method === "item/completed") {
       const value = this.item(p.turnId, p.item);
-      const index = s.items.findIndex((i) => i.id === value.id && i.turnId === value.turnId);
-      if (index < 0) s.items.push(value);
-      else s.items[index] = value;
+      const index = items.findIndex((i) => i.id === value.id && i.turnId === value.turnId);
+      if (index < 0) items.push(value);
+      else items[index] = value;
     } else if (typeof p.delta === "string" && p.itemId) {
-      let item = s.items.find((i) => i.id === p.itemId && i.turnId === p.turnId);
+      let item = items.find((i) => i.id === p.itemId && i.turnId === p.turnId);
       if (!item) {
         item = {
           id: p.itemId,
@@ -482,22 +481,20 @@ export class ChatService {
           type: message.method?.includes("agentMessage") ? "agentMessage" : "activity",
           text: "",
         };
-        s.items.push(item);
+        items.push(item);
       }
-      const index = s.items.indexOf(item);
-      s.items[index] = { ...item, text: item.text + p.delta };
-      delete s.items[index].revision;
+      const index = items.indexOf(item);
+      items[index] = { ...item, text: item.text + p.delta };
+      delete items[index].revision;
     } else if (message.method === "error")
       s.error = p.error?.message ?? "Codex turn failed. Send a new message to continue.";
     if (p.item || typeof p.delta === "string") {
       try {
-        if (s.items.length > 1000 || Buffer.byteLength(JSON.stringify(s.items)) > 128 * 1024)
+        if (items.length > 1000 || Buffer.byteLength(JSON.stringify(items)) > 128 * 1024)
           throw Error("Live display capacity exhausted");
-        s.outputItems = s.items;
-        s.items = previous;
+        s.outputItems = items;
         this.persistOutput(s);
       } catch (error) {
-        s.items = previous;
         s.outputFailed = true;
         s.error = `Live output partial/unavailable: ${String(error)}. Provider work continues; Stop remains available. Reload saved history after completion.`;
       }
