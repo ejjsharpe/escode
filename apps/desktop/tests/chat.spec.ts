@@ -111,7 +111,7 @@ test("installed Codex accepts scratch and deferred worktree drafts through Elect
       expect(snapshot.error).toBeNull();
       expect(snapshot.items.filter((i) => i.type === "userMessage")).toHaveLength(1);
       expect(snapshot.items.filter((i) => i.type === "agentMessage").map((i) => i.text).join("")).toContain("INTEGRATED_LIVE_OK");
-      expect(snapshot.settings.model).toBeTruthy();
+      expect((snapshot.settings as { model?: string }).model).toBeTruthy();
       console.log("Integrated installed-Codex settings", JSON.stringify(snapshot.settings));
     }
     const saved = [...await page.evaluate(readChats, root), ...await page.evaluate(readChats, null)];

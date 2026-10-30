@@ -93,12 +93,13 @@ export const DraftRecord = Schema.Struct({
   initialSend: ChatSummary.fields.initialSend, hasSent: ChatSummary.fields.hasSent,
   draft: Schema.Literal(""),
 });
-export const DraftAction = Schema.Struct({
-  operation: Schema.Literals(["createDraft", "context", "execution"]),
-  project: Schema.NullOr(Schema.String), id: Schema.optionalKey(Schema.String),
-  expected: Schema.optionalKey(Schema.String), target: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  mode: Schema.optionalKey(Schema.Literals(["new", "reuse"])), value: Schema.optionalKey(Schema.String), commit: Schema.optionalKey(Schema.String),
-});
+export const DraftAction = Schema.Union([
+  Schema.Struct({ operation: Schema.Literal("createDraft"), project: Schema.NullOr(Schema.String) }),
+  Schema.Struct({ operation: Schema.Literal("context"), project: Schema.NullOr(Schema.String),
+    id: Schema.String, expected: Schema.String, target: Schema.NullOr(Schema.String) }),
+  Schema.Struct({ operation: Schema.Literal("execution"), project: Schema.String,
+    id: Schema.String, expected: Schema.String, mode: Schema.Literals(["new", "reuse"]), value: Schema.String, commit: Schema.String }),
+]);
 export type DraftAction = typeof DraftAction.Type;
 
 
@@ -192,3 +193,7 @@ export const GitQueries = RpcGroup.make(
 export const HostQueries = Directories.merge(Files).merge(GitQueries).merge(RpcGroup.make(Rpc.make("moveEntry", { payload: { command: MoveEntry }, success: MoveResult, error: Schema.String }), Rpc.make("ackFileOperation", { payload: { root: Schema.String }, success: Schema.Void, error: Schema.String }), Rpc.make("draftAction", { payload: { action: DraftAction }, success: DraftRecord, error: Schema.String }), Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
   success: ChatSummaries, error: Schema.String, stream: true,
 }), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));
+
+// Host and renderer memory may mutate validated contract values.
+export type Mutable<T> = T extends object ? { -readonly [K in keyof T]: Mutable<T[K]> } : T;
+export type WorkspaceState = typeof WorkspaceState.Type;

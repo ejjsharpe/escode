@@ -4,23 +4,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { accessSync, constants, realpathSync, statSync } from "node:fs";
 import { Chats, type SavedChat } from "./chat";
 import { codexDiagnostic, connectCodex, type CodexConnection, type WireMessage } from "./tools";
-export type ChatItem = { id: string; turnId: string; type: string; text: string; revision?: string };
-export type LiveRequest = { token: string; method: string; params: any };
-export type ChatSnapshot = {
-  controlTarget?: string;
-  preparing?: boolean;
-  project: string | null;
-  chatId: string;
-  threadId: string | null;
-  connected: boolean;
-  busy: boolean;
-  turnId: string | null;
-  settings: any;
-  items: ChatItem[];
+export type ChatItem = import("@escode/contracts").Mutable<HistoryPage["items"][number]>;
+type RequestParams = import("./vendor/codex/src/schema").ServerRequestParamsByMethod;
+export type LiveRequest = { [M in keyof RequestParams]: { token: string; method: M; params: RequestParams[M] } }[keyof RequestParams];
+export type ChatSnapshot = import("@escode/contracts").Mutable<import("@escode/contracts").ChatDetail>;
+type RuntimeSnapshot = Omit<ChatSnapshot, "settings" | "requests"> & {
+  settings: { model?: string | null; reasoning?: unknown; approval?: unknown; sandbox?: unknown } | null;
   requests: LiveRequest[];
-  error: string | null;
-  contextError?: string | null;
-  history?: { nextCursor: string | null; revision: string };
 };
 // Connection readiness and callback ownership are independent of saved provider identity.
 type ConnectionState = {
@@ -41,7 +31,7 @@ type OutputState = {
   pending?: ChatItem[];
   writing?: Promise<void>;
 };
-type Session = Omit<ChatSnapshot, "connected" | "busy" | "turnId" | "preparing" | "controlTarget"> & {
+type Session = Omit<RuntimeSnapshot, "connected" | "busy" | "turnId" | "preparing" | "controlTarget"> & {
   connection: ConnectionState;
   turn: TurnState;
   output: OutputState;
@@ -72,7 +62,7 @@ export class ChatService {
     private store: Chats,
     private connect = connectCodex,
     private spool: Pick<LiveSpool, "read" | "write"> = new LiveSpool(store.spoolDirectory),
-    private previewSettings?: (cwd: string) => Promise<unknown>,
+    private previewSettings?: (cwd: string) => Promise<RuntimeSnapshot["settings"]>,
   ) {}
   private clearRequests(s: Session) {
     s.requests = [];
@@ -143,7 +133,7 @@ export class ChatService {
     return { busy: !!((s && s.turn.phase !== "idle") || s?.sending || s?.connection.opening || this.transitions.has(id)),
       needsInput: !!s?.requests.length, unavailable: !!s?.error };
   }
-  snapshot(project: string | null, id: string): ChatSnapshot {
+  snapshot(project: string | null, id: string): RuntimeSnapshot {
     const s = this.session(project, id, false);
     return structuredClone({
       controlTarget: JSON.stringify([s.connection.epoch, s.turn.id, s.preparation?.id]),
@@ -293,7 +283,7 @@ export class ChatService {
           throw Error("Project closed during connection.");
         }
         s.connection.rpc = rpc;
-        const account = await rpc.request("account/read", { refreshToken: false });
+        const account = await rpc.request("account/read", { refreshToken: false }) as import("./vendor/codex/src/schema").V2GetAccountResponse;
         if (!account.account)
           throw Error(
             "Run codex login externally, then Retry connection. Draft and saved history are retained.",
@@ -310,7 +300,7 @@ export class ChatService {
           resume
             ? { threadId: chat.threadId, cwd: chat.checkout, excludeTurns: true }
             : { cwd: chat.checkout },
-        );
+        ) as import("./vendor/codex/src/schema").V2ThreadStartResponse;
         // Retain returned identity even if later response validation or persistence fails.
         if (
           typeof result.thread?.id === "string" &&
@@ -405,7 +395,7 @@ export class ChatService {
     if (!s.connection.rpc) throw Error("History unavailable. Retry connection.");
     const page = await s.connection.rpc.request("thread/turns/list", {
       threadId: s.threadId, cursor, limit: 20, sortDirection: "asc", itemsView: "full",
-    });
+    }) as import("./vendor/codex/src/schema").V2ThreadTurnsListResponse;
     if (!page || !Array.isArray(page.data) || page.data.length > 20 ||
         !(page.nextCursor === null || (typeof page.nextCursor === "string" && page.nextCursor.length <= 4096)) ||
         (cursor !== null && cursor === page.nextCursor)) throw Error("Malformed or repeated history page. History unavailable.");
@@ -426,11 +416,11 @@ export class ChatService {
     const body = JSON.stringify({ items, nextCursor: page.nextCursor });
     return { items, nextCursor: page.nextCursor, revision: createHash("sha256").update(body).digest("hex") };
   }
-  private item(turnId: string, item: any): ChatItem {
+  private item(turnId: string, item: import("./vendor/codex/src/schema").V2ItemCompletedNotification__ThreadItem): ChatItem {
     const text =
-      item.text ??
+      ("text" in item ? item.text : undefined) ??
       (item.type === "userMessage"
-        ? item.content.map((c: any) => c.text ?? "").join("\n")
+        ? item.content.map((c) => "text" in c ? c.text : "").join("\n")
         : item.type === "commandExecution"
           ? `${item.command}\n${item.aggregatedOutput ?? ""}`
           : JSON.stringify(item));
@@ -492,12 +482,12 @@ export class ChatService {
       }
       const token = randomUUID();
       s.requestIds.set(token, message.id);
-      s.requests.push({ token, method: message.method!, params: p });
+      s.requests.push({ token, method: message.method!, params: p } as LiveRequest);
       return;
     }
     if (message.method === "turn/completed" && p.turn.id === s.turn.id) {
       s.turn = { phase: "idle", id: null };
-      s.requests = s.requests.filter((r) => r.params.turnId == null);
+      s.requests = s.requests.filter((r) => ("turnId" in r.params ? r.params.turnId : null) == null);
       for (const token of s.requestIds.keys())
         if (!s.requests.some((r) => r.token === token)) s.requestIds.delete(token);
       if (p.turn.error) s.error = p.turn.error.message;
@@ -611,7 +601,7 @@ export class ChatService {
       const result = await s.connection.rpc.request("turn/start", {
         threadId: s.threadId,
         input: [{ type: "text", text, text_elements: [] }],
-      });
+      }) as import("./vendor/codex/src/schema").V2TurnStartResponse;
       if (s.turn.phase === "starting") s.turn = { phase: "running", id: result.turn.id };
       await this.store.update(project, id, {
         draft: "",
@@ -661,7 +651,7 @@ export class ChatService {
       !request ||
       wireId === undefined ||
       s.connection.status !== "connected" ||
-      (request.params.turnId != null && (s.turn.phase === "idle" || request.params.turnId !== s.turn.id))
+      (("turnId" in request.params ? request.params.turnId : null) != null && (s.turn.phase === "idle" || ("turnId" in request.params ? request.params.turnId : null) !== s.turn.id))
     )
       throw Error("Stale or mismatched live request. Reopen the originating chat.");
     let result: unknown;

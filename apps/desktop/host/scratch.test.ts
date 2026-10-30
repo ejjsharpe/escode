@@ -174,9 +174,9 @@ test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
         const saved = await store.get(null, chat.id),
           snapshot = service.snapshot(null, chat.id);
         expect(snapshot.error).toBeNull();
-        expect(snapshot.settings.model).toBeTruthy();
-        expect(snapshot.settings.approval).toBeTruthy();
-        expect(snapshot.settings.sandbox).toBeTruthy();
+        expect(snapshot.settings?.model).toBeTruthy();
+        expect(snapshot.settings?.approval).toBeTruthy();
+        expect(snapshot.settings?.sandbox).toBeTruthy();
         expect(await readFile(join(saved.checkout, "evidence.txt"), "utf8")).toBe(`SCRATCH_${i}`);
         expect(await readdir(saved.checkout)).not.toContain(".git");
         evidence.push({

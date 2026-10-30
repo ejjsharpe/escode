@@ -40,14 +40,15 @@ export interface ChatBridge {
   ): Promise<void>;
 }
 function Request({
-  request,
+  request: wireRequest,
   answer,
   busy,
 }: {
-  request: LiveRequest;
+  request: import("@escode/contracts").ChatDetail["requests"][number];
   busy: boolean;
   answer: (value: unknown) => Promise<void>;
 }) {
+  const request = wireRequest as LiveRequest;
   const [values, setValues] = useState<Record<string, string>>({});
   const submit = answer;
   const [content, setContent] = useState("{}");
@@ -113,11 +114,11 @@ function Request({
             void submit(values);
           }}
         >
-          {questions.map((q: any) => (
+          {questions.map((q) => (
             <label key={q.id}>
               {q.question}
               {q.options && (
-                <p>{q.options.map((o: any) => `${o.label}: ${o.description}`).join("\n")}</p>
+                <p>{q.options.map((o) => `${o.label}: ${o.description}`).join("\n")}</p>
               )}
               <input
                 required
@@ -320,9 +321,9 @@ export function ChatView({
               </p>
             )}
             <div className="transcript" role="region" aria-label="Conversation history">
-              {snapshot?.settings && (
+              {Boolean(snapshot?.settings) && (
                 <details>
-                  <summary>Effective Codex settings · {snapshot.settings.model}</summary>
+                  <summary>Effective Codex settings · {(snapshot!.settings as { model?: string }).model}</summary>
                   <pre>{JSON.stringify(snapshot.settings, null, 2)}</pre>
                 </details>
               )}

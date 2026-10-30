@@ -390,35 +390,17 @@ app.whenReady().then(async () => {
         throw Error("Open and approve this project first.");
     };
     requireOpen();
-    const args = operation === "createDraft" ? [] : operation === "context"
-      ? [action.id, action.target] : [action.id, action.mode, action.value, action.commit];
-    if (operation === "createDraft" && !args.length)
+    if (operation === "createDraft")
       return store.createDraft(root, root === null ? "" : await currentTarget(root), true);
-    if (
-      operation === "context" &&
-      args.length === 2 &&
-      typeof args[0] === "string" &&
-      (args[1] === null || typeof args[1] === "string")
-    ) {
-      const target = args[1];
+    if (operation === "context") {
+      const { id, target, expected } = action;
       if (target !== null && !projectSessions.has(target))
         throw Error("Approve the target using Open project… first.");
-      return chats.context(
-        root,
-        args[0],
-        target,
-        target === null ? "" : await currentTarget(target),
-        undefined,
-        async () => { if (await expectedSend(root, args[0] as string) !== action.expected) throw Error("Draft changed. Inspect and retry."); },
-      );
+      return chats.context(root, id, target, target === null ? "" : await currentTarget(target), undefined,
+        async () => { if (await expectedSend(root, id) !== expected) throw Error("Draft changed. Inspect and retry."); });
     }
-    if (
-      root !== null &&
-      operation === "execution" &&
-      args.length === 4 &&
-      args.every((a) => typeof a === "string")
-    ) {
-      const [id, mode, value, commit] = args as string[];
+    if (root !== null && operation === "execution") {
+      const { id, mode, value, commit } = action;
       const saved = await store.get(root, id);
       const source = saved.worktree?.source ?? saved.checkout;
       const project = await checkout(source);

@@ -301,7 +301,7 @@ for (const outcome of [
           expect(
             restart.snapshot(root, chat.id).items.filter((i) => i.type === "userMessage"),
           ).toHaveLength(1);
-          expect(restart.snapshot(root, chat.id).settings.model).toBeTruthy();
+          expect(restart.snapshot(root, chat.id).settings?.model).toBeTruthy();
         }
       } finally {
         await service.shutdown();

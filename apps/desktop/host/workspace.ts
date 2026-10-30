@@ -1,32 +1,9 @@
 import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
-import type { Document } from "./project";
-export type RecoveryDraft = { root: string; path: string; text: string; disk: Document };
-export type FilesMemory = {
-  expanded: string[];
-  selected: string[];
-  focus: string;
-  scroll: number;
-  hideIgnored?: boolean;
-};
-export type ViewMemory = {
-  files?: FilesMemory;
-  mode?: string;
-  checkout?: string;
-  roots?: string[];
-  path?: string;
-  directory?: string;
-  change?: { path: string; area: "staged" | "unstaged" | "untracked" };
-  chat?: string;
-};
-export type WorkspaceState = {
-  projects: { project: string; root: string }[];
-  savedProjects?: { project: string; root: string }[];
-  agentsChat?: string;
-  selected: string;
-  views: Record<string, ViewMemory>;
-  drafts: RecoveryDraft[];
-};
+export type WorkspaceState = import("@escode/contracts").Mutable<import("@escode/contracts").WorkspaceState>;
+export type RecoveryDraft = WorkspaceState["drafts"][number];
+export type ViewMemory = WorkspaceState["views"][string];
+export type FilesMemory = NonNullable<ViewMemory["files"]>;
 export type RestoredStatus = {
   project: string;
   root: string;

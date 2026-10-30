@@ -2,6 +2,28 @@ import { Schema } from "effect";
 import { SendReceipt } from "@escode/contracts";
 import { createDirectoryClient } from "@escode/client-runtime";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+type ProjectArguments =
+  | ["drag-capture" | "trash-selection", string, string[]]
+  | ["clipboard-capture", string, "copy" | "cut", string[]]
+  | ["transfer", string, "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", string, string[]]
+  | ["file-operation", string, "move" | "rename", string, string]
+  | ["create-entry", string, string, string, "file" | "folder"]
+  | ["file-operation-ack" | "worktree-managed" | "worktree-options" | "status", string]
+  | ["worktree-remove" | "read", string, string]
+  | ["open"]
+  | ["entry-action", string, string, "copy-path" | "copy-relative" | "finder"]
+  | ["save", string, string, string, string]
+  | ["diff", string, string, "staged" | "unstaged" | "untracked"];
+type ChatArguments =
+  | [operation: "createDraft", project: string | null]
+  | [operation: "context", project: string | null, id: string, target: string | null]
+  | [operation: "execution", project: string, id: string, mode: "new" | "reuse", value: string, commit: string]
+  | [operation: "targets"]
+  | [operation: "create", project: string, checkout: string]
+  | [operation: "open" | "composer" | "disconnect" | "resolveSend", project: string | null, id: string]
+  | [operation: "send" | "draft", project: string | null, id: string, text: string]
+  | [operation: "stop", project: string | null, id: string, target?: string]
+  | [operation: "answer", project: string | null, id: string, token: string, answer: unknown];
 const directories = createDirectoryClient(() => ipcRenderer.invoke("local-bootstrap"), reconcile);
 async function createEntry(root: string, parent: string, name: string, kind: "file" | "folder") {
   const key = `escode-create:${JSON.stringify([root, parent, name, kind])}`;
@@ -52,7 +74,7 @@ async function send(project: string | null, id: string, text: string) {
   await ipcRenderer.invoke("lifecycle", "flushClientStorage");
   if (text !== command.text) throw Error("Previous Send accepted. Current text retained; Send again explicitly.");
 }
-async function control(operation: "stop" | "answer", project: string | null, id: string, target: string, token = "", answer: unknown = null) {
+async function control(operation: "stop" | "answer", project: string | null, id: string, target: string | undefined, token = "", answer: unknown = null) {
   const key = `escode-control:${JSON.stringify([project, id, operation, target, token])}`;
   const saved = localStorage.getItem(key);
   const state = await directories.sendState(project, id);
@@ -88,57 +110,65 @@ contextBridge.exposeInMainWorld(
       if (paths.some((path) => !path)) throw Error("A genuine native file reference is required.");
       return ipcRenderer.invoke("native-import-capture", paths);
     },
-    lifecycle: (operation: string, ...args: unknown[]) =>
-      operation === "load" ? directories.loadWorkspace()
-      : operation === "persist" ? directories.persistWorkspace(args[0] as typeof import("@escode/contracts").WorkspaceState.Type)
-      : ipcRenderer.invoke("lifecycle", operation, ...args),
+    lifecycle: (...call: ["load"] | ["persist", import("@escode/contracts").WorkspaceState] | ["dirty", string] | ["prepare" | "finish", string?]) =>
+      call[0] === "load" ? directories.loadWorkspace()
+      : call[0] === "persist" ? directories.persistWorkspace(call[1])
+      : ipcRenderer.invoke("lifecycle", ...call),
     onClose: (callback: () => void) => {
       const listener = () => callback();
       ipcRenderer.on("close-request", listener);
       return () => ipcRenderer.removeListener("close-request", listener);
     },
-    chat: (operation: string, ...args: unknown[]) => ["createDraft", "context", "execution"].includes(operation)
+    chat: (...call: ChatArguments) => {
+      const [operation, ...args] = call;
+      return ["createDraft", "context", "execution"].includes(operation)
       ? (async () => {
-        const project = args[0] as string | null, id = args[1] as string;
-        const expected = operation === "createDraft" ? undefined : (await directories.sendState(project, id)).expected;
-        return directories.draftAction({ operation: operation as "createDraft" | "context" | "execution", project, ...(operation === "createDraft" ? {} : { id, expected }),
-          ...(operation === "context" ? { target: args[2] as string | null } : {}),
-          ...(operation === "execution" ? { mode: args[2] as "new" | "reuse", value: args[3] as string, commit: args[4] as string } : {}),
-        });
+        if (call[0] === "createDraft") return directories.draftAction({ operation: call[0], project: call[1] });
+        if (call[0] === "context") {
+          const [, project, id, target] = call;
+          const { expected } = await directories.sendState(project, id);
+          return directories.draftAction({ operation: call[0], project, id, expected, target });
+        }
+        if (call[0] === "execution") {
+          const [, project, id, mode, value, commit] = call;
+          const { expected } = await directories.sendState(project, id);
+          return directories.draftAction({ operation: call[0], project, id, expected, mode, value, commit });
+        }
       })()
-      : operation === "draft" ? Promise.resolve().then(() => {
-        localStorage.setItem(`escode-composer:${String(args[1])}`, String(args[2]));
+      : call[0] === "draft" ? Promise.resolve().then(() => {
+        localStorage.setItem(`escode-composer:${String(call[2])}`, String(call[3]));
         return ipcRenderer.invoke("lifecycle", "flushClientStorage");
       })
-      : operation === "open"
-      ? open(args[0] as string | null, args[1] as string)
-      : operation === "composer" ? Promise.resolve().then(() => {
-        const text = localStorage.getItem(`escode-composer:${String(args[1])}`);
-        const saved = localStorage.getItem(`escode-send:${JSON.stringify([args[0], args[1]])}`);
+      : call[0] === "open"
+      ? open(call[1], call[2])
+      : call[0] === "composer" ? Promise.resolve().then(() => {
+        const text = localStorage.getItem(`escode-composer:${String(call[2])}`);
+        const saved = localStorage.getItem(`escode-send:${JSON.stringify([call[1], call[2]])}`);
         return text || (saved ? JSON.parse(saved).text : "");
       })
-      : operation === "resolveSend" ? ipcRenderer.invoke("chat", operation, ...args).then(confirmed => {
-        if (confirmed) localStorage.removeItem(`escode-send:${JSON.stringify([args[0], args[1]])}`);
+      : call[0] === "resolveSend" ? ipcRenderer.invoke("chat", operation, ...args).then(confirmed => {
+        if (confirmed) localStorage.removeItem(`escode-send:${JSON.stringify([call[1], call[2]])}`);
       })
-      : operation === "stop" ? control("stop", args[0] as string | null, args[1] as string, args[2] as string)
-      : operation === "answer" ? control("answer", args[0] as string | null, args[1] as string, "", args[2] as string, args[3])
-      : operation === "send" ? send(args[0] as string | null, args[1] as string, args[2] as string)
-      : ipcRenderer.invoke("chat", operation, ...args),
+      : call[0] === "stop" ? control("stop", call[1], call[2], call[3])
+      : call[0] === "answer" ? control("answer", call[1], call[2], "", call[3], call[4])
+      : call[0] === "send" ? send(call[1], call[2], call[3])
+      : ipcRenderer.invoke("chat", operation, ...args);
+    },
     toolStatus: () => ipcRenderer.invoke("tools:status"),
-    project: (operation: string, ...args: string[]) =>
-      operation === "status" ? directories.gitStatus(args[0])
-      : operation === "worktree-options" ? directories.worktreeOptions(args[0])
-      : operation === "drag-capture" ? directories.transferAction({ root: args[0], operation, paths: args[1] as unknown as string[] })
-      : operation === "clipboard-capture" ? directories.transferAction({ root: args[0], operation, kind: args[1] as "copy" | "cut", paths: args[2] as unknown as string[] })
-      : operation === "transfer" ? transfer(args[0], args[1] as "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", args[2], args[3] as unknown as string[])
-      : operation === "create-entry" ? createEntry(args[0], args[1], args[2], args[3] as "file" | "folder")
-      : operation === "diff" ? directories.readDiff(args[0], args[1], args[2] as typeof import("@escode/contracts").DiffArea.Type)
-      : operation === "read" ? directories.readFile(args[0], args[1])
-      : operation === "trash-selection" ? directories.trashEntries(args[0], args[1] as unknown as string[])
-      : operation === "save" ? directories.saveFile(args[0], args[1], args[2], args[3])
-      : operation === "file-operation"
-        ? directories.moveEntry({ root: args[0] as string, action: args[1] as "move" | "rename", source: args[2] as string, target: args[3] as string })
-        : operation === "file-operation-ack" ? directories.ackFileOperation(args[0] as string)
-        : ipcRenderer.invoke("project", operation, ...args),
+    project: (...call: ProjectArguments) =>
+      call[0] === "status" ? directories.gitStatus(call[1])
+      : call[0] === "worktree-options" ? directories.worktreeOptions(call[1])
+      : call[0] === "drag-capture" ? directories.transferAction({ root: call[1], operation: call[0], paths: call[2] })
+      : call[0] === "clipboard-capture" ? directories.transferAction({ root: call[1], operation: call[0], kind: call[2], paths: call[3] })
+      : call[0] === "transfer" ? transfer(call[1], call[2], call[3], call[4])
+      : call[0] === "create-entry" ? createEntry(call[1], call[2], call[3], call[4])
+      : call[0] === "diff" ? directories.readDiff(call[1], call[2], call[3])
+      : call[0] === "read" ? directories.readFile(call[1], call[2])
+      : call[0] === "trash-selection" ? directories.trashEntries(call[1], call[2])
+      : call[0] === "save" ? directories.saveFile(call[1], call[2], call[3], call[4])
+      : call[0] === "file-operation"
+        ? directories.moveEntry({ root: call[1], action: call[2], source: call[3], target: call[4] })
+        : call[0] === "file-operation-ack" ? directories.ackFileOperation(call[1])
+        : ipcRenderer.invoke("project", ...call),
   }),
 );

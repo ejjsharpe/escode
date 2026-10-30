@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+import { DraftAction } from "@escode/contracts";
 import { test, expect } from "vite-plus/test";
 import { mkdtemp, rm, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -308,4 +310,26 @@ test("stale context edits reject inside the first-Send serialization boundary", 
     expect((await store.get("alpha", chat.id)).phase).toBe("draft");
     service.close();
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("draft actions retain valid payloads and require operation-specific fields", () => {
+  const decode = Schema.decodeUnknownSync(DraftAction);
+  const actions = [
+    { operation: "createDraft", project: null },
+    { operation: "context", project: null, id: "draft", expected: "revision", target: null },
+    { operation: "execution", project: "/project", id: "draft", expected: "revision", mode: "new", value: "main", commit: "sha" },
+    { operation: "execution", project: "/project", id: "draft", expected: "revision", mode: "reuse", value: "/checkout", commit: "" },
+  ] satisfies DraftAction[];
+  for (const action of actions) expect(decode(action)).toEqual(action);
+  for (const action of actions.slice(1)) {
+    for (const key of ["id", "expected", ...(action.operation === "context" ? ["target"] : ["mode", "value", "commit"])]) {
+      const incomplete = { ...action };
+      Reflect.deleteProperty(incomplete, key);
+      expect(() => decode(incomplete)).toThrow();
+    }
+  }
+  expect(() => decode({ ...actions[2], project: null })).toThrow();
+  // @ts-expect-error Context changes require both the target and expected revision.
+  const incomplete: DraftAction = { operation: "context", project: null, id: "draft" };
+  expect(() => decode(incomplete)).toThrow();
 });

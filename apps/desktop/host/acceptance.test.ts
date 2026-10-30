@@ -86,7 +86,7 @@ child.on('exit',code=>process.exit(code??1));
           const { config } = await reference.request("config/read", {
             cwd: profile.root,
             includeLayers: false,
-          });
+          }) as import("./vendor/codex/src/schema").V2ConfigReadResponse;
           expect(config.model).toBe(profile.model);
           expect(config.model_reasoning_effort).toBe(profile.reasoning);
           expect(config.approval_policy).toBe(profile.approval);

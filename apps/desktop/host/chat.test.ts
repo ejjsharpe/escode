@@ -201,7 +201,7 @@ test("setup failures retain drafts; exact input requests cannot answer another t
       method: "model/rerouted",
       params: { threadId: "thread", turnId: "turn", toModel: "fallback" },
     });
-    expect(service.snapshot(dir, c.id).settings.model).toBe("fallback");
+    expect(service.snapshot(dir, c.id).settings?.model).toBe("fallback");
     const request = service.snapshot(dir, c.id).requests[0];
     await expect(service.answer(dir, c.id, request.token, {})).rejects.toThrow("Answer each");
     await service.answer(dir, c.id, request.token, { choice: "first" });

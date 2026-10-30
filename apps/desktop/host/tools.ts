@@ -87,12 +87,12 @@ export type WireMessage = {
   id?: number | string;
   method?: string;
   params?: any;
-  result?: any;
+  result?: unknown;
   error?: { message: string };
 };
 export interface CodexConnection {
   installation?: { path: string; version: string };
-  request(method: string, params: unknown): Promise<any>;
+  request(method: string, params: unknown): Promise<unknown>;
   respond(id: number | string, result: unknown): void;
   close(): void;
   finished?: Promise<void>;
@@ -222,7 +222,7 @@ export async function connectCodex(
     const initialized = await rpc.request("initialize", {
       clientInfo: { name: "escode", version: "0.1.0" },
       capabilities: {},
-    });
+    }) as import("./vendor/codex/src/schema").V1InitializeResponse;
     if (typeof initialized?.userAgent !== "string")
       throw Error("Incompatible Codex initialize response. Update Codex or escode and retry.");
     await Effect.runPromise(protocol.notify("initialized"));
@@ -239,7 +239,7 @@ export async function connectCodex(
 export async function draftSettings(cwd: string) {
   const rpc = await connectCodex(cwd, () => {}, () => {});
   try {
-    const { config } = await rpc.request("config/read", { cwd, includeLayers: false });
+    const { config } = await rpc.request("config/read", { cwd, includeLayers: false }) as import("./vendor/codex/src/schema").V2ConfigReadResponse;
     return { model: config.model ?? null, reasoning: config.model_reasoning_effort ?? null,
       approval: config.approval_policy ?? null, sandbox: config.sandbox_mode ?? null };
   } finally { rpc.close(); }
@@ -253,8 +253,8 @@ export async function probeCodex(path: string) {
     path,
   );
   try {
-    const account = await rpc.request("account/read", { refreshToken: false });
-    const result = await rpc.request("config/read", { includeLayers: false });
+    const account = await rpc.request("account/read", { refreshToken: false }) as import("./vendor/codex/src/schema").V2GetAccountResponse;
+    const result = await rpc.request("config/read", { includeLayers: false }) as import("./vendor/codex/src/schema").V2ConfigReadResponse;
     const config = result.config;
     return {
       authenticated: Boolean(account.account),
