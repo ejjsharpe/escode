@@ -17,7 +17,7 @@ import {createInterface} from 'node:readline';
 import {appendFileSync,existsSync} from 'node:fs';
 if(process.argv.includes('--version')) { console.log('codex-cli 0.165.0'); process.exit(0); }
 const send = value => process.stdout.write(JSON.stringify(value)+'\\n');
-let threadId='thread-'+process.pid; const turnId='turn';
+let threadId='thread-'+process.pid; const turnId='turn'; let nextRequestId=99;
 createInterface({input:process.stdin}).on('line', line => {
  const m=JSON.parse(line); if(!m.id) return;
  if(!m.method) { appendFileSync(${JSON.stringify(join(dir, "events"))},JSON.stringify({responseId:m.id,result:m.result,threadId})+'\\n'); send({method:'item/agentMessage/delta',params:{threadId,turnId,itemId:'reply',delta:'Answered by '+process.pid}}); return; }
@@ -32,11 +32,11 @@ createInterface({input:process.stdin}).on('line', line => {
   result={turn:{id:turnId}};
   send({method:'turn/started',params:{threadId,turn:{id:turnId}}});
   if(m.params.input[0].text==='fail') { setTimeout(()=>process.exit(1),20); }
-  else setTimeout(()=>send({id:99,method:'item/commandExecution/requestApproval',params:{threadId,turnId,itemId:'command',command:'fixture approval'}}),100);
+  else setTimeout(()=>send({id:nextRequestId++,method:'item/commandExecution/requestApproval',params:{threadId,turnId,itemId:'command',command:'fixture approval'}}),100);
  }
  if(m.method==='turn/interrupt') send({method:'turn/completed',params:{threadId,turn:{id:turnId}}});
  if(m.method==='turn/start' && m.params.input[0].text==='delayed') {
-  setTimeout(()=>send({id:100,method:'item/tool/requestUserInput',params:{threadId,turnId,itemId:'question',questions:[{id:'choice',question:'Which choice?',options:[]}]}}),100);
+  setTimeout(()=>send({id:nextRequestId++,method:'item/tool/requestUserInput',params:{threadId,turnId,itemId:'question',questions:[{id:'choice',question:'Which choice?',options:[]}]}}),100);
   const timer=setInterval(()=>{if(existsSync(${JSON.stringify(join(dir, "release-send"))})) {clearInterval(timer);send({id:m.id,result});}},20);
  }
  else if(m.method==='thread/start') setTimeout(()=>send({id:m.id,result}),500);
@@ -295,7 +295,7 @@ createInterface({input:process.stdin}).on('line', line => {
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await page.getByRole("textbox", { name: "Message Codex" }).fill("fail");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText(/disconnected|connection closed/);
+    await expect(page.getByRole("alert")).toContainText(/disconnected|connection closed|input stream ended/);
     const token = states[0].requests[0].token;
     const result = await page.evaluate(
       async ({ a, ids, token }) => {

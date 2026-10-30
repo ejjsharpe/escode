@@ -459,6 +459,7 @@ export class ChatService {
       if (s.seenRequestIds?.has(message.id)) {
         for (const [token, wireId] of s.requestIds) if (wireId === message.id) { s.requestIds.delete(token); s.requests = s.requests.filter(r => r.token !== token); }
         s.error = "Provider reused a live request identifier. Stop and reconnect."; return; }
+      if ((s.seenRequestIds?.size ?? 0) >= 4096) { s.error = "Provider request identity capacity exhausted. Stop and reconnect before further requests."; return; }
       s.seenRequestIds?.add(message.id);
       if (s.requests.length >= 32 || Buffer.byteLength(JSON.stringify([...s.requests, { params: p }])) > 64 * 1024) {
         s.error = "Provider request capacity exhausted. Request details unavailable; provider work continues and Stop remains available.";
