@@ -139,3 +139,7 @@ follow-up; integrated application qualification belongs to the parent effort.
 Synchronous Git is not cancellable or rolled back, and already-started preparation
 retains resources, including partial failures. Transport, receipt admission,
 provider/output seams and persisted record formats remain unchanged.
+
+The combined host/client [integration verification](reconnect.md#combined-hostclient-integration)
+records subsequent full host, Electron and packaged checks, including initial
+unsuccessful runs and their limits.

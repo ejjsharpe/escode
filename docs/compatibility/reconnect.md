@@ -80,3 +80,47 @@ watch-failure test); the host-client/directories/git-observation run then passed
 `--maxWorkers=2`. `bun run typecheck`, `bun run lint` and `git diff --check` passed.
 Integrated build/package/Electron checks are left to the parent integration run;
 no real provider turns or manual accessibility checks were performed here.
+
+## Combined host/client integration
+
+On 2026-10-30, combined code commit
+`6ecb8180d4a4db4e6344f7c9cc8e5da1a4063cf9` merged host Chat ownership
+(`671746e31425ec3cea975743b4933329c6864b35`) and client admission/failure isolation
+(`2d2fe8ec10f5319910b22fc09d819f8558714906`) without conflicts. Each implementation
+received an independent GPT-6.1 Sol extra-high review with a Ship verdict at its
+exact commit. The separate Files recovery investigation and independent review
+found no justified change to the existing persistence/acknowledgement handoff.
+
+Validation in a dedicated integration worktree passed:
+
+- Full host suite: 264 passed, four opt-in provider checks skipped, using
+  `bun run --cwd apps/desktop test -- --maxWorkers=2`.
+- Desktop typecheck, lint, build, macOS arm64 packaging and baseline-to-HEAD
+  whitespace checks.
+- Thirteen development Electron scenarios across `send`, `history`,
+  `project-drafts`, `worktree-drafts`, `scratch`, `concurrency`, `files-watch`
+  and `files-tree`.
+- Eight packaged scenarios across `send`, `history`, `project-drafts`,
+  `worktree-drafts` and `files-watch`, using `ESCODE_PACKAGED=1` and the fixture's
+  restricted PATH. All app checks used temporary state and controlled providers.
+
+The first host attempt in the shared root checkout was invalidated by checkout
+switches during execution: the runner loaded mixed old/new files and lost the new
+transport test file. Its failures are not counted as a coherent regression result;
+the dedicated-worktree full run above passed without source changes.
+
+The first thirteen-scenario Electron run passed twelve and timed out once waiting
+five seconds for the generated tree's 200 root rows (zero observed). That scenario
+then passed alone. All nine scenarios in three complete Files-watch repetitions
+passed on both unchanged baseline `fc8643912b79fab9279256cde75e9af0843bf9a1` and the
+combined code, followed by the full thirteen-scenario rerun and eight packaged
+checks above. The timeout's cause remains unclassified; no source change or timeout
+relaxation was used to obtain the passing runs.
+
+No real provider turns, new manual accessibility check, exhaustive multi-client
+test or production capacity qualification is claimed. Synchronous Git remains
+noncancellable; started preparation retains possibly partial resources. Ordinary
+queries can still contend for control admission. Existing best-effort recovery,
+cross-process filesystem races and absence of exactly-once external-effect
+guarantees remain. Packaging retains the existing default icon, unsigned-build
+and large renderer-chunk notices.
