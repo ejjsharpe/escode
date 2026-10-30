@@ -58,6 +58,8 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
     saveFile: (root: string, path: string, text: string, version: string) => chatQuery(client => client.saveFile({ root, path, text, version })),
     loadWorkspace: () => chatQuery(client => client.loadWorkspace()),
     persistWorkspace: (state: typeof import("@escode/contracts").WorkspaceState.Type) => chatQuery(client => client.persistWorkspace({ state })),
+    moveEntry: (command: import("@escode/contracts").MoveEntry) => chatQuery(client => client.moveEntry({ command })),
+    ackFileOperation: (root: string) => chatQuery(client => client.ackFileOperation({ root })),
     draftAction: (action: import("@escode/contracts").DraftAction) => chatQuery(client => client.draftAction({ action })),
     sendState: (project: string | null, id: string) => chatQuery(client => client.sendState({ project, id })),
     sendMessage: (command: SendCommand) => chatQuery(client => client.sendMessage({ command })),

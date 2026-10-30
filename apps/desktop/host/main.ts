@@ -538,7 +538,55 @@ app.whenReady().then(async () => {
     };
     check(); return { project, check };
   };
+  async function approvedFiles(root: string) {
+    if (!projects.has(root)) throw Error("Open and approve this checkout first.");
+    const project = await checkout(root);
+    if (removing.has(project.repository()) || quitting) throw Error("Project unavailable.");
+    return project;
+  }
+  async function moveEntry({ root, action, source, target }: import("@escode/contracts").MoveEntry) {
+    const project = await approvedFiles(root);
+    const identity = project.repository();
+      if (mutationOrigin) throw Error("Another file operation is pending.");
+      mutationOrigin = project.root;
+      try {
+
+        const kind = action === "rename" ? "move" : action;
+        const destination =
+          action === "rename" ? project.renameDestination(source, target) : target;
+        operations.assertIdle();
+        const owner = projectSessions.get(identity);
+        const originalIdentity = project.operationIdentity(source);
+        const check = () => {
+          if (!owner || projectSessions.get(identity) !== owner || quitting)
+            throw Error("Originating project unavailable or app quitting.");
+          for (const path of [source, ...(kind === "move" ? [destination] : [])]) {
+            const absolute = resolve(project.root, path);
+            if (
+              isAppState(absolute) ||
+              stateFiles.some((file) => affected(file.toLowerCase(), absolute.toLowerCase()))
+            )
+              throw Error("Protected app state is inside this operation.");
+          }
+          if (project.operationIdentity(source) !== originalIdentity)
+            throw Error(
+              "Source changed after confirmation. Edits retained; retry after inspecting actual paths.",
+            );
+        };
+        check();
+        return await operations.run(project, kind, source, destination, check);
+      } finally {
+        mutationOrigin = undefined;
+      }
+  }
+  async function ackFileOperation(root: string) {
+    const project = await approvedFiles(root);
+    if (mutationOrigin) throw Error("File operation is still delivering results.");
+    await operations.ack(project.root);
+  }
   const directoryHost = await startDirectoryHost({
+    moveEntry,
+    ackFileOperation,
     draftAction,
     sendState: async (root, id) => ({ admissionEpoch: foundation.admissionEpoch, expected: await expectedSend(root, id) }),
     sendStatus: async commandId => {
@@ -674,8 +722,6 @@ app.whenReady().then(async () => {
         "clipboard-capture",
         "transfer",
         "trash-selection",
-        "file-operation",
-        "file-operation-ack",
         "create-entry",
       ].includes(String(operation)) &&
       (typeof requestedRoot !== "string" || !projects.has(requestedRoot))
@@ -702,10 +748,6 @@ app.whenReady().then(async () => {
     };
     if (operation === "entry-action") checkFilesSession();
     if (removing.has(identity)) throw Error("Worktree removal is in progress. Retry afterward.");
-    if (operation === "file-operation-ack" && !args.length) {
-      if (mutationOrigin) throw Error("File operation is still delivering results.");
-      return operations.ack(project.root);
-    }
     const protect = (path: string) => {
       const absolute = resolve(project.root, path);
       if (
@@ -1256,44 +1298,6 @@ app.whenReady().then(async () => {
     if (operation === "save") {
       if (mutationOrigin) throw Error("File operation awaiting confirmation.");
       operations.assertIdle();
-    }
-    if (
-      operation === "file-operation" &&
-      args.length === 3 &&
-      args.every((a) => typeof a === "string") &&
-      ["move", "rename"].includes(args[0] as string)
-    ) {
-      if (mutationOrigin) throw Error("Another file operation is pending.");
-      mutationOrigin = project.root;
-      try {
-        const [action, source, target] = args as ["move" | "rename", string, string];
-        const kind = action === "rename" ? "move" : action;
-        const destination =
-          action === "rename" ? project.renameDestination(source, target) : target;
-        operations.assertIdle();
-        const owner = projectSessions.get(identity);
-        const originalIdentity = project.operationIdentity(source);
-        const check = () => {
-          if (!owner || projectSessions.get(identity) !== owner || quitting)
-            throw Error("Originating project unavailable or app quitting.");
-          for (const path of [source, ...(kind === "move" ? [destination] : [])]) {
-            const absolute = resolve(project.root, path);
-            if (
-              isAppState(absolute) ||
-              stateFiles.some((file) => affected(file.toLowerCase(), absolute.toLowerCase()))
-            )
-              throw Error("Protected app state is inside this operation.");
-          }
-          if (project.operationIdentity(source) !== originalIdentity)
-            throw Error(
-              "Source changed after confirmation. Edits retained; retry after inspecting actual paths.",
-            );
-        };
-        check();
-        return await operations.run(project, kind, source, destination, check);
-      } finally {
-        mutationOrigin = undefined;
-      }
     }
     const managedRoot = join(app.getPath("userData"), "worktrees");
     if (operation === "worktree-managed" && !args.length)

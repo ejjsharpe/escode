@@ -331,3 +331,33 @@ test("authenticated Files accepts a full editor document and rejects invalid sav
     expect(saves).toBe(1);
   } finally { const done = closed(socket); socket.close(); await done; await host.close(); }
 });
+
+test("authenticated moves validate commands and retain results until explicit acknowledgement", async () => {
+  let moves = 0, acknowledgements = 0;
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "unused" }),
+    moveEntry: async command => {
+      moves++;
+      expect(command).toEqual({ root: "/repo", action: "rename", source: "old", target: "new" });
+      return { applied: true, message: "Moved", intent: { root: "/repo", checkoutIdentity: "checkout",
+        source: "old", destination: "new", kind: "move", identity: "object", completed: true } };
+    },
+    ackFileOperation: async root => { expect(root).toBe("/repo"); acknowledgements++; },
+  });
+  try {
+    const socket = await connect(host.bootstrap().url);
+    async function request(tag: string, payload: unknown) {
+      const reply = new Promise<string>(resolve => socket.once("message", data => resolve(String(data))));
+      socket.send(JSON.stringify({ _tag: "Request", id: String(Math.random()), tag, payload, headers: [] }));
+      return reply;
+    }
+    expect(await request("moveEntry", { command: { root: "/repo", action: "delete", source: "old", target: "new" } })).toContain("Failure");
+    expect(moves).toBe(0);
+    expect(await request("moveEntry", { command: { root: "/repo", action: "rename", source: "old", target: "new" } })).toContain('"destination":"new"');
+    expect(moves).toBe(1);
+    expect(acknowledgements).toBe(0);
+    expect(await request("ackFileOperation", { root: "/repo" })).toContain("Success");
+    expect(acknowledgements).toBe(1);
+    const done = closed(socket); socket.close(); await done;
+  } finally { await host.close(); }
+});

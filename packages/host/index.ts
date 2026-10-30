@@ -5,7 +5,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { maximumFileFrameBytes, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult } from "@escode/contracts";
+import { maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult } from "@escode/contracts";
 
 const fileMethods = ["readFile", "saveFile", "loadWorkspace", "persistWorkspace"];
 
@@ -43,6 +43,8 @@ export async function startDirectoryHost(options: {
   chatSnapshot?: (project: string | null, id: string) => Promise<ChatDetail>;
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
   history?: (project: string | null, id: string, cursor: string | null) => Promise<HistoryPage>;
+  moveEntry?: (command: import("@escode/contracts").MoveEntry) => Promise<unknown>;
+  ackFileOperation?: (root: string) => Promise<void>;
   draftAction?: (action: import("@escode/contracts").DraftAction) => Promise<unknown>;
   sendState?: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
   sendMessage?: (command: SendCommand) => Promise<SendReceipt>;
@@ -99,7 +101,7 @@ export async function startDirectoryHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -165,6 +167,14 @@ export async function startDirectoryHost(options: {
         }, catch: String }),
         persistWorkspace: ({ state }) => Effect.tryPromise({ try: async () => {
           if (!options.persistWorkspace) throw Error("Recovery unavailable"); return options.persistWorkspace(state);
+        }, catch: String }),
+        moveEntry: ({ command }) => Effect.tryPromise({ try: async () => {
+          if (!options.moveEntry) throw Error("Move unavailable");
+          return Schema.decodeUnknownSync(MoveResult)(await options.moveEntry(command));
+        }, catch: String }),
+        ackFileOperation: ({ root }) => Effect.tryPromise({ try: async () => {
+          if (!options.ackFileOperation) throw Error("Acknowledgement unavailable");
+          await options.ackFileOperation(root);
         }, catch: String }),
         draftAction: ({ action }) => Effect.tryPromise({ try: async () => {
           if (!options.draftAction) throw Error("Draft editing unavailable");

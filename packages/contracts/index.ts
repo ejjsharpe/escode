@@ -129,6 +129,18 @@ export const Files = RpcGroup.make(
   Rpc.make("persistWorkspace", { payload: { state: WorkspaceState }, success: Schema.Void, error: Schema.String }),
 );
 
-export const HostQueries = Directories.merge(Files).merge(RpcGroup.make(Rpc.make("draftAction", { payload: { action: DraftAction }, success: DraftRecord, error: Schema.String }), Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
+export const MoveEntry = Schema.Struct({
+  root: Schema.String, action: Schema.Literals(["move", "rename"]),
+  source: Schema.String, target: Schema.String,
+});
+export type MoveEntry = typeof MoveEntry.Type;
+export const MoveResult = Schema.Struct({
+  applied: Schema.Boolean, message: Schema.String, persistencePending: Schema.optionalKey(Schema.Boolean),
+  intent: Schema.optionalKey(Schema.Struct({ root: Schema.String, checkoutIdentity: Schema.String,
+    source: Schema.String, destination: Schema.String, kind: Schema.Literal("move"), identity: Schema.String,
+    completed: Schema.optionalKey(Schema.Boolean),
+  })),
+});
+export const HostQueries = Directories.merge(Files).merge(RpcGroup.make(Rpc.make("moveEntry", { payload: { command: MoveEntry }, success: MoveResult, error: Schema.String }), Rpc.make("ackFileOperation", { payload: { root: Schema.String }, success: Schema.Void, error: Schema.String }), Rpc.make("draftAction", { payload: { action: DraftAction }, success: DraftRecord, error: Schema.String }), Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
   success: ChatSummaries, error: Schema.String, stream: true,
 }), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));
