@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { accessSync, constants, lstatSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Project } from "./project";
@@ -34,10 +34,22 @@ export type SavedChat = {
 };
 export class Chats {
   private queue: Promise<unknown> = Promise.resolve();
+  private failed = false;
+  private checkedRecovery = false;
   constructor(private file: string) {}
   get spoolDirectory() { return join(dirname(this.file), "live-spool-v1"); }
   private async read(): Promise<SavedChat[]> {
     try {
+      if (!this.checkedRecovery) {
+        try {
+          const temporary = await open(this.file + ".tmp", "r");
+          await temporary.close();
+          throw Error("Incomplete chat write; explicit recovery required.");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+        this.checkedRecovery = true;
+      }
       const value = JSON.parse(await readFile(this.file, "utf8"));
       if (value.version !== 1 || !Array.isArray(value.chats)) throw Error("Unsupported chat association store");
       const chats: SavedChat[] = value.chats;
@@ -60,12 +72,24 @@ export class Chats {
   }
   private change<T>(edit: (chats: SavedChat[]) => T) {
     const task = this.queue.then(async () => {
+      if (this.failed) throw Error("Chat storage unavailable; explicit recovery required.");
       const chats = await this.read();
       const result = edit(chats);
       await mkdir(dirname(this.file), { recursive: true, mode: 0o700 });
       const temporary = this.file + ".tmp";
-      await writeFile(temporary, JSON.stringify({ version: 1, chats }), { mode: 0o600 });
-      await rename(temporary, this.file);
+      try {
+        const output = await open(temporary, "wx", 0o600);
+        try {
+          await output.writeFile(JSON.stringify({ version: 1, chats }));
+          await output.sync();
+        } finally { await output.close(); }
+        await rename(temporary, this.file);
+        const directory = await open(dirname(this.file), constants.O_RDONLY | constants.O_DIRECTORY);
+        try { await directory.sync(); } finally { await directory.close(); }
+      } catch (error) {
+        this.failed = true;
+        throw error;
+      }
       return result;
     });
     this.queue = task.catch(() => {});
@@ -237,13 +261,15 @@ export class Chats {
     }
     if (chat.phase !== "draft") throw Error("Bound scratch ownership is missing.");
     const path = join(dirname(this.file), "scratch", chat.id);
+    // Reserve before any allocation, including creation of the scratch parent.
+    await this.update(null, chat.id, { checkout: path, scratch: { path } });
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     if (realpathSync(dirname(path)) !== dirname(path))
       throw Error(`Scratch storage is unavailable or changed: ${dirname(path)}`);
-    // Persist the reservation before allocation; a partial handoff never permits reconstruction.
-    await this.update(null, chat.id, { checkout: path, scratch: { path } });
     try {
       await mkdir(path, { mode: 0o700 });
+      const parent = await open(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
+      try { await parent.sync(); } finally { await parent.close(); }
       const identity = lstatSync(path);
       await this.update(null, chat.id, {
         scratch: { path, dev: identity.dev, ino: identity.ino },

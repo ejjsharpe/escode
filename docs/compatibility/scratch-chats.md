@@ -89,3 +89,40 @@ covered with controlled events/failures rather than new live service outages.
 Packaged scratch execution uses the controlled provider; real Codex execution above
 uses the host seam. Deferred draft worktree preparation (#35), broader recovery (#36)
 and integrated parent acceptance (#37) remain separate.
+
+## Fresh foundation delivery (#76, 2026-10-30)
+
+The existing first-Send path now uses the fresh `host-chats-v1.json` association
+store and authenticated durable Send receipts (see [durable Send](durable-send.md)).
+No legacy chat import, scratch adapter or second preparation route is introduced.
+The reservation retains chat ID and creation time before even creating the scratch
+parent. Association snapshots use exclusive temporary files, file fsync, rename
+and parent-directory fsync; scratch allocation syncs its parent before recording
+ownership. A failed writer rejects further mutations. On fresh startup, an
+abandoned temporary snapshot requires explicit recovery instead of overwriting
+uncertain evidence. Already running host control can still read committed records
+and Stop work even when another write leaves temporary evidence.
+
+`host/scratch.test.ts` checks parent-allocation failure, retained exact reservation
+and composer on reopen/Retry with zero provider calls, incomplete ownership,
+startup cancellation, distinct folders, missing/replaced directories and active
+Stop with interrupted-write evidence present. The earlier scratch/provider
+fixtures are reused. `tests/scratch.spec.ts` now checks exact `id`, `createdAt`,
+`checkout`, `scratch` device/inode, `threadId` and composer values after a real
+Electron process restart. Its two chats dispatch exactly two turns total;
+restarting never replays either. The fixture ignores protocol notifications.
+
+Local checks: typecheck and lint passed; focused scratch tests: 10 passed, one
+opt-in live-provider check skipped. Full host suite: 189 passed, four skipped,
+two worktree tests timed out at 15 seconds under concurrent load; all 17 worktree
+tests passed on focused rerun with a 60-second timeout. Build and unsigned macOS
+arm64 packaging passed. Restricted-PATH packaged No project first-Send/restart
+scenario passed. Actual installation: macOS 26.3.1, Electron 45.1.0, Git 2.50.1,
+installed Codex 0.163.0; this delivery uses protocol fixtures and consumes no live
+provider turns.
+
+No UI controls, focus behavior or accessible names changed. Prior keyboard and
+VoiceOver evidence is reused; no new manual VoiceOver or physical power-loss
+validation is claimed. Broad capacity and multi-client qualification remain
+deferred. Interrupted storage requires external inspection and explicit recovery;
+no automatic repair is offered.

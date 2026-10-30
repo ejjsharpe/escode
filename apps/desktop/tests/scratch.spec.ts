@@ -29,6 +29,7 @@ const thread=process.cwd(), send=m=>process.stdout.write(JSON.stringify(m)+'\\n'
 createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);
 fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify({cwd:process.cwd(),...m})+'\\n');
 if(!m.method){if(m.id===99&&pendingTurn){send({id:pendingTurn,result:{turn:{id:'turn'}}});pendingTurn=null;}return;}
+if(m.id===undefined)return;
 let result={};if(m.method==='initialize')result={userAgent:'codex/0.165.0'};
 if(m.method==='account/read')result={account:{}};
 if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:thread},cwd:thread,model:'scratch-fixture',reasoningEffort:'high',approvalPolicy:'on-request',sandbox:{type:'workspaceWrite'}};
@@ -109,8 +110,16 @@ send({id:m.id,result});});`,
     page = await app.firstWindow();
     await expect(message()).toHaveValue("unsent followup");
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeDisabled();
-    for (const chat of [a, b])
+    const restored = await records();
+    for (const chat of [a, b]) {
+      expect(restored.find((saved: any) => saved.id === chat.id)).toMatchObject({
+        id: chat.id, createdAt: chat.createdAt, project: null,
+        checkout: chat.checkout, scratch: chat.scratch, threadId: chat.threadId,
+        draft: chat.id === a.id ? "unsent followup" : "",
+      });
       expect(await readFile(join(chat.checkout, "retained.txt"), "utf8")).toBe("retained bytes");
+    }
+    await writeFile("test-results/scratch-restart-identities.json", JSON.stringify(restored, null, 2));
     const wire = (await readFile(calls, "utf8"))
       .trim()
       .split("\n")

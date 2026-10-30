@@ -321,8 +321,10 @@ test("missing scratch retains active Stop and explicit Retry reuses the restored
     const saved = await store.get(null, chat.id);
     await store.draft(null, chat.id, "followup");
     await rename(saved.checkout, saved.checkout + "-away");
+    await writeFile(file + ".tmp", "interrupted unrelated write");
     await service.stop(null, chat.id);
     expect(interrupts).toBe(1);
+    await rm(file + ".tmp");
     await service.shutdown();
     const restarted = new ChatService(new Chats(file), connector);
     await expect(restarted.open(null, chat.id)).rejects.toThrow(saved.checkout);
@@ -339,4 +341,44 @@ test("missing scratch retains active Stop and explicit Retry reuses the restored
     service.close();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("scratch parent allocation failure retains the reservation across restart", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-scratch-parent-")));
+  const file = join(dir, "host-chats-v1.json");
+  const store = new Chats(file);
+  const chat = await store.createDraft(null, "");
+  const path = join(dir, "scratch", chat.id);
+  await writeFile(join(dir, "scratch"), "occupied parent");
+  let connections = 0;
+  const service = new ChatService(store, async () => { connections++; throw Error("unexpected provider"); });
+  try {
+    await expect(service.send(null, chat.id, "retained composer")).rejects.toThrow();
+    const restartedStore = new Chats(file);
+    expect(await restartedStore.get(null, chat.id)).toMatchObject({
+      id: chat.id, createdAt: chat.createdAt, checkout: path,
+      scratch: { path }, draft: "retained composer", threadId: null,
+    });
+    await rm(join(dir, "scratch"));
+    const restart = new ChatService(restartedStore, async () => { connections++; throw Error("unexpected provider"); });
+    await expect(restart.open(null, chat.id)).rejects.toThrow(path);
+    await expect(restart.send(null, chat.id, "retained composer")).rejects.toThrow(path);
+    expect(connections).toBe(0);
+    expect(await readdir(dir)).toEqual(["host-chats-v1.json"]);
+    restart.close();
+  } finally { service.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("interrupted association write blocks fresh-process recovery without replacing evidence", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-scratch-write-")));
+  const file = join(dir, "host-chats-v1.json");
+  const store = new Chats(file);
+  const chat = await store.createDraft(null, "");
+  await writeFile(file + ".tmp", "interrupted reservation");
+  try {
+    const restart = new Chats(file);
+    await expect(restart.get(null, chat.id)).rejects.toThrow("explicit recovery");
+    await expect(restart.createDraft(null, "")).rejects.toThrow("explicit recovery");
+    expect(await readFile(file + ".tmp", "utf8")).toBe("interrupted reservation");
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
