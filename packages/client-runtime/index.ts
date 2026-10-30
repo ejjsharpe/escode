@@ -6,7 +6,9 @@ export { createChatClient } from "./chat";
 
 export function createHostClient(bootstrap: () => Promise<unknown>) {
   const queries = Semaphore.makeUnsafe(4);
-  let queued = 0;
+  // Bulk rescans cannot occupy the permits or admission reserved for ordinary queries.
+  const listings = Semaphore.makeUnsafe(4);
+  let queued = 0, queuedListings = 0;
   type Client = Effect.Success<ReturnType<typeof makeClient>>;
   const makeClient = () => RpcClient.make(HostQueries);
   let session: { scope: Scope.Closeable; client: Promise<Client> } | undefined;
@@ -35,25 +37,29 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     session = { scope, client };
     return client;
   }
+  function domainFailure(cause: Cause.Cause<unknown>) {
+    const failure = Cause.findError(cause);
+    return Result.isSuccess(failure) && typeof failure.success === "string" ? failure.success : undefined;
+  }
+  async function runQuery<A>(current: Promise<Client>, query: Effect.Effect<A, unknown>, signal?: AbortSignal): Promise<A> {
+    const result = await Effect.runPromise(Effect.exit(query), { signal });
+    if (Exit.isSuccess(result)) return result.value;
+    const domain = domainFailure(result.cause);
+    if (domain !== undefined) throw Error(domain);
+    if (session?.client === current) await close();
+    throw Cause.squash(result.cause);
+  }
   async function chatQuery<A>(request: (client: Client) => Effect.Effect<A, unknown>, waitsForConsent = false): Promise<A> {
     if (queued >= 16) throw Error("Chat query admission exhausted. Retry explicitly.");
     queued++;
     try {
       const current = connect();
-      try {
-        const client = await current;
-        const query = queries.withPermit(request(client));
-        // Native confirmation waits for the user; expiring it cannot cancel admitted filesystem work.
-        const result = await Effect.runPromise(Effect.exit(waitsForConsent ? query : query.pipe(Effect.timeout("35 seconds"))));
-        if (Exit.isSuccess(result)) return result.value;
-        const failure = Cause.findError(result.cause);
-        if (Result.isSuccess(failure) && typeof failure.success === "string")
-          throw Object.assign(Error(failure.success), { domain: true });
-        throw Cause.squash(result.cause);
-      } catch (error) {
-        if (!(error as { domain?: boolean })?.domain && session?.client === current) await close();
-        throw error;
-      }
+      const query = queries.withPermit(Effect.gen(function* () {
+        const client = yield* Effect.tryPromise(() => current);
+        return yield* request(client);
+      }));
+      // Native confirmation waits for the user; expiring it cannot cancel admitted filesystem work.
+      return await runQuery(current, waitsForConsent ? query : query.pipe(Effect.timeout("35 seconds")));
     } finally { queued--; }
   }
   return {
@@ -107,8 +113,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
           const current = connect();
           const result = yield* Effect.exit(attempt());
           if (!active) return;
-          const failure = Exit.isFailure(result) ? Cause.findError(result.cause) : undefined;
-          const domainError = failure && Result.isSuccess(failure) && typeof failure.success === "string";
+          const domainError = Exit.isFailure(result) && domainFailure(result.cause) !== undefined;
           // A moved chat invalidates its old subscription, not the shared connection.
           if (!domainError && session?.client === current) yield* Effect.tryPromise(close);
           if (retry >= 3) {
@@ -124,18 +129,15 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     chatHistory: (project: string | null, id: string, cursor: string | null): Promise<HistoryPage> =>
       chatQuery(client => client.chatHistory({ project, id, cursor })),
     async listDirectory(root: string, path: string): Promise<DirectoryResult> {
-      if (queued >= 10000) throw Error("Directory query admission exhausted. Refresh to retry.");
-      queued++;
+      if (queuedListings >= 10000) throw Error("Directory query admission exhausted. Refresh to retry.");
+      queuedListings++;
       const current = connect();
       try {
-        return await Effect.runPromise(queries.withPermit(Effect.gen(function* () {
+        return await runQuery(current, listings.withPermit(Effect.gen(function* () {
           const client = yield* Effect.tryPromise(() => current);
           return yield* client.listDirectory({ root, path });
         })).pipe(Effect.timeout("10 seconds")));
-      } catch (error) {
-        if (session?.client === current) await close();
-        throw error;
-      } finally { queued--; }
+      } finally { queuedListings--; }
     },
     watchFiles(root: string, paths: string[], notify: (error?: string, ready?: boolean) => void) {
       let disposed = false;
@@ -147,7 +149,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
           if (!disposed) notify(change.error, change.ready);
         })));
       });
-      void Effect.runPromise(effect, { signal: controller.signal }).catch(async (error) => {
+      void runQuery(current, effect, controller.signal).catch(async (error) => {
         if (disposed) return;
         if (!disposed) notify(String(error));
       });
@@ -157,11 +159,10 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
       let active = true;
       const attempt = Effect.gen(function* () {
         const current = connect();
-        yield* Effect.gen(function* () {
+        yield* Effect.tryPromise(signal => runQuery(current, Effect.gen(function* () {
           const client = yield* Effect.tryPromise(() => current);
           yield* client.chatSummaries().pipe(Stream.runForEach(value => Effect.sync(() => { if (active) apply(value); })));
-        }).pipe(Effect.catch(() => Effect.tryPromise(async () => {
-          if (session?.client === current) await close();
+        }), signal)).pipe(Effect.catch(() => Effect.sync(() => {
           if (active) error("Chat summaries unavailable. Reconnecting…");
         })));
       }).pipe(Effect.catch(() => Effect.void), Effect.andThen(Effect.sleep("500 millis")));

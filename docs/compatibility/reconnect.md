@@ -43,3 +43,40 @@ replay. No production capacity or exactly-once external-effect guarantee is clai
 Standards review found no violations. Spec review identified missing receipt/history
 reconciliation, domain-error disruption and hidden uncertainty warnings; these were
 addressed in the final change. Static review does not replace runtime evidence.
+
+## Shared-session admission and failure isolation
+
+On 2026-10-30, `host/host-client.test.ts` reproduced two failures through the
+production `createHostClient` / `startHost` loopback path: twenty held directory
+listings rejected an unrelated `sendState` request at ordinary admission, and a
+summary domain failure interrupted an unrelated in-flight query. Both tests failed
+before the correction and passed afterward.
+
+Directory rescans now have their own four permits and 10,000-request admission
+bound; ordinary queries retain four permits and their 16-request bound. Thus at
+most eight unary requests execute concurrently through the same authenticated
+session. A held four-listing batch no longer prevents control-state queries from
+progressing. Listings retain their ten-second timeout; ordinary queries retain
+35 seconds, with native-consent operations exempt as before. This does not reserve
+control capacity against other ordinary queries or change the host's total
+request/stream admission limit.
+
+Unary, listing, directory-watch and summary execution share Effect-cause handling:
+contract domain failures retain the connection; non-domain failures retire only
+the session on which they occurred. Live chat recovery uses the same domain
+classification and retains its existing resnapshot policy. Summary observation
+still retries at 500 ms; neither mutations nor prompts are replayed. Observation
+cancellation releases subscriptions without closing healthy unrelated traffic.
+
+Bounded fixtures cover held listings against a real temporary directory, in-flight
+query survival and summary recovery on one socket, actual socket loss and renewed
+summary authentication, watch cleanup and watch transport failure. These are local
+loopback checks, not production capacity, remote trust or provider qualification.
+
+Validation for this correction: the focused host-client/reconnect/client-chat/
+client-recovery/Send run passed 34 tests in five files (before the final standalone
+watch-failure test); the host-client/directories/git-observation run then passed
+20 tests in three files, including all four new host-client tests. Both runs used
+`--maxWorkers=2`. `bun run typecheck`, `bun run lint` and `git diff --check` passed.
+Integrated build/package/Electron checks are left to the parent integration run;
+no real provider turns or manual accessibility checks were performed here.
