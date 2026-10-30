@@ -126,7 +126,7 @@ export class FoundationState {
       }
       return new FoundationState(directory, state);
     } catch (error) {
-      unlinkSync(lock);
+      if (!fresh) unlinkSync(lock);
       throw error;
     }
   }

@@ -193,3 +193,28 @@ test.each([1, 2, 3])(
     }
   },
 );
+
+test.each([3, 4, 5])(
+  "initialization sync failure at step %i blocks identity replacement",
+  async (step) => {
+    const actual = await vi.importActual<typeof fs>("node:fs");
+    const directory = mkdtempSync(join(tmpdir(), "escode-foundation-init-"));
+    try {
+      const root = join(directory, "foundation");
+      let calls = 0;
+      const fault = vi.spyOn(fs, "fsyncSync").mockImplementation((fd) => {
+        if (++calls === step) throw Error("initialization sync failed");
+        actual.fsyncSync(fd);
+      });
+      try {
+        expect(() => FoundationState.open(root)).toThrow("initialization sync failed");
+      } finally {
+        fault.mockRestore();
+      }
+      expect(() => FoundationState.open(root)).toThrow();
+      expect(readFileSync(join(root, "owner.lock"), "utf8")).toBe("");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
