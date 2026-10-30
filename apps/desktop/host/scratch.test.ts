@@ -118,11 +118,10 @@ test("occupied reservation and failures before allocation preserve prompt withou
     throw Error("unexpected");
   });
   try {
-    await expect(
-      service.send(null, chat.id, "retained", async () => {
-        throw Error("before allocation");
-      }),
-    ).rejects.toThrow("before allocation");
+    const draft = store.draft.bind(store);
+    store.draft = async (...args) => { await draft(...args); throw Error("before allocation"); };
+    await expect(service.send(null, chat.id, "retained")).rejects.toThrow("before allocation");
+    store.draft = draft;
     expect((await store.get(null, chat.id)).scratch).toBeUndefined();
     await expect(service.send(null, chat.id, "retained")).rejects.toThrow(destination);
     await expect(service.send(null, chat.id, "retained")).rejects.toThrow(destination);

@@ -258,19 +258,16 @@ for (const stage of ["authorization", "preparation"] as const) {
       throw Error("Unexpected provider");
     });
     try {
-      const sending = service
-        .send(dir, chat.id, "keep prompt", async (authorized) => {
-          expect(Object.isFrozen(authorized)).toBe(true);
-          await expect(service.context(dir, chat.id, "other", dir)).rejects.toThrow(
-            "context change",
-          );
-          await expect(service.open(dir, chat.id)).rejects.toThrow("context change");
-          await expect(service.send(dir, chat.id, "duplicate")).rejects.toThrow("active turn");
-          if (stage === "authorization") {
-            entered();
-            await gate;
-          }
-        })
+      const draft = store.draft.bind(store);
+      store.draft = async (...args) => {
+        const result = await draft(...args);
+        await expect(service.context(dir, chat.id, "other", dir)).rejects.toThrow("context change");
+        await expect(service.open(dir, chat.id)).rejects.toThrow("context change");
+        await expect(service.send(dir, chat.id, "duplicate")).rejects.toThrow("active turn");
+        if (stage === "authorization") { entered(); await gate; }
+        return result;
+      };
+      const sending = service.send(dir, chat.id, "keep prompt")
         .then(
           () => "unexpected success",
           (e: Error) => e.message,
@@ -294,16 +291,20 @@ test("stale context edits reject inside the first-Send serialization boundary", 
   try {
     const store = new Chats(join(dir, "chats.json"));
     const chat = await store.createDraft("alpha", dir);
-    const service = new ChatService(store);
-    const revision = service.revision(chat.id);
-    await service.context("alpha", chat.id, "beta", dir);
-    await expect(service.context("beta", chat.id, "alpha", dir, undefined, async () => {
-      if (service.revision(chat.id) !== revision) throw Error("Draft changed");
-    })).rejects.toThrow("Draft changed");
+    const service = new ChatService(store, undefined, undefined, undefined, {
+      guard: () => () => {}, authorize: async () => {}, currentTarget: async () => dir,
+      checkout: async () => { throw Error("Unexpected checkout access"); }, managedRoot: join(dir, "managed"),
+    });
+    const expected = await service.expectation("alpha", chat.id);
+    await service.draftAction({ operation: "context", project: "alpha", id: chat.id, expected, target: "beta" });
+    await expect(service.draftAction({ operation: "context", project: "beta", id: chat.id, expected, target: "alpha" }))
+      .rejects.toThrow("Draft changed");
     expect((await store.get("beta", chat.id)).project).toBe("beta");
     let release!: () => void;
     const waiting = new Promise<void>(resolve => { release = resolve; });
-    const editing = service.context("beta", chat.id, "alpha", dir, undefined, () => waiting);
+    const context = store.context.bind(store);
+    store.context = async (...args) => { await waiting; return context(...args); };
+    const editing = service.context("beta", chat.id, "alpha", dir);
     await expect(service.send("beta", chat.id, "keep text")).rejects.toThrow("in progress");
     release();
     await editing;

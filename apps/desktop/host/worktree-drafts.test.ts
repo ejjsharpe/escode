@@ -53,22 +53,24 @@ for (const failure of [
     writeFileSync(join(root, "ignored"), "ignored");
     const index = readFileSync(join(root, ".git/index"));
     let connections = 0;
+    const opened: Checkout[] = [];
     const service = new ChatService(store, async (cwd) => {
       connections++;
       expect(readFileSync(join(cwd, "tracked"), "utf8")).toBe("committed");
       expect(existsSync(join(cwd, "ignored"))).toBe(false);
       throw Error("provider fixture unavailable");
+    }, undefined, undefined, {
+      guard: () => () => {}, authorize: async () => {}, currentTarget: async () => root, managedRoot: managed,
+      checkout: async path => {
+          if (path === root) return project;
+          const target = await Checkout.open(path);
+          opened.push(target);
+          return target;
+        },
     });
     try {
       await service.open(root, chat.id);
       expect(existsSync(managed)).toBe(false);
-      if (failure === "provider") {
-        await expect(service.send(root, chat.id, "keep prompt")).rejects.toThrow(
-          "has not been prepared",
-        );
-        expect(connections).toBe(0);
-        expect(existsSync(managed)).toBe(false);
-      }
       if (failure === "moved-base") git("update-ref", "-d", base.ref);
       if (failure === "occupied") {
         const reserve = project.repositoryGit.reserveWorktree.bind(project.repositoryGit);
@@ -95,22 +97,15 @@ for (const failure of [
           return update(...args);
         });
       }
-      await expect(
-        service.send(
-          root,
-          chat.id,
-          "keep prompt",
-          async () => {},
-          async (snapshot) => {
-            const prepared = await store.prepareWorktree(snapshot, project, managed);
-            if (failure === "cancelled") {
-              expect(service.snapshot(root, chat.id).preparing).toBe(true);
-              await service.stop(root, chat.id);
-            }
-            return prepared;
-          },
-        ),
-      ).rejects.toThrow();
+      if (failure === "cancelled") {
+        const prepare = store.prepareWorktree.bind(store);
+        vi.spyOn(store, "prepareWorktree").mockImplementation(async (...args) => {
+          const prepared = await prepare(...args);
+          await service.stop(root, chat.id);
+          return prepared;
+        });
+      }
+      await expect(service.send(root, chat.id, "keep prompt", await service.expectation(root, chat.id))).rejects.toThrow();
       const saved = await new Chats(file).get(root, chat.id);
       expect(saved).toMatchObject({
         id: chat.id,
@@ -154,6 +149,7 @@ for (const failure of [
       if (failure === "provider") expect(connections).toBe(1);
     } finally {
       service.close();
+      opened.forEach(target => target.close());
       project.close();
       vi.restoreAllMocks();
       rmSync(dir, { recursive: true, force: true });
@@ -252,7 +248,16 @@ for (const outcome of [
                 drop(Error("closed"));
               },
             });
-      const service = new ChatService(store, connector);
+      const opened: Checkout[] = [];
+      const service = new ChatService(store, connector, undefined, undefined, {
+        guard: () => () => {}, authorize: async () => {}, currentTarget: async () => root, managedRoot: managed,
+        checkout: async path => {
+          if (path === root) return project;
+          const target = await Checkout.open(path);
+          opened.push(target);
+          return target;
+        },
+      });
       let restart: ChatService | undefined;
       try {
         const sending = service.send(
@@ -261,8 +266,7 @@ for (const outcome of [
           outcome === "live"
             ? "Reply exactly WORKTREE_OK. Do not use tools or change files."
             : "retained initial message",
-          async () => {},
-          (snapshot) => store.prepareWorktree(snapshot, project, managed),
+          await service.expectation(root, chat.id),
         );
         if (outcome === "live") {
           await sending;
@@ -306,6 +310,7 @@ for (const outcome of [
       } finally {
         await service.shutdown();
         await restart?.shutdown();
+        opened.forEach(target => target.close());
         project.close();
         rmSync(dir, { recursive: true, force: true });
       }

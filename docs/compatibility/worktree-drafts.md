@@ -111,3 +111,31 @@ removal and retained chat/provider identities. It waits for the host's history
 transition to settle before removal. Fixture reads use the client composer;
 configuration probes before Send are allowed, thread/turn creation is not.
 Final typecheck and lint pass after these fixture corrections.
+
+Host Chat command ownership follow-up (2026-10-30): `ChatService` now owns the
+unchanged expectation encoding, comparison and draft action ordering under its
+existing per-chat guard. Desktop supplies approval-session/lifecycle checks,
+checkout access, remembered Current checkout and the managed root. Send no longer
+accepts caller-authored authorization/preparation procedures. CheckoutRepository
+retains Git/base/membership policy and Chats retains durable reservations.
+
+`host/chat-commands.test.ts` exercises the production expectation/action/Send
+interface with real local Git checkouts and controlled provider responses. Stop,
+shutdown and approval-session replacement during either checkout lookup prevent
+allocation/provider startup. Once preparation starts, Stop retains the actual
+reserved branch/path and checkout; reopening the saved draft does not replay work.
+The same three interruptions during final Send persistence prevent turn handoff
+while retaining prompt/provider identity. Stale Send/context/execution choices and
+changed displayed base identities reject. Existing worktree/provider-recovery
+scenarios now use production preparation through this interface.
+
+Bounded verification: the six suites `chat`, `project-drafts`, `worktree-drafts`,
+`chat-commands`, `scratch` and `availability` passed 53 tests with three opt-in
+provider skips before the final three persistence-race cases were added;
+`chat-commands` then passed all 11 cases. `send.test.ts` passed all eight durable
+Send/control checks. Typecheck, lint and diff whitespace checks pass. No provider
+turns, Electron/package builds, UI or manual accessibility checks were run for this
+follow-up; integrated application qualification belongs to the parent effort.
+Synchronous Git is not cancellable or rolled back, and already-started preparation
+retains resources, including partial failures. Transport, receipt admission,
+provider/output seams and persisted record formats remain unchanged.

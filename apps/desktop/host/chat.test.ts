@@ -496,7 +496,9 @@ test("Stop cancels captured preparation without deleting its saved draft or disp
     let entered!: () => void;
     const ready = new Promise<void>(resolve => { entered = resolve; });
     const gate = new Promise<void>(resolve => { release = resolve; });
-    const sending = service.send(dir, chat.id, "retained", async () => { entered(); await gate; });
+    const draft = store.draft.bind(store);
+    store.draft = async (...args) => { const result = await draft(...args); entered(); await gate; return result; };
+    const sending = service.send(dir, chat.id, "retained");
     const failed = expect(sending).rejects.toThrow("not submitted");
     await ready;
     const snapshot = service.snapshot(dir, chat.id);

@@ -86,7 +86,22 @@ app.whenReady().then(async () => {
     return toolStatus();
   });
   const store = new Chats(join(app.getPath("userData"), "host-chats-v1.json"));
-  const chats = new ChatService(store, undefined, undefined, draftSettings);
+  const chats = new ChatService(store, undefined, undefined, draftSettings, {
+    guard: root => {
+      const owner = root === null ? undefined : projectSessions.get(root);
+      return () => {
+        if (quitting || (root !== null && (removing.has(root) || !owner || projectSessions.get(root) !== owner)))
+          throw Error("Chat unavailable during shutdown, removal or lost project approval");
+      };
+    },
+    authorize: async root => {
+      if (quitting || (root !== null && removing.has(root))) throw Error("Chat unavailable during shutdown or removal");
+      if (root !== null && !(await workspace.approved()).some(p => p.project === root))
+        throw Error("Open this project first. Use Open project… to approve its saved directory.");
+    },
+    checkout: root => checkout(root), currentTarget: root => currentTarget(root),
+    managedRoot: join(app.getPath("userData"), "worktrees"),
+  });
   const projects = new Map<string, Checkout>();
   const projectSessions = new Map<string, object>();
   const unapprovedProjects = new Set<string>();
@@ -310,123 +325,22 @@ app.whenReady().then(async () => {
     }
     return chat;
   };
-  const expectedSend = async (root: string | null, id: string) => {
-    const chat = await authorizeHistory(root, id);
-    const detail = chats.snapshot(root, id);
-    return JSON.stringify([chats.revision(id), chat.checkout, chat.threadId, chat.phase, chat.directoryIdentity,
-      chat.worktree, chat.scratch, detail.connected, detail.busy, detail.turnId]);
-  };
-  const dispatchSend = async (command: SendCommand) => {
-    const { project: root, id } = command;
-    const owner = root === null ? undefined : projectSessions.get(root);
-    const requireOpen = () => {
-      if (quitting || (root !== null && (removing.has(root) || !owner || projectSessions.get(root) !== owner)))
-        throw Error("Chat unavailable during shutdown, removal or lost project approval");
-    };
-    requireOpen();
-    return chats.send(
-          root,
-          id,
-          command.text,
-          async (chat) => {
-            if (await expectedSend(root, id) !== command.expected) throw Error("Chat/context state changed. Inspect before sending again.");
-            if (chat.project === null) {
-              requireOpen();
-              return;
-            }
-            const target = await checkout(chat.checkout);
-            requireOpen();
-            target.checkoutIdentity();
-            if (
-              chat.phase === "draft" &&
-              !chat.directoryIdentity &&
-              !chat.worktree?.reservation &&
-              !target.repositoryGit.validateRepository().includes(target.root)
-            )
-              throw Error("Choose an available Git checkout before first Send. Prompt retained.");
-            if (target.repositoryGit.repository() !== root)
-              throw Error(
-                "Saved checkout is unavailable or no longer belongs to this project. Prompt retained; restore this exact path and Retry.",
-              );
-          },
-          async (chat) => {
-            if (!chat.worktree) return chat;
-            if (chat.worktree.reservation) {
-              store.validateWorktree(chat);
-              return chat;
-            }
-            const source = await checkout(chat.worktree.source);
-            requireOpen();
-            if (source.repositoryGit.repository() !== root) throw Error("Wrong project checkout.");
-            const prepared = await store.prepareWorktree(
-              chat,
-              source,
-              join(app.getPath("userData"), "worktrees"),
-            );
-            requireOpen();
-            const target = await checkout(prepared.checkout);
-            requireOpen();
-            if (target.repositoryGit.repository() !== root || !target.repositoryGit.validateRepository().includes(target.root))
-              throw Error("Prepared checkout is no longer registered with this project.");
-            return prepared;
-          },
-        ).then(() => undefined);
-  };
-    const currentTarget = async (identity: string) => {
-      const state = await workspace.read();
-      const saved = [
-        ...(state.savedProjects ?? []),
-        ...state.projects,
-        ...(await workspace.approved()),
-      ];
-      const p = saved.find((p) => p.project === identity);
-      if (!p) throw Error("Unknown saved project.");
-      return state.views[identity]?.checkout ?? p.root;
-    };
-  const draftAction = async (action: import("@escode/contracts").DraftAction) => {
-    const { operation, project: root } = action;
-    const requireOpen = () => {
-      if (quitting || (root !== null && (!projectSessions.has(root) || removing.has(root))))
-        throw Error("Open and approve this project first.");
-    };
-    requireOpen();
-    if (operation === "createDraft")
-      return store.createDraft(root, root === null ? "" : await currentTarget(root), true);
-    if (operation === "context") {
-      const { id, target, expected } = action;
-      if (target !== null && !projectSessions.has(target))
-        throw Error("Approve the target using Open project… first.");
-      return chats.context(root, id, target, target === null ? "" : await currentTarget(target), undefined,
-        async () => { if (await expectedSend(root, id) !== expected) throw Error("Draft changed. Inspect and retry."); });
-    }
-    if (root !== null && operation === "execution") {
-      const { id, mode, value, commit } = action;
-      const saved = await store.get(root, id);
-      const source = saved.worktree?.source ?? saved.checkout;
-      const project = await checkout(source);
-      requireOpen();
-      const options = project.repositoryGit.worktreeOptions();
-      if (project.repositoryGit.repository() !== root) throw Error("Wrong project checkout.");
-      if (mode === "new") {
-        if (!options.bases.some((b) => b.ref === value && b.commit === commit))
-          throw Error("Base is missing or changed. Refresh and choose again.");
-        return chats.context(root, id, root, source, { source, ref: value, commit }, async () => { if (await expectedSend(root, id) !== action.expected) throw Error("Draft changed. Inspect and retry."); });
-      }
-      if (mode === "reuse" && options.checkouts.includes(value)) {
-        const target = await checkout(value);
-        requireOpen();
-        if (target.repositoryGit.repository() !== root) throw Error("Wrong project checkout.");
-        return chats.context(root, id, root, target.root, undefined, async () => { if (await expectedSend(root, id) !== action.expected) throw Error("Draft changed. Inspect and retry."); });
-      }
-      throw Error("Choose a Git-discovered worktree explicitly.");
-    }
-    throw Error("Invalid draft action");
+  const currentTarget = async (identity: string) => {
+    const state = await workspace.read();
+    const saved = [
+      ...(state.savedProjects ?? []),
+      ...state.projects,
+      ...(await workspace.approved()),
+    ];
+    const p = saved.find((p) => p.project === identity);
+    if (!p) throw Error("Unknown saved project.");
+    return state.views[identity]?.checkout ?? p.root;
   };
   const host = await startHost({
     gitStatus: async root => (await checkout(root)).status(),
     worktreeOptions: async root => (await checkout(root)).repositoryGit.worktreeOptions(),
-    draftAction,
-    sendState: async (root, id) => ({ admissionEpoch: foundation.admissionEpoch, expected: await expectedSend(root, id) }),
+    draftAction: action => chats.draftAction(action),
+    sendState: async (root, id) => ({ admissionEpoch: foundation.admissionEpoch, expected: await chats.expectation(root, id) }),
     sendStatus: async commandId => {
       const receipt = foundation.receipt(commandId);
       if (receipt) await authorizeHistory(receipt.command.project, receipt.command.id);
@@ -440,7 +354,7 @@ app.whenReady().then(async () => {
           const { operation, target, token, answer } = command.control;
           if (operation === "stop") await chats.stop(command.project, command.id, target);
           else await chats.answer(command.project, command.id, token, answer);
-        } else await dispatchSend(command);
+        } else await chats.send(command.project, command.id, command.text, command.expected);
       });
     },
     chatSnapshot: async (root, id) => { await authorizeHistory(root, id); return chats.inspect(root, id); },

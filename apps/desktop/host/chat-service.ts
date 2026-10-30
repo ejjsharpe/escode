@@ -1,3 +1,5 @@
+import type { Checkout } from "./project";
+import type { DraftAction } from "@escode/contracts";
 import { LiveSpool } from "./live-spool";
 import type { HistoryPage } from "@escode/contracts";
 import { createHash, randomUUID } from "node:crypto";
@@ -41,10 +43,18 @@ type Session = Omit<RuntimeSnapshot, "connected" | "busy" | "turnId" | "preparin
   preparation?: { id: string; cancelled: boolean };
   checkoutIdentity?: { path: string; dev: number; ino: number };
 };
+export type ChatEnvironment = {
+  // Capture the approval session; the returned check must reject even after reapproval.
+  guard: (project: string | null) => () => void;
+  authorize: (project: string | null) => Promise<void>;
+  checkout: (root: string) => Promise<Checkout>;
+  currentTarget: (project: string) => Promise<string>;
+  managedRoot: string;
+};
 export class ChatService {
   private sessions = new Map<string, Session>();
   private revisions = new Map<string, number>();
-  revision(id: string) { return this.revisions.get(id) ?? 0; }
+  private revision(id: string) { return this.revisions.get(id) ?? 0; }
   private transitions = new Map<string, string | null>();
   // Hold identity stable from host authorization through binding; live responses stay independent.
   private async inContext<T>(project: string | null, id: string, action: () => Promise<T>) {
@@ -63,7 +73,86 @@ export class ChatService {
     private connect = connectCodex,
     private spool: Pick<LiveSpool, "read" | "write"> = new LiveSpool(store.spoolDirectory),
     private previewSettings?: (cwd: string) => Promise<RuntimeSnapshot["settings"]>,
+    private environment?: ChatEnvironment,
   ) {}
+  async expectation(project: string | null, id: string) {
+    const chat = await this.store.get(project, id);
+    await this.environment?.authorize(project);
+    const detail = this.snapshot(project, id);
+    return JSON.stringify([this.revision(id), chat.checkout, chat.threadId, chat.phase, chat.directoryIdentity,
+      chat.worktree, chat.scratch, detail.connected, detail.busy, detail.turnId]);
+  }
+  private async expectState(project: string | null, id: string, expected: string, message: string) {
+    if (await this.expectation(project, id) !== expected) throw Error(message);
+  }
+  async draftAction(action: DraftAction) {
+    const env = this.environment;
+    if (!env) throw Error("Chat environment unavailable");
+    const { project, operation } = action;
+    const check = env.guard(project);
+    check();
+    if (operation === "createDraft") {
+      const target = project === null ? "" : await env.currentTarget(project);
+      check();
+      return this.store.createDraft(project, target, true);
+    }
+    return this.inContext(project, action.id, async () => {
+      await this.expectState(project, action.id, action.expected, "Draft changed. Inspect and retry.");
+      check();
+      if (operation === "context") {
+        const targetCheck = env.guard(action.target);
+        targetCheck();
+        const target = action.target === null ? "" : await env.currentTarget(action.target);
+        check();
+        targetCheck();
+        return this.changeContext(project, action.id, action.target, target);
+      }
+      const saved = await this.store.get(project, action.id);
+      const source = saved.worktree?.source ?? saved.checkout;
+      const checkout = await env.checkout(source);
+      check();
+      if (checkout.repositoryGit.repository() !== project) throw Error("Wrong project checkout.");
+      const options = checkout.repositoryGit.worktreeOptions();
+      if (action.mode === "new") {
+        if (!options.bases.some(b => b.ref === action.value && b.commit === action.commit))
+          throw Error("Base is missing or changed. Refresh and choose again.");
+        return this.changeContext(project, action.id, project, source, { source, ref: action.value, commit: action.commit });
+      }
+      if (!options.checkouts.includes(action.value)) throw Error("Choose a Git-discovered worktree explicitly.");
+      const target = await env.checkout(action.value);
+      check();
+      if (target.repositoryGit.repository() !== project) throw Error("Wrong project checkout.");
+      return this.changeContext(project, action.id, project, target.root);
+    });
+  }
+  private async authorizeSend(chat: Readonly<SavedChat>, check: () => void) {
+    if (chat.project === null) return;
+    const target = await this.environment!.checkout(chat.checkout);
+    check();
+    target.checkoutIdentity();
+    if (chat.phase === "draft" && !chat.directoryIdentity && !chat.worktree?.reservation &&
+        !target.repositoryGit.validateRepository().includes(target.root))
+      throw Error("Choose an available Git checkout before first Send. Prompt retained.");
+    if (target.repositoryGit.repository() !== chat.project)
+      throw Error("Saved checkout is unavailable or no longer belongs to this project. Prompt retained; restore this exact path and Retry.");
+  }
+  private async prepareSend(chat: Readonly<SavedChat>, check: () => void) {
+    if (!chat.worktree) return chat;
+    if (chat.worktree.reservation) {
+      this.store.validateWorktree(chat);
+      return chat;
+    }
+    const source = await this.environment!.checkout(chat.worktree.source);
+    check();
+    if (source.repositoryGit.repository() !== chat.project) throw Error("Wrong project checkout.");
+    const prepared = await this.store.prepareWorktree(chat, source, this.environment!.managedRoot);
+    check();
+    const target = await this.environment!.checkout(prepared.checkout);
+    check();
+    if (target.repositoryGit.repository() !== chat.project || !target.repositoryGit.validateRepository().includes(target.root))
+      throw Error("Prepared checkout is no longer registered with this project.");
+    return prepared;
+  }
   private clearRequests(s: Session) {
     s.requests = [];
     s.requestIds.clear();
@@ -202,18 +291,15 @@ export class ChatService {
     target: string | null,
     checkout: string,
     worktree?: SavedChat["worktree"],
-    authorize: () => Promise<void> = async () => {},
   ) {
-    return this.inContext(project, id, async () => {
-      await authorize();
-      const chat = await this.store.context(project, id, target, checkout, worktree);
-      const previous = this.sessions.get(id);
-      if (previous) {
-        this.closeConnection(previous);
-      }
-      this.sessions.delete(id);
-      return chat;
-    });
+    return this.inContext(project, id, () => this.changeContext(project, id, target, checkout, worktree));
+  }
+  private async changeContext(project: string | null, id: string, target: string | null, checkout: string, worktree?: SavedChat["worktree"]) {
+    const chat = await this.store.context(project, id, target, checkout, worktree);
+    const previous = this.sessions.get(id);
+    if (previous) this.closeConnection(previous);
+    this.sessions.delete(id);
+    return chat;
   }
   open(project: string | null, id: string) {
     return this.inContext(project, id, () => this.connectSession(project, id));
@@ -533,19 +619,17 @@ export class ChatService {
     project: string | null,
     id: string,
     text: string,
-    authorize: (chat: Readonly<SavedChat>) => Promise<void> = async () => {},
-    prepare: (chat: Readonly<SavedChat>) => Promise<Readonly<SavedChat>> = async (chat) => chat,
+    expected?: string,
   ) {
     return this.inContext(project, id, () =>
-      this.sendInContext(project, id, text, authorize, prepare),
+      this.sendInContext(project, id, text, expected),
     );
   }
   private async sendInContext(
     project: string | null,
     id: string,
     text: string,
-    authorize: (chat: Readonly<SavedChat>) => Promise<void>,
-    prepare: (chat: Readonly<SavedChat>) => Promise<Readonly<SavedChat>>,
+    expected?: string,
   ) {
     const s = this.session(project, id);
     if (s.sending || s.turn.phase !== "idle") throw Error("This chat already has an active turn.");
@@ -557,22 +641,32 @@ export class ChatService {
     let sendIntent = false;
     let chat: Readonly<SavedChat> | undefined;
     try {
-      const epoch = s.connection.epoch;
+      let epoch = s.connection.epoch;
+      const authority = this.environment?.guard(project);
+      if (expected !== undefined && !authority) throw Error("Chat environment unavailable");
+      const check = () => {
+        if (this.sessions.get(id) !== s || s.connection.epoch !== epoch || s.preparation?.cancelled)
+          throw Error(s.preparation?.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during authorization or preparation. Work was not submitted.");
+        authority?.();
+      };
+      check();
       chat = Object.freeze(await this.store.get(project, id));
       if (chat.removed) throw Error("Checkout was removed. This chat cannot run.");
       await this.store.draft(project, id, text);
-      await authorize(chat);
-      if (this.sessions.get(id) !== s || s.connection.epoch !== epoch || s.preparation?.cancelled)
-        throw Error(s.preparation?.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during authorization. Work was not submitted.");
+      if (expected !== undefined) {
+        await this.expectState(project, id, expected, "Chat/context state changed. Inspect before sending again.");
+        check();
+      }
+      if (this.environment) await this.authorizeSend(chat, check);
+      check();
       if (chat.project === null) chat = await this.store.prepareScratch(chat);
-      else chat = await prepare(chat);
-      if (this.sessions.get(id) !== s || s.connection.epoch !== epoch || s.preparation?.cancelled)
-        throw Error(s.preparation?.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during authorization. Work was not submitted.");
+      else if (this.environment) chat = await this.prepareSend(chat, check);
+      check();
       if (chat.phase === "draft") {
         await this.store.update(project, id, { initialSend: "preparing" });
-        if (this.sessions.get(id) !== s || s.connection.epoch !== epoch || s.preparation?.cancelled)
-          throw Error(s.preparation?.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during preparation. Work was not submitted.");
+        check();
         await this.connectSession(project, id, chat);
+        epoch = s.connection.epoch;
       }
       if (s.connection.status !== "connected" || !s.connection.rpc)
         throw Error("Retry connection before sending. Work was not resent.");
@@ -585,7 +679,7 @@ export class ChatService {
       );
       if (directoryError) throw Error(directoryError);
       if (s.preparation?.cancelled) throw Error("Preparation cancelled; reserved resources retained and may be partially prepared.");
-      s.preparation = undefined;
+      check();
       s.turn = { phase: "starting", id: null };
 
       s.error = null;
@@ -594,6 +688,8 @@ export class ChatService {
         ...(chat.phase ? { initialSend: "uncertain" as const } : {}),
       });
       sendIntent = true;
+      check();
+      s.preparation = undefined;
       this.store.validateWorktree(chat);
       this.store.validateScratch(chat);
       this.validateCheckout(s, chat.checkout);
