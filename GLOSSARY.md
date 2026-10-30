@@ -8,7 +8,7 @@ Integrated behavior and acceptance boundaries are recorded in [Agents acceptance
 
 ## Language
 
-The host, connection and lifecycle terms below reflect the [agreed lifecycle planning amendment](https://github.com/ejjsharpe/escode/issues/53); these changes are not yet implemented.
+The host, connection and lifecycle terms below reflect the [agreed lifecycle planning amendment](https://github.com/ejjsharpe/escode/issues/53) and [agreed device trust rules](https://github.com/ejjsharpe/escode/issues/59#issuecomment-6521010880); these changes are not yet implemented.
 
 **Execution host**:
 The escode runtime on one machine that owns its projects, files, saved chats and agent execution. Its work can continue without an open client connection or view.
@@ -18,6 +18,15 @@ A live connection between an execution host and a provider for a chat, distinct 
 
 **Client connection**:
 An authenticated link through which a client controls an execution host and receives updates. Losing the link does not by itself stop host-owned work.
+
+**Paired device**:
+A device trusted with owner-equivalent control of a particular execution host, including managing its paired devices and requesting confirmed host shutdown.
+
+**Device revocation**:
+Withdrawal of a device's trust on an execution host, invalidating its connections and derived sessions and requesting Stop for its still-running work. It does not undo completed effects or guarantee termination of external side effects.
+
+**Host identity**:
+The verified identity to which clients and chats bind an execution host, independent of its display name or project paths. Recovery or replacement requires explicit verification and rebinding rather than silently redirecting existing chats or uncertain work.
 
 **View subscription**:
 A client's interest in updates for a displayed chat, directory or other surface. Ending it releases that interest without ending the underlying chat or host.
