@@ -11,7 +11,7 @@ before their buffers are reset; failed persistence retains the in-memory text.
 Successful saves remain saved when a later choice cancels.
 
 Confirmed Quit uses the existing bounded provider interrupt and owned process-group
-TERM/KILL cleanup, closes project watchers, the authenticated directory host and the
+TERM/KILL cleanup, closes project watchers, the authenticated local host and the
 foundation owner lock. No process-name search or unrelated PID targeting is introduced.
 Restart reads new-format associations and drafts without dispatching stored turns,
 replies or preparation. A crash leaves the foundation owner lock fail-closed: explicit

@@ -1,6 +1,6 @@
 import { test, expect } from "vite-plus/test";
 import WebSocket from "ws";
-import { startDirectoryHost } from "@escode/host";
+import { startHost } from "@escode/host";
 import { maximumFrameBytes } from "@escode/contracts";
 
 async function connect(url: string, headers = { Origin: "null" }): Promise<WebSocket> {
@@ -16,7 +16,7 @@ async function connect(url: string, headers = { Origin: "null" }): Promise<WebSo
 const closed = (socket: WebSocket) => new Promise<void>((resolve) => { if (socket.readyState === WebSocket.CLOSED) resolve(); else socket.once("close", () => resolve()); });
 test("local trust checks reject before dispatch; credentials expire and cannot be replayed", async () => {
   let clock = Date.now(), calls = 0;
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null", now: () => clock,
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null", now: () => clock,
     list: async () => { calls++; return { kind: "denied", message: "Unknown root" }; } });
   try {
     for (const change of ["origin", "host", "path", "identity", "wire", "credential", "expired"]) {
@@ -44,7 +44,7 @@ test("local trust checks reject before dispatch; credentials expire and cannot b
 
 test("oversized frames close without directory dispatch and admission recovers", async () => {
   let calls = 0;
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => { calls++; return { kind: "denied", message: "denied" }; } });
   try {
     const socket = await connect(host.bootstrap().url);
@@ -59,7 +59,7 @@ test("oversized frames close without directory dispatch and admission recovers",
 
 test("malformed envelopes and payloads never reach the adapter; a healthy client still works", async () => {
   let calls = 0;
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => { calls++; return { kind: "available", listing: { entries: [], ignored: [] } }; } });
   try {
     for (const payload of [{ root: 7, path: "" }, { root: "/repo" }]) {
@@ -86,7 +86,7 @@ test("malformed envelopes and payloads never reach the adapter; a healthy client
 
 test("request admission stays bounded while an adapter is stalled", async () => {
   const releases: (() => void)[] = [];
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: () => new Promise((resolve) => releases.push(() => resolve({ kind: "available", listing: { entries: [], ignored: [] } }))) });
   try {
     const socket = await connect(host.bootstrap().url);
@@ -102,7 +102,7 @@ test("request admission stays bounded while an adapter is stalled", async () => 
 });
 
 test("stalled delivery exhausts a finite response budget without blocking a healthy client", async () => {
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "available", listing: { entries: [], ignored: [] } }),
     summaries: async () => [{ id: "x".repeat(400000), project: null, checkout: "", threadId: null, busy: false, needsInput: false, unavailable: false }] });
   try {
@@ -132,7 +132,7 @@ test("stalled delivery exhausts a finite response budget without blocking a heal
 
 test("summary snapshots stream metadata and activity, cancel cleanly, and bound oversized projections", async () => {
   let busy = false, calls = 0, oversized = false;
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "denied", message: "unused" }),
     summaries: async () => { calls++; return [{ id: oversized ? "x".repeat(maximumFrameBytes) : "chat", project: null, checkout: "", threadId: null, busy, needsInput: false, unavailable: false }]; },
   });
@@ -176,7 +176,7 @@ test("summary snapshots stream metadata and activity, cancel cleanly, and bound 
 });
 
 test("acknowledged summaries stay connected beyond the directory deadline and cumulative budget", async () => {
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "denied", message: "unused" }),
     summaries: async () => [{ id: "x".repeat(50000), project: null, checkout: "", threadId: null, busy: false, needsInput: false, unavailable: false }],
   });
@@ -197,7 +197,7 @@ test("acknowledged summaries stay connected beyond the directory deadline and cu
 }, 22000);
 test("watch streams share the query connection, report failures, and release on interrupt and disconnect", async () => {
   const listeners = new Set<(error?: string) => void>();
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "available", listing: { entries: [{ path: "external.txt", directory: false }], ignored: [] } }),
     watch: (_root, _paths, notify) => { listeners.add(notify); return () => { listeners.delete(notify); }; },
   });
@@ -227,7 +227,7 @@ test("watch streams share the query connection, report failures, and release on 
 
 
 test("consumed unary listings may exceed the aggregate stream delivery budget", async () => {
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "available", listing: { entries: [{ path: "x".repeat(400000), directory: false }], ignored: [] } }),
   });
   const socket = await connect(host.bootstrap().url);
@@ -242,7 +242,7 @@ test("consumed unary listings may exceed the aggregate stream delivery budget", 
 
 test("saved history uses authenticated validated queries and bounded responses", async () => {
   const calls: unknown[] = [];
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "denied", message: "denied" }),
     history: async (project, id, cursor) => {
       calls.push({ project, id, cursor });
@@ -265,7 +265,7 @@ test("saved history uses authenticated validated queries and bounded responses",
 
 test("live handoff sends bounded append batches, retains ACK charge and releases stalled views", async () => {
   let text = "captured", captures = 0;
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "denied", message: "denied" }),
     chatSnapshot: async () => {
       const value = text;
@@ -312,7 +312,7 @@ test("authenticated Files accepts a full editor document and rejects invalid sav
   let saves = 0;
   let diffs = 0;
   let creates = 0;
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "denied", message: "unused" }),
     createEntry: async (command) => {
       const {root, parent, name, kind} = command;
@@ -352,7 +352,7 @@ test("authenticated Files accepts a full editor document and rejects invalid sav
 
 test("authenticated moves validate commands and retain results until explicit acknowledgement", async () => {
   let moves = 0, acknowledgements = 0;
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "denied", message: "unused" }),
     moveEntry: async command => {
       moves++;
@@ -382,7 +382,7 @@ test("authenticated moves validate commands and retain results until explicit ac
 
 test("authenticated Trash validates selections and retains partial outcomes and reconciliation identities", async () => {
   let calls = 0;
-  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "denied", message: "unused" }),
     trashEntries: async (root, paths) => {
       calls++; expect(root).toBe("/approved"); expect(paths).toEqual(["folder", "failed"]);

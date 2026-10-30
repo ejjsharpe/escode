@@ -36,7 +36,7 @@ class BoundedWebSocket extends WebSocket {
 }
 
 // One host scope; no provider or project resource belongs to a socket.
-export async function startDirectoryHost(options: {
+export async function startHost(options: {
   hostId: string; clientId: string; origin: string;
   list(root: string, path: string): Promise<DirectoryResult>;
   watch?(root: string, paths: readonly string[], notify: (error?: string) => void): () => void;

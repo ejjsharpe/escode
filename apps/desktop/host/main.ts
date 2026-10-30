@@ -13,7 +13,7 @@ import {
 } from "electron";
 import { join, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
-import { startDirectoryHost } from "@escode/host";
+import { startHost } from "@escode/host";
 import { FoundationState } from "./foundation-state";
 import { pathToFileURL } from "node:url";
 import { draftSettings, toolStatus } from "./tools";
@@ -55,7 +55,7 @@ app.whenReady().then(async () => {
       nodeIntegration: false,
     },
   });
-  let directoryOrigin = "";
+  let hostOrigin = "";
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
     callback(false),
   );
@@ -65,8 +65,8 @@ app.whenReady().then(async () => {
         ...details.responseHeaders,
         "Content-Security-Policy": [
           dev
-            ? `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ${developmentOrigin.replace("http:", "ws:")} ${directoryOrigin}; worker-src 'self' blob:; font-src 'self' data:`
-            : `default-src 'self'; connect-src ${directoryOrigin}; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; font-src 'self' data:`,
+            ? `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ${developmentOrigin.replace("http:", "ws:")} ${hostOrigin}; worker-src 'self' blob:; font-src 'self' data:`
+            : `default-src 'self'; connect-src ${hostOrigin}; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; font-src 'self' data:`,
         ],
       },
     }),
@@ -422,7 +422,7 @@ app.whenReady().then(async () => {
     }
     throw Error("Invalid draft action");
   };
-  const directoryHost = await startDirectoryHost({
+  const host = await startHost({
     gitStatus: async root => (await checkout(root)).status(),
     worktreeOptions: async root => (await checkout(root)).repositoryGit.worktreeOptions(),
     draftAction,
@@ -464,14 +464,14 @@ app.whenReady().then(async () => {
     ...files.hostActions,
     ...foundation.read(), origin: dev ? developmentOrigin : "file://",
   });
-  directoryOrigin = directoryHost.origin;
+  hostOrigin = host.origin;
   ipcMain.handle("local-bootstrap", (event, ...args) => {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
         event.senderFrame.url !== documentURL || args.length) throw Error("Invalid local bootstrap request");
     if (quitting) throw Error("App is quitting.");
-    return directoryHost.bootstrap();
+    return host.bootstrap();
   });
-  app.once("will-quit", () => { void directoryHost.close(); });
+  app.once("will-quit", () => { void host.close(); });
   ipcMain.handle("project", async (event, operation: unknown, ...args: unknown[]) => {
     if (
       event.sender !== window.webContents ||
@@ -501,22 +501,11 @@ app.whenReady().then(async () => {
     if (["status", "worktree-options", "diff", "read", "save", "files", "files-filter", "create-entry", "trash-selection", "drag-capture", "clipboard-capture", "transfer"].includes(String(operation))) throw Error("Invalid project request");
     const requestedRoot = args.shift();
     if (
-      [
-        "entry-action",
-        "drag-capture",
-        "clipboard-capture",
-        "transfer",
-      ].includes(String(operation)) &&
+      ["entry-action"].includes(String(operation)) &&
       (typeof requestedRoot !== "string" || !projects.has(requestedRoot))
     )
       throw Error("Open and approve this checkout first.");
     const project = await checkout(requestedRoot);
-    if (
-      ["read", "save"].includes(String(operation)) &&
-      typeof args[0] === "string" &&
-      isAppState(resolve(project.root, args[0]))
-    )
-      throw Error("App state is unavailable through project file operations.");
     const identity = project.repositoryGit.repository();
     const owner = projectSessions.get(identity);
     const checkFilesSession = () => {
@@ -532,9 +521,6 @@ app.whenReady().then(async () => {
     if (operation === "entry-action") checkFilesSession();
     if (removing.has(identity)) throw Error("Worktree removal is in progress. Retry afterward.");
     const protect = (path: string) => files.protectPath(resolve(project.root, path));
-    if (operation === "save") {
-      files.assertIdle();
-    }
     const managedRoot = join(app.getPath("userData"), "worktrees");
     if (operation === "worktree-managed" && !args.length)
       return project.repositoryGit.managedWorktrees(managedRoot);

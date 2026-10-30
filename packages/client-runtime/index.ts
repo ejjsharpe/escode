@@ -3,7 +3,7 @@ import { RpcClient, RpcSerialization } from "effect/rpc";
 import { Socket } from "effect/socket";
 import { Bootstrap, ChatDetail, HostQueries, type SendCommand, type HistoryPage, type ChatSummaries, type DirectoryResult } from "@escode/contracts";
 
-export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconcile?: (project: string | null, id: string) => Promise<string | undefined>) {
+export function createHostClient(bootstrap: () => Promise<unknown>, reconcile?: (project: string | null, id: string) => Promise<string | undefined>) {
   const queries = Semaphore.makeUnsafe(4);
   let queued = 0;
   type Client = Effect.Success<ReturnType<typeof makeClient>>;

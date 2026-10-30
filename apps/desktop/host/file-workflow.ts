@@ -7,7 +7,7 @@ import type {
   MessageBoxReturnValue,
   clipboard as electronClipboard,
 } from "electron";
-import type { startDirectoryHost } from "@escode/host";
+import type { startHost } from "@escode/host";
 import { maximumFrameBytes, type DirectoryResult } from "@escode/contracts";
 import { NativeImport } from "./native-import";
 import { FileOperations } from "./file-operations";
@@ -16,7 +16,7 @@ import { Checkout, limit } from "./project";
 import type { Workspace } from "./workspace";
 import type { FoundationState } from "./foundation-state";
 
-type HostOptions = Parameters<typeof startDirectoryHost>[0];
+type HostOptions = Parameters<typeof startHost>[0];
 type FileActions = Pick<
   HostOptions,
   "createEntry" | "readDiff" | "readFile" | "saveFile" | "watch" | "list"
@@ -153,7 +153,7 @@ export function createFileWorkflow({
         isQuitting() ||
         removing.has(identity)
       )
-        throw Error("Originating project unavailable or app isQuitting().");
+        throw Error("Originating project unavailable or app quitting.");
       if (isAppState(resolve(root, path)))
         throw Error("App state is unavailable through project file operations.");
       project.checkoutIdentity();
@@ -184,7 +184,7 @@ export function createFileWorkflow({
       const originalIdentity = project.operationIdentity(source);
       const check = () => {
         if (!owner || projectSessions.get(identity) !== owner || isQuitting())
-          throw Error("Originating project unavailable or app isQuitting().");
+          throw Error("Originating project unavailable or app quitting.");
         for (const path of [source, destination]) {
           const absolute = resolve(project.root, path);
           if (
@@ -228,7 +228,7 @@ export function createFileWorkflow({
           isQuitting() ||
           projects.get(project.root) !== project
         )
-          throw Error("Originating project unavailable or app isQuitting().");
+          throw Error("Originating project unavailable or app quitting.");
       };
       // Only validated native identities grant authority; hidden selection is still input.
       const paths = [...new Set(selection)];
@@ -468,7 +468,7 @@ export function createFileWorkflow({
           projects.get(project.root) !== project ||
           isQuitting()
         )
-          throw Error("Originating project unavailable or app isQuitting().");
+          throw Error("Originating project unavailable or app quitting.");
         if (
           project.checkoutIdentity() !== checkoutIdentity ||
           (parent ? project.operationIdentity(parent) : project.checkoutIdentity()) !==
@@ -782,7 +782,7 @@ export function createFileWorkflow({
           isQuitting() ||
           removing.has(identity)
         )
-          notify("Originating project unavailable or app isQuitting().");
+          notify("Originating project unavailable or app quitting.");
         else notify(error);
       });
     },
@@ -801,7 +801,7 @@ export function createFileWorkflow({
           isQuitting() ||
           removing.has(identity)
         )
-          throw Error("Originating project unavailable or app isQuitting().");
+          throw Error("Originating project unavailable or app quitting.");
         project.checkoutIdentity();
       };
       const protectedPath = (path: string) => {
@@ -870,9 +870,5 @@ export function createFileWorkflow({
     protectPath: (path: string) => protectImport(path, "operation"),
     recover: () => operations.recover(checkout),
     persist: (state: unknown) => operations.persist(state),
-    assertIdle: () => {
-      if (mutationOrigin) throw Error("File operation awaiting confirmation.");
-      operations.assertIdle();
-    },
   };
 }

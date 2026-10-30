@@ -33,7 +33,9 @@ test("collision consent shares the mutation gate and Keep Both preserves existin
     showMessageBox: async (options) => {
       dialogs++;
       expect(options.message).toContain("Destination occupied");
-      expect(() => files.assertIdle()).toThrow("awaiting confirmation");
+      await expect(
+        files.hostActions.saveFile!(root, "a.txt", "blocked", "unused"),
+      ).rejects.toThrow("awaiting confirmation");
       await expect(
         files.hostActions.moveEntry({ root, action: "move", source: "a.txt", target: "b.txt" }),
       ).rejects.toThrow("Another file operation");
@@ -58,7 +60,9 @@ test("collision consent shares the mutation gate and Keep Both preserves existin
     expect(readFileSync(join(root, "target/a.txt"), "utf8")).toBe("destination");
     expect(readFileSync(join(root, "target/a copy.txt"), "utf8")).toBe("source");
     await files.hostActions.ackFileOperation(root);
-    files.assertIdle();
+    const disk = await files.hostActions.readFile!(root, "a.txt");
+    await files.hostActions.saveFile!(root, "a.txt", "saved", disk.version);
+    expect(readFileSync(join(root, "a.txt"), "utf8")).toBe("saved");
   } finally {
     files.clearImports();
     project.close();

@@ -170,3 +170,5 @@ Files terminology above does not certify those unverified native and VoiceOver c
 
 
 Internal host naming: `Checkout` owns one opened checkout and its filesystem descriptor. Its `CheckoutRepository` owns Git repository identity and worktree policy through that checkout; a repository identity can span multiple checkouts. These implementation names do not change the product terms above.
+
+Internal transport naming: `startHost` starts the shared local host transport; `createHostClient` connects to it across chat, workspace, Files and Source Control. These names describe the execution host and client connection above; the `/directories` wire endpoint remains unchanged.
