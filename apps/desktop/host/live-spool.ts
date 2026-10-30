@@ -24,7 +24,9 @@ export class LiveSpool {
     const record = Schema.decodeUnknownSync(Index)(JSON.parse(await readFile(path, "utf8")));
     if (record.chatId !== chatId || record.threadId !== threadId) throw Error("Live spool identity mismatch");
     let bytes = 0;
-    const items = await Promise.all(record.items.map(async ({ item, chunks }) => {
+    if (record.items.length > 1000) throw Error("Live cache exceeds capacity");
+    const items: typeof HistoryItem.Type[] = [];
+    for (const { item, chunks } of record.items) {
       const parts = [];
       for (const hash of chunks) {
         if (!/^[a-f0-9]{64}$/.test(hash)) throw Error("Invalid live chunk reference");
@@ -33,10 +35,12 @@ export class LiveSpool {
         const text = await readFile(path, "utf8");
         bytes += Buffer.byteLength(text);
         if (bytes > 128 * 1024 || digest(text) !== hash) throw Error("Incomplete or oversized live spool");
-        parts.push(JSON.parse(text) as string);
+        const value: unknown = JSON.parse(text);
+        if (typeof value !== "string") throw Error("Invalid live chunk body");
+        parts.push(value);
       }
-      return { ...item, text: parts.join("") };
-    }));
+      items.push({ ...item, text: parts.join("") });
+    }
     if (Buffer.byteLength(JSON.stringify(items)) > 128 * 1024 || items.length > 1000) throw Error("Live cache exceeds capacity");
     return { items, partial: record.partial };
   }
