@@ -12,6 +12,7 @@ import { join, resolve, dirname, basename, extname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, realpathSync, statSync } from "node:fs";
 import { NativeImport } from "./native-import";
+import { FoundationState } from "./foundation-state";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { toolStatus } from "./tools";
 import { Chats } from "./chat";
@@ -24,6 +25,19 @@ const developmentOrigin = /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.ESCODE_
   ? process.env.ESCODE_DEV_URL!
   : "http://127.0.0.1:5173";
 app.whenReady().then(() => {
+  mkdirSync(app.getPath("userData"), { recursive: true, mode: 0o700 });
+  let foundation: FoundationState;
+  try {
+    foundation = FoundationState.open(join(app.getPath("userData"), "foundation"));
+  } catch (error) {
+    dialog.showErrorBox(
+      "Foundation state unavailable",
+      `${String(error)}\nExisting state is retained. Resolve storage access or perform explicit recovery before restarting.`,
+    );
+    app.quit();
+    return;
+  }
+  app.once("will-quit", () => foundation.close());
   const page = pathToFileURL(join(__dirname, "../renderer/index.html")).href;
   const dev = !app.isPackaged && process.env.ESCODE_DEV_URL === developmentOrigin;
   const documentURL = dev ? developmentOrigin + "/" : page;
@@ -88,6 +102,8 @@ app.whenReady().then(() => {
     "approved-projects.json",
     "chats.json",
     "file-operation.json",
+    "foundation/state.json",
+    "foundation/owner.lock",
   ]
     .flatMap((name) => [name, name + ".tmp"])
     .map((name) => join(realpathSync(app.getPath("userData")), name));
@@ -360,10 +376,17 @@ app.whenReady().then(() => {
   window.webContents.on("render-process-gone", clearFilesSubscriptions);
   window.on("closed", clearFilesSubscriptions);
   ipcMain.handle("files-watch", (event, root: unknown, id: unknown, paths: unknown) => {
-    if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
-        event.senderFrame.url !== documentURL || typeof root !== "string" ||
-        typeof id !== "string" || id.length > 100 || !Array.isArray(paths) ||
-        paths.length > 10000 || paths.some((p) => typeof p !== "string"))
+    if (
+      event.sender !== window.webContents ||
+      event.senderFrame !== window.webContents.mainFrame ||
+      event.senderFrame.url !== documentURL ||
+      typeof root !== "string" ||
+      typeof id !== "string" ||
+      id.length > 100 ||
+      !Array.isArray(paths) ||
+      paths.length > 10000 ||
+      paths.some((p) => typeof p !== "string")
+    )
       throw Error("Invalid Files subscription.");
     filesSubscriptions.get(id)?.();
     filesSubscriptions.delete(id);
@@ -378,11 +401,18 @@ app.whenReady().then(() => {
       if (isAppState(absolute) || stateFiles.some((file) => file.startsWith(absolute + "/")))
         throw Error("App state is unavailable in Files.");
     }
-    filesSubscriptions.set(id, project.watchFiles(paths, (error) => {
-      if (projects.get(root) === project && projectSessions.get(identity) === session &&
-          !quitting && !window.webContents.isDestroyed())
-        window.webContents.send("files-changed", { id, root, error });
-    }));
+    filesSubscriptions.set(
+      id,
+      project.watchFiles(paths, (error) => {
+        if (
+          projects.get(root) === project &&
+          projectSessions.get(identity) === session &&
+          !quitting &&
+          !window.webContents.isDestroyed()
+        )
+          window.webContents.send("files-changed", { id, root, error });
+      }),
+    );
   });
   ipcMain.handle("project", async (event, operation: unknown, ...args: unknown[]) => {
     if (
