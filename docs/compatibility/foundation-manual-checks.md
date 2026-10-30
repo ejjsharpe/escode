@@ -31,6 +31,15 @@ reload with retained selection/composer, and Stop checks before handoff. It retu
 empty saved history after app restart; real provider-history qualification is
 covered by the separate installed-Codex checks.
 
+**Use Cmd+W for close/reopen and Cmd+Q for Quit. Force Quit is a separate
+crash test:** this build deliberately leaves `foundation/owner.lock` and blocks
+restart until explicit recovery. Do not delete the user-data directory or remove
+a lock while an owner is alive. After confirming all owners have exited, preserve
+a copy of the foundation directory and validate its retained state; only a stale
+lock may then be removed. An interrupted `state.json.tmp` needs separate inspection.
+See [storage recovery limits](foundation-state.md). The launcher also sets the
+fake-provider PATH; running only its final `exec` line does not set that PATH.
+
 For client reconnect, leave the question pending and type a second unsent message,
 pause briefly for the debounced recovery save, then use View → Reload (Cmd+R). Verify the same question and unsent text return,
 then answer it once. This exercises renderer replacement and reconnection;
