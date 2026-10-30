@@ -140,7 +140,7 @@ send({id:m.id,result});});`,
     await page.locator(".agent-row").filter({ hasText: "No project" }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Allow once", exact: true }).click();
-    await expect.poll(async () => JSON.parse(await readFile(join(mixed.scratch.checkout, "approval-result"), "utf8")).result.decision).toBe("accept");
+    await expect.poll(async () => JSON.parse(await readFile(join(mixed.scratch.checkout, "approval-result"), "utf8").catch(() => "{}"))?.result?.decision).toBe("accept");
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     expect((await page.evaluate((c) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( c.project, c.id), beta)).busy).toBe(true);
     expect((await page.evaluate((c) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( c.project, c.id), mixed.shared)).busy).toBe(true);
@@ -154,7 +154,7 @@ send({id:m.id,result});});`,
     expect(
       (await page.evaluate((c) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( c.project, c.id), beta)).busy,
     ).toBe(true);
-    await expect.poll(async () => JSON.parse(await readFile(join(managed.root, "approval-result"), "utf8")).result.decision).toBe("accept");
+    await expect.poll(async () => JSON.parse(await readFile(join(managed.root, "approval-result"), "utf8").catch(() => "{}"))?.result?.decision).toBe("accept");
     expect(await readFile(join(a, "approval-result"), "utf8").catch(() => "")).toBe("");
     expect(await readFile(join(b, "approval-result"), "utf8").catch(() => "")).toBe("");
     expect(await page.locator(".agent-row strong").allTextContents()).toEqual(order);

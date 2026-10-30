@@ -223,7 +223,10 @@ for (const outcome of [
                   };
                 if (method === "turn/start") {
                   accepted++;
-                  if (outcome === "cancelled-acceptance") await service.stop(root, chat.id);
+                  if (outcome === "cancelled-acceptance") {
+                    _emit({ method: "turn/started", params: { threadId: "known", turn: { id: "turn" } } });
+                    await service.stop(root, chat.id);
+                  }
                   throw Error("accepted; acknowledgement lost");
                 }
                 if (method === "thread/turns/list")

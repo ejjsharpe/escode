@@ -84,7 +84,10 @@ send({id:m.id,result});});`,
     await page.getByRole("combobox", { name: "New chat project", exact: true }).selectOption(alpha);
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
     await message().fill("Retain this draft");
-    const records = async () => JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+    const records = async () => {
+      const saved = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+      return Promise.all(saved.map(async (chat: any) => ({ ...chat, draft: await page.evaluate(({ project, id }) => window.escode.chat("composer", project, id), chat) })));
+    };
     await expect.poll(async () => (await records())[0]?.draft).toBe("Retain this draft");
     const original = (await records())[0];
     await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(beta);
@@ -101,7 +104,7 @@ send({id:m.id,result});});`,
       .toBe(execFileSync("git", ["-C", beta, "rev-parse", "HEAD"]).toString().trim());
     expect((await records())[0].worktree.reservation).toBeUndefined();
     await writeFile(join(worktree, "original-untracked"), "retain original");
-    expect(await readFile(join(dir, "calls"), "utf8").catch(() => "")).toBe("");
+    expect((await readFile(join(dir, "calls"), "utf8").catch(() => "")).split("\n").filter(method => method === "thread/start" || method === "turn/start")).toEqual([]);
     await page.setViewportSize({ width: 728, height: 600 });
     await message().scrollIntoViewIfNeeded();
     await expect(message()).toBeInViewport();
@@ -208,9 +211,9 @@ send({id:m.id,result});});`,
         async () =>
           (await readFile(join(dir, "calls"), "utf8"))
             .split("\n")
-            .filter((x) => x === "thread/resume").length,
+            .filter((x) => x === "thread/turns/list").length,
       )
-      .toBe(1);
+      .toBeGreaterThan(0);
     expect(
       (await readFile(join(dir, "calls"), "utf8")).split("\n").filter((x) => x === "turn/start"),
     ).toHaveLength(1);

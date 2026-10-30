@@ -83,7 +83,18 @@ Local checks on 2026-10-30: typecheck, lint and build pass. The host suite passe
 192 tests with 4 opt-in skips using two workers; the first unrestricted run hit
 native-build/process timing limits, so those results are not claimed as passes.
 The expanded worktree test file passes 11 tests with one live-provider skip.
-Development/packaged Electron results are recorded below after final verification.
+After integration with parallel foundation slices, typecheck/lint/build and packaging
+pass; the full host suite passes 198 tests with 4 opt-in skips (two workers).
+Focused worktree suites pass 28 with one skip. Packaged retained-project checks
+pass with client-owned composers and asynchronous approval-result polling.
+The broad lifecycle run was unsuccessful (restart window timeout and process
+fixture timing); it is not an acceptance claim for this slice. The earlier UI run
+that overlapped rebasing is invalidated rather than counted as qualification.
+
+Actual installation: macOS 26.3.1 arm64, Electron 45.1.0, shell Node 26.13.0,
+Bun 1.4.4, Git 2.50.1 (Apple Git-155), installed Codex 0.163.0. Provider tests
+here use a controlled executable reporting 0.165.0; no new live-version claim is made.
+The unsigned package retains the default-icon and renderer chunk-size notices.
 No live provider turn or manual VoiceOver check was performed for this change.
 The Stop button is now enabled during preparation; it retains its native button
 keyboard behavior and does not move focus. Broader accessibility qualification
