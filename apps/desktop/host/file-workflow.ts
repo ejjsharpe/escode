@@ -12,7 +12,7 @@ import { maximumFrameBytes, type DirectoryResult } from "@escode/contracts";
 import { NativeImport } from "./native-import";
 import { FileOperations } from "./file-operations";
 import { affected } from "./file-operation-state";
-import { Project, limit } from "./project";
+import { Checkout, limit } from "./project";
 import type { Workspace } from "./workspace";
 import type { FoundationState } from "./foundation-state";
 
@@ -38,10 +38,10 @@ export function createFileWorkflow({
   userData: string;
   workspace: Workspace;
   foundation: FoundationState;
-  projects: Map<string, Project>;
+  projects: Map<string, Checkout>;
   projectSessions: Map<string, object>;
   removing: Set<string>;
-  checkout: (root: unknown) => Promise<Project>;
+  checkout: (root: unknown) => Promise<Checkout>;
   isQuitting: () => boolean;
   showMessageBox: (options: MessageBoxOptions) => Promise<MessageBoxReturnValue>;
   clipboard: Pick<typeof electronClipboard, "read">;
@@ -143,7 +143,7 @@ export function createFileWorkflow({
   const fileContext = async (root: string, path: string) => {
     if (!projects.has(root)) throw Error("Open and approve this checkout first.");
     const project = await checkout(root),
-      identity = project.repository(),
+      identity = project.repositoryGit.repository(),
       owner = projectSessions.get(identity);
     const check = () => {
       if (
@@ -164,7 +164,7 @@ export function createFileWorkflow({
   async function approvedFiles(root: string) {
     if (!projects.has(root)) throw Error("Open and approve this checkout first.");
     const project = await checkout(root);
-    if (removing.has(project.repository()) || isQuitting()) throw Error("Project unavailable.");
+    if (removing.has(project.repositoryGit.repository()) || isQuitting()) throw Error("Project unavailable.");
     return project;
   }
   async function moveEntry({
@@ -174,7 +174,7 @@ export function createFileWorkflow({
     target,
   }: import("@escode/contracts").MoveEntry) {
     const project = await approvedFiles(root);
-    const identity = project.repository();
+    const identity = project.repositoryGit.repository();
     if (mutationOrigin) throw Error("Another file operation is pending.");
     mutationOrigin = project.root;
     try {
@@ -212,7 +212,7 @@ export function createFileWorkflow({
   const trashEntries = async (root: string, selection: readonly string[]) => {
     const { project, check } = await fileContext(root, "");
     check();
-    const identity = project.repository();
+    const identity = project.repositoryGit.repository();
     if (mutationOrigin) throw Error("Another file operation is pending.");
     mutationOrigin = project.root;
     try {
@@ -363,7 +363,7 @@ export function createFileWorkflow({
   async function transferAction(action: import("@escode/contracts").TransferAction) {
     const { root, operation, paths } = action;
     const project = await approvedFiles(root);
-    const identity = project.repository();
+    const identity = project.repositoryGit.repository();
     const protect = (path: string) => {
       const absolute = resolve(project.root, path);
       if (
@@ -766,7 +766,7 @@ export function createFileWorkflow({
     watch: (root, paths, notify) => {
       const project = projects.get(root);
       if (!project) throw Error("Open and approve this checkout first.");
-      const identity = project.repository(),
+      const identity = project.repositoryGit.repository(),
         session = projectSessions.get(identity);
       if (!session || isQuitting() || removing.has(identity))
         throw Error("Project session closed.");
@@ -791,7 +791,7 @@ export function createFileWorkflow({
       if (!projects.has(root))
         return { kind: "denied", message: "Open and approve this checkout first." };
       const project = await checkout(root);
-      const identity = project.repository(),
+      const identity = project.repositoryGit.repository(),
         owner = projectSessions.get(identity);
       const check = () => {
         if (

@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { createFileWorkflow } from "./file-workflow";
 import { FoundationState } from "./foundation-state";
 import { Workspace } from "./workspace";
-import { Project } from "./project";
+import { Checkout } from "./project";
 
 test("collision consent shares the mutation gate and Keep Both preserves existing files", async () => {
   const base = realpathSync(mkdtempSync(join(tmpdir(), "escode-workflow-")));
@@ -15,7 +15,7 @@ test("collision consent shares the mutation gate and Keep Both preserves existin
   mkdirSync(join(root, "target"));
   writeFileSync(join(root, "a.txt"), "source");
   writeFileSync(join(root, "target/a.txt"), "destination");
-  const project = await Project.open(root);
+  const project = await Checkout.open(root);
   const foundation = FoundationState.open(join(base, "foundation"));
   const workspace = new Workspace(join(base, "workspace.json"), foundation.read());
   let dialogs = 0;
@@ -24,7 +24,7 @@ test("collision consent shares the mutation gate and Keep Both preserves existin
     workspace,
     foundation,
     projects: new Map([[root, project]]),
-    projectSessions: new Map([[project.repository(), {}]]),
+    projectSessions: new Map([[project.repositoryGit.repository(), {}]]),
     removing: new Set(),
     checkout: async () => project,
     isQuitting: () => false,

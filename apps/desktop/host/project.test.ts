@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import * as child from "node:child_process";
-import { Project } from "./project";
+import { Checkout } from "./project";
 import * as fs from "node:fs";
 vi.mock("node:child_process", async (original) => ({
   ...(await original<typeof import("node:child_process")>()),
 }));
-const projects: Project[] = [];
+const projects: Checkout[] = [];
 async function openProject(root: string) {
-  const project = await Project.open(root);
+  const project = await Checkout.open(root);
   projects.push(project);
   return project;
 }
@@ -264,12 +264,12 @@ test("losing Git leaves file editing available and status retry recovers", async
   try {
     let project = await openProject(root);
     const loaded = await project.read("a");
-    const repository = project.repository();
+    const repository = project.repositoryGit.repository();
     await rm(executable);
     expect((await project.status()).gitError).toMatch(/retry/i);
     project.close();
     await writeFile(executable, "#!/bin/sh\nexit 127\n", { mode: 0o700 });
-    project = await Project.restore(project.root, repository);
+    project = await Checkout.restore(project.root, repository);
     projects.push(project);
     const unavailable = await project.status();
     expect(unavailable).toMatchObject({
@@ -282,7 +282,7 @@ test("losing Git leaves file editing available and status retry recovers", async
     await writeFile(executable, '#!/bin/sh\nexec /usr/bin/git "$@"\n', { mode: 0o700 });
     expect((await project.status()).changes).toEqual([{ path: "a", area: "untracked" }]);
     expect((await project.read("a")).text).toBe("saved without Git");
-    expect(project.worktreeOptions().checkouts).toContain(project.root);
+    expect(project.repositoryGit.worktreeOptions().checkouts).toContain(project.root);
   } finally {
     vi.unstubAllEnvs();
     await rm(dir, { recursive: true, force: true });
@@ -297,7 +297,7 @@ test("Git stays in the opened checkout when external configuration changes its w
     await writeFile(join(root, "inside"), "checkout");
     await writeFile(join(outside, "outside"), "other directory");
     fs.mkdirSync(join(root, "subdir"));
-    await expect(Project.open(join(root, "subdir"))).rejects.toThrow("checkout root");
+    await expect(Checkout.open(join(root, "subdir"))).rejects.toThrow("checkout root");
     const project = await openProject(root);
     execFileSync("git", ["-C", root, "config", "core.worktree", outside]);
     expect((await project.status()).changes).toEqual([{ path: "inside", area: "untracked" }]);

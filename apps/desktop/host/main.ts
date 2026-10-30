@@ -20,7 +20,7 @@ import { draftSettings, toolStatus } from "./tools";
 import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
 import { Workspace } from "./workspace";
-import { Project } from "./project";
+import { Checkout } from "./project";
 import { createFileWorkflow } from "./file-workflow";
 const developmentOrigin = /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.ESCODE_DEV_URL ?? "")
   ? process.env.ESCODE_DEV_URL!
@@ -87,7 +87,7 @@ app.whenReady().then(async () => {
   });
   const store = new Chats(join(app.getPath("userData"), "host-chats-v1.json"));
   const chats = new ChatService(store, undefined, undefined, draftSettings);
-  const projects = new Map<string, Project>();
+  const projects = new Map<string, Checkout>();
   const projectSessions = new Map<string, object>();
   const unapprovedProjects = new Set<string>();
   const removing = new Set<string>();
@@ -178,7 +178,7 @@ app.whenReady().then(async () => {
         unapprovedProjects.delete(item.project);
         if (!projectSessions.has(item.project)) projectSessions.set(item.project, {});
         try {
-          const p = await Project.restore(item.root, item.project, helper);
+          const p = await Checkout.restore(item.root, item.project, helper);
           projects.get(p.root)?.close();
           projects.set(p.root, p);
           restored.push(await p.status());
@@ -288,9 +288,9 @@ app.whenReady().then(async () => {
       }
     } else if (existing) return existing;
     const candidate = saved
-      ? await Project.restore(root, saved.project!, helper)
-      : await Project.open(root, helper);
-    if (!projectSessions.has(candidate.repository())) {
+      ? await Checkout.restore(root, saved.project!, helper)
+      : await Checkout.open(root, helper);
+    if (!projectSessions.has(candidate.repositoryGit.repository())) {
       candidate.close();
       throw Error("Open this project first.");
     }
@@ -341,10 +341,10 @@ app.whenReady().then(async () => {
               chat.phase === "draft" &&
               !chat.directoryIdentity &&
               !chat.worktree?.reservation &&
-              !target.validateRepository().includes(target.root)
+              !target.repositoryGit.validateRepository().includes(target.root)
             )
               throw Error("Choose an available Git checkout before first Send. Prompt retained.");
-            if (target.repository() !== root)
+            if (target.repositoryGit.repository() !== root)
               throw Error(
                 "Saved checkout is unavailable or no longer belongs to this project. Prompt retained; restore this exact path and Retry.",
               );
@@ -357,7 +357,7 @@ app.whenReady().then(async () => {
             }
             const source = await checkout(chat.worktree.source);
             requireOpen();
-            if (source.repository() !== root) throw Error("Wrong project checkout.");
+            if (source.repositoryGit.repository() !== root) throw Error("Wrong project checkout.");
             const prepared = await store.prepareWorktree(
               chat,
               source,
@@ -366,7 +366,7 @@ app.whenReady().then(async () => {
             requireOpen();
             const target = await checkout(prepared.checkout);
             requireOpen();
-            if (target.repository() !== root || !target.validateRepository().includes(target.root))
+            if (target.repositoryGit.repository() !== root || !target.repositoryGit.validateRepository().includes(target.root))
               throw Error("Prepared checkout is no longer registered with this project.");
             return prepared;
           },
@@ -405,8 +405,8 @@ app.whenReady().then(async () => {
       const source = saved.worktree?.source ?? saved.checkout;
       const project = await checkout(source);
       requireOpen();
-      const options = project.worktreeOptions();
-      if (project.repository() !== root) throw Error("Wrong project checkout.");
+      const options = project.repositoryGit.worktreeOptions();
+      if (project.repositoryGit.repository() !== root) throw Error("Wrong project checkout.");
       if (mode === "new") {
         if (!options.bases.some((b) => b.ref === value && b.commit === commit))
           throw Error("Base is missing or changed. Refresh and choose again.");
@@ -415,7 +415,7 @@ app.whenReady().then(async () => {
       if (mode === "reuse" && options.checkouts.includes(value)) {
         const target = await checkout(value);
         requireOpen();
-        if (target.repository() !== root) throw Error("Wrong project checkout.");
+        if (target.repositoryGit.repository() !== root) throw Error("Wrong project checkout.");
         return chats.context(root, id, root, target.root, undefined, async () => { if (await expectedSend(root, id) !== action.expected) throw Error("Draft changed. Inspect and retry."); });
       }
       throw Error("Choose a Git-discovered worktree explicitly.");
@@ -424,7 +424,7 @@ app.whenReady().then(async () => {
   };
   const directoryHost = await startDirectoryHost({
     gitStatus: async root => (await checkout(root)).status(),
-    worktreeOptions: async root => (await checkout(root)).worktreeOptions(),
+    worktreeOptions: async root => (await checkout(root)).repositoryGit.worktreeOptions(),
     draftAction,
     sendState: async (root, id) => ({ admissionEpoch: foundation.admissionEpoch, expected: await expectedSend(root, id) }),
     sendStatus: async commandId => {
@@ -482,20 +482,20 @@ app.whenReady().then(async () => {
     if (operation === "open" && args.length === 0) {
       const result = await dialog.showOpenDialog(window, { properties: ["openDirectory"] });
       if (result.canceled) return null;
-      const candidate = await Project.open(result.filePaths[0], helper);
+      const candidate = await Checkout.open(result.filePaths[0], helper);
       const existing = projects.get(candidate.root);
       if (existing) candidate.close();
       const opened = existing ?? candidate;
       try {
-        await workspace.approve(opened.repository(), opened.root);
+        await workspace.approve(opened.repositoryGit.repository(), opened.root);
       } catch (error) {
         if (!existing) opened.close();
         throw error;
       }
       if (!existing) projects.set(candidate.root, candidate);
-      unapprovedProjects.delete(opened.repository());
-      if (!projectSessions.has(opened.repository())) projectSessions.set(opened.repository(), {});
-      await store.migrate(opened.repository(), opened.checkouts());
+      unapprovedProjects.delete(opened.repositoryGit.repository());
+      if (!projectSessions.has(opened.repositoryGit.repository())) projectSessions.set(opened.repositoryGit.repository(), {});
+      await store.migrate(opened.repositoryGit.repository(), opened.repositoryGit.checkouts());
       return opened.status();
     }
     if (["status", "worktree-options", "diff", "read", "save", "files", "files-filter", "create-entry", "trash-selection", "drag-capture", "clipboard-capture", "transfer"].includes(String(operation))) throw Error("Invalid project request");
@@ -517,7 +517,7 @@ app.whenReady().then(async () => {
       isAppState(resolve(project.root, args[0]))
     )
       throw Error("App state is unavailable through project file operations.");
-    const identity = project.repository();
+    const identity = project.repositoryGit.repository();
     const owner = projectSessions.get(identity);
     const checkFilesSession = () => {
       if (
@@ -537,7 +537,7 @@ app.whenReady().then(async () => {
     }
     const managedRoot = join(app.getPath("userData"), "worktrees");
     if (operation === "worktree-managed" && !args.length)
-      return project.managedWorktrees(managedRoot);
+      return project.repositoryGit.managedWorktrees(managedRoot);
     if (operation === "worktree-remove" && args.length === 1 && typeof args[0] === "string") {
       const root = args[0];
       removing.add(identity);
@@ -551,7 +551,7 @@ app.whenReady().then(async () => {
             );
           if (linked.some((c) => chats.checkoutActive(identity, c.id)))
             throw Error("Stop linked agents before removal.");
-          return project.removalCheck(managedRoot, root);
+          return project.repositoryGit.removalCheck(managedRoot, root);
         };
         const before = await check();
         const answer = await dialog.showMessageBox(window, {
@@ -566,7 +566,7 @@ app.whenReady().then(async () => {
         // Persist intent for every chat before any destructive operation.
         await Promise.all(linked.map((c) => chats.markUnavailable(identity, c.id)));
         await check();
-        project.removeWorktree(managedRoot, root, before.commit);
+        project.repositoryGit.removeWorktree(managedRoot, root, before.commit);
         projects.get(root)?.close();
         projects.delete(root);
         return true;
@@ -647,9 +647,9 @@ app.whenReady().then(async () => {
     if (root !== null && operation === "create" && args.length === 1) {
       const target = await checkout(args[0]);
       requireOpen();
-      if (!target.validateRepository().includes(target.root))
+      if (!target.repositoryGit.validateRepository().includes(target.root))
         throw Error("Checkout is no longer registered with Git.");
-      if (target.repository() !== root) throw Error("Checkout belongs to another project.");
+      if (target.repositoryGit.repository() !== root) throw Error("Checkout belongs to another project.");
       return chats.create(root, target.root);
     }
     const [id] = args;

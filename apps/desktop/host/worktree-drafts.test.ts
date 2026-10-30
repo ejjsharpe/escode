@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { Project } from "./project";
+import { Checkout } from "./project";
 import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
 
@@ -39,10 +39,10 @@ for (const failure of [
     writeFileSync(join(root, ".gitignore"), "ignored\n");
     git("add", ".");
     git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "initial");
-    const project = await Project.open(root),
+    const project = await Checkout.open(root),
       store = new Chats(file);
     const chat = await store.createDraft(root, root);
-    const base = project.worktreeOptions().bases.find((b) => b.ref === "refs/heads/main")!;
+    const base = project.repositoryGit.worktreeOptions().bases.find((b) => b.ref === "refs/heads/main")!;
     const choice = { source: root, ...base };
     await store.context(root, chat.id, root, root, choice);
     expect((await store.createDraft(root, root)).id).not.toBe(chat.id);
@@ -71,8 +71,8 @@ for (const failure of [
       }
       if (failure === "moved-base") git("update-ref", "-d", base.ref);
       if (failure === "occupied") {
-        const reserve = project.reserveWorktree.bind(project);
-        vi.spyOn(project, "reserveWorktree").mockImplementation((...args) => {
+        const reserve = project.repositoryGit.reserveWorktree.bind(project.repositoryGit);
+        vi.spyOn(project.repositoryGit, "reserveWorktree").mockImplementation((...args) => {
           const result = reserve(...args);
           mkdirSync(result.root);
           writeFileSync(join(result.root, "valuable"), "retain");
@@ -80,8 +80,8 @@ for (const failure of [
         });
       }
       if (failure === "replaced-directory") {
-        const create = project.createWorktree.bind(project);
-        vi.spyOn(project, "createWorktree").mockImplementation((...args) => {
+        const create = project.repositoryGit.createWorktree.bind(project.repositoryGit);
+        vi.spyOn(project.repositoryGit, "createWorktree").mockImplementation((...args) => {
           const result = create(...args);
           renameSync(result.root, result.root + "-original");
           mkdirSync(result.root);
@@ -192,10 +192,10 @@ for (const outcome of [
         "-m",
         "initial",
       );
-      const project = await Project.open(root),
+      const project = await Checkout.open(root),
         store = new Chats(file);
       const chat = await store.createDraft(root, root);
-      const base = project.worktreeOptions().bases.find((b) => b.ref === "HEAD")!;
+      const base = project.repositoryGit.worktreeOptions().bases.find((b) => b.ref === "HEAD")!;
       await store.context(root, chat.id, root, root, { ...base, source: root });
       let starts = 0,
         accepted = 0;
@@ -278,7 +278,7 @@ for (const outcome of [
         } else await expect(sending).rejects.toThrow();
         const saved = await store.get(root, chat.id);
         expect(saved.worktree?.reservation?.root).toBe(saved.checkout);
-        expect(project.checkouts()).toContain(saved.checkout);
+        expect(project.repositoryGit.checkouts()).toContain(saved.checkout);
         await service.shutdown();
         restart = new ChatService(new Chats(file), connector);
         if (outcome === "creation-uncertain")

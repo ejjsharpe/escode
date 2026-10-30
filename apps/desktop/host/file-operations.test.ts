@@ -15,20 +15,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import * as child from "node:child_process";
-import { Project } from "./project";
+import { Checkout } from "./project";
 import { Workspace } from "./workspace";
 import { FileOperations } from "./file-operations";
 vi.mock("node:child_process", async (original) => ({
   ...(await original<typeof import("node:child_process")>()),
 }));
-async function fixture(run: (p: Project, store: Workspace, base: string) => Promise<void>) {
+async function fixture(run: (p: Checkout, store: Workspace, base: string) => Promise<void>) {
   const base = realpathSync(mkdtempSync(join(tmpdir(), "escode-operations-")));
   const root = join(base, "repo");
   execFileSync("git", ["init", root]);
   mkdirSync(join(root, "folder"));
   writeFileSync(join(root, "folder/a.ts"), "disk");
   writeFileSync(join(root, "folder/b.ts"), "second disk");
-  const p = await Project.open(root);
+  const p = await Checkout.open(root);
   const store = new Workspace(join(base, "workspace.json"));
   await store.write({
     projects: [{ project: root, root }],
@@ -626,7 +626,7 @@ test("an opened copy stage moved away before native failure retains uncertain in
       "-o",
       helper,
     ]);
-    const staged = await Project.open(p.root, helper);
+    const staged = await Checkout.open(p.root, helper);
     const execute = child.spawn;
     vi.spyOn(child, "spawn").mockImplementation((...args) => {
       const process = execute(...args);

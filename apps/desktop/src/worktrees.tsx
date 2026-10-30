@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Button } from "@base-ui/react/button";
 import { persist, flush } from "./workspace";
-import type { Project } from "../host/project";
-type Options = ReturnType<Project["worktreeOptions"]>;
+import type { Checkout } from "../host/project";
+type Options = ReturnType<Checkout["repositoryGit"]["worktreeOptions"]>;
 export function WorktreeChoices({
   createChat,
   project,
@@ -12,7 +12,7 @@ export function WorktreeChoices({
   onRemoved: () => Promise<unknown>;
   createChat: (root: string) => Promise<void>;
 }) {
-  const [managed, setManaged] = useState<ReturnType<Project["managedWorktrees"]>>([]);
+  const [managed, setManaged] = useState<ReturnType<Checkout["repositoryGit"]["managedWorktrees"]>>([]);
   const [options, setOptions] = useState<Options>();
   const [reuse, setReuse] = useState("");
   const observation = useRef(0);

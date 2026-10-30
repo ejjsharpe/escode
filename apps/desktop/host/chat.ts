@@ -1,7 +1,7 @@
 import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { accessSync, constants, lstatSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { Project } from "./project";
+import type { Checkout } from "./project";
 import { randomUUID } from "node:crypto";
 export type SavedChat = {
   id: string;
@@ -166,24 +166,24 @@ export class Chats {
       return chat;
     });
   }
-  async prepareWorktree(chat: Readonly<SavedChat>, project: Project, managedRoot: string) {
+  async prepareWorktree(chat: Readonly<SavedChat>, project: Checkout, managedRoot: string) {
     const choice = chat.worktree;
     if (!choice || choice.reservation) {
       this.validateWorktree(chat);
       return chat;
     }
-    const reservation = project.reserveWorktree(managedRoot, choice.ref, choice.commit);
+    const reservation = project.repositoryGit.reserveWorktree(managedRoot, choice.ref, choice.commit);
     try {
       // Persist before Git mutation: an interrupted preparation is never silently repeated.
       await this.update(chat.project, chat.id, {
         checkout: reservation.root,
         worktree: { ...choice, reservation },
       });
-      const result = project.createWorktree(managedRoot, choice.ref, choice.commit, reservation);
+      const result = project.repositoryGit.createWorktree(managedRoot, choice.ref, choice.commit, reservation);
       const identity = result.error
         ? undefined
         : project
-            .managedWorktrees(managedRoot)
+            .repositoryGit.managedWorktrees(managedRoot)
             .find((record) => record.root === result.root && record.branch === result.branch);
       if (!result.error && !identity) throw Error("Managed ownership record is missing.");
       await this.update(chat.project, chat.id, {

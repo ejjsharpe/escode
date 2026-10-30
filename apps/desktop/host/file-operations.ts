@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import { Project } from "./project";
+import { Checkout } from "./project";
 import { Workspace } from "./workspace";
 export type Intent = {
   root: string;
@@ -41,7 +41,7 @@ export class FileOperations {
   ) {
     this.journal = new Workspace(file, owner);
   }
-  async recover(project: (root: string) => Promise<Project>) {
+  async recover(project: (root: string) => Promise<Checkout>) {
     const record = await this.journal.readIntent();
     if (!record) return "";
     this.pending = record;
@@ -128,7 +128,7 @@ export class FileOperations {
       );
   }
   async run(
-    p: Project,
+    p: Checkout,
     kind: "move" | "trash" | "copy",
     source: string,
     destination: string,
@@ -180,7 +180,7 @@ export class FileOperations {
         else if (kind === "move") p.move(source, destination, intent.identity);
         else p.trash(source, intent.identity);
       } catch (error) {
-        // Imports never mutate their source; Project.copy marks any possible publication uncertain.
+        // Imports never mutate their source; Checkout.copy marks any possible publication uncertain.
         // Other operations require a still-identical source to prove a failed mutation.
         let unchanged = false;
         try {
@@ -238,7 +238,7 @@ export class FileOperations {
     }
   }
   async save(
-    p: Project,
+    p: Checkout,
     path: string,
     text: string,
     version: string,

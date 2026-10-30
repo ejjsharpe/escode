@@ -369,7 +369,7 @@ test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
     const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-live-concurrency-")));
     const a = join(dir, "alpha"),
       b = join(dir, "beta");
-    let project: import("./project").Project | undefined;
+    let project: import("./project").Checkout | undefined;
     const store = new Chats(join(dir, "chats.json"));
     const service = new ChatService(store);
     try {
@@ -388,10 +388,10 @@ test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
           "initial",
         ]);
       }
-      const { Project } = await import("./project");
-      project = await Project.open(a);
-      const base = project.worktreeOptions().bases.find((b) => b.ref === "HEAD")!;
-      const created = project.createWorktree(join(dir, "managed"), base.ref, base.commit);
+      const { Checkout } = await import("./project");
+      project = await Checkout.open(a);
+      const base = project.repositoryGit.worktreeOptions().bases.find((b) => b.ref === "HEAD")!;
+      const created = project.repositoryGit.createWorktree(join(dir, "managed"), base.ref, base.commit);
       expect(created.error).toBeNull();
       const worktree = created.root;
       const chats = await Promise.all([

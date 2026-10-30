@@ -167,3 +167,5 @@ Integrated Files acceptance and its user-owned manual follow-up are recorded in
 [Files acceptance evidence](docs/compatibility/files-acceptance.md); the implemented
 Files terminology above does not certify those unverified native and VoiceOver checks.
 
+
+Internal host naming: `Checkout` owns one opened checkout and its filesystem descriptor. Its `CheckoutRepository` owns Git repository identity and worktree policy through that checkout; a repository identity can span multiple checkouts. These implementation names do not change the product terms above.

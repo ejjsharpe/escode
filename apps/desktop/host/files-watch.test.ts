@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
-import { Project } from "./project";
+import { Checkout } from "./project";
 vi.mock("node:fs", async (original) => ({ ...await original<typeof import("node:fs")>() }));
 
 test("loaded directories share coalesced native notifications; clients release independently", async () => {
@@ -12,7 +12,7 @@ test("loaded directories share coalesced native notifications; clients release i
   execFileSync("git", ["init", root]);
   await mkdir(join(root, "loaded"));
   await mkdir(join(root, "unloaded"));
-  const project = await Project.open(root);
+  const project = await Checkout.open(root);
   const watch = vi.spyOn(fs, "watch");
   const first = vi.fn(), second = vi.fn();
   const release = project.watchFiles(["", "loaded"], first);
@@ -52,7 +52,7 @@ test("loaded directories share coalesced native notifications; clients release i
 test("watch failures are contextual; symlink parents, metadata and replaced roots cannot subscribe", async () => {
   const root = fs.realpathSync(await mkdtemp(join(tmpdir(), "escode-watch-failure-")));
   execFileSync("git", ["init", root]);
-  const project = await Project.open(root);
+  const project = await Checkout.open(root);
   try {
     await symlink(root, join(root, "alias"));
     const notify = vi.fn();
@@ -89,7 +89,7 @@ test("a live loaded parent swapped for a symlink cannot expose outside contents 
   await mkdir(join(root, "parent"));
   await writeFile(join(root, "parent/original"), "original");
   await writeFile(join(outside, "secret"), "outside");
-  const project = await Project.open(root);
+  const project = await Checkout.open(root);
   const changed = vi.fn();
   project.watchFiles(["", "parent"], changed);
   try {

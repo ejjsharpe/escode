@@ -14,13 +14,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { NativeImport } from "./native-import";
-import { Project } from "./project";
+import { Checkout } from "./project";
 
-async function fixture(run: (base: string, project: Project) => Promise<void>) {
+async function fixture(run: (base: string, project: Checkout) => Promise<void>) {
   const base = realpathSync(mkdtempSync(join(tmpdir(), "escode-import-45-")));
   const root = join(base, "repo");
   execFileSync("git", ["init", root]);
-  const project = await Project.open(root);
+  const project = await Checkout.open(root);
   try {
     await run(base, project);
   } finally {
@@ -28,7 +28,7 @@ async function fixture(run: (base: string, project: Project) => Promise<void>) {
     rmSync(base, { recursive: true, force: true });
   }
 }
-test("native source scope rejects traversal, links, replaced source and parent without granting Project access", async () => {
+test("native source scope rejects traversal, links, replaced source and parent without granting Checkout access", async () => {
   await fixture(async (base, project) => {
     const parent = join(base, "external");
     mkdirSync(parent);
