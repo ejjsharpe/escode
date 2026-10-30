@@ -126,3 +126,8 @@ VoiceOver evidence is reused; no new manual VoiceOver or physical power-loss
 validation is claimed. Broad capacity and multi-client qualification remain
 deferred. Interrupted storage requires external inspection and explicit recovery;
 no automatic repair is offered.
+
+The initial packaged draft-context switching scenario timed out before integration
+with concurrent `main` changes; it is not counted as a pass. The first packaged
+fixture attempt also exposed an obsolete response to `initialized` notifications;
+after correcting that fixture, the first-Send/restart scenario passed.
