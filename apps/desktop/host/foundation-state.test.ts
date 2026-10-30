@@ -1,6 +1,14 @@
 import { test, expect, vi } from "vite-plus/test";
 import * as fs from "node:fs";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FoundationState } from "./foundation-state";
@@ -46,6 +54,12 @@ test("incomplete initialization, writes, unsupported versions and unreadable rec
     store.close();
     const file = join(root, "state.json");
     const original = readFileSync(file);
+    chmodSync(file, 0);
+    try {
+      expect(() => FoundationState.open(root)).toThrow();
+    } finally {
+      chmodSync(file, 0o600);
+    }
     for (const bytes of [
       "{",
       JSON.stringify({ ...identity, version: 2 }),
