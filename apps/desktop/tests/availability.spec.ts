@@ -50,7 +50,7 @@ test("approved projects reopen across repeated restarts without choosing directo
   }
 });
 
-test("renderer state cannot grant file access or overwrite approvals; native reopening restores legacy drafts", async () => {
+test("renderer state cannot grant file access or overwrite approvals; native reopening restores client recovery drafts", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-approval-boundary-")));
   const root = join(dir, "repo"),
     outside = join(dir, "outside"),
@@ -81,7 +81,7 @@ test("renderer state cannot grant file access or overwrite approvals; native reo
         {
           root,
           path: "a.txt",
-          text: "legacy recovered edits",
+          text: "client recovered edits",
           disk: await window.escode.project("read", root, "a.txt"),
         },
       ];
@@ -148,13 +148,14 @@ test("renderer state cannot grant file access or overwrite approvals; native reo
     expect(await readFile(join(outside, "private.txt"), "utf8")).toBe("outside");
     await page.evaluate((state) => window.escode.lifecycle("persist", state), original);
     await app.close();
+    await writeFile(join(user, "client-workspace-v1.json"), JSON.stringify(original));
     await rm(file);
     app = await launchDesktop(user, bin);
     page = await app.firstWindow();
     await expect(
       page.getByRole("alert").filter({ hasText: "Use Open project to approve" }),
     ).toBeVisible();
-    await expect(page.locator(".monaco-editor:visible")).toContainText("legacy recovered edits");
+    await expect(page.locator(".monaco-editor:visible")).toContainText("client recovered edits");
     expect(await page.evaluate((root) => window.escode.lifecycle("prepare", root), root)).toBe(
       true,
     );
@@ -164,10 +165,10 @@ test("renderer state cannot grant file access or overwrite approvals; native reo
       page.getByRole("alert").filter({ hasText: "Use Open project to approve" }),
     ).toHaveCount(0);
     await expect(page.getByRole("treeitem", { name: "a.txt, unsaved", exact: true })).toBeVisible();
-    await expect(page.locator(".monaco-editor:visible")).toContainText("legacy recovered edits");
+    await expect(page.locator(".monaco-editor:visible")).toContainText("client recovered edits");
     await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
     await expect(page.getByRole("status").filter({ hasText: "Saved a.txt" })).toBeVisible();
-    expect(await readFile(join(root, "a.txt"), "utf8")).toBe("legacy recovered edits");
+    expect(await readFile(join(root, "a.txt"), "utf8")).toBe("client recovered edits");
   } finally {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async (_window: unknown, options?: any) => ({
@@ -330,7 +331,9 @@ test("a saved secondary checkout can recover and save its buffer after restartin
       },
       { root, secondary },
     );
+    const recovery = await readFile(join(user, "client-workspace-v1.json"));
     await app.close();
+    await writeFile(join(user, "client-workspace-v1.json"), recovery);
     await writeFile(join(bin, "git"), "#!/bin/sh\nexit 127\n", { mode: 0o700 });
     app = await launchDesktop(user, bin);
     page = await app.firstWindow();
@@ -413,6 +416,12 @@ createInterface({input:process.stdin}).on('line', line=>{
     await expect(page.getByLabel("Conversation history")).toContainText("retained history");
     await expect(status).toHaveText("Ready");
     await page.getByLabel("Message Codex").fill("keep this unsent");
+    await page.evaluate(async root => {
+      const chats = await new Promise<import("@escode/contracts").ChatSummary[]>((resolve, reject) => {
+        const off = window.escode.chatSummaries(({ chats }) => { off(); resolve([...chats]); }, reject);
+      });
+      await window.escode.chat("disconnect", root, chats.find(chat => chat.project === root)!.id);
+    }, root);
     await setState({ auth: true, missing: true });
     let retry = page.getByRole("button", { name: "Retry connection / reload history" });
     await retry.click();

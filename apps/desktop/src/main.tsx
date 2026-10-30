@@ -785,6 +785,7 @@ function CheckoutView({
               <div role="alert" className="conflict">
                 <p>{conflict.path} changed on disk. Your edits are retained.</p>
                 <Button
+                  disabled={saving}
                   onClick={() =>
                     setDiff({
                       original: conflict.disk.text,
@@ -1137,9 +1138,9 @@ window.escode
   .lifecycle("load")
   .then(({ state, restored, errors }) => {
     initialize(state);
-    createRoot(document.getElementById("root")!).render(
-      <App restored={restored} errors={errors} />,
-    );
+    const root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
+    if (import.meta.hot) import.meta.hot.data.root = root;
+    root.render(<App restored={restored} errors={errors} />);
   })
   .catch((error) => {
     window.escode.onClose(() => {

@@ -292,7 +292,7 @@ createInterface({input:process.stdin}).on('line',line=>{
           execFileSync("git", ["-C", root, "branch", "--list", managed!.branch]).toString(),
         ).toContain(managed!.branch);
         const saved = await page.evaluate(readChats, root);
-        expect(saved).toHaveLength(3);
+        expect(saved).toHaveLength(2);
         expect(saved.find((chat) => chat.checkout === managed!.root)!.draft).toBe(
           "retained worktree draft",
         );

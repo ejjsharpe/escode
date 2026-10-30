@@ -214,7 +214,8 @@ createInterface({input:process.stdin}).on('line', line => {
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("second draft");
 
     await page.getByRole("button", { name: "Chat 1", exact: true }).click();
-    // Gate the store's atomic replacement to delay create without a production test hook.
+    await expect(page.getByRole("button", { name: "New chat on current checkout" })).toBeEnabled();
+    // Gate the store's atomic replacement after opening the selected chat has settled.
     await app.evaluate(() => {
       const fs = process.getBuiltinModule("fs/promises") as any;
       const rename = fs.rename;
@@ -317,7 +318,11 @@ createInterface({input:process.stdin}).on('line', line => {
     expect(survivor.requests).toHaveLength(1);
     await page.screenshot({ path: "test-results/concurrency.png" });
   } finally {
-    await app.evaluate(() => (globalThis as any).releaseChatResponses?.());
+    await app.evaluate(() => {
+      (globalThis as any).releaseChatResponses?.();
+      (globalThis as any).releaseChatCreate?.();
+    });
+    await writeFile(join(dir, "release-send"), "release");
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async (_window: unknown, options?: any) => ({
         response: options.buttons[0] === "Save" ? 1 : 0,

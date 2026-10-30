@@ -255,15 +255,22 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
         return state.views[root]?.files?.hideIgnored &&
           (change === "editor close" || state.drafts.some((d: any) => d.text === "retained ignored draft"));
       }).toBe(true);
-      await app.evaluate(({ shell }) => {
+      await app.evaluate(({ shell, ipcMain }) => {
         (globalThis as any).finderTargets = [];
         shell.showItemInFolder = (path: string) => { (globalThis as any).finderTargets.push(path); };
         const fs = process.getBuiltinModule("fs/promises") as any;
         const read = fs.readFile;
+        const { AsyncLocalStorage } = process.getBuiltinModule("async_hooks") as any;
+        const context = new AsyncLocalStorage();
+        const handlers = (ipcMain as any)._invokeHandlers;
+        const handler = handlers.get("project");
+        handlers.set("project", (event: unknown, operation: string, ...args: unknown[]) =>
+          context.run(operation === "entry-action", () => handler(event, operation, ...args)));
         fs.readFile = (...args: any[]) => {
           const result = read(...args);
-          if (!String(args[0]).endsWith("/host-chats-v1.json")) return result;
+          if (!context.getStore() || !String(args[0]).endsWith("/host-chats-v1.json")) return result;
           fs.readFile = read;
+          handlers.set("project", handler);
           return new Promise((resolve, reject) => {
             (globalThis as any).releaseContext = () => result.then(resolve, reject);
           });

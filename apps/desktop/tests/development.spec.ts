@@ -22,21 +22,23 @@ test("StyleX updates during development", async () => {
     args: [".", `--user-data-dir=${user}`],
     env,
   });
+  const childProcess = app.process();
   try {
     const page = await app.firstWindow();
     await expect(page.locator("main")).toHaveCSS("background-color", "rgb(19, 20, 22)");
     await writeFile(source, original.replace('backgroundColor: "#131416"', 'backgroundColor: "#203040"'));
     await expect(page.locator("main")).toHaveCSS("background-color", "rgb(32, 48, 64)");
   } finally {
-    await writeFile(source, original);
-    await app.evaluate(({ dialog }) => {
-      dialog.showMessageBox = async (_window: unknown, options?: any) => ({
-        response: options.buttons[0] === "Save" ? 1 : 0,
-        checkboxChecked: false,
-      });
-    });
-    await app.close();
-    await server.close();
-    await rm(user, { recursive: true, force: true });
+    try {
+      await writeFile(source, original);
+    } finally {
+      if (childProcess.exitCode === null && childProcess.signalCode === null) {
+        const exited = new Promise(resolve => childProcess.once("exit", resolve));
+        childProcess.kill("SIGKILL");
+        await exited;
+      }
+      await server.close();
+      await rm(user, { recursive: true, force: true });
+    }
   }
 });

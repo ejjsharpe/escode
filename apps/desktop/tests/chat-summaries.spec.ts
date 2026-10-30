@@ -26,7 +26,7 @@ test("fresh summaries exclude old metadata and bodies, release detail polling du
         if (method !== "Network.webSocketFrameSent") return;
         try {
           const request = JSON.parse(params.response.payloadData);
-          if (request.tag !== "chatSnapshot") return;
+          if (request.tag !== "chatLive") return;
           const counts = (globalThis as any).detailCalls;
           counts[request.payload.id] = (counts[request.payload.id] ?? 0) + 1;
         } catch { /* Ignore other transport frames. */ }

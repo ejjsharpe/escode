@@ -207,7 +207,7 @@ test("one repository offers No project and text-bearing local drafts move throug
     await expect(message).toHaveValue("move this prompt");
     await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(repo);
     await expect(message).toHaveValue("move this prompt");
-    expect((await records()).find((c: any) => c.id === original.id)).toMatchObject({
+    await expect.poll(async () => (await records()).find((c: any) => c.id === original.id)).toMatchObject({
       id: original.id,
       createdAt: original.createdAt,
       project: repo,
@@ -216,6 +216,11 @@ test("one repository offers No project and text-bearing local drafts move throug
     expect(await readdir(user)).not.toContain("scratch");
     await expect(page.getByRole("button", { name: "No project", exact: true })).toBeVisible();
   } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options?: any) => ({
+        response: options.buttons[0] === "Save" ? 1 : 0, checkboxChecked: false,
+      });
+    });
     await app.close();
     await rm(dir, { recursive: true, force: true });
   }

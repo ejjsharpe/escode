@@ -377,6 +377,7 @@ test("restored hidden selection loads its type and refuses unavailable or missin
   execFileSync("git", ["init", root]);
   await mkdir(join(root, "folder/deep"), { recursive: true });
   let app = await launchDesktop(user);
+  let childProcess = app.process();
   try {
     let page = await app.firstWindow();
     await app.evaluate(({ dialog }, root) => {
@@ -389,12 +390,15 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files,
+          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.files,
       )
       .toMatchObject({ expanded: [], selected: ["folder/deep"] });
+    const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
-    await new Promise((resolve) => app.process().once("exit", resolve));
+    await exited;
+    await rm(join(user, "foundation/owner.lock"));
     app = await launchDesktop(user);
+    childProcess = app.process();
     page = await app.firstWindow();
     await expect(page.getByRole("treeitem", { name: "folder", exact: true })).toBeVisible();
     await expect(page.getByRole("treeitem", { name: "deep", exact: true })).toHaveCount(0);
@@ -412,9 +416,10 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     await app.evaluate(() => {
       const cp = process.getBuiltinModule("child_process") as any,
         execute = cp.execFileSync;
+      let remaining = 2;
       cp.execFileSync = (...args: any[]) => {
         if (args[1]?.[0] === "list" && args[1][1] === "folder") {
-          cp.execFileSync = execute;
+          if (--remaining === 0) cp.execFileSync = execute;
           throw Error("injected selected-entry listing unavailable");
         }
         return execute(...args);
@@ -436,9 +441,9 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     await app.evaluate(() => {
       const cp = process.getBuiltinModule("child_process") as any,
         execute = cp.execFileSync;
+      (globalThis as any).restoreRootListing = () => { cp.execFileSync = execute; };
       cp.execFileSync = (...args: any[]) => {
         if (args[1]?.[0] === "list" && args[1][1] === ".") {
-          cp.execFileSync = execute;
           throw Error("injected root listing unavailable");
         }
         return execute(...args);
@@ -456,6 +461,7 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     await expect(hiddenRename).toBeFocused();
     await hiddenRename.press("Escape");
     await expect(tree).toBeFocused();
+    await app.evaluate(() => (globalThis as any).restoreRootListing());
     await rm(join(root, "folder/deep"), { recursive: true });
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByRole("treeitem", { name: "folder", exact: true })).toBeVisible();
@@ -466,7 +472,7 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     expect((await stat(join(root, "folder"))).isDirectory()).toBe(true);
     await expect(stat(join(root, "deep"))).rejects.toThrow();
   } finally {
-    app.process().kill("SIGKILL");
+    childProcess.kill("SIGKILL");
     await rm(base, { recursive: true, force: true, maxRetries: 3 });
   }
 });

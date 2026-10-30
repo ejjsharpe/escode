@@ -320,6 +320,11 @@ app.whenReady().then(async () => {
       event.senderFrame.url !== documentURL
     )
       throw Error("Invalid sender");
+    if (operation === "flushClientStorage" && !args.length) {
+      // Electron requests a flush without a completion acknowledgement; recovery remains best effort.
+      window.webContents.session.flushStorageData();
+      return;
+    }
     if (operation === "dirty" && args.length === 1 && typeof args[0] === "string") {
       return (
         await dialog.showMessageBox(window, {

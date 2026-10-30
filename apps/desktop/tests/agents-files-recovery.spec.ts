@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import type { WorkspaceState } from "../host/workspace";
 import { launchDesktop } from "./desktop";
 
-test("legacy saved-project migration and interrupted move recovery survive together across restart", async () => {
+test("saved-project registration and interrupted move recovery survive together across restart", async () => {
   const base = await realpath(await mkdtemp(join(tmpdir(), "escode-agents-files-")));
   const root = join(base, "open"),
     closed = join(base, "closed"),
@@ -43,7 +43,7 @@ test("legacy saved-project migration and interrupted move recovery survive toget
     },
   ];
   await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
-  // Legacy workspace deliberately has no savedProjects registration yet.
+  // The fresh client workspace deliberately has no savedProjects registration yet.
   const legacy: WorkspaceState = {
     projects: [approved[0]],
     selected: root,
@@ -91,7 +91,7 @@ test("legacy saved-project migration and interrupted move recovery survive toget
       expect(durable.drafts).toEqual([
         { root, path: "moved/a.ts", text: "unsaved recovered text", disk },
       ]);
-      expect(await readFile(join(user, "client-file-operation-v1.json"), "utf8")).toBe("null");
+      expect(JSON.parse(await readFile(join(user, "client-file-operation-v1.json"), "utf8"))).toMatchObject({ storageVersion: 1, intent: null, records: [] });
       await expect(readFile(join(root, "folder/a.ts"))).rejects.toThrow();
       expect(await readFile(join(root, "moved/a.ts"), "utf8")).toBe(disk.text);
       await page.getByRole("button", { name: "Agents", exact: true }).click();
@@ -224,7 +224,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
       expect(state.drafts).toEqual([
         { root, path: "moved/a.ts", text: "retained closed edits", disk },
       ]);
-      expect(await readFile(join(user, "client-file-operation-v1.json"), "utf8")).toBe("null");
+      expect(JSON.parse(await readFile(join(user, "client-file-operation-v1.json"), "utf8"))).toMatchObject({ storageVersion: 1, intent: null, records: [] });
       if (restart === 0) {
         const exited = new Promise((resolve) => app.process().once("exit", resolve));
         app.process().kill("SIGKILL");

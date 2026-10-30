@@ -72,6 +72,9 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
   );
   let app = await launchDesktop(user, dir);
   try {
+    await (await app.firstWindow()).evaluate(async records => {
+      for (const record of records) await window.escode.chat("draft", record.project, record.id, record.draft);
+    }, records);
     let page = await app.firstWindow();
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
@@ -404,6 +407,9 @@ send({id:m.id,result});});`,
   );
   const app = await launchDesktop(user, dir);
   try {
+    await (await app.firstWindow()).evaluate(async records => {
+      for (const record of records) await window.escode.chat("draft", record.project, record.id, record.draft);
+    }, records);
     const page = await app.firstWindow();
     const localRows = page.locator(".chat-list:visible li button");
     const globalRows = page.locator(".agent-row strong");
@@ -528,6 +534,11 @@ test("global creation keeps newest-first rows through live summaries", async () 
     await expect(rows).toHaveText(["Delta", "Gamma", "Beta", "Alpha"]);
     await page.screenshot({ path: "test-results/agents-creation-order.png" });
   } finally {
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options?: any) => ({
+        response: options.buttons[0] === "Save" ? 1 : 0, checkboxChecked: false,
+      });
+    });
     await app.close();
     await rm(dir, { recursive: true, force: true });
   }

@@ -30,7 +30,7 @@ test("keyboard can navigate projects, edit, review an accessible diff and answer
 import {createInterface} from 'node:readline';
 if(process.argv.includes('--version')){console.log('codex-cli 0.165.0');process.exit(0);}
 const send=m=>process.stdout.write(JSON.stringify(m)+'\\n');
-const threadId='thread',turnId='turn';
+const threadId='thread';let turnId='',nextTurn=0;
 createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line);if(!m.id)return;
  if(!m.method){send({method:'item/completed',params:{threadId,turnId,item:{id:'reply',type:'agentMessage',text:'Input received: '+m.result.answers.choice.answers[0]}}});send({method:'turn/completed',params:{threadId,turn:{id:turnId}}});return;}
@@ -39,7 +39,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='account/read')result={account:{}};
  if(m.method==='thread/start')result={thread:{id:threadId},cwd:process.cwd(),model:'fixture',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
  if(m.method==='turn/interrupt')send({method:'turn/completed',params:{threadId,turn:{id:turnId}}});
- if(m.method==='turn/start'){result={turn:{id:turnId}};setTimeout(()=>send({id:99,method:'item/tool/requestUserInput',params:{threadId,turnId,questions:[{id:'choice',question:'Which name should I use?'}]}}),20);}
+ if(m.method==='turn/start'){turnId='turn-'+(++nextTurn);result={turn:{id:turnId}};setTimeout(()=>send({id:99+nextTurn,method:'item/tool/requestUserInput',params:{threadId,turnId,questions:[{id:'choice',question:'Which name should I use?'}]}}),20);}
  send({id:m.id,result});
 });
 `,
@@ -88,6 +88,8 @@ createInterface({input:process.stdin}).on('line',line=>{
     await activate(page.getByRole("button", { name: "a.txt", exact: true }));
     const diff = page.getByRole("textbox", { name: "unstaged · a.txt modified", exact: true });
     await expect(diff).toBeEditable();
+    // Monaco computes changes asynchronously after making the editor available.
+    await expect(page.getByRole("button", { name: "Revert Block", exact: true })).toBeVisible();
     await reach(diff);
     await page.keyboard.press("F7");
     await expect(

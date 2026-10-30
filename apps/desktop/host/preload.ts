@@ -49,6 +49,7 @@ async function send(project: string | null, id: string, text: string) {
   localStorage.removeItem(key);
   const composerKey = `escode-composer:${id}`;
   if (localStorage.getItem(composerKey) === command.text) localStorage.setItem(composerKey, "");
+  await ipcRenderer.invoke("lifecycle", "flushClientStorage");
   if (text !== command.text) throw Error("Previous Send accepted. Current text retained; Send again explicitly.");
 }
 async function control(operation: "stop" | "answer", project: string | null, id: string, target: string, token = "", answer: unknown = null) {
@@ -105,7 +106,10 @@ contextBridge.exposeInMainWorld(
           ...(operation === "execution" ? { mode: args[2] as "new" | "reuse", value: args[3] as string, commit: args[4] as string } : {}),
         });
       })()
-      : operation === "draft" ? Promise.resolve(localStorage.setItem(`escode-composer:${String(args[1])}`, String(args[2])))
+      : operation === "draft" ? Promise.resolve().then(() => {
+        localStorage.setItem(`escode-composer:${String(args[1])}`, String(args[2]));
+        return ipcRenderer.invoke("lifecycle", "flushClientStorage");
+      })
       : operation === "open"
       ? open(args[0] as string | null, args[1] as string)
       : operation === "composer" ? Promise.resolve().then(() => {
