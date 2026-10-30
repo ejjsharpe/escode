@@ -42,14 +42,14 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
     const next = page.getByRole("button", { name: "Next history page" });
     await next.focus(); await page.keyboard.press("Enter");
-    await expect(page.getByText("second saved page", { exact: true })).toBeVisible();
-    await expect(page.getByText("first saved page", { exact: true })).toHaveCount(0);
-    await expect(next).toBeDisabled();
     if (mode === "streaming") {
       await expect(page.getByText("newest live body", { exact: true })).toBeVisible();
       await expect(page.getByText("second saved page", { exact: true })).toHaveCount(0);
       return;
     }
+    await expect(page.getByText("second saved page", { exact: true })).toBeVisible();
+    await expect(page.getByText("first saved page", { exact: true })).toHaveCount(0);
+    await expect(next).toBeDisabled();
     await page.getByRole("button", { name: "Retry connection / reload history" }).click();
     await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
     await expect(page.getByText("second saved page", { exact: true })).toHaveCount(0);

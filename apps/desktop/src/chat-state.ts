@@ -135,6 +135,15 @@ class ProjectChats {
       if (this.observed.has(id) && this.observationEpoch.get(id) === epoch) this.update({ history: { ...this.state.history, [id]: page } });
     });
   }
+  reconnect(id: string) {
+    return this.run(id, async () => {
+      await window.escode.chat("disconnect", this.project, id);
+      await window.escode.chat("open", this.project, id);
+      const history = { ...this.state.history };
+      delete history[id];
+      this.update({ history });
+    });
+  }
   open(id: string) {
     const existing = this.opening.get(id);
     if (existing) return existing;

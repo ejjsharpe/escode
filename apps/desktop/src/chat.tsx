@@ -267,13 +267,7 @@ export function ChatView({
             <div className="chat-actions">
               <Button
                 disabled={working || snapshot?.busy}
-                onClick={() =>
-                  void run(async () => {
-                    const id = selected;
-                    await window.escode.chat("disconnect", project, id);
-                    await window.escode.chat("open", project, id);
-                  })
-                }
+                onClick={() => void store.reconnect(selected)}
               >
                 Retry connection / reload history
               </Button>
