@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Button } from "@base-ui/react/button";
 import { persist, flush } from "./workspace";
 import type { Project } from "../host/project";
@@ -15,6 +15,7 @@ export function WorktreeChoices({
   const [managed, setManaged] = useState<ReturnType<Project["managedWorktrees"]>>([]);
   const [options, setOptions] = useState<Options>();
   const [reuse, setReuse] = useState("");
+  const observation = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const run = async (action: () => Promise<void>) => {
@@ -29,11 +30,24 @@ export function WorktreeChoices({
     }
   };
   const refresh = async () => {
+    const request = ++observation.current;
     const value = await window.escode.project("worktree-options", project);
+    if (request !== observation.current) return;
     setOptions(value);
     setManaged(await window.escode.project("worktree-managed", project));
     setReuse("");
   };
+  useEffect(() => {
+    if (!options) return;
+    let active = true;
+    const timer = setInterval(() => {
+      const request = ++observation.current;
+      void window.escode.project("worktree-options", project).then(value => {
+        if (active && request === observation.current) setOptions(value);
+      }, error => { if (active) setError(String(error)); });
+    }, 2000);
+    return () => { active = false; clearInterval(timer); observation.current++; };
+  }, [project, !!options]);
   return (
     <section className="worktree-choices" aria-label="Worktree chat choices">
       <Button disabled={busy} onClick={() => void run(refresh)}>
@@ -115,23 +129,28 @@ export function DraftWorktreeChoices({
   const [options, setOptions] = useState<Options>();
   const [ref, setRef] = useState(chat.worktree?.ref ?? "");
   const [reuse, setReuse] = useState("");
+  const observation = useRef(0);
   const [error, setError] = useState("");
   const refresh = async () => {
+    const request = ++observation.current;
     try {
       const value = await window.escode.project(
         "worktree-options",
         chat.worktree?.source ?? chat.checkout,
       );
+      if (request !== observation.current) return;
       setOptions(value);
       setRef((previous) => previous || value.defaultRef);
       setError("");
     } catch (e) {
-      setError(String(e));
+      if (request === observation.current) setError(String(e));
     }
   };
   useEffect(() => {
     void refresh();
-  }, [chat.id]);
+    const timer = setInterval(() => void refresh(), 2000);
+    return () => { clearInterval(timer); observation.current++; };
+  }, [chat.id, chat.checkout, chat.worktree?.source]);
   return (
     <details className="worktree-choices">
       <summary>Execution checkout choices</summary>

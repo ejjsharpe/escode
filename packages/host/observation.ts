@@ -1,21 +1,22 @@
-// Only in-flight observations are cached; completed state is always rebuildable.
+// Completed observations are delivered even while the next refresh is dirty.
 export function coalesceObservation<A>(scan: (root: string) => Promise<A>) {
-  const pending = new Map<string, { dirty: boolean; result: Promise<A> }>();
-  return (root: string): Promise<A> => {
-    const previous = pending.get(root);
-    if (previous) { previous.dirty = true; return previous.result; }
-    const entry = { dirty: false, result: undefined as unknown as Promise<A> };
-    pending.set(root, entry);
-    entry.result = (async () => {
-      try {
-        let value: A;
-        do {
-          entry.dirty = false;
-          value = await scan(root);
-        } while (entry.dirty);
-        return value;
-      } finally { pending.delete(root); }
-    })();
-    return entry.result;
+  const pending = new Map<string, Promise<A>>();
+  const dirty = new Map<string, Promise<A>>();
+  return function observe(root: string): Promise<A> {
+    const current = pending.get(root);
+    if (current) {
+      let next = dirty.get(root);
+      if (!next) {
+        next = current.catch(() => undefined).then(() => {
+          dirty.delete(root);
+          return observe(root);
+        });
+        dirty.set(root, next);
+      }
+      return next;
+    }
+    const result = Promise.resolve().then(() => scan(root)).finally(() => pending.delete(root));
+    pending.set(root, result);
+    return result;
   };
 }

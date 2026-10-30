@@ -9,17 +9,25 @@ test("overlapping invalidations discard a delayed scan, coalesce and rebuild", a
     return new Promise<number>(resolve => releases.push(resolve));
   });
   const first = observe("checkout");
-  for (let i = 0; i < 20; i++) expect(observe("checkout")).toBe(first);
+  const next = observe("checkout");
+  for (let i = 0; i < 20; i++) expect(observe("checkout")).toBe(next);
+  await new Promise(resolve => setImmediate(resolve));
   expect(scans).toBe(1);
   releases.shift()!(1);
+  expect(await first).toBe(1);
   await new Promise(resolve => setImmediate(resolve));
   expect(scans).toBe(2);
+  const third = observe("checkout");
   releases.shift()!(2);
-  expect(await first).toBe(2);
-  const rebuilt = observe("checkout");
-  expect(scans).toBe(3);
+  expect(await next).toBe(2);
+  await new Promise(resolve => setImmediate(resolve));
   releases.shift()!(3);
-  expect(await rebuilt).toBe(3);
+  expect(await third).toBe(3);
+  const rebuilt = observe("checkout");
+  await new Promise(resolve => setImmediate(resolve));
+  expect(scans).toBe(4);
+  releases.shift()!(4);
+  expect(await rebuilt).toBe(4);
 });
 
 test("failed scans release their cache and checkout observations are independent", async () => {

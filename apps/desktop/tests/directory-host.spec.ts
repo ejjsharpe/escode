@@ -35,6 +35,13 @@ test("Files uses authenticated directory contracts with denied paths and no list
     expect(status.changes).toContainEqual({ path: "folder/a.txt", area: "untracked" });
     const options = await page.evaluate(root => window.escode.project("worktree-options", root), root);
     expect(options.checkouts).toContain(root);
+    execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial"]);
+    const linked = join(base, "linked");
+    execFileSync("git", ["-C", root, "worktree", "add", "-b", "sibling", linked]);
+    expect((await page.evaluate(root => window.escode.project("worktree-options", root), root)).checkouts).toContain(linked);
+    await writeFile(join(root, "external.txt"), "changed");
+    expect((await page.evaluate(root => window.escode.project("status", root), root)).changes)
+      .toContainEqual({ path: "external.txt", area: "untracked" });
     const oldRoute = await page.evaluate((root) => (window.escode.project as any)("files-filter", root, "").then(() => "accepted", String), root);
     expect(oldRoute).toContain("Invalid project request");
   } finally {

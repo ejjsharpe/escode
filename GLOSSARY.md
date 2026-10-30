@@ -90,7 +90,7 @@ A persistent working folder owned by one No project chat. It is allocated only o
 The checkout through which a project was opened, shown by Files and Source Control before a chat is selected.
 
 **Current checkout**:
-A project's remembered Files/Source Control checkout, using its original checkout until a different editor checkout is selected. It supplies the Current checkout choice for project-backed chat drafts, including when the project's tab is closed.
+A project's remembered Files/Source Control checkout, using its original checkout until a different editor checkout is selected. It supplies the Current checkout choice for project-backed chat drafts, including when the project's tab is closed. Status and displayed worktree options are rebuildable host observations, refreshed through the authenticated connection; observation results never authorize a context change.
 
 **Managed worktree**:
 A separate working copy created by escode for a project. It starts from a displayed committed local base on a unique `escode/<short-id>` branch,
