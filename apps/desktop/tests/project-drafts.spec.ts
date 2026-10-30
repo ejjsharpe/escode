@@ -30,7 +30,7 @@ test("saved project drafts move with text, survive restart and bind exactly once
   const saved = [alpha, beta].map((root) => ({ project: root, root }));
   await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
   await writeFile(
-    join(user, "workspace.json"),
+    join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
       savedProjects: saved,

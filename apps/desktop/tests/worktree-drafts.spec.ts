@@ -51,7 +51,7 @@ test("worktree draft prepares only on Send from closed-project Agents, retains e
   const saved = [alpha, beta].map((root) => ({ project: root, root }));
   await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
   await writeFile(
-    join(user, "workspace.json"),
+    join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
       savedProjects: saved,
@@ -143,7 +143,7 @@ send({id:m.id,result});});`,
     expect(
       execFileSync("git", ["-C", worktree, "status", "--porcelain", "--ignored"]).toString(),
     ).toBe(originalStatus.replace("!! ignored", "?? original-untracked\n!! ignored"));
-    expect(JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts).toContainEqual(
+    expect(JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts).toContainEqual(
       recovery,
     );
     expect(prepared.worktree.reservation.root).toBe(prepared.checkout);

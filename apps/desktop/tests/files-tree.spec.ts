@@ -80,7 +80,7 @@ test("lazy tree keyboard, independent selection, menus, refresh and restart reco
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).views[root].files.focus,
+          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.focus,
       )
       .toBe("b.txt");
     app.process().kill("SIGKILL");
@@ -210,7 +210,7 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).views[root].files.scroll,
+          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.scroll,
       )
       .toBe(scroll);
     await open(other);
@@ -222,7 +222,7 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
     expect(await tree.evaluate((el) => el.scrollTop)).toBe(scroll);
     await expect
       .poll(async () => {
-        const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+        const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
         return state.selected === root && state.views[root].files.scroll === scroll;
       })
       .toBe(true);

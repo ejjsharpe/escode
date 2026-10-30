@@ -1,12 +1,28 @@
 import { _electron } from "@playwright/test";
 import electron from "electron";
+import { FoundationState } from "../host/foundation-state";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { resolve } from "node:path";
 
-export function launchDesktop(
+export async function launchDesktop(
   userData: string,
   tools?: string,
   packaged = process.env.ESCODE_PACKAGED === "1",
 ) {
+  // Explicitly seeded test recovery belongs to this installation's sole client.
+  await mkdir(userData, { recursive: true });
+  const foundation = FoundationState.open(join(userData, "foundation"));
+  const { hostId, clientId } = foundation.read();
+  foundation.close();
+  for (const name of ["client-workspace-v1.json", "client-file-operation-v1.json"]) {
+    const file = join(userData, name);
+    try {
+      const state = JSON.parse(await readFile(file, "utf8"));
+      if (state && state.storageVersion === undefined)
+        await writeFile(file, JSON.stringify({ ...state, storageVersion: 1, hostId, clientId }));
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  }
   const env: Record<string, string> = {
     ...process.env,
     PATH: [tools, packaged ? "/usr/bin:/bin" : process.env.PATH].filter(Boolean).join(":"),

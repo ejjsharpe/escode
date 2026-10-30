@@ -103,7 +103,7 @@ test("renderer state cannot grant file access or overwrite approvals; native reo
           required: loaded.restored.find((p) => p.root === outside)?.approvalRequired,
           outside: await attempt(() => window.escode.project("read", outside, "private.txt")),
           state: await attempt(() =>
-            window.escode.project("read", root, "app-state/workspace.json"),
+            window.escode.project("read", root, "app-state/client-workspace-v1.json"),
           ),
           alias: await attempt(() =>
             window.escode.project("read", root, "APP-STATE/APPROVED-PROJECTS.JSON"),
@@ -220,7 +220,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts[0]?.text,
+          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
       )
       .toBe("recovery edits");
     await open(other);
@@ -229,7 +229,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
       .getByRole("button", { name: "repo", exact: true })
       .click();
     await expect
-      .poll(async () => JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).selected)
+      .poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected)
       .toBe(root);
     // A stale on-disk snapshot can precede queued selection writes; crash only after acknowledgement.
     await expect(page.locator("header")).toContainText(root);

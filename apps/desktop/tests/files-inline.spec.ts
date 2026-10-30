@@ -129,7 +129,7 @@ test("pending inline rename stays with its original checkout", async () => {
       const fs = process.getBuiltinModule("fs/promises") as any;
       const rename = fs.rename;
       fs.rename = async (...args: any[]) => {
-        if (String(args[1]).endsWith("/file-operation.json")) {
+        if (String(args[1]).endsWith("/client-file-operation-v1.json")) {
           fs.rename = rename;
           await new Promise<void>((resolve) => {
             (globalThis as any).resumeRename = resolve;
@@ -388,7 +388,7 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).views[root].files,
+          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files,
       )
       .toMatchObject({ expanded: [], selected: ["folder/deep"] });
     app.process().kill("SIGKILL");

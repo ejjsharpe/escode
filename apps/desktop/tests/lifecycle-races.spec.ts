@@ -32,7 +32,7 @@ for (const dirty of [false, true]) {
       }
       await expect
         .poll(async () => {
-          const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+          const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
           return dirty ? state.drafts[0]?.text : state.views[root]?.path;
         })
         .toBe(dirty ? "discard this" : "a.txt");
@@ -41,7 +41,7 @@ for (const dirty of [false, true]) {
         const fs = process.getBuiltinModule("fs/promises") as any;
         const rename = fs.rename;
         fs.rename = async (...args: unknown[]) => {
-          if (!String(args[1]).endsWith("/workspace.json")) return rename(...args);
+          if (!String(args[1]).endsWith("/client-workspace-v1.json")) return rename(...args);
           fs.rename = rename;
           await new Promise<void>((resolve) => {
             (globalThis as any).releasePersistence = resolve;
@@ -68,7 +68,7 @@ for (const dirty of [false, true]) {
       await expect(page.locator(".monaco-editor:visible")).toHaveCount(0);
       expect(await app.evaluate(() => (globalThis as any).dirtyPrompts)).toBe(dirty ? 1 : 0);
       await app.close();
-      expect(JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts).toEqual([]);
+      expect(JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts).toEqual([]);
       expect(await readFile(join(root, "a.txt"), "utf8")).toBe("original");
     } finally {
       try {

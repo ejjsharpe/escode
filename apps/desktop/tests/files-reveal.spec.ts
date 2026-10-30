@@ -148,7 +148,7 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
     ).toHaveAttribute("aria-pressed", "true");
     await expect
       .poll(async () => {
-        const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+        const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
         return (
           state.selected === root &&
           state.views[root].files.hideIgnored &&
@@ -170,7 +170,7 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
     await page.getByRole("button", { name: "Reveal Active File", exact: true }).click();
     await expect(page.getByRole("treeitem", { name: "normal.txt", exact: true })).toBeVisible();
     expect(
-      JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts.find(
+      JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
         (d: any) => d.path === "folder/deep/ignored.log",
       )?.text,
     ).toBe("ignored unsaved");
@@ -251,7 +251,7 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
       }
       await page.getByRole("button", { name: "Hide Git-ignored files", exact: true }).click();
       await expect.poll(async () => {
-        const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+        const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
         return state.views[root]?.files?.hideIgnored &&
           (change === "editor close" || state.drafts.some((d: any) => d.text === "retained ignored draft"));
       }).toBe(true);
@@ -324,7 +324,7 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
         }).toBe("changed");
       }
       await page.evaluate(() => (window as any).releaseWatch());
-      const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+      const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
       expect(state.views[root].files.hideIgnored).toBe(true);
       if (change !== "editor close") expect(state.drafts.find((d: any) => d.root === root)).toMatchObject({
         text: "retained ignored draft", disk: { text: "active disk" },

@@ -90,7 +90,7 @@ test("external restoration, loaded/collapsed updates, focus recovery and dirty m
     await writeFile(join(root, "manual.txt"), "manual");
     await refresh.click();
     await expect(row("manual.txt")).toBeVisible();
-    await expect.poll(async () => (await readFile(join(user, "workspace.json"), "utf8"))).toContain("retained external deletion edits");
+    await expect.poll(async () => (await readFile(join(user, "client-workspace-v1.json"), "utf8"))).toContain("retained external deletion edits");
     await app.evaluate(({ app }) => app.exit(0));
     await rm(join(user, "foundation/owner.lock"), { force: true });
     app = await launchDesktop(user);

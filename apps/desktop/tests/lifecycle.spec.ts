@@ -30,10 +30,10 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts[0]?.text,
+          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
       )
       .toBe("recover these edits");
-    const durable = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+    const durable = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
     await page.evaluate((state) => window.escode.lifecycle("persist", state), durable);
     console.log(
       `Recovery draft acknowledged ${Date.now() - recoveryStarted} ms after typing began; crash recovery below starts from this durable draft.`,
@@ -56,7 +56,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       .click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("recover these edits");
     await expect
-      .poll(async () => JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).selected)
+      .poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected)
       .toBe(root);
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
@@ -96,7 +96,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     await expect(page.locator(".monaco-editor:visible")).toHaveCount(0);
     await expect
       .poll(
-        async () => JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts.length,
+        async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.length,
       )
       .toBe(0);
     await app.close();
@@ -190,6 +190,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       await page.getByRole("button", { name: "Open project…" }).click();
       if (closeProject) {
         await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
+        await expect(page.locator(".monaco-editor:visible")).toHaveAttribute("data-uri", /a\.txt$/);
         await page.locator(".monaco-editor:visible").click();
         await page.keyboard.press("Meta+a");
         await page.keyboard.type("save on close");
@@ -252,7 +253,7 @@ createInterface({input:process.stdin}).on('line',line=>{
         await expect(page.getByRole("status")).toHaveText("Running");
         expect(await readFile(join(root, "a.txt"), "utf8")).toBe("committed");
         expect(
-          JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts[0].text,
+          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0].text,
         ).toBe("save on close");
       }
       if (closeProject) {
@@ -381,6 +382,7 @@ test("cancelled Quit retains an earlier Discard choice", async () => {
     await page.getByRole("button", { name: "Open project…" }).click();
     for (const file of ["a.txt", "b.txt"]) {
       await page.getByRole("treeitem", { name: file, exact: true }).click();
+      await expect(page.locator(".monaco-editor:visible")).toHaveAttribute("data-uri", new RegExp(file.replace(".", "\\.") + "$"));
       await page.locator(".monaco-editor:visible").click();
       await page.keyboard.press("Meta+a");
       await page.keyboard.type(`unsaved ${file}`);
@@ -395,7 +397,7 @@ test("cancelled Quit retains an earlier Discard choice", async () => {
     await page.bringToFront();
     await page.getByRole("treeitem", { name: /^a.txt/ }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("unsaved a.txt");
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts.length).toBe(2);
+    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.length).toBe(2);
   } finally {
     app.process().kill("SIGKILL");
     await rm(dir, { recursive: true, force: true });

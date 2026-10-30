@@ -40,7 +40,7 @@ test("tree clipboard copy, dirty duplicate, collision and cut partial results us
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts.find(
+          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
             (d: any) => d.path === "target/a copy.ts",
           )?.text,
       )
@@ -123,7 +123,7 @@ test("dirty destination blocks Replace; duplicate text survives a fresh Electron
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts.find(
+          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
             (d: any) => d.path === "a copy.ts",
           )?.text,
       )
@@ -418,7 +418,7 @@ test("copy delivery updates an early-open clean destination after a second-item 
     await expect(page.locator(".content:visible > [role=status]")).toContainText("Cancelled");
     await expect(page.locator(".monaco-editor:visible")).toContainText("SOURCE UNSAVED");
     const draft = async () =>
-      JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts.find(
+      JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
         (d: any) => d.path === "target/a.ts",
       );
     await expect.poll(async () => (await draft())?.text).toBe("SOURCE UNSAVED");
@@ -503,7 +503,7 @@ for (const change of [
         await expect
           .poll(
             async () =>
-              JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts[0]?.text,
+              JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
           )
           .toBe("retained source edits");
       }
@@ -576,9 +576,9 @@ for (const change of [
       expect(await readFile(join(other, "target/a.ts"), "utf8")).toBe("occupied disk");
       await expect(readFile(join(other, "target/a copy.ts"))).rejects.toThrow();
       await expect
-        .poll(async () => JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).selected)
+        .poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected)
         .toBe("agents");
-      const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+      const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
       if (change === "retained dirty editor") {
         expect(state.drafts.find((d: any) => d.root === root && d.path === "a.ts")).toMatchObject({
           text: "retained source edits",

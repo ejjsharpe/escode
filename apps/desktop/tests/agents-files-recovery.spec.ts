@@ -50,11 +50,11 @@ test("legacy saved-project migration and interrupted move recovery survive toget
     views: { [root]: { path: "folder/a.ts", directory: "folder" } },
     drafts: [{ root, path: "folder/a.ts", text: "unsaved recovered text", disk }],
   };
-  await writeFile(join(user, "workspace.json"), JSON.stringify(legacy));
+  await writeFile(join(user, "client-workspace-v1.json"), JSON.stringify(legacy));
   const checkout = await stat(root),
     source = await stat(join(root, "folder"));
   await writeFile(
-    join(user, "file-operation.json"),
+    join(user, "client-file-operation-v1.json"),
     JSON.stringify({
       root,
       checkoutIdentity: `${checkout.dev}:${checkout.ino}`,
@@ -77,11 +77,11 @@ test("legacy saved-project migration and interrupted move recovery survive toget
       await expect
         .poll(
           async () =>
-            JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).savedProjects,
+            JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).savedProjects,
         )
         .toEqual(expectedSaved);
       const durable: WorkspaceState = JSON.parse(
-        await readFile(join(user, "workspace.json"), "utf8"),
+        await readFile(join(user, "client-workspace-v1.json"), "utf8"),
       );
       expect(durable.views[root]).toMatchObject({
         path: "moved/a.ts",
@@ -91,7 +91,7 @@ test("legacy saved-project migration and interrupted move recovery survive toget
       expect(durable.drafts).toEqual([
         { root, path: "moved/a.ts", text: "unsaved recovered text", disk },
       ]);
-      expect(await readFile(join(user, "file-operation.json"), "utf8")).toBe("null");
+      expect(await readFile(join(user, "client-file-operation-v1.json"), "utf8")).toBe("null");
       await expect(readFile(join(root, "folder/a.ts"))).rejects.toThrow();
       expect(await readFile(join(root, "moved/a.ts"), "utf8")).toBe(disk.text);
       await page.getByRole("button", { name: "Agents", exact: true }).click();
@@ -123,7 +123,7 @@ test("legacy saved-project migration and interrupted move recovery survive toget
       if (restart === 0) {
         await expect
           .poll(
-            async () => JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).selected,
+            async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected,
           )
           .toBe(root);
         const exit = new Promise((resolve) => app.process().once("exit", resolve));
@@ -164,7 +164,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
   execFileSync("git", ["-C", root, "worktree", "add", "-b", "linked", linked]);
   await writeFile(join(user, "approved-projects.json"), JSON.stringify([{ project: root, root }]));
   await writeFile(
-    join(user, "workspace.json"),
+    join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
       selected: "agents",
@@ -184,7 +184,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
   const checkout = await stat(root),
     source = await stat(join(root, "folder"));
   await writeFile(
-    join(user, "file-operation.json"),
+    join(user, "client-file-operation-v1.json"),
     JSON.stringify({
       root,
       checkoutIdentity: `${checkout.dev}:${checkout.ino}`,
@@ -209,10 +209,10 @@ test("closed editor retains recovered move mappings and drafts through restart a
       await expect
         .poll(
           async () =>
-            JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).savedProjects,
+            JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).savedProjects,
         )
         .toEqual([{ project: root, root }]);
-      const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+      const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
       expect(state.projects).toEqual([]);
       expect(state.agentsChat).toBe("retained-unavailable-selection");
       expect(state.views[root]).toMatchObject({
@@ -224,7 +224,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
       expect(state.drafts).toEqual([
         { root, path: "moved/a.ts", text: "retained closed edits", disk },
       ]);
-      expect(await readFile(join(user, "file-operation.json"), "utf8")).toBe("null");
+      expect(await readFile(join(user, "client-file-operation-v1.json"), "utf8")).toBe("null");
       if (restart === 0) {
         const exited = new Promise((resolve) => app.process().once("exit", resolve));
         app.process().kill("SIGKILL");

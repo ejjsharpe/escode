@@ -31,6 +31,7 @@ import { affected, reconcile } from "./file-operation-state";
 export class FileOperations {
   private journal: Workspace;
   private pending?: Intent;
+  private savedBaselines = new Map<string, { root: string; path: string; before: Set<string>; disk: import("./project").Document }>();
   private handoff?: { root: string; facts: Intent[] };
   busy = false;
   constructor(
@@ -106,9 +107,15 @@ export class FileOperations {
     if (this.busy && this.pending?.kind !== "copy")
       throw Error("File operation is persisting recovery intent. Retry after completion.");
     // Apply facts inside the storage queue, including writes queued before a fact completed.
+    const acknowledged = new Map<string, typeof this.savedBaselines extends Map<string, infer V> ? V : never>();
     return this.workspace.write(state, (snapshot) => {
+      for (const [key, saved] of this.savedBaselines) {
+        const draft = snapshot.drafts.find(d => d.root === saved.root && d.path === saved.path);
+        if (!draft || draft.disk.version === saved.disk.version) acknowledged.set(key, saved);
+        else if (saved.before.has(draft.disk.version)) draft.disk = saved.disk;
+      }
       for (const fact of this.handoff?.facts ?? []) reconcile(snapshot, fact);
-    });
+    }).then(() => { for (const [key, saved] of acknowledged) if (this.savedBaselines.get(key) === saved) this.savedBaselines.delete(key); });
   }
   private remember(intent: Intent) {
     if (this.handoff?.root === intent.root) this.handoff.facts.push(structuredClone(intent));
@@ -258,6 +265,9 @@ export class FileOperations {
       }
       intent.completed = true;
       intent.savedDisk = result.disk;
+      const key = JSON.stringify([p.root, path]);
+      this.savedBaselines.set(key, { root: p.root, path,
+        before: new Set([...(this.savedBaselines.get(key)?.before ?? []), version]), disk: result.disk });
       this.remember(intent);
       try {
         await this.journal.writeIntent(intent);

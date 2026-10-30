@@ -47,7 +47,7 @@ test("Agents restores closed saved projects and shares conversations without mov
   ];
   await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
   await writeFile(
-    join(user, "workspace.json"),
+    join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [saved[0]],
       savedProjects: [...saved, { project: "/unapproved", root: b }],
@@ -254,7 +254,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     });
     await expect
       .poll(async () => {
-        const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+        const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
         return [state.selected, state.agentsChat];
       })
       .toEqual(["agents", "beta-chat"]);
@@ -279,7 +279,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("beta retained");
     await expect(page.getByRole("status")).toHaveText("Ready");
     expect(await readFile(join(dir, "events"), "utf8")).not.toContain("turn/start");
-    const state = JSON.parse(await readFile(join(user, "workspace.json"), "utf8"));
+    const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
     expect(state.views[a].checkout).toBe(worktree);
     expect(state.drafts[0].text).toBe("dirty alpha");
   } finally {
@@ -296,7 +296,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
 test("Agents keeps an unavailable remembered selection and validates catalogue arguments", async () => {
   const user = await mkdtemp(join(tmpdir(), "escode-agents-empty-"));
   await writeFile(
-    join(user, "workspace.json"),
+    join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
       selected: "agents",
@@ -328,7 +328,7 @@ test("Agents keeps an unavailable remembered selection and validates catalogue a
         }
       }),
     ).toBe(true);
-    expect(JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).agentsChat).toBe(
+    expect(JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).agentsChat).toBe(
       "missing-chat",
     );
   } finally {
@@ -346,7 +346,7 @@ test("Agents and local Chats keep newest-first order and original labels through
   const saved = [{ project: root, root }];
   await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
   await writeFile(
-    join(user, "workspace.json"),
+    join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: saved,
       selected: root,
@@ -491,7 +491,7 @@ test("global creation keeps newest-first rows through live summaries", async () 
   const saved = roots.map((root) => ({ project: root, root }));
   await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
   await writeFile(
-    join(user, "workspace.json"),
+    join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
       savedProjects: saved,

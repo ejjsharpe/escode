@@ -6,20 +6,32 @@ export function initialize(state: WorkspaceState) {
 }
 let pending: Promise<unknown> = Promise.resolve();
 let failure: unknown;
+let scheduled: ReturnType<typeof setTimeout> | undefined;
+let writeScheduled: (() => void) | undefined;
 export function persist() {
-  pending = window.escode.lifecycle("persist", structuredClone(memory));
-  void pending.then(
-    () => {
-      failure = undefined;
-    },
-    (error) => {
-      failure = error;
-      window.dispatchEvent(new CustomEvent("recovery-error", { detail: String(error) }));
-    },
-  );
+  if (scheduled) clearTimeout(scheduled);
+  if (!writeScheduled) {
+    pending = new Promise<void>((resolve, reject) => {
+      writeScheduled = () => {
+        scheduled = undefined;
+        writeScheduled = undefined;
+        window.escode.lifecycle("persist", structuredClone(memory)).then(() => {
+          failure = undefined; resolve();
+        }, error => {
+          failure = error;
+          window.dispatchEvent(new CustomEvent("recovery-error", { detail: String(error) }));
+          reject(error);
+        });
+      };
+    });
+    void pending.catch(() => {});
+  }
+  scheduled = setTimeout(() => writeScheduled?.(), 150);
   return pending;
 }
 export async function flush() {
+  if (scheduled) clearTimeout(scheduled);
+  writeScheduled?.();
   await pending;
   if (failure) throw failure;
 }

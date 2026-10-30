@@ -65,7 +65,7 @@ for (const failure of ["workspace", "renderer workspace", "acknowledgement"] as 
         fs.rename = async (...args: any[]) => {
           const destination = String(args[1]);
           const trashed = (globalThis as any).trashFixtures.length > 0;
-          if (trashed && destination.endsWith("/workspace.json")) {
+          if (trashed && destination.endsWith("/client-workspace-v1.json")) {
             workspaceWrites++;
             if (
               failure === "workspace" ||
@@ -75,7 +75,7 @@ for (const failure of ["workspace", "renderer workspace", "acknowledgement"] as 
           }
           if (
             trashed &&
-            destination.endsWith("/file-operation.json") &&
+            destination.endsWith("/client-file-operation-v1.json") &&
             failure === "acknowledgement" &&
             (await fs.readFile(args[0], "utf8")) === "null"
           )
@@ -92,7 +92,7 @@ for (const failure of ["workspace", "renderer workspace", "acknowledgement"] as 
       );
       await expect(f.page.getByRole("treeitem", { name: /^a.txt/ })).toHaveCount(0);
       await expect(readFile(join(f.root, "a.txt"))).rejects.toThrow();
-      const intent = JSON.parse(await readFile(join(f.user, "file-operation.json"), "utf8"));
+      const intent = JSON.parse(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8"));
       if (failure === "renderer workspace") expect(intent).toBe(null);
       else expect(intent).toMatchObject({ kind: "trash", source: "a.txt", completed: true });
       trash = await app.evaluate(() => (globalThis as any).trashFixtures);
@@ -115,9 +115,9 @@ for (const failure of ["workspace", "renderer workspace", "acknowledgement"] as 
       await expect(page.getByRole("treeitem", { name: /^folder/ })).toBeVisible();
       await expect(page.getByRole("treeitem", { name: /^a.txt/ })).toHaveCount(0);
       await expect
-        .poll(async () => JSON.parse(await readFile(join(f.user, "file-operation.json"), "utf8")))
+        .poll(async () => JSON.parse(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8")))
         .toBe(null);
-      expect(JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8")).drafts).toEqual([]);
+      expect(JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts).toEqual([]);
       expect(await readFile(trash[0], "utf8")).toBe("saved and trashed");
     } finally {
       await cleanup(app, f.base, trash);
@@ -146,7 +146,7 @@ for (const next of ["retry Trash", "ordinary Save", "external change"] as const)
         "probe native Trash failed",
       );
       expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe("first save");
-      const draft = JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8")).drafts[0];
+      const draft = JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts[0];
       expect(draft.text).toBe("first save");
       expect(draft.disk.text).toBe("first save");
       await edit(f.page, "a.txt", "second save");
@@ -162,7 +162,7 @@ for (const next of ["retry Trash", "ordinary Save", "external change"] as const)
           await expect(f.page.locator(".conflict")).toContainText("a.txt changed on disk");
           expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe("real external writer");
           expect(
-            JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8")).drafts[0].text,
+            JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts[0].text,
           ).toBe("second save");
         } else {
           await expect(f.page.locator(".content:visible > [role=status]")).toContainText(
@@ -194,7 +194,7 @@ test("partial descendant save carries its new baseline through later conflict an
     await f.page.getByRole("menuitem", { name: "Move to Trash", exact: true }).click();
     await expect(f.page.locator(".conflict")).toContainText("folder/two.txt changed on disk");
     expect(await readFile(join(f.root, "folder/one.txt"), "utf8")).toBe("saved descendant");
-    const drafts = JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8")).drafts;
+    const drafts = JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts;
     expect(drafts.find((d: any) => d.path === "folder/one.txt").disk.text).toBe("saved descendant");
     expect(drafts.find((d: any) => d.path === "folder/two.txt").disk.text).toBe(
       "disk folder/two.txt",
@@ -233,7 +233,7 @@ test("completed save with failed baseline persistence blocks Trash and recovers 
         return value;
       };
       fs.rename = async (...args: any[]) => {
-        if (saved && String(args[1]).endsWith("/workspace.json"))
+        if (saved && String(args[1]).endsWith("/client-workspace-v1.json"))
           throw Error("probe baseline handoff denied");
         return rename(...args);
       };
@@ -248,7 +248,7 @@ test("completed save with failed baseline persistence blocks Trash and recovers 
     );
     expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe("completed but not handed off");
     expect(await app.evaluate(() => (globalThis as any).trashFixtures)).toEqual([]);
-    expect(JSON.parse(await readFile(join(f.user, "file-operation.json"), "utf8"))).toMatchObject({
+    expect(JSON.parse(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8"))).toMatchObject({
       kind: "save",
       completed: true,
       savedDisk: { text: "completed but not handed off" },
@@ -260,10 +260,10 @@ test("completed save with failed baseline persistence blocks Trash and recovers 
       "completed but not handed off",
     );
     await expect
-      .poll(async () => JSON.parse(await readFile(join(f.user, "file-operation.json"), "utf8")))
+      .poll(async () => JSON.parse(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8")))
       .toBe(null);
     expect(
-      JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8")).drafts[0].disk.text,
+      JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts[0].disk.text,
     ).toBe("completed but not handed off");
     await edit(page, "a.txt", "new edit after recovery");
     await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
@@ -306,7 +306,7 @@ for (const completion of ["crash", "continue"] as const) {
         let paused = false;
         fs.rename = async (...args: any[]) => {
           const clearing =
-            String(args[1]).endsWith("/file-operation.json") &&
+            String(args[1]).endsWith("/client-file-operation-v1.json") &&
             (await fs.readFile(args[0], "utf8")) === "null";
           const value = await rename(...args);
           if (!paused && clearing && (globalThis as any).trashFixtures.length > 0) {
@@ -322,16 +322,16 @@ for (const completion of ["crash", "continue"] as const) {
         .getByRole("button", { name: "Move to Trash 2 selected items", exact: true })
         .click();
       await expect.poll(() => app.evaluate(() => !!(globalThis as any).resumeBatch)).toBe(true);
-      expect(JSON.parse(await readFile(join(f.user, "file-operation.json"), "utf8"))).toBe(null);
+      expect(JSON.parse(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8"))).toBe(null);
       expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe("saved a");
       await expect(readFile(join(f.root, "b.txt"))).rejects.toThrow();
       await f.page.getByRole("button", { name: "Agents", exact: true }).click();
       await expect
         .poll(
-          async () => JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8")).selected,
+          async () => JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).selected,
         )
         .toBe("agents");
-      const state = JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8"));
+      const state = JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8"));
       expect(state.drafts.find((d: any) => d.path === "a.txt")).toMatchObject({
         text: "saved a",
         disk: { text: "saved a" },
@@ -370,7 +370,7 @@ for (const completion of ["crash", "continue"] as const) {
         await expect(page.locator(".conflict")).toContainText("a.txt changed on disk");
         expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe("real external change");
         expect(
-          JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8")).drafts.find(
+          JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts.find(
             (d: any) => d.path === "folder/one.txt",
           ).text,
         ).toBe("retained unrelated edits");
@@ -397,7 +397,7 @@ for (const completion of ["crash", "continue"] as const) {
         await expect
           .poll(
             async () =>
-              JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8")).drafts.find(
+              JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts.find(
                 (d: any) => d.path === "a.txt",
               )?.text,
           )
@@ -429,7 +429,7 @@ for (const change of [
         await edit(f.page, "one.txt", "unrelated retained edits");
         await expect
           .poll(async () => {
-            const state = JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8"));
+            const state = JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8"));
             return state.drafts.find((d: any) => d.path === "folder/one.txt")?.text;
           })
           .toBe("unrelated retained edits");
@@ -500,7 +500,7 @@ for (const change of [
         );
         await expect(readFile(join(f.root, "a.txt"))).rejects.toThrow();
       }
-      const state = JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8"));
+      const state = JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8"));
       if (change !== "editor close") {
         expect(state.drafts.find((d: any) => d.path === "folder/one.txt")).toMatchObject({
           root: f.root,

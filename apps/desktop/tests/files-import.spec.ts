@@ -309,7 +309,7 @@ test("imports never carry source drafts; same-folder import preserves original; 
       .toBe("source disk");
     await expect(f.page.locator(".content:visible > [role=status]")).toContainText("Copied;");
     expect(await readFile(join(f.root, "a.ts"), "utf8")).toBe("source disk");
-    const drafts = JSON.parse(await readFile(join(f.user, "workspace.json"), "utf8")).drafts;
+    const drafts = JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts;
     expect(drafts.find((d: any) => d.path === "a.ts")?.text).toBe("source draft");
     expect(drafts.find((d: any) => d.path === "a copy.ts")).toBeUndefined();
     await clipboardFiles(f, [join(f.other, "a.ts")]);
@@ -324,7 +324,7 @@ test("imports never carry source drafts; same-folder import preserves original; 
     expect(prompts.at(-1).buttons).toEqual(["Open affected files", "Keep Both", "Cancel"]);
     await expect(row(f.page, "a.ts")).toContainText("•");
     await expect(f.page.locator(".content:visible > [role=status]")).toContainText("Copied;");
-    await clipboardFiles(f, [join(f.user, "workspace.json")]);
+    await clipboardFiles(f, [join(f.user, "client-workspace-v1.json")]);
     await f.page.keyboard.press("Meta+v");
     await expect(f.page.locator(".content:visible > [role=status]")).toContainText(
       "Protected app state",

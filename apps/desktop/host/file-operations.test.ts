@@ -659,3 +659,17 @@ test("an opened copy stage moved away before native failure retains uncertain in
       staged.close();
     }
   }));
+
+
+test("a late client snapshot retains newer text and the completed ordinary-save baseline", async () =>
+  fixture(async (p, store, base) => {
+    const ops = new FileOperations(store, join(base, "intent.json"));
+    const stale = await store.read();
+    await ops.save(p, "folder/a.ts", "saved", stale.drafts[0].disk.version, () => {});
+    stale.drafts[0].text = "newer available text";
+    await ops.persist(stale);
+    const fresh = await new Workspace(join(base, "workspace.json")).read();
+    expect(fresh.drafts[0]).toMatchObject({ text: "newer available text", disk: { text: "saved" } });
+    writeFileSync(join(p.root, "folder/a.ts"), "external writer");
+    expect((await ops.save(p, "folder/a.ts", fresh.drafts[0].text, fresh.drafts[0].disk.version, () => {})).kind).toBe("conflict");
+  }));

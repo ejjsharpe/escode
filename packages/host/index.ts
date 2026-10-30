@@ -7,13 +7,15 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { maximumFileFrameBytes, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult } from "@escode/contracts";
 
+const fileMethods = ["readFile", "saveFile", "loadWorkspace", "persistWorkspace"];
+
 // Guard parser/error writes too; they bypass the RPC response budget.
 class BoundedWebSocket extends WebSocket {
   override emit(event: string | symbol, ...args: any[]): boolean {
     if (event === "message" && Buffer.byteLength(args[0]) > maximumFrameBytes) {
       try {
         const request = JSON.parse(String(args[0]));
-        if (request?._tag !== "Request" || !["readFile", "saveFile", "loadWorkspace", "persistWorkspace"].includes(request.tag)) {
+        if (request?._tag !== "Request" || !fileMethods.includes(request.tag)) {
           this.terminate(); return false;
         }
       } catch { this.terminate(); return false; }
@@ -111,7 +113,7 @@ export async function startDirectoryHost(options: {
           const requests = pending.get(id) ?? new Set<string | number>();
           if (!Schema.is(requestEnvelope)(data) || data.isNotification || data.discard ||
               requests.size >= 16 || requests.has(data.id)) return reject(id);
-          const file = ["readFile", "saveFile", "loadWorkspace", "persistWorkspace"].includes(data.tag);
+          const file = fileMethods.includes(data.tag);
           if (Buffer.byteLength(JSON.stringify(data)) > (file ? maximumFileFrameBytes : maximumFrameBytes)) return reject(id);
           if (file) { const files = fileRequests.get(id) ?? new Set(); files.add(data.id); fileRequests.set(id, files); }
           requests.add(data.id); pending.set(id, requests);
