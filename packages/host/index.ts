@@ -5,7 +5,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult } from "@escode/contracts";
+import { DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult } from "@escode/contracts";
 
 // Guard parser/error writes too; they bypass the RPC response budget.
 class BoundedWebSocket extends WebSocket {
@@ -134,7 +134,7 @@ export async function startDirectoryHost(options: {
       Effect.provide(HostQueries.toLayer({
         draftAction: ({ action }) => Effect.tryPromise({ try: async () => {
           if (!options.draftAction) throw Error("Draft editing unavailable");
-          return options.draftAction(action);
+          return Schema.decodeUnknownSync(DraftRecord)({ ...await options.draftAction(action) as object, draft: "" });
         }, catch: String }),
         sendState: ({ project, id }) => Effect.tryPromise({ try: async () => {
           if (!options.sendState) throw Error("Send unavailable");

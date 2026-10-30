@@ -236,6 +236,15 @@ export async function connectCodex(
   }
 }
 
+export async function draftSettings(cwd: string) {
+  const rpc = await connectCodex(cwd, () => {}, () => {});
+  try {
+    const { config } = await rpc.request("config/read", { includeLayers: false });
+    return { model: config.model ?? null, reasoning: config.model_reasoning_effort ?? null,
+      approval: config.approval_policy ?? null, sandbox: config.sandbox_mode ?? null };
+  } finally { rpc.close(); }
+}
+
 export async function probeCodex(path: string) {
   const rpc = await connectCodex(
     homedir(),

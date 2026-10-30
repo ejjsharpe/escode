@@ -37,6 +37,8 @@ async function send(project: string | null, id: string, text: string) {
   const receipt = Schema.decodeUnknownSync(SendReceipt)(result);
   if (receipt.status !== "accepted") throw Error(`Send ${receipt.status}. ${receipt.message} Inspect history; work was not resent.`);
   localStorage.removeItem(key);
+  const composerKey = `escode-composer:${id}`;
+  if (localStorage.getItem(composerKey) === command.text) localStorage.setItem(composerKey, "");
   if (text !== command.text) throw Error("Previous Send accepted. Current text retained; Send again explicitly.");
 }
 async function control(operation: "stop" | "answer", project: string | null, id: string, target: string, token = "", answer: unknown = null) {
@@ -79,7 +81,7 @@ contextBridge.exposeInMainWorld(
       ? (async () => {
         const project = args[0] as string | null, id = args[1] as string;
         const expected = operation === "createDraft" ? undefined : (await directories.sendState(project, id)).expected;
-        return directories.draftAction({ operation: operation as "createDraft" | "context" | "execution", project, id, expected,
+        return directories.draftAction({ operation: operation as "createDraft" | "context" | "execution", project, ...(operation === "createDraft" ? {} : { id, expected }),
           ...(operation === "context" ? { target: args[2] as string | null } : {}),
           ...(operation === "execution" ? { mode: args[2] as "new" | "reuse", value: args[3] as string, commit: args[4] as string } : {}),
         });

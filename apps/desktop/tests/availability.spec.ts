@@ -237,6 +237,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
     const acknowledged = await page.evaluate(() => window.escode.lifecycle("load"));
     await page.evaluate((state) => window.escode.lifecycle("persist", state), acknowledged.state);
     await rename(root, root + "-away");
+    await app.evaluate(({ session }) => session.defaultSession.flushStorageData());
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;

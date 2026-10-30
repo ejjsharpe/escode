@@ -19,7 +19,7 @@ import { startDirectoryHost } from "@escode/host";
 import { maximumFrameBytes, type DirectoryResult } from "@escode/contracts";
 import { FoundationState } from "./foundation-state";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { toolStatus } from "./tools";
+import { draftSettings, toolStatus } from "./tools";
 import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
 import { Workspace } from "./workspace";
@@ -90,7 +90,7 @@ app.whenReady().then(async () => {
     return toolStatus();
   });
   const store = new Chats(join(app.getPath("userData"), "host-chats-v1.json"));
-  const chats = new ChatService(store);
+  const chats = new ChatService(store, undefined, undefined, draftSettings);
   const projects = new Map<string, Project>();
   const projectSessions = new Map<string, object>();
   const unapprovedProjects = new Set<string>();

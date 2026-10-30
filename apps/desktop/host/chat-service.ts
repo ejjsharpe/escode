@@ -60,6 +60,7 @@ export class ChatService {
     private store: Chats,
     private connect = connectCodex,
     private spool: Pick<LiveSpool, "read" | "write"> = new LiveSpool(store.spoolDirectory),
+    private previewSettings?: (cwd: string) => Promise<unknown>,
   ) {}
   private writers = 0;
   private persistOutput(s: Session) {
@@ -240,6 +241,7 @@ export class ChatService {
           if (chat.project !== null && !chat.worktree) this.validateCheckout(s, chat.checkout);
           else if (chat.worktree?.reservation) this.store.validateWorktree(chat);
           else if (chat.scratch) this.store.validateScratch(chat);
+          if (this.previewSettings && chat.checkout) s.settings = await this.previewSettings(chat.checkout);
           return;
         }
         const directoryError = await this.store.validateDirectory(chat);
