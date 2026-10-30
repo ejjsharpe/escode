@@ -1,7 +1,8 @@
 # Foundation manual checks
 
 For [Accept the complete local foundation](https://github.com/ejjsharpe/escode/issues/86).
-Results are pending. The prepared package contains application commit `e970363`;
+The user reported all checklist checks were fine on 2026-10-30.
+The prepared package contains application commit `e970363`;
 record that commit and the package path before starting. The earlier package does not certify later fixes.
 Use a disposable Git repository and test files, with VoiceOver enabled (Cmd+F5).
 Use Tab/Shift+Tab and VoiceOver navigation to reach controls; activate them with
@@ -10,6 +11,24 @@ the keyboard. Record any step needing the mouse.
 For each check report: **pass/fail/blocked; focus destination; announcement;
 unexpected behavior**. Include macOS version, build commit, date and operator.
 
+
+## Reported results — 2026-10-30
+
+Elliot reported: “I did everything in the checlist you mentioned before and it was all fine”.
+This records user-confirmed manual keyboard/focus/VoiceOver success for the supplied
+close/reopen, renderer reconnect, conflict choices, Needs input, Quit cancellation,
+Save/Discard and failed-Save checks, and Files/Source Control navigation. No
+per-control announcement transcript or separate fault-injection log was supplied;
+none is inferred. In particular, prolonged socket-only outage announcements remain
+unverified separately from renderer reload.
+
+Two setup problems occurred before this confirmation. Force Quit left the expected
+exclusive foundation lock: after the failed startup exited, the foundation was
+backed up, validated using the production validator on a copy, and only the stale
+lock was removed. Launching without the fixture PATH then sent its synthetic
+`thread` session ID to real Codex; the full launcher restores the correct provider.
+Neither recovery means Force Quit automatically restarts or fake history is usable
+by real Codex. The reported success follows the corrected launch instructions.
 
 ## Prepared local session
 

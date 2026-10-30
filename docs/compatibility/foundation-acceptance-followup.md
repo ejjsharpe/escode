@@ -2,7 +2,7 @@
 
 Follow-up to [Accept the complete local foundation](https://github.com/ejjsharpe/escode/issues/86)
 and the [initial integrated record](foundation-acceptance.md), on 2026-10-30.
-The starting commit is `5373c2f`; application fixes are in `e970363`, with final acceptance fixtures at `ae0114f`. **Acceptance remains pending manual evidence.**
+The starting commit is `5373c2f`; application fixes are in `e970363`, with final acceptance fixtures at `ae0114f`. **Applicable local qualification is complete, including user-confirmed manual checks on 2026-10-30, within the recorded limits.**
 
 ## Repairs
 
@@ -89,10 +89,15 @@ state and a deterministic input-request fixture. A separate packaged rehearsal
 passed fixture selection, live input, renderer reload with retained selected chat
 and composer, and Stop after waiting for the debounced selection save. See the
 [rehearsal result](foundation-acceptance-followup/manual-rehearsal.log).
-Current-build VoiceOver results
-remain pending. Renderer reload can exercise reconnection; prolonged socket-only
-failure announcements remain a distinct assisted check. Native Finder/clipboard/
-Trash follow-up remains outstanding under the accepted exclusion.
+On 2026-10-30 the user confirmed that everything in the supplied checklist was
+fine, after the stale-lock recovery and corrected fixture launch instructions.
+This supplies current-build user-reported keyboard/focus/VoiceOver evidence for
+close/reopen, renderer reconnect, conflicts, Needs input, Quit and Files/Source
+Control. See the checklist's reported-results section for provenance and setup
+incidents. No detailed announcement transcript was supplied. Prolonged socket-only
+failure announcements are not independently evidenced by the renderer reload
+check. Native Finder/clipboard/Trash follow-up remains outstanding under the
+accepted exclusion.
 
 Legacy import, upgrade/downgrade support, exhaustive multi-client/revocation and
 full sustained-load qualification remain excluded and unclaimed.

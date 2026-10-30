@@ -1,7 +1,8 @@
 # Integrated local foundation qualification
 
 See the [follow-up repairs and qualification](foundation-acceptance-followup.md)
-for the subsequent implementation fixes, rerun results and manual checklist.
+for the subsequent implementation fixes, passing rerun results and user-confirmed
+manual checks on 2026-10-30.
 The record below preserves the original failed run.
 
 Tracks [Accept the complete local foundation](https://github.com/ejjsharpe/escode/issues/86).
