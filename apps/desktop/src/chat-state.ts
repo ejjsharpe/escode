@@ -188,7 +188,7 @@ class ProjectChats {
   }
   async stop(id: string) {
     try {
-      await window.escode.chat("stop", this.project, id);
+      await window.escode.chat("stop", this.project, id, this.state.snapshots[id]?.controlTarget);
     } catch (e) {
       this.report(id, e);
     } finally {

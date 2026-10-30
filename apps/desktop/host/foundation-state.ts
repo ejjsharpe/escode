@@ -178,7 +178,7 @@ export class FoundationState {
 
   admit(command: SendCommand): SendReceipt {
     command = { commandId: command.commandId, admissionEpoch: command.admissionEpoch,
-      project: command.project, id: command.id, expected: command.expected, text: command.text };
+      project: command.project, id: command.id, expected: command.expected, text: command.text, ...(command.control ? { control: command.control } : {}) };
     const previous = this.receipt(command.commandId);
     if (previous) {
       if (JSON.stringify(previous.command) !== JSON.stringify(command)) throw Error("Command identity conflict");

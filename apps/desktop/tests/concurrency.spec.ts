@@ -270,6 +270,7 @@ createInterface({input:process.stdin}).on('line', line => {
     await rename(a, a + "-unavailable");
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await rename(a + "-unavailable", a);
+    await expect.poll(() => page.evaluate(({ b, id }) => new Promise<boolean>((resolve, reject) => { const off = window.escode.chatLive(b, id, value => { off(); resolve(value.busy); }, reject); }), { b, id: ids[2] })).toBe(false);
     const states = await page.evaluate(
       async ({ a, b, ids }) =>
         Promise.all([

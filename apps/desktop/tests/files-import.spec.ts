@@ -265,7 +265,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect.poll(() => app.evaluate(() => (globalThis as any).copyRunning)).toBe(true);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     const stopStart = Date.now();
-    await page.evaluate(({ root, chat }) => window.escode.chat("stop", root, chat), { root, chat });
+    await page.evaluate(({ root, chat }) => new Promise<void>((resolve, reject) => { const off = window.escode.chatLive(root, chat, snapshot => { off(); window.escode.chat("stop", root, chat, snapshot.controlTarget).then(resolve, reject); }, reject); }), { root, chat });
     const stopMs = Date.now() - stopStart;
     expect(await app.evaluate(() => (globalThis as any).copyRunning)).toBe(true);
     await expect

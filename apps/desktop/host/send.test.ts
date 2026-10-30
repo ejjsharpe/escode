@@ -109,3 +109,20 @@ test.each(["admitted", "dispatching", "accepted"] as const)("restart after %s ne
     store.close();
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+test("control receipts preserve exact targets and answers, reject changed payloads and never redispatch", async () => {
+  const { executeSend } = await import("./send");
+  const directory = mkdtempSync(join(tmpdir(), "escode-control-receipt-"));
+  try {
+    const store = FoundationState.open(join(directory, "foundation"));
+    const command = { commandId: "reply", admissionEpoch: store.admissionEpoch, project: null,
+      id: "chat", expected: "", text: "", control: { operation: "answer" as const, target: "", token: "request", answer: "accept" } };
+    let effects = 0;
+    expect((await executeSend(store, command, async () => { effects++; })).status).toBe("accepted");
+    await executeSend(store, command, async () => { effects++; });
+    expect(effects).toBe(1);
+    expect(store.receipt("reply")?.command.control).toEqual(command.control);
+    expect(() => store.admit({ ...command, control: { ...command.control, answer: "decline" } })).toThrow("conflict");
+    store.close();
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

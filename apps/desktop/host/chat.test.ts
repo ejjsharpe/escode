@@ -73,12 +73,19 @@ test("turns, approvals and Stop stay scoped; reconnect invalidates old callbacks
     const request = service.snapshot(dir, a.id).requests[0];
     await expect(service.answer(dir, b.id, request.token, "accept")).rejects.toThrow("Stale");
     await service.answer(dir, a.id, request.token, "decline");
+    await expect(service.answer(dir, a.id, request.token, "accept")).rejects.toThrow("Stale");
+    await expect(service.stop(dir, a.id, "old-session")).rejects.toThrow("Stale Stop");
+    expect(peers[0].calls).not.toContain("turn/interrupt");
     expect(peers[0].replies).toEqual([{ id: 77, result: { decision: "decline" } }]);
     peers[0].emit({
       id: 78,
       method: "item/fileChange/requestApproval",
       params: { threadId: "thread-0", turnId: "turn-1", itemId: "item-2" },
     });
+    for (let n = 0; n < 31; n++) peers[0].emit({ id: 100 + n, method: "item/fileChange/requestApproval", params: { threadId: "thread-0", turnId: "turn-1", itemId: String(n) } });
+    const reused = service.snapshot(dir, a.id).requests[0];
+    peers[0].emit({ id: 78, method: "item/fileChange/requestApproval", params: { threadId: "thread-0", turnId: "turn-1", itemId: "replacement" } });
+    await expect(service.answer(dir, a.id, reused.token, "accept")).rejects.toThrow("Stale");
     const stale = service.snapshot(dir, a.id).requests[0];
     await service.stop(dir, a.id);
     expect(peers[0].calls.at(-1)).toBe("turn/interrupt");
@@ -460,4 +467,27 @@ test("unsupported chat association versions retain their exact bytes", async () 
     await expect(store.createDraft(null, "")).rejects.toThrow("Unsupported chat association store");
     expect(await readFile(file, "utf8")).toBe(bytes);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("Stop cancels captured preparation without deleting its saved draft or dispatching a turn", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-cancel-preparation-"));
+  const store = new Chats(join(dir, "chats.json"));
+  const service = new ChatService(store, async () => { throw Error("provider must not start"); });
+  try {
+    const chat = await service.create(dir);
+    let release!: () => void;
+    let entered!: () => void;
+    const ready = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const sending = service.send(dir, chat.id, "retained", async () => { entered(); await gate; });
+    const failed = expect(sending).rejects.toThrow("not submitted");
+    await ready;
+    const snapshot = service.snapshot(dir, chat.id);
+    expect(snapshot.preparing).toBe(true);
+    await service.stop(dir, chat.id, snapshot.controlTarget);
+    release();
+    await failed;
+    expect((await store.get(dir, chat.id)).draft).toBe("retained");
+    expect(service.snapshot(dir, chat.id).busy).toBe(false);
+  } finally { await service.shutdown(); await rm(dir, { recursive: true, force: true }); }
 });

@@ -38,6 +38,17 @@ async function send(project: string | null, id: string, text: string) {
   localStorage.removeItem(key);
   if (text !== command.text) throw Error("Previous Send accepted. Current text retained; Send again explicitly.");
 }
+async function control(operation: "stop" | "answer", project: string | null, id: string, target: string, token = "", answer: unknown = null) {
+  const key = `escode-control:${JSON.stringify([project, id, operation, target, token])}`;
+  const saved = localStorage.getItem(key);
+  const state = await directories.sendState(project, id);
+  const command = saved ? JSON.parse(saved) : { ...state, commandId: crypto.randomUUID(), project, id, text: "", control: { operation, target, token, answer } };
+  localStorage.setItem(key, JSON.stringify(command));
+  const receipt = saved ? (await directories.sendStatus(command.commandId) ?? await directories.sendMessage(command)) : await directories.sendMessage(command);
+  if (!receipt) throw Error("Control outcome unavailable; command identity retained. Refresh to inspect current work.");
+  if (receipt.status !== "accepted") throw Error(`${operation} ${receipt.status}: ${receipt.message}`);
+  localStorage.removeItem(key);
+}
 window.addEventListener("unload", () => { void directories.close(); });
 contextBridge.exposeInMainWorld(
   "escode",
@@ -72,6 +83,8 @@ contextBridge.exposeInMainWorld(
       : operation === "resolveSend" ? ipcRenderer.invoke("chat", operation, ...args).then(confirmed => {
         if (confirmed) localStorage.removeItem(`escode-send:${JSON.stringify([args[0], args[1]])}`);
       })
+      : operation === "stop" ? control("stop", args[0] as string | null, args[1] as string, args[2] as string)
+      : operation === "answer" ? control("answer", args[0] as string | null, args[1] as string, "", args[2] as string, args[3])
       : operation === "send" ? send(args[0] as string | null, args[1] as string, args[2] as string)
       : ipcRenderer.invoke("chat", operation, ...args),
     toolStatus: () => ipcRenderer.invoke("tools:status"),

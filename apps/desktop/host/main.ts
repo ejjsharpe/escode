@@ -462,7 +462,13 @@ app.whenReady().then(async () => {
     sendMessage: async input => {
       const command = Schema.decodeUnknownSync(SendCommand)(input);
       await authorizeHistory(command.project, command.id);
-      return executeSend(foundation, command, () => dispatchSend(command));
+      return executeSend(foundation, command, async () => {
+        if (command.control) {
+          const { operation, target, token, answer } = command.control;
+          if (operation === "stop") await chats.stop(command.project, command.id, target);
+          else await chats.answer(command.project, command.id, token, answer);
+        } else await dispatchSend(command);
+      });
     },
     chatSnapshot: async (root, id) => { await authorizeHistory(root, id); return chats.inspect(root, id); },
     openChat: async (root, id) => { await authorizeHistory(root, id); return chats.open(root, id); },
@@ -1388,7 +1394,7 @@ app.whenReady().then(async () => {
       if (target.repository() !== root) throw Error("Checkout belongs to another project.");
       return chats.create(root, target.root);
     }
-    const [id, value, answer] = args;
+    const [id, value] = args;
     if (typeof id !== "string" || id.length > 100) throw Error("Invalid chat identity");
     await chats.list(root).then((list) => {
       if (!list.some((c) => c.id === id)) throw Error("Unknown project/chat");
@@ -1396,19 +1402,12 @@ app.whenReady().then(async () => {
     if (!["snapshot", "draft", "composer"].includes(String(operation))) requireOpen();
     if (args.length === 1) {
       if (operation === "composer") return (await store.get(root, id)).draft;
-      if (operation === "stop") return chats.stop(root, id);
+
       if (operation === "disconnect") return chats.disconnect(root, id);
     }
     if (args.length === 2 && typeof value === "string" && value.length <= 100000) {
       if (operation === "draft") return chats.draft(root, id, value);
     }
-    if (
-      operation === "answer" &&
-      args.length === 3 &&
-      typeof value === "string" &&
-      JSON.stringify(answer)?.length <= 200000
-    )
-      return chats.answer(root, id, value, answer);
     throw Error("Invalid chat request");
   });
   void window.loadURL(documentURL);

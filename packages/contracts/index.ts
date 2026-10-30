@@ -54,7 +54,7 @@ export const HistoryPage = Schema.Struct({
 export type HistoryPage = typeof HistoryPage.Type;
 export const ChatDetail = Schema.Struct({
   project: Schema.NullOr(Schema.String), chatId: Schema.String, threadId: Schema.NullOr(Schema.String),
-  connected: Schema.Boolean, busy: Schema.Boolean, turnId: Schema.NullOr(Schema.String),
+  controlTarget: Schema.optional(Schema.String), preparing: Schema.optional(Schema.Boolean), connected: Schema.Boolean, busy: Schema.Boolean, turnId: Schema.NullOr(Schema.String),
   settings: Schema.Unknown, items: HistoryPage.fields.items,
   requests: Schema.Array(Schema.Struct({ token: Schema.String, method: Schema.String, params: Schema.Unknown })),
   error: Schema.NullOr(Schema.String), contextError: Schema.optional(Schema.NullOr(Schema.String)),
@@ -73,6 +73,7 @@ export const HistoryQuery = { project: Schema.NullOr(Schema.String), id: Schema.
 export const SendCommand = Schema.Struct({
   commandId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
   admissionEpoch: Schema.String, project: Schema.NullOr(Schema.String), id: Schema.String,
+  control: Schema.optional(Schema.Struct({ operation: Schema.Literals(["stop", "answer"]), target: Schema.String, token: Schema.String, answer: Schema.Unknown })),
   expected: Schema.String, text: Schema.String.check(Schema.isMaxLength(100000)),
 });
 export type SendCommand = typeof SendCommand.Type;

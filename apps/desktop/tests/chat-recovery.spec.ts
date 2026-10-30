@@ -70,7 +70,7 @@ send({id:m.id,result});});`,
     expect(
       (await page.evaluate((id) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( null, id), ids.b)).busy,
     ).toBe(true);
-    await page.evaluate((id) => window.escode.chat("stop", null, id), ids.b);
+    await page.evaluate((id) => new Promise<void>((resolve, reject) => { const off = window.escode.chatLive(null, id, snapshot => { off(); window.escode.chat("stop", null, id, snapshot.controlTarget).then(resolve, reject); }, reject); }), ids.b);
     await app.close();
     await mkdir(root);
     await writeFile(join(dir, "git"), "#!/bin/sh\nexit 127\n", { mode: 0o700 });

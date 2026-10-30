@@ -7,6 +7,8 @@ import { codexDiagnostic, connectCodex, type CodexConnection, type WireMessage }
 export type ChatItem = { id: string; turnId: string; type: string; text: string; revision?: string };
 export type LiveRequest = { token: string; method: string; params: any };
 export type ChatSnapshot = {
+  controlTarget?: string;
+  preparing?: boolean;
   project: string | null;
   chatId: string;
   threadId: string | null;
@@ -32,6 +34,9 @@ type Session = ChatSnapshot & {
   outputItems?: ChatItem[];
   writing?: Promise<void>;
   sending?: boolean;
+  preparation?: string;
+  cancelled?: boolean;
+  seenRequestIds?: Set<string | number>;
   checkoutIdentity?: { path: string; dev: number; ino: number };
 };
 export class ChatService {
@@ -115,11 +120,13 @@ export class ChatService {
   snapshot(project: string | null, id: string): ChatSnapshot {
     const s = this.session(project, id, false);
     return structuredClone({
+      controlTarget: JSON.stringify([s.epoch, s.turnId, s.preparation]),
       project,
       chatId: id,
       threadId: s.threadId,
       connected: s.connected,
       busy: s.busy,
+      preparing: !!s.preparation,
       turnId: s.turnId,
       settings: s.settings,
       items: s.items,
@@ -212,6 +219,7 @@ export class ChatService {
     s.opening = (async () => {
       const epoch = randomUUID();
       s.epoch = epoch;
+      s.seenRequestIds = new Set();
       s.error = null;
       let rpc: CodexConnection | undefined;
       let chat: Readonly<SavedChat> | undefined;
@@ -448,6 +456,10 @@ export class ChatService {
         s.rpc?.close();
         return;
       }
+      if (s.seenRequestIds?.has(message.id)) {
+        for (const [token, wireId] of s.requestIds) if (wireId === message.id) { s.requestIds.delete(token); s.requests = s.requests.filter(r => r.token !== token); }
+        s.error = "Provider reused a live request identifier. Stop and reconnect."; return; }
+      s.seenRequestIds?.add(message.id);
       if (s.requests.length >= 32 || Buffer.byteLength(JSON.stringify([...s.requests, { params: p }])) > 64 * 1024) {
         s.error = "Provider request capacity exhausted. Request details unavailable; provider work continues and Stop remains available.";
         return;
@@ -526,6 +538,8 @@ export class ChatService {
     if (!text.trim() || text.length > 100000)
       throw Error("Enter a message under 100,000 characters.");
     s.sending = true;
+    s.preparation = randomUUID();
+    s.cancelled = false;
     let launched = false;
     let sendIntent = false;
     let chat: Readonly<SavedChat> | undefined;
@@ -535,16 +549,16 @@ export class ChatService {
       if (chat.removed) throw Error("Checkout was removed. This chat cannot run.");
       await this.store.draft(project, id, text);
       await authorize(chat);
-      if (this.sessions.get(id) !== s || s.epoch !== epoch)
-        throw Error("Chat disconnected during authorization. Work was not submitted.");
+      if (this.sessions.get(id) !== s || s.epoch !== epoch || s.cancelled)
+        throw Error(s.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during authorization. Work was not submitted.");
       if (chat.project === null) chat = await this.store.prepareScratch(chat);
       else chat = await prepare(chat);
-      if (this.sessions.get(id) !== s || s.epoch !== epoch)
-        throw Error("Chat disconnected during authorization. Work was not submitted.");
+      if (this.sessions.get(id) !== s || s.epoch !== epoch || s.cancelled)
+        throw Error(s.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during authorization. Work was not submitted.");
       if (chat.phase === "draft") {
         await this.store.update(project, id, { initialSend: "preparing" });
-        if (this.sessions.get(id) !== s || s.epoch !== epoch)
-          throw Error("Chat disconnected during preparation. Work was not submitted.");
+        if (this.sessions.get(id) !== s || s.epoch !== epoch || s.cancelled)
+          throw Error(s.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during preparation. Work was not submitted.");
         await this.connectSession(project, id, chat);
       }
       if (!s.connected || !s.rpc)
@@ -557,6 +571,8 @@ export class ChatService {
         true,
       );
       if (directoryError) throw Error(directoryError);
+      if (s.cancelled) throw Error("Preparation cancelled; reserved resources retained and may be partially prepared.");
+      s.preparation = undefined;
       s.busy = true;
       s.stopping = false;
       s.error = null;
@@ -601,12 +617,15 @@ export class ChatService {
       throw Object.assign(Error(s.error), { rejected: !!rejected });
     } finally {
       s.sending = false;
+      s.preparation = undefined;
     }
     return this.snapshot(project, id);
   }
-  async stop(project: string | null, id: string) {
+  async stop(project: string | null, id: string, target?: string) {
     await this.store.get(project, id);
     const s = this.session(project, id, false);
+    if (target !== undefined && target !== this.snapshot(project, id).controlTarget) throw Object.assign(Error("Stale Stop target."), { rejected: true });
+    if (s.preparation) { s.cancelled = true; s.error = "Preparation cancelled; reserved resources retained and may be partially prepared."; return; }
     if (!s.connected || !s.busy || !s.turnId) throw Error("No interruptible active turn.");
     s.stopping = true;
     s.requests = [];
@@ -614,7 +633,7 @@ export class ChatService {
     await s.rpc!.request("turn/interrupt", { threadId: s.threadId, turnId: s.turnId });
   }
   async answer(project: string | null, id: string, token: string, answer: unknown) {
-    const chat = await this.store.get(project, id);
+    await this.store.get(project, id);
     const s = this.session(project, id, false);
     const request = s.requests.find((r) => r.token === token),
       wireId = s.requestIds.get(token);
@@ -662,12 +681,9 @@ export class ChatService {
           ? { permissions: answer === "accept" ? request.params.permissions : {}, scope: "turn" }
           : { decision: answer };
     }
-    this.store.validateWorktree(chat);
-    this.store.validateScratch(chat);
-    this.validateCheckout(s, chat.checkout);
-    s.rpc!.respond(wireId, result);
     s.requestIds.delete(token);
     s.requests = s.requests.filter((r) => r.token !== token);
+    s.rpc!.respond(wireId, result);
   }
   disconnect(project: string | null, id: string) {
     const s = this.session(project, id, false);
