@@ -659,7 +659,7 @@ app.whenReady().then(async () => {
         const before = identity();
         try { return project.create(parent, name, kind); }
         catch (error) {
-          throw Object.assign(Error(String(error)), { rejected: identity() === before });
+          throw Object.assign(Error(String(error)), { rejected: !!before && identity() === before });
         }
       });
     },

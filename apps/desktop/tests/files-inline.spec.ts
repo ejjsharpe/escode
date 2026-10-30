@@ -665,9 +665,11 @@ test("lost native creation result retains input and does not repeat the effect",
     await app.evaluate(({ dialog }, root) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
       const cp = process.getBuiltinModule("child_process") as any, execute = cp.execFileSync;
+      let created = false;
       cp.execFileSync = (...args: any[]) => {
+        if (created && args[1]?.[0] === "identity") throw Error("post-effect identity unavailable");
         const value = execute(...args);
-        if (args[1]?.[0] === "create") throw Error("lost native creation result");
+        if (args[1]?.[0] === "create") { created = true; throw Error("lost native creation result"); }
         return value;
       };
     }, root);
