@@ -22,21 +22,33 @@ export type ChatSnapshot = {
   contextError?: string | null;
   history?: { nextCursor: string | null; revision: string };
 };
-type Session = ChatSnapshot & {
-  rpc?: CodexConnection;
+// Connection readiness and callback ownership are independent of saved provider identity.
+type ConnectionState = {
+  status: "disconnected" | "connecting" | "connected";
   epoch: string;
+  rpc?: CodexConnection;
   opening?: Promise<void>;
-  requestIds: Map<string, string | number>;
-  stopping: boolean;
-  outputFailed?: boolean;
+  seenRequestIds?: Set<string | number>;
+};
+// Starting has no provider turn ID yet; Stop becomes interruptible once running.
+type TurnState =
+  | { phase: "idle" | "starting"; id: null }
+  | { phase: "running" | "stopping"; id: string };
+type OutputState = {
+  failed?: boolean;
   recovered?: boolean;
   recovering?: Promise<void>;
-  outputItems?: ChatItem[];
+  pending?: ChatItem[];
   writing?: Promise<void>;
+};
+type Session = Omit<ChatSnapshot, "connected" | "busy" | "turnId" | "preparing" | "controlTarget"> & {
+  connection: ConnectionState;
+  turn: TurnState;
+  output: OutputState;
+  requestIds: Map<string, string | number>;
+  // Send remains in flight through persistence, even if the provider already completed.
   sending?: boolean;
-  preparation?: string;
-  cancelled?: boolean;
-  seenRequestIds?: Set<string | number>;
+  preparation?: { id: string; cancelled: boolean };
   checkoutIdentity?: { path: string; dev: number; ino: number };
 };
 export class ChatService {
@@ -62,23 +74,38 @@ export class ChatService {
     private spool: Pick<LiveSpool, "read" | "write"> = new LiveSpool(store.spoolDirectory),
     private previewSettings?: (cwd: string) => Promise<unknown>,
   ) {}
+  private clearRequests(s: Session) {
+    s.requests = [];
+    s.requestIds.clear();
+  }
+  // Retire live controls without clearing preparation reservations or persisted output.
+  private endConnection(s: Session) {
+    s.connection.epoch = randomUUID();
+    s.connection.status = "disconnected";
+    s.turn = { phase: "idle", id: null };
+    this.clearRequests(s);
+  }
+  private closeConnection(s: Session) {
+    this.endConnection(s);
+    s.connection.rpc?.close();
+  }
   private writers = 0;
   private persistOutput(s: Session) {
-    if (s.writing) return;
-    if (this.writers >= 16) { s.outputItems = undefined; s.outputFailed = true; s.error = "Live output partial: persistence admission exhausted. Stop remains available."; return; }
+    if (s.output.writing) return;
+    if (this.writers >= 16) { s.output.pending = undefined; s.output.failed = true; s.error = "Live output partial: persistence admission exhausted. Stop remains available."; return; }
     this.writers++;
-    s.writing = (async () => {
+    s.output.writing = (async () => {
       try {
-        while (s.outputItems) {
-          const items = s.outputItems;
+        while (s.output.pending) {
+          const items = s.output.pending;
           if (s.threadId) await this.spool.write(s.chatId, s.threadId, items, false);
           s.items = items;
-          if (s.outputItems === items) s.outputItems = undefined;
+          if (s.output.pending === items) s.output.pending = undefined;
         }
       } catch (error) {
-        s.outputItems = undefined; s.outputFailed = true;
+        s.output.pending = undefined; s.output.failed = true;
         s.error = `Live output partial/unavailable: ${String(error)}. Provider work continues; Stop remains available. Reload saved history after completion.`;
-      } finally { this.writers--; s.writing = undefined; }
+      } finally { this.writers--; s.output.writing = undefined; }
     })();
   }
   list(project: string | null) {
@@ -98,16 +125,14 @@ export class ChatService {
         project,
         chatId: id,
         threadId: null,
-        connected: false,
-        busy: false,
-        turnId: null,
+        connection: { status: "disconnected", epoch: randomUUID() },
+        turn: { phase: "idle", id: null },
+        output: {},
         settings: null,
         items: [],
         requests: [],
         requestIds: new Map(),
-        epoch: randomUUID(),
         error: null,
-        stopping: false,
       };
       if (retain) this.sessions.set(id, s);
     }
@@ -115,20 +140,20 @@ export class ChatService {
   }
   summary(project: string | null, id: string) {
     const s = this.sessions.get(id);
-    return { busy: !!(s?.busy || s?.sending || s?.opening || this.transitions.has(id)),
+    return { busy: !!((s && s.turn.phase !== "idle") || s?.sending || s?.connection.opening || this.transitions.has(id)),
       needsInput: !!s?.requests.length, unavailable: !!s?.error };
   }
   snapshot(project: string | null, id: string): ChatSnapshot {
     const s = this.session(project, id, false);
     return structuredClone({
-      controlTarget: JSON.stringify([s.epoch, s.turnId, s.preparation]),
+      controlTarget: JSON.stringify([s.connection.epoch, s.turn.id, s.preparation?.id]),
       project,
       chatId: id,
       threadId: s.threadId,
-      connected: s.connected,
-      busy: s.busy,
+      connected: s.connection.status === "connected",
+      busy: s.turn.phase !== "idle",
       preparing: !!s.preparation,
-      turnId: s.turnId,
+      turnId: s.turn.id,
       settings: s.settings,
       items: s.items,
       requests: s.requests,
@@ -139,7 +164,7 @@ export class ChatService {
   async inspect(project: string | null, id: string) {
     const chat = await this.store.get(project, id);
     const s = this.session(project, id);
-    if (!s.rpc && chat.threadId) await this.recoverOutput(s, chat.threadId);
+    if (!s.connection.rpc && chat.threadId) await this.recoverOutput(s, chat.threadId);
     const snapshot = this.snapshot(project, id);
     snapshot.contextError =
       chat.phase === "draft" &&
@@ -149,17 +174,17 @@ export class ChatService {
     return snapshot;
   }
   private async recoverOutput(s: Session, threadId: string) {
-    if (s.recovering) return s.recovering;
-    if (s.recovered) return;
-    s.recovered = true;
+    if (s.output.recovering) return s.output.recovering;
+    if (s.output.recovered) return;
+    s.output.recovered = true;
     s.threadId = threadId;
-    s.recovering = (async () => {
+    s.output.recovering = (async () => {
       try {
         const saved = await this.spool.read(s.chatId, threadId);
         if (saved) { s.items = [...saved.items]; s.error = "Recovered live output; Retry to inspect provider history. Work was not resumed."; }
       } catch { s.error = "Live output unavailable: incomplete spool. Provider identity retained; Retry explicitly."; }
     })();
-    try { await s.recovering; } finally { s.recovering = undefined; }
+    try { await s.output.recovering; } finally { s.output.recovering = undefined; }
   }
   private validateCheckout(s: Session, checkout: string) {
     try {
@@ -194,8 +219,7 @@ export class ChatService {
       const chat = await this.store.context(project, id, target, checkout, worktree);
       const previous = this.sessions.get(id);
       if (previous) {
-        previous.epoch = randomUUID();
-        previous.rpc?.close();
+        this.closeConnection(previous);
       }
       this.sessions.delete(id);
       return chat;
@@ -210,19 +234,20 @@ export class ChatService {
     authorizedDraft?: Readonly<SavedChat>,
   ) {
     const s = this.session(project, id);
-    if (s.opening) {
-      await s.opening;
+    if (s.connection.opening) {
+      await s.connection.opening;
       return this.snapshot(project, id);
     }
-    if (s.connected) {
+    if (s.connection.status === "connected") {
       const error = await this.store.validateDirectory(await this.store.get(project, id), true);
       if (error) throw Error(error);
       return this.snapshot(project, id);
     }
-    s.opening = (async () => {
+    s.connection.status = "connecting";
+    s.connection.opening = (async () => {
       const epoch = randomUUID();
-      s.epoch = epoch;
-      s.seenRequestIds = new Set();
+      s.connection.epoch = epoch;
+      s.connection.seenRequestIds = new Set();
       s.error = null;
       let rpc: CodexConnection | undefined;
       let chat: Readonly<SavedChat> | undefined;
@@ -236,7 +261,7 @@ export class ChatService {
           throw Error(
             "Checkout was removed. History and drafts are retained; this chat cannot run.",
           );
-        if (s.epoch !== epoch) throw Error("Project closed while loading saved chat.");
+        if (s.connection.epoch !== epoch) throw Error("Project closed while loading saved chat.");
         if (chat.phase === "draft" && !authorizedDraft) {
           if (chat.project !== null && !chat.worktree) this.validateCheckout(s, chat.checkout);
           else if (chat.worktree?.reservation) this.store.validateWorktree(chat);
@@ -255,24 +280,19 @@ export class ChatService {
         rpc = await this.connect(
           chat.checkout,
           (event) => {
-            if (s.epoch === epoch) this.event(s, event);
+            if (s.connection.epoch === epoch) this.event(s, event);
           },
           (error) => {
-            if (s.epoch !== epoch) return;
-            s.epoch = randomUUID();
-            s.connected = false;
-            s.busy = false;
-            s.turnId = null;
-            s.requests = [];
-            s.requestIds.clear();
+            if (s.connection.epoch !== epoch) return;
+            this.endConnection(s);
             s.error = error.message;
           },
         );
-        if (s.epoch !== epoch) {
+        if (s.connection.epoch !== epoch) {
           rpc.close();
           throw Error("Project closed during connection.");
         }
-        s.rpc = rpc;
+        s.connection.rpc = rpc;
         const account = await rpc.request("account/read", { refreshToken: false });
         if (!account.account)
           throw Error(
@@ -329,30 +349,30 @@ export class ChatService {
           sandbox: result.sandbox,
         };
         if (resume) {
-          await s.writing;
+          await s.output.writing;
           const page = await this.readHistory(s, null);
-          await s.writing;
+          await s.output.writing;
           const retained = s.items.filter(item => !page.items.some(saved => saved.id === item.id && saved.turnId === item.turnId && saved.text.startsWith(item.text)));
           s.items = [...page.items.filter(item => !retained.some(value => value.id === item.id && value.turnId === item.turnId)), ...retained];
           if (!retained.length) s.error = null;
-          s.outputFailed = false;
+          s.output.failed = false;
           s.history = { nextCursor: page.nextCursor, revision: page.revision };
         }
-        if (s.epoch !== epoch) throw Error("Codex disconnected during setup. Retry connection.");
+        if (s.connection.epoch !== epoch) throw Error("Codex disconnected during setup. Retry connection.");
         this.store.validateWorktree(chat);
         this.store.validateScratch(chat);
         this.validateCheckout(s, chat.checkout);
-        s.connected = true;
+        s.connection.status = "connected";
       } catch (error) {
-        if (!chat && !s.threadId && !s.rpc && this.sessions.get(id) === s) this.sessions.delete(id);
+        if (!chat && !s.threadId && !s.connection.rpc && this.sessions.get(id) === s) this.sessions.delete(id);
         if ((error as { rejected?: boolean }).rejected) {
           const saved = await this.store.get(project, id);
           if (saved.initialSend === "creating" && !saved.threadId)
             await this.store.update(project, id, { phase: "draft", initialSend: "unaccepted" });
         }
+        this.endConnection(s);
         rpc?.close();
         await rpc?.finished;
-        s.connected = false;
         const message = error instanceof Error ? error.message : String(error);
         s.error = rpc?.installation
           ? codexDiagnostic(rpc.installation.path, rpc.installation.version, message)
@@ -361,9 +381,10 @@ export class ChatService {
       }
     })();
     try {
-      await s.opening;
+      await s.connection.opening;
     } finally {
-      s.opening = undefined;
+      s.connection.opening = undefined;
+      if (s.connection.status === "connecting") s.connection.status = "disconnected";
     }
     return this.snapshot(project, id);
   }
@@ -381,8 +402,8 @@ export class ChatService {
     });
   }
   private async readHistory(s: Session, cursor: string | null): Promise<HistoryPage> {
-    if (!s.rpc) throw Error("History unavailable. Retry connection.");
-    const page = await s.rpc.request("thread/turns/list", {
+    if (!s.connection.rpc) throw Error("History unavailable. Retry connection.");
+    const page = await s.connection.rpc.request("thread/turns/list", {
       threadId: s.threadId, cursor, limit: 20, sortDirection: "asc", itemsView: "full",
     });
     if (!page || !Array.isArray(page.data) || page.data.length > 20 ||
@@ -436,18 +457,18 @@ export class ChatService {
       };
       return;
     }
-    if (message.method === "model/rerouted" && p.turnId === s.turnId && s.settings) {
+    if (message.method === "model/rerouted" && p.turnId === s.turn.id && s.settings) {
       s.settings.model = p.toModel;
       return;
     }
     if (message.method === "turn/started") {
-      s.turnId = p.turn.id;
-      s.busy = true;
+      if (s.turn.phase === "stopping" && s.turn.id === p.turn.id) return;
+      s.turn = { phase: "running", id: p.turn.id };
       return;
     }
     if (message.id !== undefined) {
       const standalone = message.method === "mcpServer/elicitation/request" && p.turnId == null;
-      if (!standalone && (!s.busy || s.stopping || p.turnId !== s.turnId)) return;
+      if (!standalone && (s.turn.phase === "idle" || s.turn.phase === "stopping" || p.turnId !== s.turn.id)) return;
       const allowed = [
         "item/commandExecution/requestApproval",
         "item/fileChange/requestApproval",
@@ -457,14 +478,14 @@ export class ChatService {
       ];
       if (!allowed.includes(message.method!)) {
         s.error = `Unsupported Codex request: ${message.method}. Stop and update escode before retrying.`;
-        s.rpc?.close();
+        this.closeConnection(s);
         return;
       }
-      if (s.seenRequestIds?.has(message.id)) {
+      if (s.connection.seenRequestIds?.has(message.id)) {
         for (const [token, wireId] of s.requestIds) if (wireId === message.id) { s.requestIds.delete(token); s.requests = s.requests.filter(r => r.token !== token); }
         s.error = "Provider reused a live request identifier. Stop and reconnect."; return; }
-      if ((s.seenRequestIds?.size ?? 0) >= 4096) { s.error = "Provider request identity capacity exhausted. Stop and reconnect before further requests."; return; }
-      s.seenRequestIds?.add(message.id);
+      if ((s.connection.seenRequestIds?.size ?? 0) >= 4096) { s.error = "Provider request identity capacity exhausted. Stop and reconnect before further requests."; return; }
+      s.connection.seenRequestIds?.add(message.id);
       if (s.requests.length >= 32 || Buffer.byteLength(JSON.stringify([...s.requests, { params: p }])) > 64 * 1024) {
         s.error = "Provider request capacity exhausted. Request details unavailable; provider work continues and Stop remains available.";
         return;
@@ -474,19 +495,17 @@ export class ChatService {
       s.requests.push({ token, method: message.method!, params: p });
       return;
     }
-    if (message.method === "turn/completed" && p.turn.id === s.turnId) {
-      s.busy = false;
-      s.turnId = null;
-      s.stopping = false;
+    if (message.method === "turn/completed" && p.turn.id === s.turn.id) {
+      s.turn = { phase: "idle", id: null };
       s.requests = s.requests.filter((r) => r.params.turnId == null);
       for (const token of s.requestIds.keys())
         if (!s.requests.some((r) => r.token === token)) s.requestIds.delete(token);
       if (p.turn.error) s.error = p.turn.error.message;
       return;
     }
-    if (p.turnId !== s.turnId) return;
-    if (s.outputFailed && (p.item || typeof p.delta === "string")) return;
-    const items = [...(s.outputItems ?? s.items)];
+    if (p.turnId !== s.turn.id) return;
+    if (s.output.failed && (p.item || typeof p.delta === "string")) return;
+    const items = [...(s.output.pending ?? s.items)];
     if (message.method === "item/started" || message.method === "item/completed") {
       const value = this.item(p.turnId, p.item);
       const index = items.findIndex((i) => i.id === value.id && i.turnId === value.turnId);
@@ -512,10 +531,10 @@ export class ChatService {
       try {
         if (items.length > 1000 || Buffer.byteLength(JSON.stringify(items)) > 128 * 1024)
           throw Error("Live display capacity exhausted");
-        s.outputItems = items;
+        s.output.pending = items;
         this.persistOutput(s);
       } catch (error) {
-        s.outputFailed = true;
+        s.output.failed = true;
         s.error = `Live output partial/unavailable: ${String(error)}. Provider work continues; Stop remains available. Reload saved history after completion.`;
       }
     }
@@ -539,34 +558,33 @@ export class ChatService {
     prepare: (chat: Readonly<SavedChat>) => Promise<Readonly<SavedChat>>,
   ) {
     const s = this.session(project, id);
-    if (s.sending || s.busy) throw Error("This chat already has an active turn.");
+    if (s.sending || s.turn.phase !== "idle") throw Error("This chat already has an active turn.");
     if (!text.trim() || text.length > 100000)
       throw Error("Enter a message under 100,000 characters.");
     s.sending = true;
-    s.preparation = randomUUID();
-    s.cancelled = false;
+    s.preparation = { id: randomUUID(), cancelled: false };
     let launched = false;
     let sendIntent = false;
     let chat: Readonly<SavedChat> | undefined;
     try {
-      const epoch = s.epoch;
+      const epoch = s.connection.epoch;
       chat = Object.freeze(await this.store.get(project, id));
       if (chat.removed) throw Error("Checkout was removed. This chat cannot run.");
       await this.store.draft(project, id, text);
       await authorize(chat);
-      if (this.sessions.get(id) !== s || s.epoch !== epoch || s.cancelled)
-        throw Error(s.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during authorization. Work was not submitted.");
+      if (this.sessions.get(id) !== s || s.connection.epoch !== epoch || s.preparation?.cancelled)
+        throw Error(s.preparation?.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during authorization. Work was not submitted.");
       if (chat.project === null) chat = await this.store.prepareScratch(chat);
       else chat = await prepare(chat);
-      if (this.sessions.get(id) !== s || s.epoch !== epoch || s.cancelled)
-        throw Error(s.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during authorization. Work was not submitted.");
+      if (this.sessions.get(id) !== s || s.connection.epoch !== epoch || s.preparation?.cancelled)
+        throw Error(s.preparation?.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during authorization. Work was not submitted.");
       if (chat.phase === "draft") {
         await this.store.update(project, id, { initialSend: "preparing" });
-        if (this.sessions.get(id) !== s || s.epoch !== epoch || s.cancelled)
-          throw Error(s.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during preparation. Work was not submitted.");
+        if (this.sessions.get(id) !== s || s.connection.epoch !== epoch || s.preparation?.cancelled)
+          throw Error(s.preparation?.cancelled ? "Preparation cancelled; reserved resources retained and may be partially prepared. Work was not submitted." : "Chat disconnected during preparation. Work was not submitted.");
         await this.connectSession(project, id, chat);
       }
-      if (!s.connected || !s.rpc)
+      if (s.connection.status !== "connected" || !s.connection.rpc)
         throw Error("Retry connection before sending. Work was not resent.");
       this.store.validateWorktree(chat);
       this.store.validateScratch(chat);
@@ -576,10 +594,10 @@ export class ChatService {
         true,
       );
       if (directoryError) throw Error(directoryError);
-      if (s.cancelled) throw Error("Preparation cancelled; reserved resources retained and may be partially prepared.");
+      if (s.preparation?.cancelled) throw Error("Preparation cancelled; reserved resources retained and may be partially prepared.");
       s.preparation = undefined;
-      s.busy = true;
-      s.stopping = false;
+      s.turn = { phase: "starting", id: null };
+
       s.error = null;
       await this.store.update(project, id, {
         hasSent: true,
@@ -590,23 +608,21 @@ export class ChatService {
       this.store.validateScratch(chat);
       this.validateCheckout(s, chat.checkout);
       launched = true;
-      const result = await s.rpc.request("turn/start", {
+      const result = await s.connection.rpc.request("turn/start", {
         threadId: s.threadId,
         input: [{ type: "text", text, text_elements: [] }],
       });
-      if (s.busy && !s.turnId) s.turnId = result.turn.id;
+      if (s.turn.phase === "starting") s.turn = { phase: "running", id: result.turn.id };
       await this.store.update(project, id, {
         draft: "",
         ...(chat.phase ? { initialSend: "accepted" as const } : {}),
       });
     } catch (error) {
       if (!chat) {
-        if (!s.threadId && !s.rpc && this.sessions.get(id) === s) this.sessions.delete(id);
+        if (!s.threadId && !s.connection.rpc && this.sessions.get(id) === s) this.sessions.delete(id);
         throw error;
       }
-      s.rpc?.close();
-      s.connected = false;
-      s.busy = false;
+      this.closeConnection(s);
       const saved = await this.store.get(project, id);
       const rejected = (error as { rejected?: boolean }).rejected;
       if (
@@ -630,12 +646,11 @@ export class ChatService {
     await this.store.get(project, id);
     const s = this.session(project, id, false);
     if (target !== undefined && target !== this.snapshot(project, id).controlTarget) throw Object.assign(Error("Stale Stop target."), { rejected: true });
-    if (s.preparation) { s.cancelled = true; s.error = "Preparation cancelled; reserved resources retained and may be partially prepared."; return; }
-    if (!s.connected || !s.busy || !s.turnId) throw Error("No interruptible active turn.");
-    s.stopping = true;
-    s.requests = [];
-    s.requestIds.clear();
-    await s.rpc!.request("turn/interrupt", { threadId: s.threadId, turnId: s.turnId });
+    if (s.preparation) { s.preparation.cancelled = true; s.error = "Preparation cancelled; reserved resources retained and may be partially prepared."; return; }
+    if (s.connection.status !== "connected" || s.turn.phase === "idle" || !s.turn.id) throw Error("No interruptible active turn.");
+    s.turn.phase = "stopping";
+    this.clearRequests(s);
+    await s.connection.rpc!.request("turn/interrupt", { threadId: s.threadId, turnId: s.turn.id });
   }
   async answer(project: string | null, id: string, token: string, answer: unknown) {
     await this.store.get(project, id);
@@ -645,8 +660,8 @@ export class ChatService {
     if (
       !request ||
       wireId === undefined ||
-      !s.connected ||
-      (request.params.turnId != null && (!s.busy || request.params.turnId !== s.turnId))
+      s.connection.status !== "connected" ||
+      (request.params.turnId != null && (s.turn.phase === "idle" || request.params.turnId !== s.turn.id))
     )
       throw Error("Stale or mismatched live request. Reopen the originating chat.");
     let result: unknown;
@@ -688,27 +703,26 @@ export class ChatService {
     }
     s.requestIds.delete(token);
     s.requests = s.requests.filter((r) => r.token !== token);
-    s.rpc!.respond(wireId, result);
+    s.connection.rpc!.respond(wireId, result);
   }
   disconnect(project: string | null, id: string) {
     const s = this.session(project, id, false);
-    if (this.transitions.has(id) || s.busy || s.opening || s.sending)
+    if (this.transitions.has(id) || s.turn.phase !== "idle" || s.connection.opening || s.sending)
       throw Error("Stop active work before reconnecting.");
-    s.rpc?.close();
+    this.closeConnection(s);
   }
   checkoutActive(project: string | null, id: string) {
     const s = this.sessions.get(id);
     return (
       this.transitions.has(id) ||
-      (!!s && s.project === project && !!(s.busy || s.opening || s.sending || s.requests.length))
+      (!!s && s.project === project && !!(s.turn.phase !== "idle" || s.connection.opening || s.sending || s.requests.length))
     );
   }
   async markUnavailable(project: string | null, id: string) {
     return this.inContext(project, id, async () => {
       await this.store.get(project, id);
       const s = this.session(project, id);
-      s.rpc?.close();
-      s.connected = false;
+      this.closeConnection(s);
       s.error =
         "Checkout removal requested. History and drafts are retained; this chat cannot run.";
       await this.store.update(project, id, { removed: true });
@@ -720,7 +734,7 @@ export class ChatService {
       [...this.sessions.values()].some(
         (s) =>
           (project === undefined || s.project === project) &&
-          (s.busy || s.opening || s.sending || s.requests.length),
+          (s.turn.phase !== "idle" || s.connection.opening || s.sending || s.requests.length),
       )
     );
   }
@@ -730,30 +744,25 @@ export class ChatService {
     );
     await Promise.all(
       sessions.map(async (s) => {
-        if (s.busy && s.turnId && s.rpc) {
+        if (s.turn.phase !== "idle" && s.turn.id && s.connection.rpc) {
           await Promise.race([
-            s.rpc
-              .request("turn/interrupt", { threadId: s.threadId, turnId: s.turnId })
+            s.connection.rpc
+              .request("turn/interrupt", { threadId: s.threadId, turnId: s.turn.id })
               .catch(() => {}),
             new Promise((resolve) => setTimeout(resolve, 500)),
           ]);
         }
         // Invalidate setup before waiting: an in-flight connector must close its eventual RPC.
-        s.epoch = randomUUID();
-        s.rpc?.close();
-        await s.opening?.catch(() => {});
-        s.rpc?.close();
-        await s.rpc?.finished;
-        await s.writing;
-        s.connected = false;
-        s.busy = false;
-        s.turnId = null;
-        s.requests = [];
-        s.requestIds.clear();
+        this.closeConnection(s);
+        await s.connection.opening?.catch(() => {});
+        s.connection.rpc?.close();
+        await s.connection.rpc?.finished;
+        await s.output.writing;
+        this.endConnection(s);
       }),
     );
   }
   close() {
-    for (const s of this.sessions.values()) s.rpc?.close();
+    for (const s of this.sessions.values()) this.closeConnection(s);
   }
 }

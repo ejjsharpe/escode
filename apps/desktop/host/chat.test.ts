@@ -51,9 +51,8 @@ test("turns, approvals and Stop stay scoped; reconnect invalidates old callbacks
       respond(id, result) {
         peer.replies.push({ id, result });
       },
-      close() {
-        drop(Error("disconnected"));
-      },
+      close() {},
+
     };
   });
   try {
@@ -90,6 +89,15 @@ test("turns, approvals and Stop stay scoped; reconnect invalidates old callbacks
     await service.stop(dir, a.id);
     expect(peers[0].calls.at(-1)).toBe("turn/interrupt");
     expect(peers[1].calls).not.toContain("turn/interrupt");
+    const stoppedTarget = service.snapshot(dir, a.id).controlTarget;
+    peers[0].emit({ method: "turn/started", params: { threadId: "thread-0", turn: { id: "turn-1" } } });
+    peers[0].emit({
+      id: 200,
+      method: "item/fileChange/requestApproval",
+      params: { threadId: "thread-0", turnId: "turn-1", itemId: "late-approval" },
+    });
+    expect(service.snapshot(dir, a.id)).toMatchObject({ busy: true, turnId: "turn-1", requests: [], controlTarget: stoppedTarget });
+    await expect(service.answer(dir, a.id, stale.token, "accept")).rejects.toThrow("Stale");
     peers[0].drop(Error("connection lost"));
     expect(service.snapshot(dir, a.id).requests).toEqual([]);
     await service.open(dir, a.id);
@@ -99,6 +107,15 @@ test("turns, approvals and Stop stay scoped; reconnect invalidates old callbacks
     await service.markUnavailable(dir, a.id);
     await expect(service.open(dir, a.id)).rejects.toThrow("Checkout was removed");
     await expect(service.send(dir, a.id, "no")).rejects.toThrow("Checkout was removed");
+    const beforeDisconnect = service.snapshot(dir, b.id);
+    service.disconnect(dir, b.id);
+    expect(service.snapshot(dir, b.id)).toMatchObject({ connected: false, busy: false, turnId: null, requests: [] });
+    expect(service.snapshot(dir, b.id).controlTarget).not.toBe(beforeDisconnect.controlTarget);
+    peers[1].emit({ method: "turn/started", params: { threadId: "thread-1", turn: { id: "late-turn" } } });
+    peers[1].drop(Error("late disconnect"));
+    expect(service.snapshot(dir, b.id).busy).toBe(false);
+    await service.open(dir, b.id);
+    expect(peers[3].calls).not.toContain("turn/start");
     const failIntent = vi.spyOn(store, "update").mockRejectedValueOnce(Error("disk full"));
     await expect(service.markUnavailable(dir, b.id)).rejects.toThrow("disk full");
     expect(service.snapshot(dir, b.id).connected).toBe(false);
