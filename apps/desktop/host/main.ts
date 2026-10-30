@@ -620,7 +620,9 @@ app.whenReady().then(async () => {
     },
     loadWorkspace: () => workspaceAction("load") as Promise<typeof import("@escode/contracts").WorkspaceLoad.Type>,
     persistWorkspace: async (state) => { await workspaceAction("persist", state); },
-    createEntry: async (root, parent, name, kind) => {
+    createState: () => foundation.admissionEpoch,
+    createEntry: async (command) => {
+      const { root, parent, name, kind } = command;
       const { project, check } = await fileContext(root, parent);
       if (mutationOrigin || quitting) throw Error("File operation unavailable.");
       operations.assertIdle();
@@ -650,7 +652,7 @@ app.whenReady().then(async () => {
       check();
       if (mutationOrigin) throw Error("File operation awaiting confirmation.");
       operations.assertIdle();
-      return project.create(parent, name, kind);
+      return foundation.create(command, () => { check(); return project.create(parent, name, kind); });
     },
     readFile: async (root, path) => { const { project } = await fileContext(root, path); return project.read(path); },
     saveFile: async (root, path, text, version) => {

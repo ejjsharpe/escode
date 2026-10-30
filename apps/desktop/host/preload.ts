@@ -3,6 +3,16 @@ import { SendReceipt } from "@escode/contracts";
 import { createDirectoryClient } from "@escode/client-runtime";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 const directories = createDirectoryClient(() => ipcRenderer.invoke("local-bootstrap"), reconcile);
+async function createEntry(root: string, parent: string, name: string, kind: "file" | "folder") {
+  const key = `escode-create:${JSON.stringify([root, parent, name, kind])}`;
+  const saved = localStorage.getItem(key);
+  const command = saved ? JSON.parse(saved) : { commandId: crypto.randomUUID(), admissionEpoch: await directories.createState(), root, parent, name, kind };
+  localStorage.setItem(key, JSON.stringify(command));
+  const receipt = await directories.createEntry(command);
+  if (receipt.status === "accepted" || receipt.status === "rejected") localStorage.removeItem(key);
+  if (receipt.status !== "accepted") throw Error(receipt.message);
+  return receipt.path;
+}
 async function reconcile(project: string | null, id: string) {
   const saved = localStorage.getItem(`escode-send:${JSON.stringify([project, id])}`);
   if (saved) {
@@ -105,7 +115,7 @@ contextBridge.exposeInMainWorld(
       : ipcRenderer.invoke("chat", operation, ...args),
     toolStatus: () => ipcRenderer.invoke("tools:status"),
     project: (operation: string, ...args: string[]) =>
-      operation === "create-entry" ? directories.createEntry(args[0], args[1], args[2], args[3] as "file" | "folder")
+      operation === "create-entry" ? createEntry(args[0], args[1], args[2], args[3] as "file" | "folder")
       : operation === "read" ? directories.readFile(args[0], args[1])
       : operation === "save" ? directories.saveFile(args[0], args[1], args[2], args[3])
       : operation === "file-operation"

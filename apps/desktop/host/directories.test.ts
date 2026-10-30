@@ -313,10 +313,11 @@ test("authenticated Files accepts a full editor document and rejects invalid sav
   let creates = 0;
   const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "denied", message: "unused" }),
-    createEntry: async (root, parent, name, kind) => {
+    createEntry: async (command) => {
+      const {root, parent, name, kind} = command;
       creates++;
       expect([root, parent, name, kind]).toEqual(["/approved", "folder", "new.txt", "file"]);
-      return "folder/new.txt";
+      return { command, status: "accepted", message: "", path: "folder/new.txt" };
     },
     readFile: async () => ({ text, version: "loaded" }),
     saveFile: async (_root, _path, value, version) => {
@@ -335,8 +336,8 @@ test("authenticated Files accepts a full editor document and rejects invalid sav
     expect(saves).toBe(1);
     expect(await query("3", "saveFile", { root: "/approved", path: "a", text: 1, version: "loaded" })).toContain("Failure");
     expect(saves).toBe(1);
-    expect(await query("4", "createEntry", { root: "/approved", parent: "folder", name: "new.txt", kind: "file" })).toContain("folder/new.txt");
-    expect(await query("5", "createEntry", { root: "/approved", parent: "", name: "bad", kind: "symlink" })).toContain("Failure");
+    expect(await query("4", "createEntry", { command: { commandId: "create", admissionEpoch: "epoch", root: "/approved", parent: "folder", name: "new.txt", kind: "file" } })).toContain("folder/new.txt");
+    expect(await query("5", "createEntry", { command: { commandId: "bad", admissionEpoch: "epoch", root: "/approved", parent: "", name: "bad", kind: "symlink" } })).toContain("Failure");
     expect(creates).toBe(1);
   } finally { const done = closed(socket); socket.close(); await done; await host.close(); }
 });

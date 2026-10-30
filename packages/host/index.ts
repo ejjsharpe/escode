@@ -49,7 +49,8 @@ export async function startDirectoryHost(options: {
   sendState?: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
   sendMessage?: (command: SendCommand) => Promise<SendReceipt>;
   sendStatus?: (commandId: string) => Promise<SendReceipt | null>;
-  createEntry?: (root: string, parent: string, name: string, kind: "file" | "folder") => Promise<string>;
+  createEntry?: (command: typeof import("@escode/contracts").CreateCommand.Type) => Promise<typeof import("@escode/contracts").CreateReceipt.Type>;
+  createState?: () => string;
   readFile?: (root: string, path: string) => Promise<typeof import("@escode/contracts").FileDocument.Type>;
   saveFile?: (root: string, path: string, text: string, version: string) => Promise<typeof import("@escode/contracts").FileSaveResult.Type>;
   loadWorkspace?: () => Promise<typeof import("@escode/contracts").WorkspaceLoad.Type>;
@@ -102,7 +103,7 @@ export async function startDirectoryHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -157,8 +158,9 @@ export async function startDirectoryHost(options: {
       unacknowledged.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
       Effect.provide(HostQueries.toLayer({
-        createEntry: ({ root, parent, name, kind }) => Effect.tryPromise({ try: async () => {
-          if (!options.createEntry) throw Error("Files unavailable"); return options.createEntry(root, parent, name, kind);
+        createState: () => Effect.try({ try: () => { if (!options.createState) throw Error("Files unavailable"); return options.createState(); }, catch: String }),
+        createEntry: ({ command }) => Effect.tryPromise({ try: async () => {
+          if (!options.createEntry) throw Error("Files unavailable"); return options.createEntry(command);
         }, catch: String }),
         readFile: ({ root, path }) => Effect.tryPromise({ try: async () => {
           if (!options.readFile) throw Error("Files unavailable"); return options.readFile(root, path);

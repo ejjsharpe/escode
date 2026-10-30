@@ -232,3 +232,30 @@ test.each([3, 4, 5])(
     }
   },
 );
+
+test("creation receipts recover lost results without repeating effects and retain crash uncertainty", () => {
+  const directory = mkdtempSync(join(tmpdir(), "escode-create-receipt-"));
+  const root = join(directory, "foundation");
+  let store = FoundationState.open(root);
+  const command = { commandId: "create", admissionEpoch: store.admissionEpoch, root: directory, parent: "", name: "new.txt", kind: "file" as const };
+  let effects = 0;
+  try {
+    const effect = () => { effects++; writeFileSync(join(directory, "new.txt"), "", { flag: "wx" }); return "new.txt"; };
+    expect(store.create(command, effect).status).toBe("accepted");
+    expect(store.create(command, effect).path).toBe("new.txt");
+    expect(effects).toBe(1);
+    expect(() => store.create({ ...command, name: "other" }, effect)).toThrow("identity conflict");
+    store.close();
+    store = FoundationState.open(root);
+    expect(store.create(command, effect).status).toBe("accepted");
+    expect(effects).toBe(1);
+    store.close();
+    const state = JSON.parse(readFileSync(join(root, "state.json"), "utf8"));
+    state.creates[0].status = "dispatching";
+    writeFileSync(join(root, "state.json"), JSON.stringify(state));
+    store = FoundationState.open(root);
+    expect(store.create(command, effect).status).toBe("uncertain");
+    expect(effects).toBe(1);
+    expect(() => store.create({ ...command, commandId: "expired" }, effect)).toThrow("Expired creation epoch");
+  } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
+});

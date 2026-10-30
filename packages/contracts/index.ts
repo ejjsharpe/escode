@@ -122,8 +122,11 @@ export const WorkspaceLoad = Schema.Struct({ state: WorkspaceState, errors: Sche
   restored: Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String, branch: Schema.String,
     changes: Schema.Array(Schema.Struct({ path: Schema.String, area: Schema.Literals(["staged", "unstaged", "untracked"]) })),
     gitError: Schema.optionalKey(Schema.String), approvalRequired: Schema.optionalKey(Schema.Boolean) })) });
+export const CreateCommand = Schema.Struct({ commandId: Schema.String, admissionEpoch: Schema.String, root: Schema.String, parent: Schema.String, name: Schema.String, kind: Schema.Literals(["file", "folder"]) });
+export const CreateReceipt = Schema.Struct({ command: CreateCommand, status: Schema.Literals(["dispatching", "accepted", "rejected", "uncertain"]), message: Schema.String, path: Schema.String });
 export const Files = RpcGroup.make(
-  Rpc.make("createEntry", { payload: { root: Schema.String, parent: Schema.String, name: Schema.String, kind: Schema.Literals(["file", "folder"]) }, success: Schema.String, error: Schema.String }),
+  Rpc.make("createEntry", { payload: { command: CreateCommand }, success: CreateReceipt, error: Schema.String }),
+  Rpc.make("createState", { success: Schema.String, error: Schema.String }),
   Rpc.make("readFile", { payload: { root: Schema.String, path: Schema.String }, success: FileDocument, error: Schema.String }),
   Rpc.make("saveFile", { payload: { root: Schema.String, path: Schema.String, text: Schema.String, version: Schema.String }, success: FileSaveResult, error: Schema.String }),
   Rpc.make("loadWorkspace", { success: WorkspaceLoad, error: Schema.String }),
