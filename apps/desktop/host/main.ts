@@ -323,6 +323,7 @@ app.whenReady().then(async () => {
           await dialog.showMessageBox(window, {
             message:
               "Active agent work will be interrupted. Completed edits, saved chats and worktrees are retained.",
+            detail: (await store.all()).filter((chat) => chats.checkoutActive(chat.project, chat.id)).map((chat) => `${chat.id} · ${chat.checkout}`).join("\n"),
             buttons: ["Stop and Close", "Cancel"],
             defaultId: 1,
             cancelId: 1,

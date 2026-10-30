@@ -35,7 +35,7 @@ A client's interest in updates for a displayed chat, directory or other surface.
 An escode desktop interface containing Agents and project tabs. Closing the last window on macOS leaves the app and its bundled local execution host running, retaining unsaved edits for reopening. The local desktop retains the hidden window, renderer models and connection; Dock activation shows and focuses that same client.
 
 **Quit**:
-The explicit action that exits the desktop app and stops its bundled local execution host, with confirmation before stopping active local work and Save/Discard/Cancel for unsaved edits.
+The explicit action that exits the desktop app and stops its bundled local execution host, with confirmation identifying active local work and Save/Discard/Cancel for unsaved edits. Discards wait for all file choices; cancelling a later choice retains earlier proposed discards. See [deliberate Quit evidence](docs/compatibility/quit.md).
 
 **Stop**:
 The action that interrupts the selected chat's active work on its execution host. It does not shut down the host.

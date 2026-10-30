@@ -398,7 +398,7 @@ function CheckoutView({
       report(e);
     }
   }
-  async function closeFile(file: string, dispose = true) {
+  async function closeFile(file: string, dispose = true, discards?: (() => () => void)[]) {
     const b = buffers.current.get(file);
     if (!b || saveInFlight.current || closeInFlight.current) return false;
     closeInFlight.current = true;
@@ -408,6 +408,13 @@ function CheckoutView({
       if (b.model.getValue() !== b.disk.text) {
         const choice = await window.escode.lifecycle("dirty", root + "/" + file);
         if (choice === 2) return false;
+        if (choice === 1 && discards) {
+          discards.push(() => {
+            memory.drafts = memory.drafts.filter((d) => d.root !== root || d.path !== file);
+            return () => b.model.setValue(b.disk.text);
+          });
+          return true;
+        }
         if (choice === 0 && !(await save(undefined, file))) {
           setPath(file);
           window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
@@ -625,9 +632,9 @@ function CheckoutView({
   }
   closers.set(root, {
     project,
-    close: async () => {
+    close: async (discards) => {
       if (closeInFlight.current) return false;
-      for (const file of buffers.current.keys()) if (!(await closeFile(file, false))) return false;
+      for (const file of buffers.current.keys()) if (!(await closeFile(file, false, discards))) return false;
       return true;
     },
   });
@@ -966,20 +973,26 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
     setClosing(true);
     try {
       if (!(await window.escode.lifecycle("prepare", project))) return;
+      const discards: (() => () => void)[] = [];
       for (const entry of closers.values()) {
-        if ((!project || entry.project === project) && !(await entry.close())) return;
+        if ((!project || entry.project === project) && !(await entry.close(discards))) return;
       }
       await flush();
       const previousProjects = memory.projects,
-        previousSelected = memory.selected;
+        previousSelected = memory.selected,
+        previousDrafts = memory.drafts;
       try {
         if (project) {
           memory.projects = memory.projects.filter((p) => p.project !== project);
           if (memory.selected === project) memory.selected = "agents";
           await persist();
         }
+        const resetDiscardedBuffers = discards.map((discard) => discard());
+        await persist();
         await window.escode.lifecycle("finish", project);
+        for (const reset of resetDiscardedBuffers) reset();
       } catch (error) {
+        memory.drafts = previousDrafts;
         memory.projects = previousProjects;
         memory.selected = previousSelected;
         void persist();

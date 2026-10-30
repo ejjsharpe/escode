@@ -45,4 +45,4 @@ export function useMemory<K extends keyof ViewMemory>(
   };
   return [value, update] as const;
 }
-export const closers = new Map<string, { project: string; close: () => Promise<boolean> }>();
+export const closers = new Map<string, { project: string; close: (discards: (() => () => void)[]) => Promise<boolean> }>();

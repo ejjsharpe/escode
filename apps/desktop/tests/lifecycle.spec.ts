@@ -62,6 +62,8 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     app.process().kill("SIGKILL");
     await exited;
     await writeFile(join(root, "a.txt"), "external");
+    // The crashed owner is known dead; explicitly release its fail-closed storage lock.
+    await rm(join(user, "foundation", "owner.lock"));
     app = await launch();
     page = await app.firstWindow();
     await expect(
@@ -367,3 +369,39 @@ createInterface({input:process.stdin}).on('line',line=>{
     }
   });
 }
+
+test("cancelled Quit retains an earlier Discard choice", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-quit-discard-")));
+  const root = join(dir, "repo"), user = join(dir, "user");
+  execFileSync("git", ["init", root]);
+  await writeFile(join(root, "a.txt"), "disk a");
+  await writeFile(join(root, "b.txt"), "disk b");
+  const app = await launchDesktop(user);
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, root);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    for (const file of ["a.txt", "b.txt"]) {
+      await page.getByRole("treeitem", { name: file, exact: true }).click();
+      await page.locator(".monaco-editor:visible").click();
+      await page.keyboard.press("Meta+a");
+      await page.keyboard.type(`unsaved ${file}`);
+    }
+    await app.evaluate(({ app, dialog }) => {
+      let choice = 0;
+      dialog.showMessageBox = async () => ({ response: choice++ === 0 ? 1 : 2, checkboxChecked: false });
+      app.quit();
+    });
+    await expect(page.getByRole("button", { name: "Open project…" })).toBeEnabled();
+    await expect(page.locator("main")).not.toHaveAttribute("inert", "");
+    await page.bringToFront();
+    await page.getByRole("treeitem", { name: /^a.txt/ }).click();
+    await expect(page.locator(".monaco-editor:visible")).toContainText("unsaved a.txt");
+    await expect.poll(async () => JSON.parse(await readFile(join(user, "workspace.json"), "utf8")).drafts.length).toBe(2);
+  } finally {
+    app.process().kill("SIGKILL");
+    await rm(dir, { recursive: true, force: true });
+  }
+});
