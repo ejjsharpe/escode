@@ -132,4 +132,5 @@ Context menus copy absolute/relative paths and request Finder reveal for the tar
 (or the checkout root on empty space). See [reveal/filter evidence](docs/compatibility/files-reveal.md).
 
 [Integrated Files acceptance](docs/compatibility/files-acceptance.md) maps all ten explorer
-scenarios to reproducible checks. Manual native and VoiceOver gates remain pending.
+scenarios to reproducible checks. Finder/native Trash and VoiceOver checks remain user-owned follow-up, removed from
+issue 48 acceptance at the user’s request.

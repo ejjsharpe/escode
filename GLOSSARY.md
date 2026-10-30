@@ -108,6 +108,6 @@ after the operation; parent directories receive no continuing approval. Imports 
 originals and never carry source editor drafts. Collision and result handling follow Files
 clipboard transfers.
 
-Integrated Files acceptance and its pending manual gates are recorded in
+Integrated Files acceptance and its user-owned manual follow-up are recorded in
 [Files acceptance evidence](docs/compatibility/files-acceptance.md); the implemented
-Files terminology above does not certify those remaining gates.
+Files terminology above does not certify those unverified native and VoiceOver checks.

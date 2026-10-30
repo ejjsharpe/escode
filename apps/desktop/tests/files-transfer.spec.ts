@@ -152,6 +152,8 @@ test("generated recursive binary copy leaves navigation and concurrent chat Stop
   const root = join(base, "repo");
   execFileSync("git", ["init", root]);
   await mkdir(join(root, "bulk"));
+  await mkdir(join(root, "target"));
+  await writeFile(join(root, "vanishing.txt"), "source bytes");
   const bytes = Buffer.alloc(64 * 1024, 173),
     count = 8000;
   for (let batch = 0; batch < count; batch += 100)
@@ -203,12 +205,33 @@ createInterface({input:process.stdin}).on('line',line=>{
       await window.escode.chat("send", root, chat.id, "keep running until stopped");
       return chat.id;
     }, root);
+    const expanded = Date.now();
+    await page.getByRole("treeitem", { name: "bulk", exact: true }).locator(":scope > .tree-row").click();
+    await expect(page.getByRole("treeitem")).toHaveCount(count + 3);
+    const tree = page.getByRole("tree", { name: "Files", exact: true });
+    await tree.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(tree).toHaveAttribute("aria-activedescendant", root + ":bulk/0.bin");
+    await page.keyboard.press("ArrowDown");
+    await expect(tree).toHaveAttribute("aria-activedescendant", root + ":bulk/1.bin");
+    console.log(`Concurrent tree expansion and two arrow keys: ${Date.now() - expanded} ms; ${count} files; chat remains running.`);
+    await page.getByRole("treeitem", { name: "bulk", exact: true }).locator(":scope > .tree-row").click();
+    await page.getByRole("treeitem", { name: "vanishing.txt", exact: true }).click();
+    await page.keyboard.press("Meta+x");
+    await rm(join(root, "vanishing.txt"));
+    await page.getByRole("treeitem", { name: "target", exact: true }).click();
+    await page.keyboard.press("Meta+v");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("vanishing.txt");
+    await expect(readFile(join(root, "target/vanishing.txt"))).rejects.toThrow();
+    expect(await page.evaluate(({ root, chat }) =>
+      window.escode.chat("snapshot", root, chat).then((s) => s.busy), { root, chat })).toBe(true);
     await page.getByRole("treeitem", { name: "bulk", exact: true }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
     await expect.poll(() => app.evaluate(() => (globalThis as any).copyRunning)).toBe(true);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await page.locator(".agent-row").click();
     const stopStart = Date.now();
-    await page.evaluate(({ root, chat }) => window.escode.chat("stop", root, chat), { root, chat });
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
     const stopMs = Date.now() - stopStart;
     expect(await app.evaluate(() => (globalThis as any).copyRunning)).toBe(true);
     await expect
@@ -226,7 +249,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     for (let i = 0; i < count; i++)
       expect((await readFile(join(root, `bulk copy/${i}.bin`))).equals(bytes)).toBe(true);
     console.log(
-      `Generated 500 MiB / ${count} binary files: native copy ${copyMs} ms; concurrent protocol Stop ${stopMs} ms; Agents navigation completed while native copy running.`,
+      `Generated 500 MiB / ${count} binary files: native copy ${copyMs} ms; concurrent visible Stop ${stopMs} ms; Agents navigation completed while native copy running.`,
     );
   } finally {
     const exit = new Promise((resolve) => app.process().once("exit", resolve));

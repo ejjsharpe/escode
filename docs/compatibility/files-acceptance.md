@@ -2,11 +2,11 @@
 
 Issue: [Complete the Files acceptance gates](https://github.com/ejjsharpe/escode/issues/48), against the ten scenarios in [Specification: IDE-style Files view](https://github.com/ejjsharpe/escode/issues/38).
 
-Acceptance remains incomplete. The user explicitly left manual gates pending in this session. Automated results below do not certify physical Finder gestures or VoiceOver. Earlier bounded manual passes remain scoped to their original builds and journeys.
+The user removed Finder/native Trash and VoiceOver checks from issue 48 acceptance on 2026-10-30 and will handle them separately. These remain unverified follow-up checks, not conditions for closing this ticket. Automated results below do not certify physical Finder gestures or VoiceOver. Earlier bounded manual passes remain scoped to their original builds and journeys.
 
 ## Candidate and reproduction
 
-Verification date: 2026-10-30. Application source: `c272243` (documentation-only changes follow). macOS 26.3.1 (25D2128), arm64; Bun 1.4.4, Node 26.13.0. Locked Electron 45.1.0, Monaco 0.57.0, TypeScript 7.0.2, Playwright 1.64.1. Package: unsigned `apps/desktop/release/mac-arm64/escode.app`.
+Verification date: 2026-10-30. Application source: `c272243` (follow-up changes affect tests and documentation only). macOS 26.3.1 (25D2128), arm64; Bun 1.4.4, Node 26.13.0. Locked Electron 45.1.0, Monaco 0.57.0, TypeScript 7.0.2, Playwright 1.64.1. Package: unsigned `apps/desktop/release/mac-arm64/escode.app`.
 
 Run from the repository root:
 
@@ -35,12 +35,12 @@ The following maps existing reproducible checks to each requirement; execution r
 7. Authority: the operation, transfer, import, reveal and Trash-handoff suites exercise sender validation, protected metadata/app state, traversal, symlink/root/parent replacement and pending operations across project/editor changes. Renderer selection never grants filesystem authority.
 8. External changes: `tests/files-watch.spec.ts` and `tests/files-reveal.spec.ts` exercise loaded/collapsed changes, focus rescan, unavailable watch retry, retained dirty missing paths, ignore filtering and reveal. See [watch](files-watch.md) and [reveal evidence](files-reveal.md).
 9. Accessibility: keyboard journeys and `tests/accessibility.spec.ts` cover semantics, focus, menus and shortcut isolation. Integrated VoiceOver verification of later controls, error recovery and focus restoration remains pending; automated assertions do not replace it.
-10. Scale and concurrent work: generated-tree and recursive-copy journeys in `files-watch.spec.ts` and `files-transfer.spec.ts` measure tree navigation separately (no chat), and successful copying with Agents navigation and bridge-level Stop while a controlled protocol chat runs. The Stop measurement invokes the chat API directly, rather than the visible Stop button. Failing-source/destination concurrency and visible Stop during copy remain unverified. This is fixture-provider evidence, not an authenticated Codex turn. Baseline Electron suites cover editor/save, navigation, recovery, Agents, chat protocol and worktrees.
+10. Scale and concurrent work: generated-tree and recursive-copy journeys in `files-watch.spec.ts` and `files-transfer.spec.ts` measure a 20,000-file tree independently. The follow-up transfer journey expands 8,000 files and uses arrow navigation while a controlled protocol chat runs, captures then removes a cut source, verifies a visible failed-paste result and absent destination while the chat stays busy, and then performs a 500 MiB copy with Agents navigation and the visible Stop button before copy completion. This is fixture-provider evidence, not an authenticated Codex turn. Baseline Electron suites cover editor/save, navigation, recovery, Agents, chat protocol and worktrees.
 
-## Remaining manual gates and limits
+## User-owned manual follow-up and limits
 
-- Pending: physical Finder file/folder drop and file-copy/Paste, target/modifier feedback, Finder reveal, native Trash recovery on this candidate, and integrated VoiceOver navigation/selection/menus/inline/conflict/Trash/error/focus checks.
-- Pending: authenticated-provider concurrency during long copy; no live turn is inferred from protocol fixtures.
+- User-owned follow-up (removed from ticket acceptance): physical Finder file/folder drop and file-copy/Paste, target/modifier feedback, Finder reveal, native Trash recovery on this candidate, and integrated VoiceOver navigation/selection/menus/inline/conflict/Trash/error/focus checks.
+- Authenticated-provider concurrency during long copy was not repeated; the specified application seam uses a controlled provider fixture. No live turn is inferred from it.
 - No signing/notarization, cross-volume acceptance or release distribution is claimed.
 - Explicit save, practical check-before-save and best-effort draft recovery remain unchanged. Cross-process final-check races remain possible. Batches and replacement are nontransactional; partial successes remain committed and reported. Earlier text undo resets on move with disclosure; subsequent text undo is supported. No file-operation undo stack or directory merge is added.
 
@@ -62,4 +62,31 @@ Packaged measurements: 20,000-file tree generation 1151 ms, root visible 698 ms,
 
 Final packaged suite: **109 passed, 2 opt-in skips**, 5.2 minutes, using `ESCODE_PACKAGED=1` and excluding only the development HMR test. The shared launch seam honors packaged mode; `project.spec.ts` also deliberately exercises both unpackaged and packaged launches. Together with the separate full smoke run, this verifies the package without claiming every launch in that suite is packaged.
 
-Issue 48 remains open: manual native/VoiceOver gates are user-deferred, and scenario 10 still lacks failing-transfer concurrency and visible Stop-during-copy evidence. This record completes the automated verification/reporting performed in this session, not the acceptance gate as a whole.
+The initial handoff left issue 48 open for manual checks and scenario 10 coverage gaps. The follow-up below records the user-authorized acceptance exception and additional automated coverage.
+
+## Completion under the revised ticket conditions
+
+The user requested continued unattended work and explicitly removed Finder/native Trash and VoiceOver from issue 48 acceptance; those checks remain their responsibility. The issue body records this exception without claiming a manual pass or rewriting the historical parent specification.
+
+The remaining scenario 10 gaps are covered by the extended `files-transfer.spec.ts` journey: a running protocol-fixture chat coexists with expansion of 8,000 files and two arrow moves, each asserting the expected focused file. A captured cut source is removed before Paste; the visible result identifies the failed source, no destination exists and the chat remains busy. A subsequent 500 MiB copy leaves Agents navigation and the visible Stop button usable; copy remains running after Stop and every copied file's bytes are checked.
+
+Final follow-up checks:
+
+- Typecheck and lint: passed.
+- Full serial host suite: **152 passed, 4 opt-in skips**, 57.28 seconds.
+- Packaged transfer suite after focused-item assertions: **12 passed**, 35.5 seconds.
+- Packaged concurrent expansion plus two verified arrow moves: **1048 ms** for 8,000 files; native copy **3499 ms**; visible Stop click **81 ms**. These are individual fixture measurements, not performance guarantees.
+- Fresh independent Standards and Spec reviews found no actionable findings after adding focused-item assertions. The earlier review objection and bridge-Stop coverage gap are resolved.
+
+Reproduce follow-up checks from the repository root:
+
+```sh
+bun run --cwd apps/desktop typecheck
+bun run --cwd apps/desktop lint
+bun run --cwd apps/desktop test -- --maxWorkers=1
+ESCODE_PACKAGED=1 bun run --cwd apps/desktop smoke -- tests/files-transfer.spec.ts
+```
+
+Logs: `/tmp/escode-48-follow-{typecheck-final,lint-final,host,packaged-final}.log`. The application package remains the previously tested `c272243` source; follow-up changes affect tests/documentation only. Remote main's separate UI work at `31c14a7` was not integrated or certified by this session. Acceptance evidence is published on `acceptance/files-48` to preserve this exact scope.
+
+All issue 48 conditions remaining after the user's manual-check exception are satisfied. Finder/native Trash and VoiceOver remain unverified user-owned follow-up. Existing explicit-save, nontransactional batch and best-effort recovery limitations remain unchanged.
