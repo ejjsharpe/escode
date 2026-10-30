@@ -292,3 +292,9 @@ unit run had one unchanged shutdown descendant-start timeout (207 passed,
 4 skipped); this was investigated separately from Trash behavior.
 The final full-suite rerun passed: 208 tests passed, 4 opt-in tests skipped
 (22 test files passed, 1 skipped). No shutdown code or timing limits were changed.
+After the final rebase onto create-entry delivery at `b8bed72`, typecheck, lint,
+build and package pass again. The combined transport, operation and reconnect
+suites pass (51 tests); packaged restart recovery after native success and ordinary
+Save after failed Trash both pass (2 cases). The earlier full-suite result remains
+bounded to the preceding integrated tree; this final rebase was checked at the
+shared transport and preservation boundaries.
