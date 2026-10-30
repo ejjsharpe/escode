@@ -38,6 +38,7 @@ class ProjectChats {
   };
   private opening = new Map<string, Promise<void>>();
   private polling = false;
+  private observationEpoch = new Map<string, object>();
   private observed = new Map<string, number>();
   private release?: () => void;
   private timer?: ReturnType<typeof setInterval>;
@@ -84,6 +85,7 @@ class ProjectChats {
     });
   }
   observe(id: string) {
+    if (!this.observed.has(id)) this.observationEpoch.set(id, {});
     this.observed.set(id, (this.observed.get(id) ?? 0) + 1);
     this.update({ snapshots: Object.fromEntries(Object.entries(this.state.snapshots).filter(([key]) => this.observed.has(key))) });
     void this.refresh();
@@ -92,8 +94,13 @@ class ProjectChats {
       if (count) this.observed.set(id, count);
       else {
         this.observed.delete(id);
+        this.observationEpoch.delete(id);
         const snapshots = { ...this.state.snapshots }, history = { ...this.state.history };
-        delete snapshots[id]; delete history[id];
+        const previous = snapshots[id];
+        if (previous && (previous.busy || previous.requests.length))
+          snapshots[id] = { ...previous, items: [], history: undefined };
+        else delete snapshots[id];
+        delete history[id];
         this.update({ snapshots, history });
       }
     };
@@ -104,9 +111,10 @@ class ProjectChats {
     try {
       await Promise.all(
         [...this.observed.keys()].map(async (id) => {
+          const epoch = this.observationEpoch.get(id);
           const chat = { id };
           const snapshot = await window.escode.chat("snapshot", this.project, chat.id);
-          if (!this.observed.has(chat.id)) return;
+          if (!this.observed.has(chat.id) || this.observationEpoch.get(id) !== epoch) return;
           const responding = { ...this.state.responding };
           for (const request of this.state.snapshots[chat.id]?.requests ?? [])
             if (!snapshot.requests.some((r) => r.token === request.token))
@@ -121,9 +129,10 @@ class ProjectChats {
     }
   }
   history(id: string, cursor: string | null) {
+    const epoch = this.observationEpoch.get(id);
     return this.run(id, async () => {
       const page = await window.escode.chatHistory(this.project, id, cursor);
-      if (this.observed.has(id)) this.update({ history: { ...this.state.history, [id]: page } });
+      if (this.observed.has(id) && this.observationEpoch.get(id) === epoch) this.update({ history: { ...this.state.history, [id]: page } });
     });
   }
   open(id: string) {
@@ -135,6 +144,9 @@ class ProjectChats {
         if (!(id in this.state.drafts)) this.update({ drafts: { ...this.state.drafts, [id]: text } });
       }
       await window.escode.chat("open", this.project, id);
+      const history = { ...this.state.history };
+      delete history[id];
+      this.update({ history });
     }).finally(() => this.opening.delete(id));
     this.opening.set(id, operation);
     return operation;

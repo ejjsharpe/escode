@@ -185,6 +185,11 @@ export function ChatView({
   }, [store, selected]);
   const run = (action: () => Promise<unknown>) => store.run(selected, action);
   const snapshot = snapshots[selected];
+  const page = history[selected];
+  const liveItems = (snapshot?.items ?? []).filter(item => !item.revision);
+  const items = page
+    ? [...page.items.filter(saved => !liveItems.some(item => saved.id === item.id && saved.turnId === item.turnId)), ...liveItems]
+    : snapshot?.items ?? [];
   const changeContext = (target: string | null) =>
     run(async () => {
       const moved = await window.escode.chat("context", project, selected, target);
@@ -328,10 +333,10 @@ export function ChatView({
                   <Button disabled={working} onClick={() => store.history(selected, null)}>First history page</Button>
                   <Button disabled={working || !(history[selected] ?? snapshot?.history)?.nextCursor}
                     onClick={() => store.history(selected, (history[selected] ?? snapshot?.history)?.nextCursor ?? null)}>Next history page</Button>
-                  <p role="status">Showing one history page. Other portions are not loaded.</p>
+                  <p aria-live="polite">Showing one history page. Other portions are not loaded.</p>
                 </nav>
               )}
-              {(history[selected] ? [...history[selected].items, ...(snapshot?.items ?? []).filter(i => !i.revision && !history[selected].items.some(saved => saved.id === i.id && saved.turnId === i.turnId))] : snapshot?.items ?? []).map((item) => (
+              {items.map((item) => (
                 <article key={item.turnId + item.id}>
                   <h2>
                     {item.type === "userMessage"

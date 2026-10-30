@@ -56,7 +56,7 @@ export const ChatDetail = Schema.Struct({
   connected: Schema.Boolean, busy: Schema.Boolean, turnId: Schema.NullOr(Schema.String),
   settings: Schema.Unknown, items: HistoryPage.fields.items,
   requests: Schema.Array(Schema.Struct({ token: Schema.String, method: Schema.String, params: Schema.Unknown })),
-  error: Schema.NullOr(Schema.String),
+  error: Schema.NullOr(Schema.String), contextError: Schema.optional(Schema.NullOr(Schema.String)),
   history: Schema.optional(Schema.Struct({ nextCursor: Schema.NullOr(Schema.String), revision: Schema.String })),
 });
 export type ChatDetail = typeof ChatDetail.Type;
@@ -64,4 +64,4 @@ export const HistoryQuery = { project: Schema.NullOr(Schema.String), id: Schema.
   cursor: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096))) };
 export const HostQueries = Directories.merge(RpcGroup.make(Rpc.make("chatSummaries", {
   success: ChatSummaries, error: Schema.String, stream: true,
-}), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));
+}), Rpc.make("chatSnapshot", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));

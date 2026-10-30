@@ -27,6 +27,7 @@ export async function startDirectoryHost(options: {
   list(root: string, path: string): Promise<DirectoryResult>;
   watch?(root: string, paths: readonly string[], notify: (error?: string) => void): () => void;
   summaries?: () => Promise<ChatSummaries["chats"]>;
+  chatSnapshot?: (project: string | null, id: string) => Promise<ChatDetail>;
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
   history?: (project: string | null, id: string, cursor: string | null) => Promise<HistoryPage>;
   now?: () => number;
@@ -62,7 +63,7 @@ export async function startDirectoryHost(options: {
     };
     const pending = new Map<number, Set<string | number>>();
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatSnapshot"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -101,6 +102,12 @@ export async function startDirectoryHost(options: {
       unacknowledged.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
       Effect.provide(HostQueries.toLayer({
+        chatSnapshot: ({ project, id }) => Effect.tryPromise({ try: async () => {
+          if (!options.chatSnapshot) throw Error("Chat detail unavailable");
+          const detail = await options.chatSnapshot(project, id);
+          if (Buffer.byteLength(JSON.stringify(detail)) > maximumFrameBytes / 2) throw Error("Chat detail unavailable: capacity exhausted");
+          return Schema.decodeUnknownSync(ChatDetail)(detail);
+        }, catch: String }),
         openChat: ({ project, id }) => Effect.tryPromise({ try: async () => {
           if (!options.openChat) throw Error("Chat unavailable");
           const detail = await options.openChat(project, id);

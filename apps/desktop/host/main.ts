@@ -374,13 +374,13 @@ app.whenReady().then(async () => {
     if (quitting || (root !== null && removing.has(root))) throw Error("Chat unavailable during shutdown or removal");
     const chat = await store.get(root, id);
     if (root !== null) {
-      const state = await workspace.read();
-      const saved = [...(state.savedProjects ?? []), ...state.projects, ...await workspace.approved()];
-      if (!saved.some(p => p.project === root)) throw Error("Approve this project using Open project… first.");
+      if (!(await workspace.approved()).some(p => p.project === root))
+        throw Error("Open this project first. Use Open project… to approve its saved directory.");
     }
     return chat;
   };
   const directoryHost = await startDirectoryHost({
+    chatSnapshot: async (root, id) => { await authorizeHistory(root, id); return chats.inspect(root, id); },
     openChat: async (root, id) => { await authorizeHistory(root, id); return chats.open(root, id); },
     history: async (root, id, cursor) => { await authorizeHistory(root, id); return chats.history(root, id, cursor); },
     summaries: async () => {
@@ -1301,14 +1301,6 @@ app.whenReady().then(async () => {
     if (!["snapshot", "draft", "composer"].includes(String(operation))) requireOpen();
     if (args.length === 1) {
       if (operation === "composer") return (await store.get(root, id)).draft;
-      if (operation === "snapshot") {
-        if (root !== null && !owner)
-          return {
-            ...chats.snapshot(root, id),
-            contextError: `Checkout unavailable: ${(await store.get(root, id)).checkout}. Open this project first. Use Open project… to approve this saved directory. History and drafts are retained.`,
-          };
-        return chats.inspect(root, id);
-      }
       if (operation === "stop") return chats.stop(root, id);
       if (operation === "disconnect") return chats.disconnect(root, id);
     }

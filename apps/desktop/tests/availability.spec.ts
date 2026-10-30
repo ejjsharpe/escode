@@ -240,6 +240,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
+    await rm(join(user, "foundation", "owner.lock")); // Fixture-owned recovery after the confirmed crash.
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(

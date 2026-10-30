@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld(
     },
     chat: (operation: string, ...args: unknown[]) => operation === "open"
       ? directories.openChat(args[0] as string | null, args[1] as string)
+      : operation === "snapshot" ? directories.chatSnapshot(args[0] as string | null, args[1] as string)
       : ipcRenderer.invoke("chat", operation, ...args),
     toolStatus: () => ipcRenderer.invoke("tools:status"),
     project: (operation: string, ...args: string[]) =>

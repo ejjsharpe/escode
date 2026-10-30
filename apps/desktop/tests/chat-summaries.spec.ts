@@ -16,17 +16,20 @@ test("fresh summaries exclude old metadata and bodies, release detail polling du
   const app = await launchDesktop(user);
   try {
     const page = await app.firstWindow();
-    await app.evaluate(({ dialog, ipcMain }, root) => {
+    await app.evaluate(async ({ dialog, webContents }, root) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
-      const original = (ipcMain as any)._invokeHandlers.get("chat");
       (globalThis as any).detailCalls = {};
-      ipcMain.removeHandler("chat");
-      ipcMain.handle("chat", (event, operation, ...args) => {
-        if (operation === "snapshot") {
+      const debugger_ = webContents.getAllWebContents()[0].debugger;
+      debugger_.attach("1.3");
+      await debugger_.sendCommand("Network.enable");
+      debugger_.on("message", (_event: unknown, method: string, params: any) => {
+        if (method !== "Network.webSocketFrameSent") return;
+        try {
+          const request = JSON.parse(params.response.payloadData);
+          if (request.tag !== "chatSnapshot") return;
           const counts = (globalThis as any).detailCalls;
-          counts[args[1]] = (counts[args[1]] ?? 0) + 1;
-        }
-        return original(event, operation, ...args);
+          counts[request.payload.id] = (counts[request.payload.id] ?? 0) + 1;
+        } catch { /* Ignore other transport frames. */ }
       });
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();

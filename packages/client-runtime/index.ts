@@ -34,23 +34,19 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
     session = { scope, client };
     return client;
   }
+  async function chatQuery<A>(request: (client: Client) => Effect.Effect<A, unknown>): Promise<A> {
+    if (queued >= 16) throw Error("Chat query admission exhausted. Retry explicitly.");
+    queued++;
+    try {
+      const client = await connect();
+      return await Effect.runPromise(queries.withPermit(request(client)).pipe(Effect.timeout("35 seconds")));
+    } finally { queued--; }
+  }
   return {
-    async openChat(project: string | null, id: string) {
-      if (queued >= 16) throw Error("Chat query admission exhausted. Retry explicitly.");
-      queued++;
-      try {
-        const client = await connect();
-        return await Effect.runPromise(queries.withPermit(client.openChat({ project, id })).pipe(Effect.timeout("35 seconds")));
-      } finally { queued--; }
-    },
-    async chatHistory(project: string | null, id: string, cursor: string | null): Promise<HistoryPage> {
-      if (queued >= 16) throw Error("History query admission exhausted. Retry explicitly.");
-      queued++;
-      try {
-        const client = await connect();
-        return await Effect.runPromise(queries.withPermit(client.chatHistory({ project, id, cursor })).pipe(Effect.timeout("35 seconds")));
-      } finally { queued--; }
-    },
+    openChat: (project: string | null, id: string) => chatQuery(client => client.openChat({ project, id })),
+    chatSnapshot: (project: string | null, id: string) => chatQuery(client => client.chatSnapshot({ project, id })),
+    chatHistory: (project: string | null, id: string, cursor: string | null): Promise<HistoryPage> =>
+      chatQuery(client => client.chatHistory({ project, id, cursor })),
     async listDirectory(root: string, path: string): Promise<DirectoryResult> {
       if (queued >= 10000) throw Error("Directory query admission exhausted. Refresh to retry.");
       queued++;
