@@ -372,6 +372,7 @@ function CheckoutView({
         const buffer = buffers.current.get(change.path);
         if (!buffer || buffer.model.getValue() === buffer.disk.text) {
           const disk = await projectCall("read", root, change.path);
+          if (generation !== presentation.current || modeRef.current !== "Source Control") return;
           if (!buffers.current.has(change.path)) addBuffer(change.path, disk);
           else if (buffer && buffer.model.getValue() === buffer.disk.text) {
             buffer.disk = disk;

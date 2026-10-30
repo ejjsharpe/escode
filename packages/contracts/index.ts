@@ -149,7 +149,10 @@ export const TransferResult = Schema.Union([Schema.String, Schema.Struct({
   results: TrashBatch.fields.results, open: Schema.Array(Schema.String),
   requiresAck: Schema.Boolean, message: Schema.String,
 })]);
+export const DiffComparison = Schema.Struct({ original: Schema.String, modified: Schema.String });
+export const DiffArea = Schema.Literals(["staged", "unstaged", "untracked"]);
 export const Files = RpcGroup.make(
+  Rpc.make("readDiff", { payload: { root: Schema.String, path: Schema.String, area: DiffArea }, success: DiffComparison, error: Schema.String }),
   Rpc.make("transferAction", { payload: { action: TransferAction }, success: TransferResult, error: Schema.String }),
   Rpc.make("createEntry", { payload: { command: CreateCommand }, success: CreateReceipt, error: Schema.String }),
   Rpc.make("createState", { success: Schema.String, error: Schema.String }),

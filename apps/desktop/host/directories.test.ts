@@ -310,6 +310,7 @@ test("live handoff sends bounded append batches, retains ACK charge and releases
 test("authenticated Files accepts a full editor document and rejects invalid save payloads", async () => {
   const text = "a".repeat(2 * 1024 * 1024);
   let saves = 0;
+  let diffs = 0;
   let creates = 0;
   const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "denied", message: "unused" }),
@@ -318,6 +319,10 @@ test("authenticated Files accepts a full editor document and rejects invalid sav
       creates++;
       expect([root, parent, name, kind]).toEqual(["/approved", "folder", "new.txt", "file"]);
       return { command, status: "accepted", message: "", path: "folder/new.txt" };
+    },
+    readDiff: async (root, path, area) => {
+      diffs++; expect([root, path, area]).toEqual(["/approved", "a", "staged"]);
+      return { original: text, modified: text };
     },
     readFile: async () => ({ text, version: "loaded" }),
     saveFile: async (_root, _path, value, version) => {
@@ -339,6 +344,9 @@ test("authenticated Files accepts a full editor document and rejects invalid sav
     expect(await query("4", "createEntry", { command: { commandId: "create", admissionEpoch: "epoch", root: "/approved", parent: "folder", name: "new.txt", kind: "file" } })).toContain("folder/new.txt");
     expect(await query("5", "createEntry", { command: { commandId: "bad", admissionEpoch: "epoch", root: "/approved", parent: "", name: "bad", kind: "symlink" } })).toContain("Failure");
     expect(creates).toBe(1);
+    expect(await query("6", "readDiff", { root: "/approved", path: "a", area: "staged" })).toContain(text);
+    expect(await query("7", "readDiff", { root: "/approved", path: "a", area: "invalid" })).toContain("Failure");
+    expect(diffs).toBe(1);
   } finally { const done = closed(socket); socket.close(); await done; await host.close(); }
 });
 

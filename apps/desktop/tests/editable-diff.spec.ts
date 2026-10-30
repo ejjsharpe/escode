@@ -16,6 +16,7 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
   await writeFile(join(root, "a.txt"), "staged\n");
   git("add", ".");
   await writeFile(join(root, "a.txt"), "working\n");
+  await writeFile(join(root, "new.txt"), "untracked text\n");
   const app = await launchDesktop(join(dir, "user"));
   try {
     const page = await app.firstWindow();
@@ -56,6 +57,18 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(page.locator(".editor .monaco-editor")).toContainText("unsaved diff work");
+    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("heading", { name: "untracked", exact: true }).locator("..").getByRole("button", { name: "new.txt", exact: true }).click();
+    await expect(modified).toContainText("untracked text");
+    await page.getByRole("heading", { name: "unstaged", exact: true }).locator("..").getByRole("button", { name: "a.txt", exact: true }).click();
+    await expect(modified).toContainText("unsaved diff work");
+    await rm(join(root, "new.txt"));
+    await rm(join(root, "a.txt"));
+    await page.getByRole("button", { name: "Files", exact: true }).click();
+    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "a.txt", exact: true }).click();
+    await expect(modified).toContainText("unsaved diff work");
+    expect(git("show", ":a.txt")).toBe("staged\n");
   } finally {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });

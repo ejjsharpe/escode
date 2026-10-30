@@ -1167,6 +1167,12 @@ app.whenReady().then(async () => {
         }
       });
     },
+    readDiff: async (root, path, area) => {
+      const { project, check } = await fileContext(root, path);
+      const result = await project.diff({ path, area });
+      check();
+      return result;
+    },
     readFile: async (root, path) => { const { project } = await fileContext(root, path); return project.read(path); },
     saveFile: async (root, path, text, version) => {
       if (Buffer.byteLength(text) > limit) throw Error("Invalid save: file exceeds 2 MiB.");
@@ -1258,7 +1264,7 @@ app.whenReady().then(async () => {
       await store.migrate(opened.repository(), opened.checkouts());
       return opened.status();
     }
-    if (["read", "save", "files", "files-filter", "create-entry", "trash-selection", "drag-capture", "clipboard-capture", "transfer"].includes(String(operation))) throw Error("Invalid project request");
+    if (["diff", "read", "save", "files", "files-filter", "create-entry", "trash-selection", "drag-capture", "clipboard-capture", "transfer"].includes(String(operation))) throw Error("Invalid project request");
     const requestedRoot = args.shift();
     if (
       [
@@ -1272,7 +1278,7 @@ app.whenReady().then(async () => {
       throw Error("Open and approve this checkout first.");
     const project = await checkout(requestedRoot);
     if (
-      ["read", "save", "diff"].includes(String(operation)) &&
+      ["read", "save"].includes(String(operation)) &&
       typeof args[0] === "string" &&
       isAppState(resolve(project.root, args[0]))
     )
@@ -1368,13 +1374,6 @@ app.whenReady().then(async () => {
         ]);
       return;
     }
-    if (
-      operation === "diff" &&
-      args.length === 2 &&
-      typeof args[0] === "string" &&
-      typeof args[1] === "string"
-    )
-      return project.diff({ path: args[0], area: args[1] as "staged" });
     throw Error("Invalid project request");
   });
   ipcMain.handle("chat", async (event, operation: unknown, ...args: unknown[]) => {

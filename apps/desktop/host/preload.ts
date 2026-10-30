@@ -126,6 +126,7 @@ contextBridge.exposeInMainWorld(
       : operation === "clipboard-capture" ? directories.transferAction({ root: args[0], operation, kind: args[1] as "copy" | "cut", paths: args[2] as unknown as string[] })
       : operation === "transfer" ? transfer(args[0], args[1] as "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", args[2], args[3] as unknown as string[])
       : operation === "create-entry" ? createEntry(args[0], args[1], args[2], args[3] as "file" | "folder")
+      : operation === "diff" ? directories.readDiff(args[0], args[1], args[2] as typeof import("@escode/contracts").DiffArea.Type)
       : operation === "read" ? directories.readFile(args[0], args[1])
       : operation === "trash-selection" ? directories.trashEntries(args[0], args[1] as unknown as string[])
       : operation === "save" ? directories.saveFile(args[0], args[1], args[2], args[3])
