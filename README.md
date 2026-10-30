@@ -130,3 +130,6 @@ visible, with a remembered per-checkout Hide Git-ignored files toggle. Hiding re
 edits; explicit reveal offers Show ignored files. Git filtering failure keeps files visible.
 Context menus copy absolute/relative paths and request Finder reveal for the targeted entry
 (or the checkout root on empty space). See [reveal/filter evidence](docs/compatibility/files-reveal.md).
+
+[Integrated Files acceptance](docs/compatibility/files-acceptance.md) maps all ten explorer
+scenarios to reproducible checks. Manual native and VoiceOver gates remain pending.

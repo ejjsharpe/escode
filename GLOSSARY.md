@@ -107,3 +107,7 @@ approved checkout. Source descriptors and ancestor identities are revalidated an
 after the operation; parent directories receive no continuing approval. Imports retain
 originals and never carry source editor drafts. Collision and result handling follow Files
 clipboard transfers.
+
+Integrated Files acceptance and its pending manual gates are recorded in
+[Files acceptance evidence](docs/compatibility/files-acceptance.md); the implemented
+Files terminology above does not certify those remaining gates.
