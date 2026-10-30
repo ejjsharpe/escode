@@ -453,7 +453,76 @@ app.whenReady().then(async () => {
           },
         ).then(() => undefined);
   };
+    const currentTarget = async (identity: string) => {
+      const state = await workspace.read();
+      const saved = [
+        ...(state.savedProjects ?? []),
+        ...state.projects,
+        ...(await workspace.approved()),
+      ];
+      const p = saved.find((p) => p.project === identity);
+      if (!p) throw Error("Unknown saved project.");
+      return state.views[identity]?.checkout ?? p.root;
+    };
+  const draftAction = async (action: import("@escode/contracts").DraftAction) => {
+    const { operation, project: root } = action;
+    const requireOpen = () => {
+      if (quitting || (root !== null && (!projectSessions.has(root) || removing.has(root))))
+        throw Error("Open and approve this project first.");
+    };
+    requireOpen();
+    const args = operation === "createDraft" ? [] : operation === "context"
+      ? [action.id, action.target] : [action.id, action.mode, action.value, action.commit];
+    if (operation === "createDraft" && !args.length)
+      return store.createDraft(root, root === null ? "" : await currentTarget(root), true);
+    if (
+      operation === "context" &&
+      args.length === 2 &&
+      typeof args[0] === "string" &&
+      (args[1] === null || typeof args[1] === "string")
+    ) {
+      const target = args[1];
+      if (target !== null && !projectSessions.has(target))
+        throw Error("Approve the target using Open project… first.");
+      return chats.context(
+        root,
+        args[0],
+        target,
+        target === null ? "" : await currentTarget(target),
+        undefined,
+        async () => { if (await expectedSend(root, args[0] as string) !== action.expected) throw Error("Draft changed. Inspect and retry."); },
+      );
+    }
+    if (
+      root !== null &&
+      operation === "execution" &&
+      args.length === 4 &&
+      args.every((a) => typeof a === "string")
+    ) {
+      const [id, mode, value, commit] = args as string[];
+      const saved = await store.get(root, id);
+      const source = saved.worktree?.source ?? saved.checkout;
+      const project = await checkout(source);
+      requireOpen();
+      const options = project.worktreeOptions();
+      if (project.repository() !== root) throw Error("Wrong project checkout.");
+      if (mode === "new") {
+        if (!options.bases.some((b) => b.ref === value && b.commit === commit))
+          throw Error("Base is missing or changed. Refresh and choose again.");
+        return chats.context(root, id, root, source, { source, ref: value, commit }, async () => { if (await expectedSend(root, id) !== action.expected) throw Error("Draft changed. Inspect and retry."); });
+      }
+      if (mode === "reuse" && options.checkouts.includes(value)) {
+        const target = await checkout(value);
+        requireOpen();
+        if (target.repository() !== root) throw Error("Wrong project checkout.");
+        return chats.context(root, id, root, target.root, undefined, async () => { if (await expectedSend(root, id) !== action.expected) throw Error("Draft changed. Inspect and retry."); });
+      }
+      throw Error("Choose a Git-discovered worktree explicitly.");
+    }
+    throw Error("Invalid draft action");
+  };
   const directoryHost = await startDirectoryHost({
+    draftAction,
     sendState: async (root, id) => ({ admissionEpoch: foundation.admissionEpoch, expected: await expectedSend(root, id) }),
     sendStatus: async commandId => {
       const receipt = foundation.receipt(commandId);
@@ -1320,17 +1389,6 @@ app.whenReady().then(async () => {
         targets.push({ project: null, checkout: "" });
       return targets;
     }
-    const currentTarget = async (identity: string) => {
-      const state = await workspace.read();
-      const saved = [
-        ...(state.savedProjects ?? []),
-        ...state.projects,
-        ...(await workspace.approved()),
-      ];
-      const p = saved.find((p) => p.project === identity);
-      if (!p) throw Error("Unknown saved project.");
-      return state.views[identity]?.checkout ?? p.root;
-    };
     const root = args.shift();
     if (root !== null && typeof root !== "string") throw Error("Invalid project");
     const owner = root === null ? undefined : projectSessions.get(root);
@@ -1343,50 +1401,6 @@ app.whenReady().then(async () => {
     };
     if (!["snapshot", "draft", "composer"].includes(String(operation))) requireOpen();
 
-    if (operation === "createDraft" && !args.length)
-      return store.createDraft(root, root === null ? "" : await currentTarget(root));
-    if (
-      operation === "context" &&
-      args.length === 2 &&
-      typeof args[0] === "string" &&
-      (args[1] === null || typeof args[1] === "string")
-    ) {
-      const target = args[1];
-      if (target !== null && !projectSessions.has(target))
-        throw Error("Approve the target using Open project… first.");
-      return chats.context(
-        root,
-        args[0],
-        target,
-        target === null ? "" : await currentTarget(target),
-      );
-    }
-    if (
-      root !== null &&
-      operation === "execution" &&
-      args.length === 4 &&
-      args.every((a) => typeof a === "string")
-    ) {
-      const [id, mode, value, commit] = args as string[];
-      const saved = await store.get(root, id);
-      const source = saved.worktree?.source ?? saved.checkout;
-      const project = await checkout(source);
-      requireOpen();
-      const options = project.worktreeOptions();
-      if (project.repository() !== root) throw Error("Wrong project checkout.");
-      if (mode === "new") {
-        if (!options.bases.some((b) => b.ref === value && b.commit === commit))
-          throw Error("Base is missing or changed. Refresh and choose again.");
-        return chats.context(root, id, root, source, { source, ref: value, commit });
-      }
-      if (mode === "reuse" && options.checkouts.includes(value)) {
-        const target = await checkout(value);
-        requireOpen();
-        if (target.repository() !== root) throw Error("Wrong project checkout.");
-        return chats.context(root, id, root, target.root);
-      }
-      throw Error("Choose a Git-discovered worktree explicitly.");
-    }
     if (root !== null && operation === "create" && args.length === 1) {
       const target = await checkout(args[0]);
       requireOpen();

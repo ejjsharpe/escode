@@ -75,9 +75,20 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("close-request", listener);
       return () => ipcRenderer.removeListener("close-request", listener);
     },
-    chat: (operation: string, ...args: unknown[]) => operation === "open"
+    chat: (operation: string, ...args: unknown[]) => ["createDraft", "context", "execution"].includes(operation)
+      ? (async () => {
+        const project = args[0] as string | null, id = args[1] as string;
+        const expected = operation === "createDraft" ? undefined : (await directories.sendState(project, id)).expected;
+        return directories.draftAction({ operation: operation as "createDraft" | "context" | "execution", project, id, expected,
+          ...(operation === "context" ? { target: args[2] as string | null } : {}),
+          ...(operation === "execution" ? { mode: args[2] as "new" | "reuse", value: args[3] as string, commit: args[4] as string } : {}),
+        });
+      })()
+      : operation === "draft" ? Promise.resolve(localStorage.setItem(`escode-composer:${String(args[1])}`, String(args[2])))
+      : operation === "open"
       ? open(args[0] as string | null, args[1] as string)
-      : operation === "composer" ? ipcRenderer.invoke("chat", operation, ...args).then(text => {
+      : operation === "composer" ? Promise.resolve().then(() => {
+        const text = localStorage.getItem(`escode-composer:${String(args[1])}`);
         const saved = localStorage.getItem(`escode-send:${JSON.stringify([args[0], args[1]])}`);
         return text || (saved ? JSON.parse(saved).text : "");
       })

@@ -54,6 +54,7 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
     } finally { queued--; }
   }
   return {
+    draftAction: (action: import("@escode/contracts").DraftAction) => chatQuery(client => client.draftAction({ action })),
     sendState: (project: string | null, id: string) => chatQuery(client => client.sendState({ project, id })),
     sendMessage: (command: SendCommand) => chatQuery(client => client.sendMessage({ command })),
     sendStatus: (commandId: string) => chatQuery(client => client.sendStatus({ commandId })),

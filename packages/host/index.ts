@@ -30,6 +30,7 @@ export async function startDirectoryHost(options: {
   chatSnapshot?: (project: string | null, id: string) => Promise<ChatDetail>;
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
   history?: (project: string | null, id: string, cursor: string | null) => Promise<HistoryPage>;
+  draftAction?: (action: import("@escode/contracts").DraftAction) => Promise<unknown>;
   sendState?: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
   sendMessage?: (command: SendCommand) => Promise<SendReceipt>;
   sendStatus?: (commandId: string) => Promise<SendReceipt | null>;
@@ -80,7 +81,7 @@ export async function startDirectoryHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -131,6 +132,10 @@ export async function startDirectoryHost(options: {
       unacknowledged.delete(id); }) }).pipe(
       Effect.provideService(RpcServer.Protocol, boundedProtocol),
       Effect.provide(HostQueries.toLayer({
+        draftAction: ({ action }) => Effect.tryPromise({ try: async () => {
+          if (!options.draftAction) throw Error("Draft editing unavailable");
+          return options.draftAction(action);
+        }, catch: String }),
         sendState: ({ project, id }) => Effect.tryPromise({ try: async () => {
           if (!options.sendState) throw Error("Send unavailable");
           return options.sendState(project, id);

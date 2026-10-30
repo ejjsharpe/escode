@@ -93,7 +93,7 @@ export class Chats {
       return chat;
     });
   }
-  createDraft(project: string | null, checkout: string) {
+  createDraft(project: string | null, checkout: string, fresh = false) {
     return this.change((chats) => {
       const empty = chats.find(
         (c) =>
@@ -104,7 +104,7 @@ export class Chats {
           !c.worktree &&
           !c.initialSend,
       );
-      if (empty) return empty;
+      if (empty && !fresh) return empty;
       const chat: SavedChat = {
         id: randomUUID(),
         project,

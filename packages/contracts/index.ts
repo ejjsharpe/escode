@@ -84,6 +84,14 @@ export const SendReceipt = Schema.Struct({ hostId: Schema.String, clientId: Sche
 export type SendReceipt = typeof SendReceipt.Type;
 export const SendState = Schema.Struct({ admissionEpoch: Schema.String, expected: Schema.String });
 
-export const HostQueries = Directories.merge(RpcGroup.make(Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
+export const DraftAction = Schema.Struct({
+  operation: Schema.Literals(["createDraft", "context", "execution"]),
+  project: Schema.NullOr(Schema.String), id: Schema.optionalKey(Schema.String),
+  expected: Schema.optionalKey(Schema.String), target: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  mode: Schema.optionalKey(Schema.Literals(["new", "reuse"])), value: Schema.optionalKey(Schema.String), commit: Schema.optionalKey(Schema.String),
+});
+export type DraftAction = typeof DraftAction.Type;
+
+export const HostQueries = Directories.merge(RpcGroup.make(Rpc.make("draftAction", { payload: { action: DraftAction }, success: Schema.Unknown, error: Schema.String }), Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
   success: ChatSummaries, error: Schema.String, stream: true,
 }), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));

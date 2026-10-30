@@ -186,8 +186,10 @@ export class ChatService {
     target: string | null,
     checkout: string,
     worktree?: SavedChat["worktree"],
+    authorize: () => Promise<void> = async () => {},
   ) {
     return this.inContext(project, id, async () => {
+      await authorize();
       const chat = await this.store.context(project, id, target, checkout, worktree);
       const previous = this.sessions.get(id);
       if (previous) {

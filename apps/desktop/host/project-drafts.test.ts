@@ -286,3 +286,26 @@ for (const stage of ["authorization", "preparation"] as const) {
     }
   });
 }
+
+test("stale context edits reject inside the first-Send serialization boundary", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-context-revision-"));
+  try {
+    const store = new Chats(join(dir, "chats.json"));
+    const chat = await store.createDraft("alpha", dir);
+    const service = new ChatService(store);
+    const revision = service.revision(chat.id);
+    await service.context("alpha", chat.id, "beta", dir);
+    await expect(service.context("beta", chat.id, "alpha", dir, undefined, async () => {
+      if (service.revision(chat.id) !== revision) throw Error("Draft changed");
+    })).rejects.toThrow("Draft changed");
+    expect((await store.get("beta", chat.id)).project).toBe("beta");
+    let release!: () => void;
+    const waiting = new Promise<void>(resolve => { release = resolve; });
+    const editing = service.context("beta", chat.id, "alpha", dir, undefined, () => waiting);
+    await expect(service.send("beta", chat.id, "keep text")).rejects.toThrow("in progress");
+    release();
+    await editing;
+    expect((await store.get("alpha", chat.id)).phase).toBe("draft");
+    service.close();
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
