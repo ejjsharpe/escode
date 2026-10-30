@@ -17,6 +17,7 @@ import { execFileSync } from "node:child_process";
 import * as child from "node:child_process";
 import { Checkout } from "./project";
 import { Workspace } from "./workspace";
+import { FileOperationJournal } from "./file-operation-journal";
 import { FileOperations } from "./file-operations";
 vi.mock("node:child_process", async (original) => ({
   ...(await original<typeof import("node:child_process")>()),
@@ -81,7 +82,7 @@ test("restart reconciles a crash immediately after native rename, before complet
     before.views[p.root].files!.hideIgnored = true;
     await store.write(before);
     const file = join(base, "intent.json");
-    const journal = new Workspace(file);
+    const journal = new FileOperationJournal(file);
     await journal.writeIntent({
       root: p.root,
       checkoutIdentity: p.checkoutIdentity(),
@@ -175,7 +176,7 @@ test("case-only rename keeps the same object and failed Trash preserves durable 
 test("uncertain native outcome retains drafts and blocks mutations across a fresh store", async () =>
   fixture(async (p, store, base) => {
     const file = join(base, "intent.json");
-    const journal = new Workspace(file);
+    const journal = new FileOperationJournal(file);
     await journal.writeIntent({
       root: p.root,
       checkoutIdentity: p.checkoutIdentity(),
@@ -346,7 +347,7 @@ test("restart reconciles a save interrupted after replacement but before complet
   fixture(async (p, store, base) => {
     const file = join(base, "intent.json"),
       draft = (await store.read()).drafts[0];
-    await new Workspace(file).writeIntent({
+    await new FileOperationJournal(file).writeIntent({
       root: p.root,
       checkoutIdentity: p.checkoutIdentity(),
       source: draft.path,
@@ -402,7 +403,7 @@ test("interrupted save intent before replacement keeps the original draft and ba
   fixture(async (p, store, base) => {
     const file = join(base, "intent.json"),
       draft = (await store.read()).drafts[0];
-    await new Workspace(file).writeIntent({
+    await new FileOperationJournal(file).writeIntent({
       root: p.root,
       checkoutIdentity: p.checkoutIdentity(),
       source: draft.path,
@@ -415,14 +416,14 @@ test("interrupted save intent before replacement keeps the original draft and ba
       "did not replace",
     );
     expect((await store.read()).drafts[0]).toEqual(draft);
-    expect(await new Workspace(file).readIntent()).toBe(null);
+    expect(await new FileOperationJournal(file).readIntent()).toBe(null);
   }));
 
 test("ambiguous interrupted save retains its draft and blocks later mutations", async () =>
   fixture(async (p, store, base) => {
     const file = join(base, "intent.json"),
       draft = (await store.read()).drafts[0];
-    await new Workspace(file).writeIntent({
+    await new FileOperationJournal(file).writeIntent({
       root: p.root,
       checkoutIdentity: p.checkoutIdentity(),
       source: draft.path,
@@ -503,7 +504,7 @@ test("renderer acknowledgement of earlier batch facts never clears an uncertain 
     await ops.persist(await store.read());
     await ops.ack(p.root);
     expect(() => ops.assertIdle()).toThrow("pending reconciliation");
-    const pending = await new Workspace(join(base, "intent.json")).readIntent();
+    const pending = await new FileOperationJournal(join(base, "intent.json")).readIntent();
     expect(pending?.source).toBe("folder/b.ts");
     expect(pending?.completed).not.toBe(true);
   }));
@@ -607,7 +608,7 @@ test("copy rejects occupied case variants and descendant destinations without ch
     await expect(ops.run(p, "copy", "folder/a.ts", "occupied.ts")).rejects.toThrow();
     expect(readFileSync(join(p.root, "Occupied.ts"), "utf8")).toBe("keep");
     // Staged leftovers deliberately keep uncertain intent, rather than claiming rollback.
-    expect(await new Workspace(join(base, "intent.json")).readIntent()).not.toBe(null);
+    expect(await new FileOperationJournal(join(base, "intent.json")).readIntent()).not.toBe(null);
   }));
 
 test("an opened copy stage moved away before native failure retains uncertain intent and source drafts", async () =>
@@ -647,7 +648,7 @@ test("an opened copy stage moved away before native failure retains uncertain in
       );
       expect(readFileSync(join(base, "retained-stage/a.ts"), "utf8")).toBe("disk");
       expect(existsSync(join(p.root, "destination"))).toBe(false);
-      const pending = await new Workspace(file).readIntent();
+      const pending = await new FileOperationJournal(file).readIntent();
       expect(pending?.kind).toBe("copy");
       expect(pending?.completed).not.toBe(true);
       expect(pending?.copies?.[0].text).toBe("a unsaved");
@@ -688,6 +689,6 @@ test("completed move protects late recovery snapshots until acknowledgement", as
     expect(recovered.drafts[0].text).toBe("a unsaved");
     expect(recovered.drafts[0].disk).toEqual(baseline);
     await ops.ack(p.root);
-    expect(await new Workspace(join(base, "intent.json")).readIntent()).toBe(null);
+    expect(await new FileOperationJournal(join(base, "intent.json")).readIntent()).toBe(null);
   });
 });

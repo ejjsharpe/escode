@@ -1,5 +1,6 @@
-import { mkdir, open, readFile, rename } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
+import { atomicWriteJson } from "./atomic-write";
 export type WorkspaceState = import("@escode/contracts").Mutable<import("@escode/contracts").WorkspaceState>;
 export type RecoveryDraft = WorkspaceState["drafts"][number];
 export type ViewMemory = WorkspaceState["views"][string];
@@ -185,84 +186,14 @@ export class Workspace {
       await this.replace(this.file, state);
     });
   }
-  async readIntent(): Promise<import("./file-operations").Intent | null> {
-    await this.queue;
-    try {
-      const v = this.decode(JSON.parse(await readFile(this.file, "utf8"))) as any;
-      if (v === null || (this.owner && v.intent === null)) return null;
-      if (
-        !v ||
-        !isAbsolute(v.root) ||
-        !["move", "trash", "save", "copy"].includes(v.kind) ||
-        typeof v.checkoutIdentity !== "string" ||
-        typeof v.identity !== "string" ||
-        typeof v.source !== "string" ||
-        !v.source ||
-        isAbsolute(v.source) ||
-        v.source.split("/").some((p: string) => p === ".." || p.toLowerCase() === ".git") ||
-        typeof v.destination !== "string" ||
-        (["move", "copy"].includes(v.kind) &&
-          (!v.destination ||
-            isAbsolute(v.destination) ||
-            v.destination
-              .split("/")
-              .some((p: string) => p === ".." || p.toLowerCase() === ".git"))) ||
-        (v.kind === "copy" &&
-          (!Array.isArray(v.copies) ||
-            v.copies.some(
-              (d: any) =>
-                !d ||
-                d.root !== v.root ||
-                typeof d.path !== "string" ||
-                isAbsolute(d.path) ||
-                !(d.path === v.destination || d.path.startsWith(v.destination + "/")) ||
-                d.path.split("/").some((p: string) => p === ".." || p.toLowerCase() === ".git") ||
-                typeof d.text !== "string" ||
-                typeof d.disk?.text !== "string" ||
-                typeof d.disk?.version !== "string",
-            ))) ||
-        (v.completed !== undefined && typeof v.completed !== "boolean") ||
-        (v.kind === "save" &&
-          (typeof v.saveText !== "string" ||
-            (v.completed && !v.savedDisk) ||
-            (v.savedDisk !== undefined &&
-              (!v.savedDisk ||
-                typeof v.savedDisk.text !== "string" ||
-                typeof v.savedDisk.version !== "string"))))
-      )
-        throw Error("Invalid operation journal; retained for inspection.");
-      return v;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
-    }
-  }
-  writeIntent(intent: import("./file-operations").Intent | null) {
-    return this.change(() => this.replace(this.file, intent));
-  }
   private change(edit: () => Promise<void>) {
     const task = this.queue.then(edit);
     this.queue = task.catch(() => {});
     return task;
   }
-  private async replace(file: string, value: unknown) {
-    await mkdir(dirname(file), { recursive: true, mode: 0o700 });
-    const temporary = file + ".tmp";
-    const fd = await open(temporary, "w", 0o600);
-    try {
-      await fd.writeFile(JSON.stringify(this.owner && file === this.file
-        ? { ...(value === null ? { intent: null } : value as object), storageVersion: 1, ...this.owner }
-        : value));
-      await fd.sync();
-    } finally {
-      await fd.close();
-    }
-    await rename(temporary, file);
-    const directory = await open(dirname(file), "r");
-    try {
-      await directory.sync();
-    } finally {
-      await directory.close();
-    }
+  private replace(file: string, value: unknown) {
+    return atomicWriteJson(file, () => this.owner && file === this.file
+      ? { ...(value === null ? { intent: null } : value as object), storageVersion: 1, ...this.owner }
+      : value);
   }
 }

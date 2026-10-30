@@ -138,7 +138,8 @@ context entry, or the checkout root for empty space.
 **File-operation intent**:
 A durable record of an originating checkout and source/destination object identities,
 retained across a rename/move, copy, Trash or Save-before-Trash filesystem/persistence handoff.
-Copy intents additionally retain staging paths and available destination draft text.
+The dedicated file-operation journal stores and validates these records; workspace storage owns
+client recovery drafts and view memory separately. Copy intents additionally retain staging paths and available destination draft text.
 Completed saves carry their disk baseline independently of deletion outcomes, preserving
 available draft text. Authenticated direct rename/move requests and acknowledgements share the host socket;
 uncertain intents reject client acknowledgement. Completed move and batch facts protect workspace snapshots until the renderer

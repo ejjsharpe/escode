@@ -2,19 +2,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { Checkout } from "./project";
 import { Workspace } from "./workspace";
-export type Intent = {
-  root: string;
-  checkoutIdentity: string;
-  source: string;
-  destination: string;
-  kind: "move" | "trash" | "save" | "copy";
-  identity: string;
-  completed?: boolean;
-  temporary?: string;
-  copies?: import("./workspace").WorkspaceState["drafts"];
-  saveText?: string;
-  savedDisk?: import("./project").Document;
-};
+import { FileOperationJournal, type Intent } from "./file-operation-journal";
 export type OperationResult = {
   applied: boolean;
   message: string;
@@ -29,7 +17,7 @@ export type TrashResult = OperationResult & {
 import { affected, reconcile } from "./file-operation-state";
 // One journal survives the disk/workspace handoff. Never infer success from absence alone.
 export class FileOperations {
-  private journal: Workspace;
+  private journal: FileOperationJournal;
   private pending?: Intent;
   private savedBaselines = new Map<string, { root: string; path: string; before: Set<string>; disk: import("./project").Document }>();
   private handoff?: { root: string; facts: Intent[] };
@@ -39,7 +27,7 @@ export class FileOperations {
     file: string,
     owner?: { hostId: string; clientId: string },
   ) {
-    this.journal = new Workspace(file, owner);
+    this.journal = new FileOperationJournal(file, owner);
   }
   async recover(project: (root: string) => Promise<Checkout>) {
     const record = await this.journal.readIntent();

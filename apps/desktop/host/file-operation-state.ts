@@ -1,5 +1,6 @@
 import type { WorkspaceState } from "./workspace";
-import type { Intent, SavedFile } from "./file-operations";
+import type { SavedFile } from "./file-operations";
+import type { Intent } from "./file-operation-journal";
 export const affected = (path: string, source: string) =>
   path === source || path.startsWith(source + "/");
 export const moved = (path: string, source: string, destination: string) =>
