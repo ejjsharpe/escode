@@ -11,12 +11,15 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
   const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" });
   execFileSync("git", ["init", root]);
   await writeFile(join(root, "a.txt"), "original\n");
+  await writeFile(join(root, "missing.txt"), "old missing\n");
   git("add", ".");
   git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "initial");
   await writeFile(join(root, "a.txt"), "staged\n");
+  await writeFile(join(root, "missing.txt"), "staged missing\n");
   git("add", ".");
   await writeFile(join(root, "a.txt"), "working\n");
   await writeFile(join(root, "new.txt"), "untracked text\n");
+  await rm(join(root, "missing.txt"));
   const app = await launchDesktop(join(dir, "user"));
   try {
     const page = await app.firstWindow();
@@ -25,6 +28,10 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
     }, root);
     await page.getByRole("button", { name: "Open project…", exact: true }).click();
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "missing.txt", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("Working file unavailable");
+    await expect(page.getByRole("textbox", { name: "staged · missing.txt modified", exact: true })).not.toBeEditable();
     await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "a.txt", exact: true }).click();
     const modified = page.locator(".monaco-diff-editor .modified .monaco-editor");
     await expect(modified).toContainText("working");
@@ -60,6 +67,18 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
     await page.getByRole("heading", { name: "untracked", exact: true }).locator("..").getByRole("button", { name: "new.txt", exact: true }).click();
     await expect(modified).toContainText("untracked text");
+    await page.evaluate(() => {
+      const groups = [...document.querySelectorAll("h2")];
+      const select = (area: string, path: string) => {
+        const group = groups.find(h => h.textContent === area)?.parentElement;
+        const button = [...(group?.querySelectorAll("button") ?? [])].find(b => b.textContent === path);
+        if (!button) throw Error("Missing change " + area + " " + path);
+        button.click();
+      };
+      select("staged", "missing.txt");
+      select("unstaged", "a.txt");
+    });
+    await expect(modified).toContainText("unsaved diff work");
     await page.getByRole("heading", { name: "unstaged", exact: true }).locator("..").getByRole("button", { name: "a.txt", exact: true }).click();
     await expect(modified).toContainText("unsaved diff work");
     await rm(join(root, "new.txt"));
