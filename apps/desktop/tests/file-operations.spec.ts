@@ -361,7 +361,7 @@ test("mutation IPC rejects other senders, unopened checkouts and protected app s
         other.destroy();
       }
     }, root);
-    expect(otherSender).toContain("Invalid sender");
+    expect(otherSender).toContain("Invalid local bootstrap request");
     expect(await readFile(join(root, "a.txt"), "utf8")).toBe("keep");
   } finally {
     app.process().kill("SIGKILL");

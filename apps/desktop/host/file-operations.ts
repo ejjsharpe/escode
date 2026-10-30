@@ -115,6 +115,7 @@ export class FileOperations {
         else if (saved.before.has(draft.disk.version)) draft.disk = saved.disk;
       }
       for (const fact of this.handoff?.facts ?? []) reconcile(snapshot, fact);
+      if (this.pending?.completed) reconcile(snapshot, this.pending);
     }).then(() => { for (const [key, saved] of acknowledged) if (this.savedBaselines.get(key) === saved) this.savedBaselines.delete(key); });
   }
   private remember(intent: Intent) {
@@ -310,6 +311,7 @@ export class FileOperations {
       this.handoff = undefined;
       return;
     }
+    if (root && this.pending && !this.pending.completed) throw Error("Uncertain operation retains its intent; restart to reconcile actual paths.");
     if (root && this.pending?.root !== root) throw Error("Operation belongs to another checkout.");
     await this.journal.writeIntent(null);
     this.pending = undefined;

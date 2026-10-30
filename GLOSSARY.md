@@ -140,7 +140,8 @@ A durable record of an originating checkout and source/destination object identi
 retained across a rename/move, copy, Trash or Save-before-Trash filesystem/persistence handoff.
 Copy intents additionally retain staging paths and available destination draft text.
 Completed saves carry their disk baseline independently of deletion outcomes, preserving
-available draft text. Completed batch facts protect workspace snapshots until the renderer
+available draft text. Authenticated direct rename/move requests and acknowledgements share the host socket;
+uncertain intents reject client acknowledgement. Completed move and batch facts protect workspace snapshots until the renderer
 reconciles and durably acknowledges them. Restart reconciles available drafts with actual
 paths and saved baselines; uncertain outcomes retain work and block mutations.
 

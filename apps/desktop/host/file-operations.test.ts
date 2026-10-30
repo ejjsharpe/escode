@@ -188,6 +188,7 @@ test("uncertain native outcome retains drafts and blocks mutations across a fres
     const fresh = new FileOperations(new Workspace(join(base, "workspace.json")), file);
     expect(await fresh.recover(async () => p)).toContain("Uncertain file operation");
     expect(() => fresh.assertIdle()).toThrow("pending reconciliation");
+    await expect(fresh.ack(p.root)).rejects.toThrow("Uncertain operation");
     expect((await store.read()).drafts[0].text).toBe("a unsaved");
     expect(await journal.readIntent()).not.toBe(null);
     expect(existsSync(join(p.root, "folder"))).toBe(false);
@@ -435,6 +436,7 @@ test("ambiguous interrupted save retains its draft and blocks later mutations", 
     expect(await fresh.recover(async () => p)).toContain("Uncertain file operation");
     expect((await store.read()).drafts[0]).toEqual(draft);
     expect(() => fresh.assertIdle()).toThrow("pending reconciliation");
+    await expect(fresh.ack(p.root)).rejects.toThrow("Uncertain operation");
   }));
 
 test("whole batch facts protect stale navigation snapshots until renderer acknowledgement", async () =>
@@ -673,3 +675,19 @@ test("a late client snapshot retains newer text and the completed ordinary-save 
     writeFileSync(join(p.root, "folder/a.ts"), "external writer");
     expect((await ops.save(p, "folder/a.ts", fresh.drafts[0].text, fresh.drafts[0].disk.version, () => {})).kind).toBe("conflict");
   }));
+
+test("completed move protects late recovery snapshots until acknowledgement", async () => {
+  await fixture(async (p, store, base) => {
+    const ops = new FileOperations(store, join(base, "intent.json"));
+    const stale = await store.read();
+    const baseline = stale.drafts[0].disk;
+    await ops.run(p, "move", "folder", "moved");
+    await ops.persist(stale);
+    const recovered = await store.read();
+    expect(recovered.drafts[0].path).toBe("moved/a.ts");
+    expect(recovered.drafts[0].text).toBe("a unsaved");
+    expect(recovered.drafts[0].disk).toEqual(baseline);
+    await ops.ack(p.root);
+    expect(await new Workspace(join(base, "intent.json")).readIntent()).toBe(null);
+  });
+});

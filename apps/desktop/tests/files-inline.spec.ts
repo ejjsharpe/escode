@@ -202,6 +202,7 @@ test("uncertain rename retains inline input and dirty work, then restart reconci
     await expect(page.locator(".monaco-editor:visible")).toContainText("retained dirty text");
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
+    await rm(join(user, "foundation/owner.lock")); // Explicit fixture recovery after confirmed process exit.
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(page.locator(".toolbar")).toContainText("actual.txt");

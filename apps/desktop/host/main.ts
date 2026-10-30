@@ -547,37 +547,35 @@ app.whenReady().then(async () => {
   async function moveEntry({ root, action, source, target }: import("@escode/contracts").MoveEntry) {
     const project = await approvedFiles(root);
     const identity = project.repository();
-      if (mutationOrigin) throw Error("Another file operation is pending.");
-      mutationOrigin = project.root;
-      try {
-
-        const kind = action === "rename" ? "move" : action;
-        const destination =
-          action === "rename" ? project.renameDestination(source, target) : target;
-        operations.assertIdle();
-        const owner = projectSessions.get(identity);
-        const originalIdentity = project.operationIdentity(source);
-        const check = () => {
-          if (!owner || projectSessions.get(identity) !== owner || quitting)
-            throw Error("Originating project unavailable or app quitting.");
-          for (const path of [source, ...(kind === "move" ? [destination] : [])]) {
-            const absolute = resolve(project.root, path);
-            if (
-              isAppState(absolute) ||
-              stateFiles.some((file) => affected(file.toLowerCase(), absolute.toLowerCase()))
-            )
-              throw Error("Protected app state is inside this operation.");
-          }
-          if (project.operationIdentity(source) !== originalIdentity)
-            throw Error(
-              "Source changed after confirmation. Edits retained; retry after inspecting actual paths.",
-            );
-        };
-        check();
-        return await operations.run(project, kind, source, destination, check);
-      } finally {
-        mutationOrigin = undefined;
-      }
+    if (mutationOrigin) throw Error("Another file operation is pending.");
+    mutationOrigin = project.root;
+    try {
+      const destination =
+        action === "rename" ? project.renameDestination(source, target) : target;
+      operations.assertIdle();
+      const owner = projectSessions.get(identity);
+      const originalIdentity = project.operationIdentity(source);
+      const check = () => {
+        if (!owner || projectSessions.get(identity) !== owner || quitting)
+          throw Error("Originating project unavailable or app quitting.");
+        for (const path of [source, destination]) {
+          const absolute = resolve(project.root, path);
+          if (
+            isAppState(absolute) ||
+            stateFiles.some((file) => affected(file.toLowerCase(), absolute.toLowerCase()))
+          )
+            throw Error("Protected app state is inside this operation.");
+        }
+        if (project.operationIdentity(source) !== originalIdentity)
+          throw Error(
+            "Source changed after confirmation. Edits retained; retry after inspecting actual paths.",
+          );
+      };
+      check();
+      return await operations.run(project, "move", source, destination, check);
+    } finally {
+      mutationOrigin = undefined;
+    }
   }
   async function ackFileOperation(root: string) {
     const project = await approvedFiles(root);
