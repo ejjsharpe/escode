@@ -402,9 +402,10 @@ export function FilesTree({
   const watchPaths = JSON.stringify(loadedDirectories().sort());
   useEffect(() => {
     if (!active) return;
-    return window.escode.watchFiles(root, JSON.parse(watchPaths), (error) => {
+    return window.escode.watchFiles(root, JSON.parse(watchPaths), (error, ready) => {
       if (error) setWatchError(error);
       rescan();
+      if (!error && !ready) setWatchRevision((r) => r + 1);
     });
   }, [root, active, watchPaths, watchRevision]);
   const wasActive = useRef(active);

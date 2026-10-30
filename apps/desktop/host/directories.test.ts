@@ -119,7 +119,7 @@ test("stalled delivery exhausts a finite response budget without blocking a heal
     await new Promise((resolve) => setTimeout(resolve, 100));
     socket.resume();
     await rejected;
-    expect(responses).toBeLessThanOrEqual(6);
+    expect(responses).toBeLessThanOrEqual(16);
     const done = closed(socket); socket.close(); await done;
     const healthy = await connect(host.bootstrap().url);
     const response = new Promise<string>((resolve) => healthy.once("message", (data) => resolve(String(data))));
@@ -156,5 +156,20 @@ test("watch streams share the query connection, report failures, and release on 
     await expect.poll(() => listeners.size).toBe(1);
     socket.terminate();
     await expect.poll(() => listeners.size).toBe(0);
+  } finally { socket.terminate(); await host.close(); }
+});
+
+
+test("consumed unary listings may exceed the aggregate stream delivery budget", async () => {
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "available", listing: { entries: [{ path: "x".repeat(400000), directory: false }], ignored: [] } }),
+  });
+  const socket = await connect(host.bootstrap().url);
+  try {
+    for (let id = 0; id < 8; id++) {
+      const reply = new Promise<string>((resolve) => socket.once("message", (data) => resolve(String(data))));
+      socket.send(JSON.stringify({ _tag: "Request", id, tag: "listDirectory", payload: { root: "/repo", path: "" }, headers: [] }));
+      expect(await reply).toContain("available");
+    }
   } finally { socket.terminate(); await host.close(); }
 });

@@ -70,9 +70,9 @@ export async function startDirectoryHost(options: {
       })),
       send: (id, response, transferables) => {
         if (rejected.has(id)) return Effect.void;
-        const bytes = (sentBytes.get(id) ?? 0) + Buffer.byteLength(JSON.stringify(response));
+        const bytes = (response._tag === "Chunk" ? sentBytes.get(id) ?? 0 : 0) + Buffer.byteLength(JSON.stringify(response));
         if (bytes > 2 * maximumFrameBytes) return reject(id);
-        sentBytes.set(id, bytes);
+        if (response._tag === "Chunk") sentBytes.set(id, bytes);
         if (response._tag === "Exit") pending.get(id)?.delete(response.requestId);
         return protocol.send(id, response, transferables);
       },
@@ -90,7 +90,7 @@ export async function startDirectoryHost(options: {
               failure = error ?? failure;
               Queue.offerUnsafe(queue, failure ? { error: failure } : {});
             });
-            Queue.offerUnsafe(queue, {}); // Revalidate after the watch is installed.
+            Queue.offerUnsafe(queue, { ready: true }); // Revalidate after the watch is installed.
             return release;
           }),
           (release) => Effect.sync(release),

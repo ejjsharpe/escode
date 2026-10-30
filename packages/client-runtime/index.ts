@@ -49,14 +49,14 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>) {
         throw error;
       } finally { queued--; }
     },
-    watchFiles(root: string, paths: string[], notify: (error?: string) => void) {
+    watchFiles(root: string, paths: string[], notify: (error?: string, ready?: boolean) => void) {
       let disposed = false;
       const controller = new AbortController();
       const current = connect();
       const effect = Effect.gen(function* () {
         const client = yield* Effect.tryPromise(() => current);
         yield* client.watchDirectories({ root, paths }).pipe(Stream.runForEach((change) => Effect.sync(() => {
-          if (!disposed) notify(change.error);
+          if (!disposed) notify(change.error, change.ready);
         })));
       });
       void Effect.runPromise(effect, { signal: controller.signal }).catch(async (error) => {

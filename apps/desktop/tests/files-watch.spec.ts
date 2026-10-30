@@ -148,6 +148,14 @@ test("generated tree loads only expanded directories and stays navigable", async
     await writeFile(join(root, "folder-000/external.txt"), "external");
     await expect(page.getByRole("treeitem", { name: "external.txt", exact: true })).toBeVisible();
     console.log(`LARGE external notification to visible ${(performance.now() - external).toFixed(0)}ms`);
+    await rename(join(root, "folder-000"), join(root, "replaced-folder"));
+    await mkdir(join(root, "folder-000"));
+    await writeFile(join(root, "folder-000/replacement.txt"), "replacement");
+    await expect(page.getByRole("treeitem", { name: "replacement.txt", exact: true })).toBeVisible();
+    await writeFile(join(root, "folder-000/after-replacement.txt"), "new identity");
+    await expect(page.getByRole("treeitem", { name: "after-replacement.txt", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await expect.poll(() => app.evaluate(() => [...(globalThis as any).watched])).toEqual([]);
   } finally {
     await app.evaluate(({ app }) => app.exit(0));
     await rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -209,6 +217,19 @@ test("watch failure stays usable, focus retries, checkout switch disposes, repla
     await page.locator(".monaco-editor textarea").focus();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("keep work across root replacement");
+    // Destroy only this fixture's established local RPC sockets, retaining Electron IPC.
+    await app.evaluate(() => {
+      for (const handle of (process as any)._getActiveHandles()) {
+        if (handle.constructor.name === "Socket" && handle.localAddress === "127.0.0.1" &&
+            handle.remoteAddress === "127.0.0.1" && handle.server) handle.destroy();
+      }
+    });
+    await expect(page.getByText(/Automatic Files updates unavailable:/)).toBeVisible();
+    await expect(page.locator(".monaco-editor")).toContainText("keep work across root replacement");
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(page.getByText(/Automatic Files updates unavailable:/)).toHaveCount(0);
+    await writeFile(join(root, "after-disconnect.txt"), "recovered connection");
+    await expect(page.getByRole("treeitem", { name: "after-disconnect.txt", exact: true })).toBeVisible();
     await rename(root, root + "-original");
     await mkdir(root);
     await writeFile(join(root, "foreign.txt"), "outside replacement");

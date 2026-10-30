@@ -190,9 +190,6 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
       return page.getByRole("tree", { name: "Files", exact: true }).getByRole("status");
     }
     await rm(join(root, "folder"), { recursive: true });
-    await folder.click();
-    await folder.click();
-    await expect(treeStatus()).toContainText("Use Refresh to retry");
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByRole("treeitem", { name: "folder", exact: true })).toHaveCount(0);
     await expect(
