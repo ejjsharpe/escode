@@ -1,0 +1,14 @@
+$ playwright test tests/chat.spec.ts
+
+Running 2 tests using 1 worker
+
+(node:15587) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Codex under test: /Users/elliotsharpe/.bun/bin/codex codex-cli 0.166.0
+  ✓  1 tests/chat.spec.ts:8:1 › saved Codex chat streams and reopens via a fresh connection (12.4s)
+Integrated installed-Codex settings {"model":"gpt-6.1-sol","reasoning":"xhigh","approval":"on-request","sandbox":{"type":"readOnly","networkAccess":false}}
+Integrated installed-Codex settings {"model":"gpt-6.1-sol","reasoning":"xhigh","approval":"on-request","sandbox":{"type":"readOnly","networkAccess":false}}
+Integrated installed-Codex settings {"model":"gpt-6.1-sol","reasoning":"xhigh","approval":"on-request","sandbox":{"type":"readOnly","networkAccess":false}}
+  ✓  2 tests/chat.spec.ts:79:1 › installed Codex accepts scratch and deferred worktree drafts through Electron and fresh history (11.9s)
+
+  2 passed (25.0s)

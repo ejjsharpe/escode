@@ -1,0 +1,651 @@
+(node:14629) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$ playwright test
+(node:14631) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 119 tests using 1 worker
+
+(node:14632) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘    1 tests/accessibility.spec.ts:8:1 › keyboard can navigate projects, edit, review an accessible diff and answer scoped chat input (10.6s)
+(node:14840) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘    2 tests/agents-files-recovery.spec.ts:10:1 › legacy saved-project migration and interrupted move recovery survive together across restart (1.8s)
+(node:15028) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'linked')
+  ✘    3 tests/agents-files-recovery.spec.ts:142:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening (1.5s)
+(node:15173) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'other')
+  ✘    4 tests/agents.spec.ts:8:1 › Agents restores closed saved projects and shares conversations without moving editor context (7.9s)
+(node:15450) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    5 tests/agents.spec.ts:296:1 › Agents keeps an unavailable remembered selection and validates catalogue arguments (1.0s)
+
+  ✘    6 tests/agents.spec.ts:340:1 › Agents and local Chats keep newest-first order and original labels through selection and activity (6.8s)
+(node:15628) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘    7 tests/agents.spec.ts:485:1 › global creation keeps newest-first rows through live summaries (45.0s)
+Worker teardown timeout of 45000ms exceeded.
+
+Failed worker ran 1 test:
+tests/agents.spec.ts:485:1 › global creation keeps newest-first rows through live summaries
+(node:19597) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓    8 tests/availability.spec.ts:9:1 › approved projects reopen across repeated restarts without choosing directories again (6.4s)
+
+  ✘    9 tests/availability.spec.ts:53:1 › renderer state cannot grant file access or overwrite approvals; native reopening restores legacy drafts (8.1s)
+(node:19869) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   10 tests/availability.spec.ts:183:1 › unavailable checkout retains its tab, recovery edits and chat draft through restart and explicit retry (34.4s)
+Preparing worktree (new branch 'secondary')
+  ✘   11 tests/availability.spec.ts:286:1 › a saved secondary checkout can recover and save its buffer after restarting without Git (8.2s)
+(node:20828) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘   12 tests/availability.spec.ts:359:1 › Git, Codex and authentication failures preserve usable capabilities and retry never resends (8.8s)
+(node:20895) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   13 tests/chat-recovery.spec.ts:8:1 › Agents retains closed unavailable contexts, Stop and exact-path Retry through restart without Git (6.2s)
+
+  ✘   14 tests/chat-summaries.spec.ts:8:1 › fresh summaries exclude old metadata and bodies, release detail polling during navigation (6.7s)
+(node:21062) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -   15 tests/chat.spec.ts:8:1 › saved Codex chat streams and reopens via a fresh connection
+  -   16 tests/chat.spec.ts:79:1 › installed Codex accepts scratch and deferred worktree drafts through Electron and fresh history
+
+  ✓   17 tests/concurrency.spec.ts:8:1 › background requests keep focus; replies, stop and connection loss stay with their chat (8.4s)
+7:09:06 PM [vite+] (client) hmr update /src/main.tsx
+7:09:06 PM [vite+] (client) hmr invalidate /src/main.tsx No exports
+7:09:06 PM [vite+] (client) page reload src/main.tsx
+7:09:06 PM [vite+] (client) [console.error] You are calling ReactDOMClient.createRoot() on a container that has already been passed to createRoot() before. Instead, call root.render() on the existing root instead if you want to update it.
+7:09:07 PM [vite+] (client) hmr update /src/main.tsx
+7:09:07 PM [vite+] (client) hmr invalidate /src/main.tsx No exports
+7:09:07 PM [vite+] (client) page reload src/main.tsx
+7:09:07 PM [vite+] (client) [console.error] You are calling ReactDOMClient.createRoot() on a container that has already been passed to createRoot() before. Instead, call root.render() on the existing root instead if you want to update it.
+  ✘   18 tests/development.spec.ts:7:1 › StyleX updates during development (45.0s)
+Worker teardown timeout of 45000ms exceeded.
+
+Failed worker ran 4 tests:
+tests/chat.spec.ts:8:1 › saved Codex chat streams and reopens via a fresh connection
+tests/chat.spec.ts:79:1 › installed Codex accepts scratch and deferred worktree drafts through Electron and fresh history
+tests/concurrency.spec.ts:8:1 › background requests keep focus; replies, stop and connection loss stay with their chat
+tests/development.spec.ts:7:1 › StyleX updates during development
+(node:21601) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'sibling')
+  ✓   19 tests/directory-host.spec.ts:8:1 › Files uses authenticated directory contracts with denied paths and no listing IPC (2.3s)
+
+  ✓   20 tests/editable-diff.spec.ts:8:1 › diff edits share the working buffer, save explicitly and preserve the index (4.4s)
+
+  ✓   21 tests/file-operations.spec.ts:8:1 › dirty descendants move through Monaco and bridge, undo, save conflict and restart (5.7s)
+
+  ✓   22 tests/file-operations.spec.ts:119:1 › Trash cancellation, conflict and native failure retain dirty drafts; pending confirmation stays at its origin (6.2s)
+
+  ✓   23 tests/file-operations.spec.ts:238:1 › mutation IPC rejects other senders, unopened checkouts and protected app state (1.5s)
+
+  ✓   24 tests/file-operations.spec.ts:373:3 › batch Trash Save: hidden nested selection, mixed entries and per-item retention (2.9s)
+
+  ✓   25 tests/file-operations.spec.ts:373:3 › batch Trash Discard: hidden nested selection, mixed entries and per-item retention (2.5s)
+
+  ✓   26 tests/file-operations.spec.ts:373:3 › batch Trash Cancel: hidden nested selection, mixed entries and per-item retention (2.2s)
+
+  ✓   27 tests/file-operations.spec.ts:476:3 › batch confirmation revalidates missing and reports actual per-item disk outcomes (2.5s)
+
+  ✓   28 tests/file-operations.spec.ts:476:3 › batch confirmation revalidates root swap and reports actual per-item disk outcomes (2.0s)
+
+  ✓   29 tests/file-operations.spec.ts:550:1 › mixed batch save conflict retains the failed draft and uses ordinary conflict controls (2.4s)
+
+  ✓   30 tests/files-drag.spec.ts:71:1 › real drag hover, Option copy and confirmed dirty move retain disk, drafts and save identity (4.0s)
+
+  ✓   31 tests/files-drag.spec.ts:135:1 › move Cancel has no mutation; nested selection pruned; missing captured item gives partial results (3.2s)
+
+  ✓   32 tests/files-drag.spec.ts:168:1 › invalid and forged drops cannot mutate; pending confirmation remains bound across project navigation (2.2s)
+
+  ✓   33 tests/files-drag.spec.ts:209:1 › Option drop uses shared dirty collision choices, keeps originals and leaves keyboard clipboard intact (2.9s)
+
+  ✓   34 tests/files-drag.spec.ts:254:1 › confirmation revalidates destination identity; cross-checkout references and protected sources fail (2.2s)
+
+  ✓   35 tests/files-drag.spec.ts:306:1 › cancelled hover and navigation clear timers and drop authority (3.0s)
+Preparing worktree (detached HEAD fcb687b)
+  ✓   36 tests/files-drag.spec.ts:345:1 › pending drag move keeps its checkout when a chat selects a linked worktree (2.9s)
+
+  ✓   37 tests/files-drag.spec.ts:400:3 › Option-drag Replace revalidates a source replaced during collision consent before destination Trash (2.0s)
+
+  ✓   38 tests/files-drag.spec.ts:400:3 › clipboard Replace revalidates a source replaced during collision consent before destination Trash (2.3s)
+
+  ✓   39 tests/files-import.spec.ts:65:1 › native clipboard copies binary and folder disk bytes, partial unsupported batch keeps originals (2.1s)
+
+  ✓   40 tests/files-import.spec.ts:97:1 › isolated preload rejects forged paths and JS Files; native-backed File drop uses disk and reload expires references (2.6s)
+
+  ✓   41 tests/files-import.spec.ts:171:1 › pending import Replace cannot Trash destination after source replacement; navigation preserves origin (2.6s)
+Generated 500 MiB / 8000 binary files: native copy 3509 ms; concurrent protocol Stop 69 ms; Agents navigation completed while native copy running.
+  ✓   42 tests/files-import.spec.ts:206:1 › native import of generated recursive binary files leaves navigation and concurrent chat Stop responsive (11.1s)
+
+  ✓   43 tests/files-import.spec.ts:302:1 › imports never carry source drafts; same-folder import preserves original; dirty destination offers Keep Both (3.0s)
+
+  ✓   44 tests/files-import.spec.ts:392:1 › R1 native clipboard case-alias same file never offers Replace or Trashes its original (2.3s)
+
+  ✓   45 tests/files-import.spec.ts:415:1 › R1 native clipboard case-alias folder descendant rejects before any staging inside original (2.3s)
+
+  ✓   46 tests/files-import.spec.ts:437:1 › R1 native clipboard unsupported basename rejects before collision offer or destination Trash (2.3s)
+
+  ✓   47 tests/files-import.spec.ts:466:1 › R1 native clipboard Unicode alias preserves same-file original and chooses a safe sibling (2.4s)
+
+  ✓   48 tests/files-inline.spec.ts:8:1 › inline create and rename: names, cancellation, blur, click-away, case and scoped keys (4.3s)
+
+  ✓   49 tests/files-inline.spec.ts:105:1 › pending inline rename stays with its original checkout (2.7s)
+
+  ✓   50 tests/files-inline.spec.ts:160:1 › uncertain rename retains inline input and dirty work, then restart reconciles the actual path (2.9s)
+
+  ✓   51 tests/files-inline.spec.ts:221:3 › collapsed invalid creation stays reachable to correct (1.9s)
+
+  ✓   52 tests/files-inline.spec.ts:221:3 › collapsed invalid creation stays reachable to cancel (1.7s)
+
+  ✓   53 tests/files-inline.spec.ts:275:1 › creation field survives failed destination listing and missing parent without retargeting (1.7s)
+
+  ✓   54 tests/files-inline.spec.ts:334:3 › New file uses the selected nested folder after Collapse All (1.7s)
+
+  ✓   55 tests/files-inline.spec.ts:334:3 › New folder uses the selected nested folder after Collapse All (1.6s)
+
+  ✘   56 tests/files-inline.spec.ts:373:1 › restored hidden selection loads its type and refuses unavailable or missing entries (1.5s)
+(node:25248) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   57 tests/files-inline.spec.ts:475:3 › hidden selected entry renames through toolbar without changing another path (2.3s)
+
+  ✓   58 tests/files-inline.spec.ts:475:3 › hidden selected entry renames through keyboard without changing another path (2.6s)
+
+  ✓   59 tests/files-inline.spec.ts:475:3 › hidden selected entry renames through context without changing another path (2.3s)
+
+  ✓   60 tests/files-inline.spec.ts:546:1 › missing hidden rename source retains the error and permits cancellation (1.7s)
+
+  ✓   61 tests/files-inline.spec.ts:579:1 › pending entry resolution retains its source across selection and project changes (3.0s)
+
+  ✓   62 tests/files-inline.spec.ts:658:1 › lost native creation result retains input and does not repeat the effect (1.3s)
+
+  ✓   63 tests/files-reveal.spec.ts:8:1 › reveal, collapse, ignored dirty file, failure recovery, context paths and restart (5.6s)
+
+  ✓   64 tests/files-reveal.spec.ts:227:3 › context authority and filter memory across editor close (2.8s)
+
+  ✓   65 tests/files-reveal.spec.ts:227:3 › context authority and filter memory across retained dirty editor (2.0s)
+
+  ✓   66 tests/files-reveal.spec.ts:227:3 › context authority and filter memory across root replacement (2.4s)
+
+  ✓   67 tests/files-reveal.spec.ts:227:3 › context authority and filter memory across quit (2.1s)
+
+  ✓   68 tests/files-transfer.spec.ts:8:1 › tree clipboard copy, dirty duplicate, collision and cut partial results use real bytes (4.8s)
+
+  ✓   69 tests/files-transfer.spec.ts:77:1 › dirty destination blocks Replace; duplicate text survives a fresh Electron process (4.2s)
+Concurrent tree expansion and two arrow keys: 1335 ms; 8000 files; chat remains running.
+Generated 500 MiB / 8000 binary files: native copy 3376 ms; concurrent visible Stop 27 ms; Agents navigation completed while native copy running.
+  ✓   70 tests/files-transfer.spec.ts:150:1 › generated recursive binary copy leaves navigation and concurrent chat Stop responsive (14.1s)
+
+  ✓   71 tests/files-transfer.spec.ts:263:1 › explicit clean Replace uses native recovery and forged clipboard data grants no authority (1.5s)
+
+  ✓   72 tests/files-transfer.spec.ts:336:1 › pending collision stays bound to its captured source and originating project (2.3s)
+
+  ✓   73 tests/files-transfer.spec.ts:387:1 › copy delivery updates an early-open clean destination after a second-item collision, including undo and restart baseline (5.2s)
+
+  ✓   74 tests/files-transfer.spec.ts:488:3 › pending transfer preserves its origin across editor close (2.7s)
+
+  ✓   75 tests/files-transfer.spec.ts:488:3 › pending transfer preserves its origin across retained dirty editor (2.5s)
+
+  ✓   76 tests/files-transfer.spec.ts:488:3 › pending transfer preserves its origin across navigation (2.0s)
+
+  ✓   77 tests/files-transfer.spec.ts:488:3 › pending transfer preserves its origin across quit (2.1s)
+
+  ✓   78 tests/files-transfer.spec.ts:488:3 › pending transfer preserves its origin across root replacement (2.1s)
+
+  ✓   79 tests/files-transfer.spec.ts:488:3 › pending transfer preserves its origin across destination replacement (2.1s)
+
+  ✓   80 tests/files-trash-handoffs.spec.ts:65:3 › native Trash success remains visible through workspace failure and fresh-process recovery (3.6s)
+
+  ✓   81 tests/files-trash-handoffs.spec.ts:65:3 › native Trash success remains visible through renderer workspace failure and fresh-process recovery (3.6s)
+
+  ✓   82 tests/files-trash-handoffs.spec.ts:65:3 › native Trash success remains visible through acknowledgement failure and fresh-process recovery (3.6s)
+
+  ✓   83 tests/files-trash-handoffs.spec.ts:139:3 › completed save survives native Trash failure: retry Trash (3.1s)
+
+  ✓   84 tests/files-trash-handoffs.spec.ts:139:3 › completed save survives native Trash failure: ordinary Save (2.4s)
+
+  ✓   85 tests/files-trash-handoffs.spec.ts:139:3 › completed save survives native Trash failure: external change (3.1s)
+
+  ✓   86 tests/files-trash-handoffs.spec.ts:192:1 › partial descendant save carries its new baseline through later conflict and fresh process (4.5s)
+
+  ✓   87 tests/files-trash-handoffs.spec.ts:229:1 › completed save with failed baseline persistence blocks Trash and recovers its baseline on restart (3.4s)
+
+  ✓   88 tests/files-trash-handoffs.spec.ts:290:3 › Agents navigation cannot regress completed batch facts before delivery: crash (4.5s)
+
+  ✓   89 tests/files-trash-handoffs.spec.ts:290:3 › Agents navigation cannot regress completed batch facts before delivery: continue (4.9s)
+
+  ✓   90 tests/files-trash-handoffs.spec.ts:428:3 › pending batch retains its authority only while valid: editor close (2.8s)
+
+  ✓   91 tests/files-trash-handoffs.spec.ts:428:3 › pending batch retains its authority only while valid: retained dirty editor (2.8s)
+
+  ✓   92 tests/files-trash-handoffs.spec.ts:428:3 › pending batch retains its authority only while valid: checkout replaced (2.6s)
+
+  ✓   93 tests/files-trash-handoffs.spec.ts:428:3 › pending batch retains its authority only while valid: quit (2.5s)
+
+  ✓   94 tests/files-tree.spec.ts:8:1 › lazy tree keyboard, independent selection, menus, refresh and restart recovery (3.7s)
+
+  ✓   95 tests/files-tree.spec.ts:112:1 › loaded directories revalidate on expansion; missing paths recover and scroll stays per project (4.2s)
+
+  ✓   96 tests/files-watch.spec.ts:8:1 › external restoration, loaded/collapsed updates, focus recovery and dirty missing restart (4.8s)
+GENERATED 200 directories / 20000 files in 1151ms
+LARGE root visible 723ms; 200 rows
+LARGE expand 122ms; 300 rows
+LARGE two arrow keys 9ms
+LARGE external notification to visible 260ms
+  ✓   97 tests/files-watch.spec.ts:106:1 › generated tree loads only expanded directories and stays navigable (4.3s)
+
+  ✓   98 tests/files-watch.spec.ts:165:1 › watch failure stays usable, focus retries, checkout switch disposes, replaced root retains editor (2.9s)
+  ✓   99 tests/foundation-state.spec.ts:7:1 › desktop publishes its window only after durable identities and retains them on relaunch (2.2s)
+
+  ✓  100 tests/history.spec.ts:8:58 › saved new-format history: navigation (5.3s)
+
+  ✓  101 tests/history.spec.ts:8:58 › saved new-format history: streaming (5.2s)
+
+  ✓  102 tests/lifecycle-races.spec.ts:9:3 › file close locks editing and duplicate closes while closing a clean file (2.4s)
+
+  ✓  103 tests/lifecycle-races.spec.ts:9:3 › file close locks editing and duplicate closes while discarding (2.5s)
+
+  ✓  104 tests/lifecycle-races.spec.ts:84:1 › an IPC open delayed in metadata validation survives editor closure without reopening its tab (3.1s)
+Recovery draft acknowledged 421 ms after typing began; crash recovery below starts from this durable draft.
+  ✓  105 tests/lifecycle.spec.ts:8:1 › crash recovery preserves baseline; cancel and failed save retain edits; discard survives restart (8.0s)
+
+  ✓  106 tests/lifecycle.spec.ts:138:3 › active work: quit interrupts processes without replay on restart (5.7s)
+
+  ✘  107 tests/lifecycle.spec.ts:138:3 › active work: editor close retains live work, and quit stops closed-project processes (5.8s)
+(node:30307) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  108 tests/lifecycle.spec.ts:370:1 › cancelled Quit retains an earlier Discard choice (1.9s)
+  -  109 tests/live-output.spec.ts:7:1 › installed provider streams a setup-created new-format saved association
+Preparing worktree (new branch 'other')
+Switched to a new branch 'changed-branch'
+  ✓  110 tests/navigation.spec.ts:8:1 › projects and checkout selections retain buffers, drafts and mode without duplicate tabs (8.3s)
+
+  ✓  111 tests/packaged.spec.ts:7:1 › packaged app loads CSS, Monaco and tools without a development PATH (2.9s)
+Preparing worktree (new branch 'linked')
+  ✓  112 tests/project-drafts.spec.ts:8:1 › saved project drafts move with text, survive restart and bind exactly once from closed-project Agents (8.9s)
+
+  ✘  113 tests/project.spec.ts:8:3 › unpackaged: edit, navigate, cancel conflict, compare and explicitly overwrite (7.1s)
+(node:32270) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  114 tests/project.spec.ts:8:3 › packaged: edit, navigate, cancel conflict, compare and explicitly overwrite (7.1s)
+(node:32331) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  115 tests/retained-project.spec.ts:8:1 › dirty background close preserves work on cancel/failure, retained requests and managed removal protections (7.3s)
+  ✓  116 tests/scratch.spec.ts:16:1 › empty Agents creates distinct scratch chats only on Send and restores bytes, requests and drafts (5.0s)
+
+  ✘  117 tests/scratch.spec.ts:156:1 › one repository offers No project and text-bearing local drafts move through Agents without changing identity (45.0s)
+Worker teardown timeout of 45000ms exceeded.
+
+Failed worker ran 3 tests:
+tests/retained-project.spec.ts:8:1 › dirty background close preserves work on cancel/failure, retained requests and managed removal protections
+tests/scratch.spec.ts:16:1 › empty Agents creates distinct scratch chats only on Send and restores bytes, requests and drafts
+tests/scratch.spec.ts:156:1 › one repository offers No project and text-bearing local drafts move through Agents without changing identity
+(node:33239) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  118 tests/send.spec.ts:7:1 › durable Send receipts prevent duplicate provider dispatch over authenticated RPC (1.7s)
+Preparing worktree (new branch 'linked')
+
+  ✓  119 tests/worktree-drafts.spec.ts:9:1 › worktree draft prepares only on Send from closed-project Agents, retains edits and protects active removal (10.9s)
+
+
+  1) tests/accessibility.spec.ts:8:1 › keyboard can navigate projects, edit, review an accessible diff and answer scoped chat input 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('list', { name: 'Accessible Diff Viewer. Use arrow up and down to navigate.' })
+    Expected substring: "keyboard edit"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toContainText" getByRole('list', { name: 'Accessible Diff Viewer. Use arrow up and down to navigate.' }) with timeout 5000ms
+      - waiting for getByRole('list', { name: 'Accessible Diff Viewer. Use arrow up and down to navigate.' })
+
+
+       95 |         name: "Accessible Diff Viewer. Use arrow up and down to navigate.",
+       96 |       }),
+    >  97 |     ).toContainText("keyboard edit");
+          |       ^
+       98 |     await page.keyboard.press("Escape");
+       99 |     await expect(diff).toBeFocused();
+      100 |     await page.waitForTimeout(2200);
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/accessibility.spec.ts:97:7
+
+    Error Context: test-results/accessibility-keyboard-can-bba7f-nd-answer-scoped-chat-input/error-context.md
+
+  2) tests/agents-files-recovery.spec.ts:10:1 › legacy saved-project migration and interrupted move recovery survive together across restart 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "null"
+    Received: "{\"intent\":null,\"storageVersion\":1,\"version\":1,\"hostId\":\"98473342-91cb-4dc0-8f23-e8880ae59018\",\"clientId\":\"8dc431ef-239e-4c62-8875-fcb8b47edd46\",\"records\":[]}"
+
+      92 |         { root, path: "moved/a.ts", text: "unsaved recovered text", disk },
+      93 |       ]);
+    > 94 |       expect(await readFile(join(user, "client-file-operation-v1.json"), "utf8")).toBe("null");
+         |                                                                                   ^
+      95 |       await expect(readFile(join(root, "folder/a.ts"))).rejects.toThrow();
+      96 |       expect(await readFile(join(root, "moved/a.ts"), "utf8")).toBe(disk.text);
+      97 |       await page.getByRole("button", { name: "Agents", exact: true }).click();
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/agents-files-recovery.spec.ts:94:83
+
+    Error Context: test-results/agents-files-recovery-lega-3d9b6-ive-together-across-restart/error-context.md
+
+  3) tests/agents-files-recovery.spec.ts:142:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "null"
+    Received: "{\"intent\":null,\"storageVersion\":1,\"version\":1,\"hostId\":\"cdbb0abb-228f-4e36-b3a9-2d54c1643e01\",\"clientId\":\"a2b92d00-42e9-4e22-a411-2c4c4d1cc301\",\"records\":[]}"
+
+      225 |         { root, path: "moved/a.ts", text: "retained closed edits", disk },
+      226 |       ]);
+    > 227 |       expect(await readFile(join(user, "client-file-operation-v1.json"), "utf8")).toBe("null");
+          |                                                                                   ^
+      228 |       if (restart === 0) {
+      229 |         const exited = new Promise((resolve) => app.process().once("exit", resolve));
+      230 |         app.process().kill("SIGKILL");
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/agents-files-recovery.spec.ts:227:83
+
+    Error Context: test-results/agents-files-recovery-clos-bc707-d-linked-worktree-reopening/error-context.md
+
+  4) tests/agents.spec.ts:8:1 › Agents restores closed saved projects and shares conversations without moving editor context 
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  getByRole('textbox', { name: 'Message Codex' })
+    Expected: "alpha text"
+    Received: ""
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveValue" getByRole('textbox', { name: 'Message Codex' }) with timeout 5000ms
+      - waiting for getByRole('textbox', { name: 'Message Codex' })
+        3 × locator resolved to <textarea disabled maxlength="100000" id="agents-message"></textarea>
+          - unexpected value ""
+        11 × locator resolved to <textarea maxlength="100000" id="agents-message"></textarea>
+           - unexpected value ""
+
+
+       97 |     expect(denied).toBe(true);
+       98 |     await rows.filter({ hasText: "alpha" }).click();
+    >  99 |     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("alpha text");
+          |                                                                        ^
+      100 |     await expect(page.locator(".transcript:visible")).toContainText("Saved history");
+      101 |     await page.getByRole("textbox", { name: "Message Codex" }).fill("shared text");
+      102 |     await page
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/agents.spec.ts:99:72
+
+    Error Context: test-results/agents-Agents-restores-clo-e5826-thout-moving-editor-context/error-context.md
+
+  5) tests/agents.spec.ts:340:1 › Agents and local Chats keep newest-first order and original labels through selection and activity 
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  getByRole('textbox', { name: 'Message Codex' })
+    Expected: "older prompt"
+    Received: ""
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveValue" getByRole('textbox', { name: 'Message Codex' }) with timeout 5000ms
+      - waiting for getByRole('textbox', { name: 'Message Codex' })
+        3 × locator resolved to <textarea disabled maxlength="100000" id="chats-%2Fprivate%2Fvar%2Ffolders%2Fn4%2F62rjd1sj31s9v1gv1x74fr000000gn%2FT%2Fescode-chat-order-BsAByM%2Frepo-message"></textarea>
+          - unexpected value ""
+        11 × locator resolved to <textarea maxlength="100000" id="chats-%2Fprivate%2Fvar%2Ffolders%2Fn4%2F62rjd1sj31s9v1gv1x74fr000000gn%2FT%2Fescode-chat-order-BsAByM%2Frepo-message"></textarea>
+           - unexpected value ""
+
+
+      411 |     await expect(localRows).toHaveText(labels);
+      412 |     await localRows.nth(1).click();
+    > 413 |     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("older prompt");
+          |                                                                        ^
+      414 |     await expect(localRows).toHaveText(labels);
+      415 |     await page.getByRole("button", { name: "Send message", exact: true }).click();
+      416 |     await expect(localRows).toHaveText(["Chat 3", "Chat 2 · Needs input", "Chat 1"]);
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/agents.spec.ts:413:72
+
+    Error Context: test-results/agents-Agents-and-local-Ch-d0eb4-ough-selection-and-activity/error-context.md
+
+  6) tests/agents.spec.ts:485:1 › global creation keeps newest-first rows through live summaries ───
+
+    Test timeout of 45000ms exceeded.
+
+    Error Context: test-results/agents-global-creation-kee-532e8-rows-through-live-summaries/error-context.md
+
+  7) tests/availability.spec.ts:53:1 › renderer state cannot grant file access or overwrite approvals; native reopening restores legacy drafts 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.monaco-editor:visible')
+    Expected substring: "legacy recovered edits"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toContainText" locator('.monaco-editor:visible') with timeout 5000ms
+      - waiting for locator('.monaco-editor:visible')
+
+
+      155 |       page.getByRole("alert").filter({ hasText: "Use Open project to approve" }),
+      156 |     ).toBeVisible();
+    > 157 |     await expect(page.locator(".monaco-editor:visible")).toContainText("legacy recovered edits");
+          |                                                          ^
+      158 |     expect(await page.evaluate((root) => window.escode.lifecycle("prepare", root), root)).toBe(
+      159 |       true,
+      160 |     );
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/availability.spec.ts:157:58
+
+    Error Context: test-results/availability-renderer-stat-492dc-ning-restores-legacy-drafts/error-context.md
+
+  8) tests/availability.spec.ts:286:1 › a saved secondary checkout can recover and save its buffer after restarting without Git 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.view-nav:visible')
+    Expected substring: "/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-secondary-git-loss-TfnjoY/secondary"
+    Received string:    "FilesSource ControlChatsCheckout: Git unavailable · /private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-secondary-git-loss-TfnjoY/repo"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toContainText" locator('.view-nav:visible') with timeout 5000ms
+      - waiting for locator('.view-nav:visible')
+        11 × locator resolved to <nav class="view-nav" aria-label="Project views">…</nav>
+           - unexpected value "FilesSource ControlChatsCheckout: Git unavailable · /private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-secondary-git-loss-TfnjoY/repo"
+
+
+      335 |     app = await launchDesktop(user, bin);
+      336 |     page = await app.firstWindow();
+    > 337 |     await expect(page.locator(".view-nav:visible")).toContainText(secondary);
+          |                                                     ^
+      338 |     await expect(page.locator(".monaco-editor:visible")).toContainText("secondary recovered edits");
+      339 |     await expect(page.getByRole("treeitem", { name: "a.txt, unsaved", exact: true })).toBeVisible();
+      340 |     await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/availability.spec.ts:337:53
+
+    Error Context: test-results/availability-a-saved-secon-f8038-fter-restarting-without-Git/error-context.md
+
+  9) tests/availability.spec.ts:359:1 › Git, Codex and authentication failures preserve usable capabilities and retry never resends 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('alert')
+    Expected substring: "version unavailable"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toContainText" getByRole('alert') with timeout 5000ms
+      - waiting for getByRole('alert')
+
+
+      417 |     let retry = page.getByRole("button", { name: "Retry connection / reload history" });
+      418 |     await retry.click();
+    > 419 |     await expect(page.getByRole("alert")).toContainText("version unavailable");
+          |                                           ^
+      420 |     await expect(page.getByLabel("Conversation history")).toContainText("retained history");
+      421 |     await expect(page.getByLabel("Message Codex")).toHaveValue("keep this unsent");
+      422 |     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/availability.spec.ts:419:43
+
+    Error Context: test-results/availability-Git-Codex-and-ad5be-ies-and-retry-never-resends/error-context.md
+
+  10) tests/chat-summaries.spec.ts:8:1 › fresh summaries exclude old metadata and bodies, release detail polling during navigation 
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      49 |     await page.locator(".agent-row").click();
+      50 |     await expect(page.getByLabel("Message Codex")).toHaveValue("private composer");
+    > 51 |     await expect.poll(() => app.evaluate((_e, id) => (globalThis as any).detailCalls[id] ?? 0, draft.id)).toBeGreaterThan(0);
+         |                                                                                                           ^
+      52 |     const second = await page.evaluate(async () => {
+      53 |       const chat = await window.escode.chat("createDraft", null);
+      54 |       await window.escode.chat("draft", null, chat.id, "second composer");
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/chat-summaries.spec.ts:51:107
+
+    Error Context: test-results/chat-summaries-fresh-summa-fa78a-l-polling-during-navigation/error-context.md
+
+  11) tests/development.spec.ts:7:1 › StyleX updates during development ────────────────────────────
+
+    Test timeout of 45000ms exceeded.
+
+    Error Context: test-results/development-StyleX-updates-during-development/error-context.md
+
+  12) tests/files-inline.spec.ts:373:1 › restored hidden selection loads its type and refuses unavailable or missing entries 
+
+    TypeError: Cannot read properties of undefined (reading 'files')
+
+      390 |       .poll(
+      391 |         async () =>
+    > 392 |           JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files,
+          |                                                                                                 ^
+      393 |       )
+      394 |       .toMatchObject({ expanded: [], selected: ["folder/deep"] });
+      395 |     app.process().kill("SIGKILL");
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/files-inline.spec.ts:392:97
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/files-inline.spec.ts:389:5
+
+    Error Context: test-results/files-inline-restored-hidd-d7b40-vailable-or-missing-entries/error-context.md
+
+  13) tests/lifecycle.spec.ts:138:3 › active work: editor close retains live work, and quit stops closed-project processes 
+
+    Error: expect(received).toHaveLength(expected)
+
+    Expected length: 3
+    Received length: 2
+    Received array:  [{"busy": true, "checkout": "/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-quit-1GIH5s/repo", "createdAt": 1793387722725, "draft": "composer retained through close", "hasSent": true, "id": "94eacce0-91d5-431d-99b4-c5d422fc81cc", "initialSend": "accepted", "legacyOrder": 0, "needsInput": false, "phase": "bound", "project": "/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-quit-1GIH5s/repo", "removed": undefined, "scratch": undefined, "threadId": "thread", "unavailable": false, "worktree": undefined}, {"busy": true, "checkout": "/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-quit-1GIH5s/user/worktrees/7807c2f5a50276828d11f60ee2d2226965b9b75ec56299047f69eee7f7bfa71b/worktree-Kuc4kk/checkout", "createdAt": 1793387724665, "draft": "retained worktree draft", "hasSent": true, "id": "0276c919-d960-4c60-b4be-c715735ee71f", "initialSend": "accepted", "legacyOrder": 2, "needsInput": false, "phase": "bound", "project": "/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-quit-1GIH5s/repo", "removed": undefined, "scratch": undefined, "threadId": "thread", "unavailable": false, "worktree": {"commit": "799c56c942b46504f15fbb7cbf314a6ff0bf8e1e", "ref": "HEAD", "reservation": {"branch": "escode/fd71e90d-9f6", "commit": "799c56c942b46504f15fbb7cbf314a6ff0bf8e1e", "dev": 16777234, "error": null, "ino": 145204698, "root": "/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-quit-1GIH5s/user/worktrees/7807c2f5a50276828d11f60ee2d2226965b9b75ec56299047f69eee7f7bfa71b/worktree-Kuc4kk/checkout"}, "source": "/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-quit-1GIH5s/repo"}}]
+
+      293 |         ).toContain(managed!.branch);
+      294 |         const saved = await page.evaluate(readChats, root);
+    > 295 |         expect(saved).toHaveLength(3);
+          |                       ^
+      296 |         expect(saved.find((chat) => chat.checkout === managed!.root)!.draft).toBe(
+      297 |           "retained worktree draft",
+      298 |         );
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/lifecycle.spec.ts:295:23
+
+    Error Context: test-results/lifecycle-active-work-edit-8aa56-ps-closed-project-processes/error-context.md
+
+  14) tests/project.spec.ts:8:3 › unpackaged: edit, navigate, cancel conflict, compare and explicitly overwrite 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.monaco-diff-editor')
+    Expected substring: "changed after comparison"
+    Received string:    "12external1externalmy edits"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toContainText" locator('.monaco-diff-editor') with timeout 5000ms
+      - waiting for locator('.monaco-diff-editor')
+        14 × locator resolved to <div class="monaco-diff-editor has-diff-overview">…</div>
+           - unexpected value "12external1externalmy edits"
+
+
+      44 |       expect(await readFile(join(root, "a.txt"), "utf8")).toBe("changed after comparison");
+      45 |       await page.getByRole("button", { name: "Compare", exact: true }).click();
+    > 46 |       await expect(page.locator(".monaco-diff-editor")).toContainText("changed after comparison");
+         |                                                         ^
+      47 |       await page.getByRole("button", { name: "Overwrite", exact: true }).click();
+      48 |       await expect(page.locator(".content:visible > [role=status]")).toContainText("Saved a.txt");
+      49 |       expect(await readFile(join(root, "a.txt"), "utf8")).toBe("my edits");
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/project.spec.ts:46:57
+
+    Error Context: test-results/project-unpackaged-edit-na-098ec-re-and-explicitly-overwrite/error-context.md
+
+  15) tests/project.spec.ts:8:3 › packaged: edit, navigate, cancel conflict, compare and explicitly overwrite 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.monaco-diff-editor')
+    Expected substring: "changed after comparison"
+    Received string:    "12external1externalmy edits"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toContainText" locator('.monaco-diff-editor') with timeout 5000ms
+      - waiting for locator('.monaco-diff-editor')
+        14 × locator resolved to <div class="monaco-diff-editor has-diff-overview">…</div>
+           - unexpected value "12external1externalmy edits"
+
+
+      44 |       expect(await readFile(join(root, "a.txt"), "utf8")).toBe("changed after comparison");
+      45 |       await page.getByRole("button", { name: "Compare", exact: true }).click();
+    > 46 |       await expect(page.locator(".monaco-diff-editor")).toContainText("changed after comparison");
+         |                                                         ^
+      47 |       await page.getByRole("button", { name: "Overwrite", exact: true }).click();
+      48 |       await expect(page.locator(".content:visible > [role=status]")).toContainText("Saved a.txt");
+      49 |       expect(await readFile(join(root, "a.txt"), "utf8")).toBe("my edits");
+        at /Users/elliotsharpe/Projects/escode-86/apps/desktop/tests/project.spec.ts:46:57
+
+    Error Context: test-results/project-packaged-edit-navi-bad1a-re-and-explicitly-overwrite/error-context.md
+
+  16) tests/scratch.spec.ts:156:1 › one repository offers No project and text-bearing local drafts move through Agents without changing identity 
+
+    Test timeout of 45000ms exceeded.
+
+    Error Context: test-results/scratch-one-repository-off-0903f-s-without-changing-identity/error-context.md
+
+  16 failed
+    tests/accessibility.spec.ts:8:1 › keyboard can navigate projects, edit, review an accessible diff and answer scoped chat input 
+    tests/agents-files-recovery.spec.ts:10:1 › legacy saved-project migration and interrupted move recovery survive together across restart 
+    tests/agents-files-recovery.spec.ts:142:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening 
+    tests/agents.spec.ts:8:1 › Agents restores closed saved projects and shares conversations without moving editor context 
+    tests/agents.spec.ts:340:1 › Agents and local Chats keep newest-first order and original labels through selection and activity 
+    tests/agents.spec.ts:485:1 › global creation keeps newest-first rows through live summaries ────
+    tests/availability.spec.ts:53:1 › renderer state cannot grant file access or overwrite approvals; native reopening restores legacy drafts 
+    tests/availability.spec.ts:286:1 › a saved secondary checkout can recover and save its buffer after restarting without Git 
+    tests/availability.spec.ts:359:1 › Git, Codex and authentication failures preserve usable capabilities and retry never resends 
+    tests/chat-summaries.spec.ts:8:1 › fresh summaries exclude old metadata and bodies, release detail polling during navigation 
+    tests/development.spec.ts:7:1 › StyleX updates during development ──────────────────────────────
+    tests/files-inline.spec.ts:373:1 › restored hidden selection loads its type and refuses unavailable or missing entries 
+    tests/lifecycle.spec.ts:138:3 › active work: editor close retains live work, and quit stops closed-project processes 
+    tests/project.spec.ts:8:3 › unpackaged: edit, navigate, cancel conflict, compare and explicitly overwrite 
+    tests/project.spec.ts:8:3 › packaged: edit, navigate, cancel conflict, compare and explicitly overwrite 
+    tests/scratch.spec.ts:156:1 › one repository offers No project and text-bearing local drafts move through Agents without changing identity 
+  3 skipped
+  100 passed (12.5m)
+  3 errors were not a part of any test, see above for details
+error: script "smoke" exited with code 1
