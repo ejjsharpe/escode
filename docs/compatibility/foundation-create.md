@@ -12,7 +12,7 @@ Initial limits are 1,000 retained creation receipts and the existing 1 MiB found
 
 Verification on the local installation uses Bun 1.4.4 and Electron 45.1.0 with the existing native helper:
 
-- Typecheck, lint, build and package passed.
+- Typecheck, lint, build and package passed. Final full unit suite passed (206 passed, 4 opt-in tests skipped), without rebuilding the native helper concurrently.
 - Packaged restricted-PATH focused inline creation suite: 7/7 passed, including the lost native result check.
 - Development focused inline creation suite: 7/7 passed. Covers file/folder creation, basename/collision feedback, retained rejected input, keyboard/focus, successful editor opening, collapsed/nested targets, missing parent and failed listing, plus injected lost native result with retained input and unchanged bytes on Retry.
 - Authenticated transport tests exercise create payload decoding and reject invalid kinds without invoking the adapter.
