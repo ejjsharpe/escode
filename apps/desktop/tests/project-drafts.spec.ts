@@ -113,7 +113,7 @@ send({id:m.id,result});});`,
     await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toHaveCount(
       0,
     );
-    expect((await records())[0]).toMatchObject({
+    await expect.poll(async () => (await records())[0]).toMatchObject({
       id: original.id,
       createdAt: original.createdAt,
       project: beta,
