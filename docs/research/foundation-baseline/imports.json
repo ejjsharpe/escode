@@ -1,0 +1,426 @@
+{
+  "apps/desktop/host/chat-service.ts": [
+    {
+      "line": 1,
+      "statement": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "line": 2,
+      "statement": "import { accessSync, constants, realpathSync, statSync } from \"node:fs\";"
+    },
+    {
+      "line": 3,
+      "statement": "import { Chats, type SavedChat } from \"./chat\";"
+    },
+    {
+      "line": 4,
+      "statement": "import { codexDiagnostic, connectCodex, type CodexConnection, type WireMessage } from \"./tools\";"
+    }
+  ],
+  "apps/desktop/host/chat.ts": [
+    {
+      "line": 1,
+      "statement": "import { mkdir, readFile, rename, writeFile } from \"node:fs/promises\";"
+    },
+    {
+      "line": 2,
+      "statement": "import { accessSync, constants, lstatSync, realpathSync } from \"node:fs\";"
+    },
+    {
+      "line": 3,
+      "statement": "import { dirname, join } from \"node:path\";"
+    },
+    {
+      "line": 4,
+      "statement": "import type { Project } from \"./project\";"
+    },
+    {
+      "line": 5,
+      "statement": "import { randomUUID } from \"node:crypto\";"
+    }
+  ],
+  "apps/desktop/host/file-operation-state.ts": [
+    {
+      "line": 1,
+      "statement": "import type { WorkspaceState } from \"./workspace\";"
+    },
+    {
+      "line": 2,
+      "statement": "import type { Intent, SavedFile } from \"./file-operations\";"
+    }
+  ],
+  "apps/desktop/host/file-operations.ts": [
+    {
+      "line": 1,
+      "statement": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "line": 2,
+      "statement": "import { dirname, join } from \"node:path\";"
+    },
+    {
+      "line": 3,
+      "statement": "import { Project } from \"./project\";"
+    },
+    {
+      "line": 4,
+      "statement": "import { Workspace } from \"./workspace\";"
+    },
+    {
+      "line": 29,
+      "statement": "import { affected, reconcile } from \"./file-operation-state\";"
+    }
+  ],
+  "apps/desktop/host/main.ts": [
+    {
+      "line": 1,
+      "statement": "import {\n  app,\n  BrowserWindow,\n  ipcMain,\n  session,\n  dialog,\n  clipboard,\n  ClipboardItem,\n  shell,\n} from \"electron\";"
+    },
+    {
+      "line": 11,
+      "statement": "import { join, resolve, dirname, basename, extname } from \"node:path\";"
+    },
+    {
+      "line": 12,
+      "statement": "import { randomUUID } from \"node:crypto\";"
+    },
+    {
+      "line": 13,
+      "statement": "import { mkdirSync, realpathSync, statSync } from \"node:fs\";"
+    },
+    {
+      "line": 14,
+      "statement": "import { NativeImport } from \"./native-import\";"
+    },
+    {
+      "line": 15,
+      "statement": "import { pathToFileURL, fileURLToPath } from \"node:url\";"
+    },
+    {
+      "line": 16,
+      "statement": "import { toolStatus } from \"./tools\";"
+    },
+    {
+      "line": 17,
+      "statement": "import { Chats } from \"./chat\";"
+    },
+    {
+      "line": 18,
+      "statement": "import { ChatService } from \"./chat-service\";"
+    },
+    {
+      "line": 19,
+      "statement": "import { Workspace } from \"./workspace\";"
+    },
+    {
+      "line": 20,
+      "statement": "import { Project } from \"./project\";"
+    },
+    {
+      "line": 21,
+      "statement": "import { FileOperations } from \"./file-operations\";"
+    },
+    {
+      "line": 22,
+      "statement": "import { affected } from \"./file-operation-state\";"
+    }
+  ],
+  "apps/desktop/host/native-import.ts": [
+    {
+      "line": 1,
+      "statement": "import { openSync, closeSync, fstatSync, constants } from \"node:fs\";"
+    },
+    {
+      "line": 2,
+      "statement": "import { basename, dirname, isAbsolute } from \"node:path\";"
+    }
+  ],
+  "apps/desktop/host/preload.ts": [
+    {
+      "line": 1,
+      "statement": "import { contextBridge, ipcRenderer, webUtils } from \"electron\";"
+    }
+  ],
+  "apps/desktop/host/project.ts": [
+    {
+      "line": 1,
+      "statement": "import { spawn, execFileSync } from \"node:child_process\";"
+    },
+    {
+      "line": 2,
+      "statement": "import {\n  realpathSync,\n  openSync,\n  closeSync,\n  fstatSync,\n  constants,\n  mkdirSync,\n  mkdtempSync,\n  statSync,\n  readFileSync,\n  writeFileSync,\n  existsSync,\n  lstatSync,\n  readdirSync,\n  watch,\n  type FSWatcher,\n} from \"node:fs\";"
+    },
+    {
+      "line": 19,
+      "statement": "import { resolve, relative, isAbsolute, dirname, join, basename } from \"node:path\";"
+    },
+    {
+      "line": 20,
+      "statement": "import { getSystemErrorName } from \"node:util\";"
+    },
+    {
+      "line": 21,
+      "statement": "import { findExecutable } from \"./tools\";"
+    },
+    {
+      "line": 22,
+      "statement": "import { createHash, randomUUID } from \"node:crypto\";"
+    }
+  ],
+  "apps/desktop/host/tools.ts": [
+    {
+      "line": 1,
+      "statement": "import { access, open } from \"node:fs/promises\";"
+    },
+    {
+      "line": 2,
+      "statement": "import { constants } from \"node:fs\";"
+    },
+    {
+      "line": 3,
+      "statement": "import { homedir } from \"node:os\";"
+    },
+    {
+      "line": 4,
+      "statement": "import { join } from \"node:path\";"
+    },
+    {
+      "line": 5,
+      "statement": "import { execFile, execFileSync, spawn } from \"node:child_process\";"
+    },
+    {
+      "line": 6,
+      "statement": "import { promisify } from \"node:util\";"
+    },
+    {
+      "line": 7,
+      "statement": "import { createInterface } from \"node:readline\";"
+    }
+  ],
+  "apps/desktop/host/workspace.ts": [
+    {
+      "line": 1,
+      "statement": "import { mkdir, open, readFile, rename } from \"node:fs/promises\";"
+    },
+    {
+      "line": 2,
+      "statement": "import { dirname, isAbsolute, join } from \"node:path\";"
+    },
+    {
+      "line": 3,
+      "statement": "import type { Document } from \"./project\";"
+    }
+  ],
+  "apps/desktop/src/agents.tsx": [
+    {
+      "line": 1,
+      "statement": "import React, { useEffect, useState } from \"react\";"
+    },
+    {
+      "line": 2,
+      "statement": "import { Button } from \"@base-ui/react/button\";"
+    },
+    {
+      "line": 3,
+      "statement": "import type { SavedChat } from \"../host/chat\";"
+    },
+    {
+      "line": 4,
+      "statement": "import { compareChats } from \"./chat-order\";"
+    },
+    {
+      "line": 5,
+      "statement": "import { ChatView } from \"./chat\";"
+    },
+    {
+      "line": 6,
+      "statement": "import { useProjectChats } from \"./chat-state\";"
+    },
+    {
+      "line": 7,
+      "statement": "import { memory, persist } from \"./workspace\";"
+    }
+  ],
+  "apps/desktop/src/chat-order.ts": [
+    {
+      "line": 1,
+      "statement": "import type { SavedChat } from \"../host/chat\";"
+    }
+  ],
+  "apps/desktop/src/chat-state.ts": [
+    {
+      "line": 1,
+      "statement": "import { useSyncExternalStore } from \"react\";"
+    },
+    {
+      "line": 2,
+      "statement": "import type { SavedChat } from \"../host/chat\";"
+    },
+    {
+      "line": 3,
+      "statement": "import type { ChatSnapshot } from \"../host/chat-service\";"
+    }
+  ],
+  "apps/desktop/src/chat.tsx": [
+    {
+      "line": 1,
+      "statement": "import { DraftWorktreeChoices, CheckoutBranch } from \"./worktrees\";"
+    },
+    {
+      "line": 2,
+      "statement": "import { useProjectChats } from \"./chat-state\";"
+    },
+    {
+      "line": 3,
+      "statement": "import { memory, persist } from \"./workspace\";"
+    },
+    {
+      "line": 4,
+      "statement": "import { compareChats } from \"./chat-order\";"
+    },
+    {
+      "line": 5,
+      "statement": "import React, { useEffect, useState } from \"react\";"
+    },
+    {
+      "line": 6,
+      "statement": "import { createPortal } from \"react-dom\";"
+    },
+    {
+      "line": 7,
+      "statement": "import { Button } from \"@base-ui/react/button\";"
+    },
+    {
+      "line": 8,
+      "statement": "import type { SavedChat } from \"../host/chat\";"
+    },
+    {
+      "line": 9,
+      "statement": "import type { ChatSnapshot, LiveRequest } from \"../host/chat-service\";"
+    }
+  ],
+  "apps/desktop/src/files.tsx": [
+    {
+      "line": 1,
+      "statement": "import { useEffect, useLayoutEffect, useRef, useState } from \"react\";"
+    },
+    {
+      "line": 2,
+      "statement": "import type { DragEvent, KeyboardEvent } from \"react\";"
+    },
+    {
+      "line": 3,
+      "statement": "import { memory, useMemory } from \"./workspace\";"
+    },
+    {
+      "line": 4,
+      "statement": "import type { FilesMemory } from \"../host/workspace\";"
+    }
+  ],
+  "apps/desktop/src/main.tsx": [
+    {
+      "line": 1,
+      "statement": "import React, { useEffect, useLayoutEffect, useRef, useState } from \"react\";"
+    },
+    {
+      "line": 2,
+      "statement": "import { createRoot } from \"react-dom/client\";"
+    },
+    {
+      "line": 3,
+      "statement": "import * as stylex from \"@stylexjs/stylex\";"
+    },
+    {
+      "line": 4,
+      "statement": "import { Button } from \"@base-ui/react/button\";"
+    },
+    {
+      "line": 5,
+      "statement": "import * as monaco from \"monaco-editor\";"
+    },
+    {
+      "line": 6,
+      "statement": "import EditorWorker from \"monaco-editor/editor/editor.worker.js?worker\";"
+    },
+    {
+      "line": 7,
+      "statement": "import JsonWorker from \"monaco-editor/language/json/json.worker.js?worker\";"
+    },
+    {
+      "line": 8,
+      "statement": "import CssWorker from \"monaco-editor/language/css/css.worker.js?worker\";"
+    },
+    {
+      "line": 9,
+      "statement": "import HtmlWorker from \"monaco-editor/language/html/html.worker.js?worker\";"
+    },
+    {
+      "line": 10,
+      "statement": "import TypeScriptWorker from \"monaco-editor/language/typescript/ts.worker.js?worker\";"
+    },
+    {
+      "line": 11,
+      "statement": "import type { Change, Document, SaveResult, ProjectBridge } from \"../host/project\";"
+    },
+    {
+      "line": 12,
+      "statement": "import { affected, moved, reconcile, reconcileSave } from \"../host/file-operation-state\";"
+    },
+    {
+      "line": 13,
+      "statement": "import { FilesTree } from \"./files\";"
+    },
+    {
+      "line": 14,
+      "statement": "import { AgentsView } from \"./agents\";"
+    },
+    {
+      "line": 15,
+      "statement": "import { ChatView } from \"./chat\";"
+    },
+    {
+      "line": 16,
+      "statement": "import { useProjectChats } from \"./chat-state\";"
+    },
+    {
+      "line": 17,
+      "statement": "import { WorktreeChoices } from \"./worktrees\";"
+    },
+    {
+      "line": 18,
+      "statement": "import type { ChatBridge } from \"./chat\";"
+    },
+    {
+      "line": 19,
+      "statement": "import \"./style.css\";\nimport { memory, initialize, persist, flush, useMemory, closers } from \"./workspace\";"
+    }
+  ],
+  "apps/desktop/src/workspace.ts": [
+    {
+      "line": 1,
+      "statement": "import { useRef, useState } from \"react\";"
+    },
+    {
+      "line": 2,
+      "statement": "import type { WorkspaceState, ViewMemory } from \"../host/workspace\";"
+    }
+  ],
+  "apps/desktop/src/worktrees.tsx": [
+    {
+      "line": 1,
+      "statement": "import React, { useEffect, useState } from \"react\";"
+    },
+    {
+      "line": 2,
+      "statement": "import { Button } from \"@base-ui/react/button\";"
+    },
+    {
+      "line": 3,
+      "statement": "import { persist, flush } from \"./workspace\";"
+    },
+    {
+      "line": 4,
+      "statement": "import type { Project } from \"../host/project\";"
+    }
+  ]
+}

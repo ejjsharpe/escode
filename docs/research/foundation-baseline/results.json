@@ -1,0 +1,227 @@
+{
+  "environment": {
+    "date": "2026-10-30T09:52:26.875Z",
+    "bun": "1.4.4",
+    "node": "v26.3.0",
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro",
+    "totalmem": 17179869184,
+    "git": "git version 2.50.1 (Apple Git-155)",
+    "os": "ProductName:\t\tmacOS\nProductVersion:\t\t26.3.1\nBuildVersion:\t\t25D2128"
+  },
+  "results": [
+    {
+      "name": "idle-empty",
+      "repeat": 0,
+      "elapsedMs": 2101.3942089999996,
+      "calls": 0,
+      "payload": 0,
+      "notifications": 0,
+      "reads": 0,
+      "medianMs": null,
+      "maxMs": null,
+      "heapDelta": 12539
+    },
+    {
+      "name": "idle-empty",
+      "repeat": 1,
+      "elapsedMs": 2103.9824579999995,
+      "calls": 0,
+      "payload": 0,
+      "notifications": 0,
+      "reads": 0,
+      "medianMs": null,
+      "maxMs": null,
+      "heapDelta": 654
+    },
+    {
+      "name": "idle-empty",
+      "repeat": 2,
+      "elapsedMs": 2101.306625,
+      "calls": 0,
+      "payload": 0,
+      "notifications": 0,
+      "reads": 0,
+      "medianMs": null,
+      "maxMs": null,
+      "heapDelta": 3952
+    },
+    {
+      "name": "idle-one",
+      "repeat": 0,
+      "elapsedMs": 2101.2400420000004,
+      "calls": 7,
+      "payload": 1778,
+      "notifications": 7,
+      "reads": 14,
+      "medianMs": 1.6913749999994252,
+      "maxMs": 2.0611250000001746,
+      "heapDelta": 18638
+    },
+    {
+      "name": "idle-one",
+      "repeat": 1,
+      "elapsedMs": 2101.1686250000002,
+      "calls": 7,
+      "payload": 1778,
+      "notifications": 7,
+      "reads": 14,
+      "medianMs": 2.1322500000005675,
+      "maxMs": 4.591875000000073,
+      "heapDelta": 18403
+    },
+    {
+      "name": "idle-one",
+      "repeat": 2,
+      "elapsedMs": 2101.4200419999997,
+      "calls": 7,
+      "payload": 1778,
+      "notifications": 7,
+      "reads": 14,
+      "medianMs": 1.5519160000003467,
+      "maxMs": 2.4474170000012236,
+      "heapDelta": 24337
+    },
+    {
+      "name": "background-25",
+      "repeat": 0,
+      "elapsedMs": 2101.4762500000015,
+      "calls": 175,
+      "payload": 45430,
+      "notifications": 4375,
+      "reads": 350,
+      "medianMs": 4.866707999999562,
+      "maxMs": 7.355166000001191,
+      "heapDelta": 22302
+    },
+    {
+      "name": "background-25",
+      "repeat": 1,
+      "elapsedMs": 2101.0985409999994,
+      "calls": 175,
+      "payload": 45430,
+      "notifications": 4375,
+      "reads": 350,
+      "medianMs": 5.01024999999936,
+      "maxMs": 7.648333000001003,
+      "heapDelta": 12938
+    },
+    {
+      "name": "background-25",
+      "repeat": 2,
+      "elapsedMs": 2101.2541249999995,
+      "calls": 175,
+      "payload": 45430,
+      "notifications": 4375,
+      "reads": 350,
+      "medianMs": 3.7539169999981823,
+      "maxMs": 6.958749999997963,
+      "heapDelta": -1192
+    },
+    {
+      "name": "long-stream",
+      "repeat": 0,
+      "elapsedMs": 2101.121916,
+      "calls": 7,
+      "payload": 14900057,
+      "notifications": 7,
+      "reads": 14,
+      "medianMs": 3.9836670000004233,
+      "maxMs": 5.942957999999635,
+      "heapDelta": 78491
+    },
+    {
+      "name": "long-stream",
+      "repeat": 1,
+      "elapsedMs": 2100.561666999998,
+      "calls": 7,
+      "payload": 14899957,
+      "notifications": 7,
+      "reads": 14,
+      "medianMs": 2.7189999999973224,
+      "maxMs": 6.124875000001339,
+      "heapDelta": -2167915
+    },
+    {
+      "name": "long-stream",
+      "repeat": 2,
+      "elapsedMs": 2100.4483340000006,
+      "calls": 7,
+      "payload": 14900257,
+      "notifications": 7,
+      "reads": 14,
+      "medianMs": 5.032999999999447,
+      "maxMs": 5.928874999997788,
+      "heapDelta": -2170090
+    },
+    {
+      "name": "files",
+      "repeat": 0,
+      "elapsedMs": 4.883999999998196,
+      "helpers": 1,
+      "git": 0,
+      "payload": 3591
+    },
+    {
+      "name": "files",
+      "repeat": 1,
+      "elapsedMs": 4.362165999998979,
+      "helpers": 1,
+      "git": 0,
+      "payload": 3591
+    },
+    {
+      "name": "files",
+      "repeat": 2,
+      "elapsedMs": 3.5632499999992433,
+      "helpers": 1,
+      "git": 0,
+      "payload": 3591
+    },
+    {
+      "name": "status",
+      "repeat": 0,
+      "elapsedMs": 37.70825000000332,
+      "helpers": 2,
+      "git": 2,
+      "payload": 3914
+    },
+    {
+      "name": "status",
+      "repeat": 1,
+      "elapsedMs": 39.091208999998344,
+      "helpers": 2,
+      "git": 2,
+      "payload": 3914
+    },
+    {
+      "name": "status",
+      "repeat": 2,
+      "elapsedMs": 40.15137499999764,
+      "helpers": 2,
+      "git": 2,
+      "payload": 3914
+    },
+    {
+      "name": "watch-burst",
+      "repeat": 0,
+      "firstMs": 109.35524999999689,
+      "notifications": 1,
+      "finalWatchers": 0
+    },
+    {
+      "name": "watch-burst",
+      "repeat": 1,
+      "firstMs": 156.14495899999747,
+      "notifications": 1,
+      "finalWatchers": 0
+    },
+    {
+      "name": "watch-burst",
+      "repeat": 2,
+      "firstMs": 154.17404199999874,
+      "notifications": 1,
+      "finalWatchers": 0
+    }
+  ]
+}
