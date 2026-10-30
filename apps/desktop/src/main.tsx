@@ -132,27 +132,32 @@ function CheckoutView({
   const report = (error: unknown) =>
     setMessage(error instanceof Error ? error.message : String(error));
   const statusRequest = useRef(0);
+  const statusRefreshing = useRef(false);
   const refresh = async () => {
-    const request = ++statusRequest.current;
-    let value: Status;
+    if (statusRefreshing.current) return;
+    statusRefreshing.current = true;
     try {
-      value = await projectCall("status", root);
-      if (request !== statusRequest.current) return;
-      setCheckoutError("");
-    } catch (error) {
-      if (request !== statusRequest.current) return;
-      setCheckoutError(
-        "Checkout unavailable. Restore access to the original directory, then Retry checkout. Edits and chat associations are retained. " +
-          String(error),
-      );
-      throw error;
-    }
-    setStatus(value);
-    onStatus(value);
-    if (value.gitError) setDiff(null);
-    else if (selectedChange.current && modeRef.current === "Source Control") {
-      await showDiff(selectedChange.current);
-    }
+      const request = ++statusRequest.current;
+      let value: Status;
+      try {
+        value = await projectCall("status", root);
+        if (request !== statusRequest.current) return;
+        setCheckoutError("");
+      } catch (error) {
+        if (request !== statusRequest.current) return;
+        setCheckoutError(
+          "Checkout unavailable. Restore access to the original directory, then Retry checkout. Edits and chat associations are retained. " +
+            String(error),
+        );
+        throw error;
+      }
+      setStatus(value);
+      onStatus(value);
+      if (value.gitError) setDiff(null);
+      else if (selectedChange.current && modeRef.current === "Source Control") {
+        await showDiff(selectedChange.current);
+      }
+    } finally { statusRefreshing.current = false; }
   };
   useEffect(() => {
     const key = (e: KeyboardEvent) => {

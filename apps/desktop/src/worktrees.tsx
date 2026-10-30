@@ -40,11 +40,14 @@ export function WorktreeChoices({
   useEffect(() => {
     if (!options) return;
     let active = true;
+    let pending = false;
     const timer = setInterval(() => {
+      if (pending) return;
+      pending = true;
       const request = ++observation.current;
       void window.escode.project("worktree-options", project).then(value => {
         if (active && request === observation.current) setOptions(value);
-      }, error => { if (active) setError(String(error)); });
+      }, error => { if (active) setError(String(error)); }).finally(() => { pending = false; });
     }, 2000);
     return () => { active = false; clearInterval(timer); observation.current++; };
   }, [project, !!options]);
@@ -130,8 +133,11 @@ export function DraftWorktreeChoices({
   const [ref, setRef] = useState(chat.worktree?.ref ?? "");
   const [reuse, setReuse] = useState("");
   const observation = useRef(0);
+  const refreshing = useRef(false);
   const [error, setError] = useState("");
   const refresh = async () => {
+    if (refreshing.current) return;
+    refreshing.current = true;
     const request = ++observation.current;
     try {
       const value = await window.escode.project(
@@ -144,7 +150,7 @@ export function DraftWorktreeChoices({
       setError("");
     } catch (e) {
       if (request === observation.current) setError(String(e));
-    }
+    } finally { refreshing.current = false; }
   };
   useEffect(() => {
     void refresh();
