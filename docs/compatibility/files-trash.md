@@ -240,3 +240,36 @@ snapshots/ports and Desktop fixtures were not used.
 ## Current Files 43 integration context
 
 Files 42 is already integrated in actual main at `e0b66346ed8e7464011c08bfac78319adc0609e1`, including the accepted Agents evidence and all Files 42 delivery/acknowledgement fixes. The pending Files 42 merge descriptions above are historical records of that completed integration, not its current status. Files 43 is now being reconciled against that exact main commit in a dedicated checkout; see [transfer integration evidence](files-transfer.md#integration-with-accepted-agents-and-files-42). The original batch manual evidence remains bounded to the journey above; this reconciliation adds no new batch manual acceptance.
+
+## Authenticated host Trash replacement — issue 81 (2026-10-30)
+
+Batch Trash now enters through the validated `trashEntries` Files RPC on the
+shared authenticated host connection. The former `trash-selection` project IPC
+route rejects requests. Desktop still supplies native confirmation and native
+Trash; no permanent-delete fallback exists. The existing journal, completed-save
+baselines, batch facts and renderer acknowledgement preserve partial outcomes and
+block uncertain retries. The host captures checkout identity before confirmation
+and revalidates it and the originating session before effects. Selection and dirty
+descendant capture, descendant pruning, Save/Discard/Cancel and success-only buffer
+retirement retain their existing behavior. Generic operation acknowledgement stays
+shared with the file operations not yet replaced.
+
+Native confirmation has no ordinary query deadline: a user can take more than
+35 seconds to decide without losing the result channel. Queue admission remains
+bounded. Socket loss does not redispatch Trash; retained journal/batch evidence
+continues to guard further mutations and restart reconciliation.
+
+Verification on macOS 26.3.1, Apple Git 2.50.1, Codex 0.163.0, Bun 1.4.4 and
+Electron 45.1.0 (embedded Node 24.22.1): typecheck, lint, build and unsigned packaging
+pass. Focused host Files transport, operation-preservation and native race tests
+pass (59 tests); the reconnect suite passes (4 tests), including a real 36-second
+confirmation delay beyond the normal deadline. Added transport coverage rejects
+empty/non-string selections before dispatch and preserves partial results, saved
+baselines and operation identities. Handoff fixtures now recognize the fresh-state
+owned empty-journal envelope when asserting and injecting acknowledgement failures.
+
+The toolbar/context menu, keyboard handling, native confirmation choices and focus
+behavior are unchanged. Automated results do not add manual VoiceOver, Finder Put
+Back, signing/notarization, live-provider, exhaustive multi-client or capacity
+acceptance. Existing manual exclusions and filesystem final-syscall race limits
+remain in force. No legacy state is imported or deleted.

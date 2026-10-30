@@ -34,14 +34,16 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
     session = { scope, client };
     return client;
   }
-  async function chatQuery<A>(request: (client: Client) => Effect.Effect<A, unknown>): Promise<A> {
+  async function chatQuery<A>(request: (client: Client) => Effect.Effect<A, unknown>, waitsForConsent = false): Promise<A> {
     if (queued >= 16) throw Error("Chat query admission exhausted. Retry explicitly.");
     queued++;
     try {
       const current = connect();
       try {
         const client = await current;
-        const result = await Effect.runPromise(Effect.exit(queries.withPermit(request(client)).pipe(Effect.timeout("35 seconds"))));
+        const query = queries.withPermit(request(client));
+        // Native confirmation waits for the user; expiring it cannot cancel admitted filesystem work.
+        const result = await Effect.runPromise(Effect.exit(waitsForConsent ? query : query.pipe(Effect.timeout("35 seconds"))));
         if (Exit.isSuccess(result)) return result.value;
         const failure = Cause.findError(result.cause);
         if (Result.isSuccess(failure) && typeof failure.success === "string")
@@ -56,7 +58,7 @@ export function createDirectoryClient(bootstrap: () => Promise<unknown>, reconci
   return {
     createState: () => chatQuery(client => client.createState()),
     createEntry: (command: typeof import("@escode/contracts").CreateCommand.Type) => chatQuery(client => client.createEntry({ command })),
-    trashEntries: (root: string, paths: readonly string[]) => chatQuery(client => client.trashEntries({ root, paths })),
+    trashEntries: (root: string, paths: readonly string[]) => chatQuery(client => client.trashEntries({ root, paths }), true),
     readFile: (root: string, path: string) => chatQuery(client => client.readFile({ root, path })),
     saveFile: (root: string, path: string, text: string, version: string) => chatQuery(client => client.saveFile({ root, path, text, version })),
     loadWorkspace: () => chatQuery(client => client.loadWorkspace()),

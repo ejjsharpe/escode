@@ -5,6 +5,11 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { launchDesktop } from "./desktop";
 
+function readIntent(text: string) {
+  const value = JSON.parse(text);
+  return value.intent === null ? null : value;
+}
+
 async function fixture() {
   const base = await realpath(await mkdtemp(join(tmpdir(), "escode-trash-handoff-")));
   const root = join(base, "repo"),
@@ -37,9 +42,14 @@ async function edit(page: Page, name: string, text: string) {
   await page.keyboard.type(text);
 }
 async function kill(app: ElectronApplication) {
-  const exited = new Promise<void>((resolve) => app.process().once("exit", () => resolve()));
-  app.process().kill("SIGKILL");
+  const pid = await app.evaluate(() => process.pid).catch(() => null);
+  if (pid === null) return;
+  const user = await app.evaluate(({ app }) => app.getPath("userData"));
+  const exited = app.waitForEvent("close");
+  process.kill(pid, "SIGKILL");
   await exited;
+  // Explicit test recovery releases only this confirmed-dead fixture host’s lock.
+  await rm(join(user, "foundation/owner.lock"), { force: true });
 }
 async function cleanup(app: ElectronApplication, base: string, trash: string[] = []) {
   const fixtures = await app
@@ -77,7 +87,7 @@ for (const failure of ["workspace", "renderer workspace", "acknowledgement"] as 
             trashed &&
             destination.endsWith("/client-file-operation-v1.json") &&
             failure === "acknowledgement" &&
-            (await fs.readFile(args[0], "utf8")) === "null"
+            JSON.parse(await fs.readFile(args[0], "utf8")).intent === null
           )
             throw Error("probe acknowledgement denied");
           return rename(...args);
@@ -92,7 +102,7 @@ for (const failure of ["workspace", "renderer workspace", "acknowledgement"] as 
       );
       await expect(f.page.getByRole("treeitem", { name: /^a.txt/ })).toHaveCount(0);
       await expect(readFile(join(f.root, "a.txt"))).rejects.toThrow();
-      const intent = JSON.parse(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8"));
+      const intent = readIntent(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8"));
       if (failure === "renderer workspace") expect(intent).toBe(null);
       else expect(intent).toMatchObject({ kind: "trash", source: "a.txt", completed: true });
       trash = await app.evaluate(() => (globalThis as any).trashFixtures);
@@ -115,7 +125,7 @@ for (const failure of ["workspace", "renderer workspace", "acknowledgement"] as 
       await expect(page.getByRole("treeitem", { name: /^folder/ })).toBeVisible();
       await expect(page.getByRole("treeitem", { name: /^a.txt/ })).toHaveCount(0);
       await expect
-        .poll(async () => JSON.parse(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8")))
+        .poll(async () => readIntent(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8")))
         .toBe(null);
       expect(JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts).toEqual([]);
       expect(await readFile(trash[0], "utf8")).toBe("saved and trashed");
@@ -248,7 +258,7 @@ test("completed save with failed baseline persistence blocks Trash and recovers 
     );
     expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe("completed but not handed off");
     expect(await app.evaluate(() => (globalThis as any).trashFixtures)).toEqual([]);
-    expect(JSON.parse(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8"))).toMatchObject({
+    expect(readIntent(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8"))).toMatchObject({
       kind: "save",
       completed: true,
       savedDisk: { text: "completed but not handed off" },
@@ -260,7 +270,7 @@ test("completed save with failed baseline persistence blocks Trash and recovers 
       "completed but not handed off",
     );
     await expect
-      .poll(async () => JSON.parse(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8")))
+      .poll(async () => readIntent(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8")))
       .toBe(null);
     expect(
       JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts[0].disk.text,
@@ -307,7 +317,7 @@ for (const completion of ["crash", "continue"] as const) {
         fs.rename = async (...args: any[]) => {
           const clearing =
             String(args[1]).endsWith("/client-file-operation-v1.json") &&
-            (await fs.readFile(args[0], "utf8")) === "null";
+            JSON.parse(await fs.readFile(args[0], "utf8")).intent === null;
           const value = await rename(...args);
           if (!paused && clearing && (globalThis as any).trashFixtures.length > 0) {
             paused = true;
@@ -322,7 +332,7 @@ for (const completion of ["crash", "continue"] as const) {
         .getByRole("button", { name: "Move to Trash 2 selected items", exact: true })
         .click();
       await expect.poll(() => app.evaluate(() => !!(globalThis as any).resumeBatch)).toBe(true);
-      expect(JSON.parse(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8"))).toBe(null);
+      expect(readIntent(await readFile(join(f.user, "client-file-operation-v1.json"), "utf8"))).toBe(null);
       expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe("saved a");
       await expect(readFile(join(f.root, "b.txt"))).rejects.toThrow();
       await f.page.getByRole("button", { name: "Agents", exact: true }).click();
@@ -475,7 +485,10 @@ for (const change of [
         await f.app.evaluate(({ app }) => {
           app.quit = () => {};
         });
-        await f.page.evaluate(() => window.escode.lifecycle("finish"));
+        // Quit closes the recovery session before the final client snapshot can persist.
+        await f.page.evaluate(() => window.escode.lifecycle("finish")).catch(error => {
+          expect(String(error)).toContain("Project session closed");
+        });
       }
       await f.app.evaluate(() => (globalThis as any).confirmBatch());
       const result = await f.page.evaluate(() => (window as any).pendingBatch);

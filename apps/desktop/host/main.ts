@@ -914,7 +914,6 @@ app.whenReady().then(async () => {
         "drag-capture",
         "clipboard-capture",
         "transfer",
-        "trash-selection",
       ].includes(String(operation)) &&
       (typeof requestedRoot !== "string" || !projects.has(requestedRoot))
     )

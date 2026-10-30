@@ -79,3 +79,20 @@ test("a moved chat subscription does not disconnect unrelated host queries", asy
     expect(bootstraps).toBe(1);
   } finally { off(); await client.close(); await host.close(); globalThis.WebSocket = original; }
 });
+
+test("Trash confirmation can outlive the ordinary query timeout", async () => {
+  const original = globalThis.WebSocket;
+  globalThis.WebSocket = class extends WebSocket {
+    constructor(url: string) { super(url, { origin: "null" }); }
+  } as unknown as typeof globalThis.WebSocket;
+  const host = await startDirectoryHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "unused" }),
+    trashEntries: async () => {
+      await new Promise(resolve => setTimeout(resolve, 36000));
+      return { results: [], saves: [], requiresAck: false, message: "Cancelled; edits retained." };
+    },
+  });
+  const client = createDirectoryClient(async () => host.bootstrap());
+  try { expect((await client.trashEntries("/approved", ["a"])).message).toBe("Cancelled; edits retained."); }
+  finally { await client.close(); await host.close(); globalThis.WebSocket = original; }
+}, 40000);
