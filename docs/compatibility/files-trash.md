@@ -251,8 +251,8 @@ baselines, batch facts and renderer acknowledgement preserve partial outcomes an
 block uncertain retries. The host captures checkout identity before confirmation
 and revalidates it and the originating session before effects. Selection and dirty
 descendant capture, descendant pruning, Save/Discard/Cancel and success-only buffer
-retirement retain their existing behavior. Generic operation acknowledgement stays
-shared with the file operations not yet replaced.
+retirement retain their existing behavior. After integration with issue 80, operation acknowledgement also uses the
+authenticated host RPC shared with rename/move.
 
 Native confirmation has no ordinary query deadline: a user can take more than
 35 seconds to decide without losing the result channel. Queue admission remains
@@ -273,3 +273,20 @@ behavior are unchanged. Automated results do not add manual VoiceOver, Finder Pu
 Back, signing/notarization, live-provider, exhaustive multi-client or capacity
 acceptance. Existing manual exclusions and filesystem final-syscall race limits
 remain in force. No legacy state is imported or deleted.
+
+Final qualification: the full unit suite, typecheck and lint pass; build/package
+pass. All nine packaged `file-operations.spec.ts` cases pass and all fourteen
+packaged `files-trash-handoffs.spec.ts` cases pass, including fresh-process recovery,
+failed Save, partial success, late snapshots, checkout replacement and Quit. Crash
+fixtures explicitly release their own confirmed-dead host lock and use the process
+PID instead of the removed Playwright process accessor. Quit fixtures accept the
+expected closed-session recovery rejection while asserting no stale Trash effect.
+Standards review found no actionable findings; specification review identified the
+confirmation deadline and evidence gaps, both addressed.
+
+Integration with main at `0bda668` passed typecheck, lint, build and package.
+The seven focused packaged integration cases passed across the initial run and
+an isolated Save rerun: the initial Save assertion exceeded its five-second UI
+wait while still applying, then passed alone in 3.4 seconds. A concurrent full
+unit run had one unchanged shutdown descendant-start timeout (207 passed,
+4 skipped); this was investigated separately from Trash behavior.
