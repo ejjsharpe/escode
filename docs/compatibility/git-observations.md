@@ -13,7 +13,7 @@ one in-flight scan and one pending refresh. Each completed scan resolves its cal
 even if another refresh is pending, preventing continuous invalidation starvation.
 Only in-flight results are cached; subsequent requests rebuild from Git. Status and
 displayed worktree options refresh every two seconds. Renderer request generations
-reject results superseded by newer requests or checkout-view disposal. Polling observes
+reject results superseded by newer requests or checkout-view disposal. Polling skips overlapping renderer requests so slow scans can still update visible state. Polling observes
 common repository metadata as well as working files without recursive Git watchers.
 Worktree selection and first Send still revalidate the selected context and base.
 
@@ -31,6 +31,8 @@ Worktree selection and first Send still revalidate the selected context and base
   requests observe external checkout writes. Existing Files authorization checks pass.
 - Build and macOS directory packaging pass on the actual installation. Packaged
   test uses restricted PATH through the existing launch fixture.
+
+The combined native-import/diff main changes were retained during rebase; typechecking, lint, unit and packaged checks were repeated on the combined tree.
 
 Keyboard controls, focus targets and markup are unchanged. No new manual VoiceOver
 check was performed. Live provider turns, exhaustive multi-client/revocation and full
