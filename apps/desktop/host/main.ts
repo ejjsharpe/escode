@@ -1,4 +1,5 @@
 import { executeSend } from "./send";
+import { DurableSend } from "./durable-send";
 import { Schema } from "effect";
 import { SendCommand } from "@escode/contracts";
 import {
@@ -29,10 +30,12 @@ app.whenReady().then(async () => {
   mkdirSync(app.getPath("userData"), { recursive: true, mode: 0o700 });
   let foundation: FoundationState;
   const store = new Chats(join(app.getPath("userData"), "durable-chats-v1"));
+  let sends: DurableSend;
   try {
     const identity = await store.database.ready;
     console.info("SQLite durability settings", identity.settings);
     foundation = FoundationState.open(join(app.getPath("userData"), "durable-chats-v1.sqlite-state-v1", "receipts"), identity);
+    sends = new DurableSend(store.database, foundation.admissionEpoch);
   } catch (error) {
     dialog.showErrorBox(
       "Foundation state unavailable",
@@ -362,22 +365,24 @@ app.whenReady().then(async () => {
     gitStatus: async root => (await checkout(root)).status(),
     worktreeOptions: async root => (await checkout(root)).repositoryGit.worktreeOptions(),
     draftAction: action => chats.draftAction(action),
-    sendState: async (root, id) => ({ admissionEpoch: foundation.admissionEpoch, expected: await chats.expectation(root, id) }),
+    sendState: async (root, id) => ({ admissionEpoch: sends.admissionEpoch, expected: await chats.expectation(root, id) }),
     sendStatus: async commandId => {
-      const receipt = foundation.receipt(commandId);
+      const control = foundation.receipt(commandId);
+      const receipt = await sends.receipt(commandId) ?? (control?.command.control ? control : null);
       if (receipt) await authorizeHistory(receipt.command.project, receipt.command.id);
       return receipt;
     },
     sendMessage: async input => {
       const command = Schema.decodeUnknownSync(SendCommand)(input);
       await authorizeHistory(command.project, command.id);
-      return executeSend(foundation, command, async () => {
+      const dispatch = async () => {
         if (command.control) {
           const { operation, target, token, answer } = command.control;
           if (operation === "stop") await chats.stop(command.project, command.id, target);
           else await chats.answer(command.project, command.id, token, answer);
         } else await chats.send(command.project, command.id, command.text, command.expected);
-      });
+      };
+      return command.control ? executeSend(foundation, command, dispatch) : sends.execute(command, dispatch);
     },
     chatSnapshot: async (root, id) => { await authorizeHistory(root, id); return chats.inspect(root, id); },
     openChat: async (root, id) => { await authorizeHistory(root, id); return chats.open(root, id); },

@@ -36,5 +36,6 @@ export class DurableState {
   write(chats: SavedChat[], revision: number): Promise<void> { return this.request("write", { chats, revision }); }
   recoveryRead(clientId: string, kind: "workspace" | "intent"): Promise<{ body: unknown; revision: number }> { return this.request("recoveryRead", { clientId, kind }); }
   recoveryWrite(clientId: string, kind: "workspace" | "intent", body: unknown, revision: number): Promise<void> { return this.request("recoveryWrite", { clientId, kind, body, revision }); }
+  command(operation: string, fields: object): Promise<any> { return this.request(operation, fields); }
   async close() { await this.worker.terminate(); }
 }
