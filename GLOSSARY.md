@@ -227,7 +227,10 @@ An explicit cancellation request for the exact live turn or preparation captured
 ordinary Stop whose intent could not be persisted. The host rechecks authority and
 rejects a superseded target. Its result may be non-durable or uncertain; external
 effects may remain. Reservations and prior command evidence are retained. This
-exception never admits Send, approval or reply without a durable intent.
+exception never admits Send, approval or reply without a durable intent. After
+complete storage-worker loss, the running host may retain previously validated
+chat authority for cancellation of its existing live session only; authentication
+and exact captured-target checks still apply. Host restart discards this authority.
 
 ### Recovery copy
 

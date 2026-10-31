@@ -3,15 +3,16 @@ import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { launchDesktop } from "./desktop";
+import { launchDesktop, readChats } from "./desktop";
 
-for (const phase of ["baseline", "followup"]) test(`emergency Stop visibly discloses uncertainty in the packaged app (${phase})`, async () => {
+for (const phase of ["baseline", "followup", "worker-loss", "worker-loss-superseded"]) test(`emergency Stop visibly discloses uncertainty in the packaged app (${phase})`, async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-history-ui-"));
   const user = join(dir, "user"), tools = join(dir, "tools");
   await mkdir(user); await mkdir(tools);
   await writeFile(join(tools, "codex"), `#!/usr/bin/env node
 const {createInterface}=require('node:readline');
 if(process.argv.includes('--version')){console.log('codex-cli 0.165.0');process.exit(0);}
+const timer=setInterval(()=>{if(require('node:fs').existsSync(${JSON.stringify(join(dir, "supersede"))})){clearInterval(timer);process.stdout.write(JSON.stringify({method:'turn/started',params:{threadId:'saved-provider',turn:{id:'newer'}}})+'\\n');require('node:fs').writeFileSync(${JSON.stringify(join(dir, "superseded"))},'yes');}},10);
 createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line); if(!m.id)return; let result={};
  if(m.method==='initialize')result={userAgent:'fixture'};
@@ -53,15 +54,53 @@ createInterface({input:process.stdin}).on('line',line=>{
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect.poll(() => readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
     const stopMs = performance.now() - stopStart;
-    fault = new DatabaseSync(join(user, "durable-chats-v1.sqlite-state-v1/state.sqlite"));
-    fault.exec("CREATE TRIGGER deny_stop BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
-    fault.exec("CREATE TRIGGER deny_results BEFORE UPDATE ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+    const liveChat = phase.startsWith("worker-loss") ? (await page.evaluate(readChats, null))[0] : undefined;
+    if (phase.startsWith("worker-loss")) {
+      await app.evaluate(async () => {
+        const { Worker } = process.getBuiltinModule("node:worker_threads");
+        const original = Worker.prototype.postMessage;
+        Worker.prototype.postMessage = function (...args: Parameters<typeof original>) {
+          Worker.prototype.postMessage = original;
+          void this.terminate();
+          return original.apply(this, args);
+        };
+      });
+      await page.evaluate(id => window.escode.chat("composer", null, id).catch(() => {}), liveChat!.id);
+    } else {
+      fault = new DatabaseSync(join(user, "durable-chats-v1.sqlite-state-v1/state.sqlite"));
+      fault.exec("CREATE TRIGGER deny_stop BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+      fault.exec("CREATE TRIGGER deny_results BEFORE UPDATE ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+    }
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.getByRole("button", { name: "Emergency Stop", exact: true })).toBeVisible();
     expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+    if (phase.startsWith("worker-loss")) {
+      const results = await page.evaluate(async id => {
+        const state = await window.escode.sendState(null, id);
+        const base = { ...state, commandId: crypto.randomUUID(), project: null, id, text: "unrecorded" };
+        const attempt = async (command: typeof base & { control?: { operation: "answer"; target: string; token: string; answer: string } }) => {
+          try { await window.escode.sendMessage(command); return "dispatched"; } catch { return "blocked"; }
+        };
+        return Promise.all([
+          attempt(base),
+          attempt({ ...base, commandId: crypto.randomUUID(), control: { operation: "answer", target: "", token: "forged", answer: "accept" } }),
+          window.escode.sendState("/unauthorized", id).then(() => "authorized", () => "blocked"),
+        ]);
+      }, liveChat!.id);
+      expect(results).toEqual(["blocked", "blocked", "blocked"]);
+    }
+    if (phase === "worker-loss-superseded") {
+      await writeFile(join(dir, "supersede"), "yes");
+      await expect.poll(() => readFile(join(dir, "superseded"), "utf8").catch(() => "")).toBe("yes");
+    }
     const controlStart = performance.now();
     await page.getByRole("button", { name: "Emergency Stop", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("Cancellation requested.");
+    if (phase === "worker-loss-superseded") {
+      await expect(page.getByRole("alert").filter({ hasText: "Stale Stop target." })).toBeVisible();
+      expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+      return;
+    }
+    await expect(page.getByRole("alert").filter({ hasText: "Cancellation requested." })).toBeVisible();
     await expect(page.getByText(/Emergency Stop result is not durable/)).toBeVisible();
     await expect(page.getByText(/External effects may remain/)).toBeVisible();
     expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\nstop\n");
@@ -69,7 +108,8 @@ createInterface({input:process.stdin}).on('line',line=>{
   } finally {
     fault?.close();
     await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); });
-    await app.close();
-    await rm(dir, { recursive: true, force: true });
+    if (phase.startsWith("worker-loss")) await app.evaluate(({ app }) => app.exit(0)).catch(() => {});
+    else await app.close();
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });

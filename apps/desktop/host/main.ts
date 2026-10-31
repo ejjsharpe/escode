@@ -343,6 +343,9 @@ app.whenReady().then(async () => {
     chats.close();
     for (const p of projects.values()) p.close();
   });
+  // Retain validated chat authority only for cancellation of an existing live session after worker loss.
+  const liveAuthorities = new Set<string>();
+  const authorityKey = (root: string | null, id: string) => JSON.stringify([root, id]);
   const authorizeHistory = async (root: string | null, id: string) => {
     if (quitting || (root !== null && removing.has(root))) throw Error("Chat unavailable during shutdown or removal");
     const chat = await store.get(root, id);
@@ -350,7 +353,13 @@ app.whenReady().then(async () => {
       if (!(await workspace.approved()).some(p => p.project === root))
         throw Error("Open this project first. Use Open project… to approve its saved directory.");
     }
+    liveAuthorities.add(authorityKey(root, id));
     return chat;
+  };
+  const authorizeRetainedStop = (root: string | null, id: string) => {
+    if (quitting || (root !== null && removing.has(root)) || !liveAuthorities.has(authorityKey(root, id)))
+      throw Error("No retained live Stop authority.");
+    return chats.liveStopTarget(root, id);
   };
   const currentTarget = async (identity: string) => {
     const state = await workspace.read();
@@ -367,7 +376,16 @@ app.whenReady().then(async () => {
     gitStatus: async root => (await checkout(root)).status(),
     worktreeOptions: async root => (await checkout(root)).repositoryGit.worktreeOptions(),
     draftAction: action => chats.draftAction(action),
-    sendState: async (root, id) => ({ admissionEpoch: sends.admissionEpoch, expected: await chats.expectation(root, id) }),
+    sendState: async (root, id) => {
+      try {
+        await authorizeHistory(root, id);
+        return { admissionEpoch: sends.admissionEpoch, expected: await chats.expectation(root, id) };
+      } catch (error) {
+        if (!store.database.unavailable) throw error;
+        authorizeRetainedStop(root, id);
+        return { admissionEpoch: sends.admissionEpoch, expected: "" };
+      }
+    },
     sendStatus: async commandId => {
       const receipt = await sends.receipt(commandId);
       if (receipt) await authorizeHistory(receipt.command.project, receipt.command.id);
@@ -375,7 +393,9 @@ app.whenReady().then(async () => {
     },
     sendMessage: async input => {
       const command = Schema.decodeUnknownSync(SendCommand)(input);
-      await authorizeHistory(command.project, command.id);
+      if (store.database.unavailable && command.control?.operation === "stop")
+        authorizeRetainedStop(command.project, command.id);
+      else await authorizeHistory(command.project, command.id);
       const dispatch = async () => {
         if (command.control) {
           const { operation, target, token, answer } = command.control;
