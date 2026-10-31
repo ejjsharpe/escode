@@ -1,3 +1,4 @@
+import { RetentionSettings } from "./retention-settings";
 import { preserveClose } from "./close-preservation";
 import { createFileActivation } from "./file-activation";
 import type { BufferState } from "./file-activation";
@@ -40,6 +41,7 @@ declare global {
       sendState: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
       sendMessage: (command: import("@escode/contracts").SendCommand) => Promise<unknown>;
       sendStatus: (commandId: string) => Promise<unknown>;
+      checkpointRetention: (days?: number | null) => Promise<number | null>;
       checkpointPoints: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").CheckpointPage>;
       rewind: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles?: boolean) => Promise<import("@escode/contracts").RewindResult>;
       branchHistory: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, summarized?: boolean) => Promise<import("@escode/contracts").RewindResult>;
@@ -1462,6 +1464,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
       <header>
         <strong>escode</strong>
         <span>{selected}</span>
+        <RetentionSettings />
       </header>
       <nav className="project-tabs" aria-label="Projects">
         <Button aria-pressed={selected === "agents"} onClick={() => setSelected("agents")}>

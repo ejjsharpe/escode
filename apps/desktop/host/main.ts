@@ -406,6 +406,7 @@ app.whenReady().then(async () => {
       return sends.execute(command, dispatch);
     },
     chatSnapshot: async (root, id) => { await authorizeHistory(root, id); return chats.inspect(root, id); },
+    checkpointRetention: days => chats.checkpointRetention(days),
     openChat: async (root, id) => { await authorizeHistory(root, id); return chats.open(root, id); },
     checkpointPoints: async (root, id, cursor) => { await authorizeHistory(root, id); return chats.checkpointPoints(root, id, cursor); },
     rewind: async (root, id, boundary, token, commandId, restoreFiles) => { await authorizeHistory(root, id); return chats.rewind(root, id, boundary, token, commandId, restoreFiles); },

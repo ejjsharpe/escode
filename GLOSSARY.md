@@ -105,7 +105,7 @@ An explicit replacement of an eligible worktree's saved working files with the c
 A separate chat and managed worktree continuing from a selected before-message checkpoint while preserving the original work. It uses the recorded Git base with captured saved files as uncommitted changes and native provider context through the preceding turn, without starting a turn. A retained branch receipt names the child chat and preserves its required checkpoint contents independently of source-chat expiry. Incomplete historical preparation retains its exact resources and blocks connection/Send until externally reconciled; Retry never allocates substitutes. Its historical files and conversation context are distinct from a conversation fork that shares today's files.
 
 **Checkpoint retention**:
-The period for which inactive chats retain available file checkpoints, subject to protection of data still needed by retained branches. The initial cleanup expires eligible file coverage after 30 days of chat inactivity. Deliberate opening, messages and observed agent work extend remaining coverage; polling does not. Expiry retains boundary/provider metadata with an unavailable reason and cannot be reversed by opening the chat. Branch receipts keep independent required contents; active work, client recovery and uncertain evidence prevent cleanup. Logical expiry does not promise immediate disk reclamation or remove conversations/worktrees. Retaining conversation history does not imply that every historical file state remains available.
+The period for which inactive chats retain available file checkpoints, subject to protection of data still needed by retained branches. The host-owned inactivity setting defaults to 30 days and accepts 1–36500 whole days or Never. Changes settle elapsed coverage under the previous policy before applying the new policy to remaining eligible checkpoints; extending retention or choosing Never cannot recover expired contents. Shorter periods apply at the next cleanup. Never disables inactivity expiry, not capacity limits. Deliberate opening, messages and observed agent work extend remaining coverage; polling does not. Expiry retains boundary/provider metadata with an unavailable reason and cannot be reversed by opening the chat. Branch receipts keep independent required contents; active work, client recovery and uncertain evidence prevent cleanup. Logical expiry does not promise immediate disk reclamation or remove conversations/worktrees. Retaining conversation history does not imply that every historical file state remains available.
 
 **Project-backed chat**:
 A chat associated with one project and attached to one of its checkout directories. Multiple chats may share a checkout.
@@ -250,3 +250,10 @@ The next message's fresh before-state is a separate target.
 
 **Summarized continuation**:
 An explicit historical-workflow choice that creates a separate chat draft and managed worktree from an eligible checkpoint. Available provider text through the selected boundary is copied with item labels into an unsent draft for review (64 KiB maximum); it is not native historical provider context and does not reconstruct tool state. Missing, unsupported, empty or oversized required history remains unavailable. Preparation starts no provider thread or turn; first Send explicitly creates a fresh conversation. Source work and client drafts remain intact.
+
+Checkpoint storage capacity is independent of inactivity retention: active chats and
+Never retain protected history until optional capture reaches its byte or work bound,
+then disclose missing file coverage. Logical expiry drops eligible file payloads;
+SQLite reuses free pages and may truncate an unblocked WAL without shrinking the
+main database. These checkpoints store file bytes in SQLite, create no Git snapshot
+objects, and grant no authority to prune project Git objects or retained worktrees.

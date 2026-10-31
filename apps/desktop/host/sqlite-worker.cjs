@@ -49,6 +49,7 @@ try {
   if (db.prepare('PRAGMA user_version').get().user_version === 2) db.exec('BEGIN IMMEDIATE; CREATE TABLE preparation_results (id TEXT PRIMARY KEY, previous TEXT NOT NULL, result TEXT NOT NULL); PRAGMA user_version=3; COMMIT');
   if (db.prepare('PRAGMA user_version').get().user_version === 3) db.exec('BEGIN IMMEDIATE; CREATE TABLE checkpoints (id TEXT PRIMARY KEY, chatId TEXT NOT NULL, body TEXT NOT NULL); PRAGMA user_version=4; COMMIT');
   if (db.prepare('PRAGMA user_version').get().user_version !== 4 || db.prepare('PRAGMA quick_check').get().quick_check !== 'ok') throw Error('Unsupported or corrupt SQLite storage');
+  db.exec('CREATE TABLE IF NOT EXISTS checkpoint_policy (singleton INTEGER PRIMARY KEY CHECK(singleton=1), days INTEGER CHECK(days BETWEEN 1 AND 36500)); INSERT OR IGNORE INTO checkpoint_policy VALUES (1,30)');
   const identity = db.prepare('SELECT * FROM identity').all();
   if (identity.length !== 1 || !/^[0-9a-f-]{36}$/.test(identity[0].hostId) || !/^[0-9a-f-]{36}$/.test(identity[0].clientId) || !Number.isSafeInteger(identity[0].revision)) throw Error('Invalid established SQLite identities');
   db.exec('BEGIN IMMEDIATE');
@@ -91,7 +92,13 @@ try {
 if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body }) => {
   try {
     let value;
-    if (operation === 'checkpointActivity') {
+    if (operation === 'checkpointRetention') {
+      if (body !== undefined) {
+        if (body.days !== null && (!Number.isSafeInteger(body.days) || body.days < 1 || body.days > 36500)) throw Error('Retention must be 1–36500 whole days or Never');
+        db.prepare('UPDATE checkpoint_policy SET days=? WHERE singleton=1').run(body.days);
+      }
+      value = db.prepare('SELECT days FROM checkpoint_policy WHERE singleton=1').get().days;
+    } else if (operation === 'checkpointActivity') {
       if (!Number.isSafeInteger(body.now) || body.now < 0) throw Error('Invalid activity time');
       db.prepare('INSERT INTO checkpoint_activity VALUES (?, ?) ON CONFLICT(chatId) DO UPDATE SET touched=max(touched,excluded.touched)').run(commandId, body.now);
     } else if (operation === 'expireCheckpoints') {
@@ -106,7 +113,8 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         });
         const uncertain = db.prepare("SELECT 1 FROM rewinds WHERE json_extract(body,'$.result.status')='uncertain' LIMIT 1").get();
         value = 0;
-        if (!recovery && !uncertain && !db.prepare('SELECT 1 FROM preparation_results LIMIT 1').get()) {
+        const days = db.prepare('SELECT days FROM checkpoint_policy WHERE singleton=1').get().days;
+        if (days !== null && !recovery && !uncertain && !db.prepare('SELECT 1 FROM preparation_results LIMIT 1').get()) {
           const rows = db.prepare(`SELECT c.id, c.chatId, c.body FROM checkpoints c
             WHERE json_extract(c.body,'$.availability')='available' AND (? IS NULL OR c.id=?)
             AND coalesce((SELECT touched FROM checkpoint_activity WHERE chatId=c.chatId),
@@ -115,24 +123,31 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
             AND c.chatId NOT IN (SELECT value FROM json_each(?))
             AND NOT EXISTS (SELECT 1 FROM submissions WHERE json_extract(body,'$.command.id')=c.chatId
               AND json_extract(body,'$.status') NOT IN ('accepted','rejected'))
-            ORDER BY c.rowid LIMIT 100`).all(body.boundary ?? null, body.boundary ?? null, body.now - 30 * 86400000, JSON.stringify(body.active));
+            ORDER BY c.rowid LIMIT 100`).all(body.boundary ?? null, body.boundary ?? null, body.now - days * 86400000, JSON.stringify(body.active));
           for (const row of rows) {
             const point = JSON.parse(row.body);
             delete point.files;
             point.availability = 'unavailable';
-            point.reason = 'File checkpoint expired after 30 days of chat inactivity';
+            point.reason = `File checkpoint expired after ${days} days of chat inactivity`;
             db.prepare('UPDATE checkpoints SET body=? WHERE id=?').run(JSON.stringify(point), row.id);
             value++;
           }
         }
         db.exec('COMMIT');
+        // Free database pages remain reusable; truncate only the WAL, without waiting for readers.
+        db.exec('PRAGMA busy_timeout=0');
+        try { db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get(); }
+        finally { db.exec('PRAGMA busy_timeout=3000'); }
       } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
     } else if (operation === 'rewindRead') {
       const row = db.prepare('SELECT body FROM rewinds WHERE id=?').get(commandId);
       value = row ? JSON.parse(row.body) : null;
     } else if (operation === 'rewindWrite') {
       if (db.prepare('SELECT count(*) AS n FROM rewinds').get().n >= 1000 && !db.prepare('SELECT id FROM rewinds WHERE id=?').get(commandId)) throw Error('Rewind capacity exhausted');
-      db.prepare('INSERT INTO rewinds VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET body=excluded.body').run(commandId, JSON.stringify(body));
+      const encoded = JSON.stringify(body);
+      const used = db.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))),0) AS n FROM rewinds WHERE id<>?').get(commandId).n;
+      if (used + Buffer.byteLength(encoded) > 67108864) throw Error('Retained branch storage capacity exhausted');
+      db.prepare('INSERT INTO rewinds VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET body=excluded.body').run(commandId, encoded);
     } else if (operation === 'checkpointPoints') {
       const offset = Number(body.cursor ?? 0);
       if (!Number.isSafeInteger(offset) || offset < 0) throw Error('Invalid checkpoint cursor');
@@ -160,7 +175,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
       }
       db.prepare('INSERT INTO checkpoint_activity VALUES (?, ?) ON CONFLICT(chatId) DO UPDATE SET touched=max(touched,excluded.touched)').run(body.chatId, body.createdAt ?? Date.now());
       const encoded = JSON.stringify(body);
-      const used = db.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))),0) AS n FROM checkpoints').get().n;
+      const used = db.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))),0) AS n FROM checkpoints WHERE id<>?').get(body.id).n;
       if (used + Buffer.byteLength(encoded) > (body.availability === 'available' ? 50331648 : 67108864)) throw Error('Checkpoint storage capacity exhausted');
       if (operation === 'completeCheckpoint') db.prepare('UPDATE checkpoints SET body=? WHERE id=?').run(encoded, body.id);
       else db.prepare('INSERT INTO checkpoints VALUES (?, ?, ?)').run(body.id, body.chatId, encoded);
