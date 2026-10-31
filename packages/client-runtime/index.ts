@@ -103,6 +103,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     sendState: (project: string | null, id: string) => chatQuery(client => client.sendState({ project, id })),
     sendMessage: (command: SendCommand) => chatQuery(client => client.sendMessage({ command })),
     sendStatus: (commandId: string) => chatQuery(client => client.sendStatus({ commandId })),
+    checkpointRetention: (days?: number | null) => chatQuery(client => client.checkpointRetention(days === undefined ? {} : { days })),
     openChat: (project: string | null, id: string) => chatQuery(client => client.openChat({ project, id })),
     chatLive(project: string | null, id: string, apply: (detail: typeof ChatDetail.Type) => void, error: (message: string) => void, reconcile?: () => Promise<string | undefined>) {
       let active = true;

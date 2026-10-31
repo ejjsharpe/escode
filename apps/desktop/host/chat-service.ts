@@ -88,6 +88,13 @@ export class ChatService {
     this.cleanupTimer = setInterval(() => { void this.cleanupCheckpoints().catch(() => {}); }, 60000);
     this.cleanupTimer.unref();
   }
+  async checkpointRetention(days?: number | null): Promise<number | null> {
+    if (days !== undefined) {
+      if (days !== null && (!Number.isSafeInteger(days) || days < 1 || days > 36500)) throw Error("Retention must be 1–36500 whole days or Never");
+      while (await this.cleanupCheckpoints() === 100) { /* Settle elapsed coverage under the previous policy first. */ }
+    }
+    return this.store.database.command("checkpointRetention", days === undefined ? {} : { body: { days } });
+  }
   async cleanupCheckpoints(boundary?: string) {
     if (this.cleanupBlocked) return 0;
     const active = [...new Set([...this.sessions.keys(), ...this.transitions.keys()])].filter(id => {

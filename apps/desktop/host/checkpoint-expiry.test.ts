@@ -133,3 +133,55 @@ test("authenticated messages and observed agent work reset inactivity independen
     expect(turns).toBe(2);
   } finally { await client.close(); await host.close(); service.close(); await store.database.close(); globalThis.WebSocket = original; await rm(dir, { recursive: true, force: true }); }
 });
+
+test("retention changes persist, validate and never resurrect expired contents", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-policy-"));
+  let store = new Chats(join(dir, "state"));
+  try {
+    expect(await store.database.command("checkpointRetention", {})).toBe(30);
+    await expect(store.database.command("checkpointRetention", { body: { days: 0 } })).rejects.toThrow();
+    await store.database.command("checkpoint", { body: { id: "point", chatId: "chat", createdAt: 1, availability: "available", files: {} } });
+    await store.database.command("checkpointRetention", { body: { days: null } });
+    expect(await store.database.command("expireCheckpoints", { body: { now: 100 * 86400000, active: [] } })).toBe(0);
+    await store.database.close(); store = new Chats(join(dir, "state"));
+    expect(await store.database.command("checkpointRetention", {})).toBeNull();
+    await store.database.command("checkpointRetention", { body: { days: 7 } });
+    expect(await store.database.command("expireCheckpoints", { body: { now: 100 * 86400000, active: [] } })).toBe(1);
+    await store.database.command("checkpointRetention", { body: { days: null } });
+    expect((await store.database.command("inspectCheckpoint", { commandId: "chat", body: { boundary: "point" } })).availability).toBe("unavailable");
+  } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("authenticated policy changes settle elapsed coverage and preserve activity and protections", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-policy-host-"));
+  const store = new Chats(join(dir, "state"));
+  const original = globalThis.WebSocket;
+  globalThis.WebSocket = class extends WebSocket { constructor(url: string) { super(url, { origin: "null" }); } } as any;
+  let now = 1;
+  const service = new ChatService(store, undefined, undefined, undefined, undefined, () => now);
+  const host = await startHost({ ...await store.database.ready, origin: "null", list: async () => ({ kind: "denied", message: "unused" }), checkpointRetention: days => service.checkpointRetention(days) });
+  const client = createHostClient(async () => host.bootstrap());
+  const point = (id: string) => store.database.command("checkpoint", { body: { id, chatId: id, createdAt: 1, availability: "available", files: {} } });
+  const inspect = (id: string) => store.database.command("inspectCheckpoint", { commandId: id, body: { boundary: id } });
+  try {
+    expect(await client.checkpointRetention()).toBe(30);
+    for (const invalid of [0, -1, 1.5, 36501]) await expect(client.checkpointRetention(invalid)).rejects.toThrow();
+    await point("longer"); now = 20 * 86400000;
+    expect(await client.checkpointRetention(60)).toBe(60);
+    now = 40 * 86400000; await service.cleanupCheckpoints();
+    expect((await inspect("longer")).availability).toBe("available");
+    await client.checkpointRetention(7); await service.cleanupCheckpoints();
+    expect((await inspect("longer")).availability).toBe("unavailable");
+    await point("elapsed"); now = 50 * 86400000;
+    await client.checkpointRetention(null);
+    expect((await inspect("elapsed")).availability).toBe("unavailable");
+    await point("never"); now = 500 * 86400000; await service.cleanupCheckpoints();
+    expect((await inspect("never")).availability).toBe("available");
+    await store.database.recoveryWrite("client", "workspace", { drafts: [{ text: "protect" }] }, 0);
+    await client.checkpointRetention(1); await service.cleanupCheckpoints();
+    expect((await inspect("never")).availability).toBe("available");
+    await store.database.recoveryWrite("client", "workspace", { drafts: [] }, 1);
+    await service.cleanupCheckpoints();
+    expect((await inspect("never")).availability).toBe("unavailable");
+  } finally { await client.close(); await host.close(); service.close(); await store.database.close(); globalThis.WebSocket = original; await rm(dir, { recursive: true, force: true }); }
+});

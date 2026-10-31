@@ -81,6 +81,7 @@ contextBridge.exposeInMainWorld(
     sendMessage: hostClient.sendMessage,
     sendStatus: hostClient.sendStatus,
     chatLive: chatClient.live,
+    checkpointRetention: hostClient.checkpointRetention,
     checkpointPoints: hostClient.checkpointPoints,
     rewind: hostClient.rewind,
     branchHistory: hostClient.branchHistory,
