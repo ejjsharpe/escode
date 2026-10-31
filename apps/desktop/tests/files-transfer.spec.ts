@@ -34,6 +34,7 @@ test("tree clipboard copy, dirty duplicate, collision and cut partial results us
     await page.keyboard.type("unsaved source");
     await tree.focus();
     await page.keyboard.press("Meta+c");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Copied references for");
     await page.getByRole("treeitem", { name: "target", exact: true }).click();
     await page.keyboard.press("Meta+v");
     await expect(page.getByRole("treeitem", { name: /a copy.ts/ })).toBeVisible();
@@ -50,7 +51,8 @@ test("tree clipboard copy, dirty duplicate, collision and cut partial results us
     expect(await app.evaluate(() => (globalThis as any).choices)).toEqual([
       ["Replace", "Keep Both", "Skip", "Cancel"],
     ]);
-    // Capture two cuts; remove one after capture to force an honest partial result.
+    // Capture two cuts after the previous transfer finishes; then remove one source.
+    await expect(page.getByText("Transferring captured files… Navigation and chat Stop remain available.", { exact: true })).toHaveCount(0);
     await page.getByRole("treeitem", { name: /^a.ts, unsaved/ }).click();
     await page.getByRole("treeitem", { name: "b.ts", exact: true }).click({ modifiers: ["Meta"] });
     await page.keyboard.press("Meta+x");
@@ -97,16 +99,19 @@ test("dirty destination blocks Replace; duplicate text survives a fresh Electron
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
     await page.getByRole("treeitem", { name: "target", exact: true }).click();
-    await page.getByRole("treeitem", { name: "a.ts", exact: true }).nth(0).click();
+    await page.locator('[data-path="target/a.ts"] > .tree-row').click();
+    await expect(page.locator(".editor:visible")).toHaveAttribute("data-model-uri", "file://" + root + "/target/a.ts");
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("dirty destination");
-    await page.getByRole("treeitem", { name: "a.ts", exact: true }).click();
+    await page.locator('[data-path="a.ts"] > .tree-row').click();
+    await expect(page.locator(".editor:visible")).toHaveAttribute("data-model-uri", "file://" + root + "/a.ts");
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("dirty source");
     await page.getByRole("tree", { name: "Files", exact: true }).focus();
     await page.keyboard.press("Meta+c");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Copied references for");
     await page.getByRole("treeitem", { name: "target", exact: true }).click();
     await page.keyboard.press("Meta+v");
     await expect
@@ -210,7 +215,8 @@ createInterface({input:process.stdin}).on('line',line=>{
     }, root);
     const expanded = Date.now();
     await page.getByRole("treeitem", { name: "bulk", exact: true }).locator(":scope > .tree-row").click();
-    await expect(page.getByRole("treeitem")).toHaveCount(count + 3);
+    await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute("data-row-count", String(count + 3));
+    expect(await page.getByRole("treeitem").count()).toBeLessThan(100);
     const tree = page.getByRole("tree", { name: "Files", exact: true });
     await tree.focus();
     await page.keyboard.press("ArrowDown");
@@ -363,6 +369,7 @@ test("pending collision stays bound to its captured source and originating proje
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.getByRole("tree", { name: "Files", exact: true }).focus();
     await page.keyboard.press("Meta+c");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Copied references for");
     await page.getByRole("treeitem", { name: "target", exact: true }).click();
     await page.keyboard.press("Meta+v");
     await expect
@@ -417,6 +424,7 @@ test("copy delivery updates an early-open clean destination after a second-item 
     await page.getByRole("tree", { name: "Files", exact: true }).focus();
     await page.getByRole("treeitem", { name: "b.ts", exact: true }).click({ modifiers: ["Meta"] });
     await page.keyboard.press("Meta+c");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Copied references for");
     await page.getByRole("treeitem", { name: "target", exact: true }).click();
     await page.keyboard.press("Meta+v");
     await expect

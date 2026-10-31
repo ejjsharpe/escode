@@ -124,6 +124,8 @@ function validate(value: unknown): asserts value is WorkspaceState {
             p.split("/").some((c) => c === ".." || c.toLowerCase() === ".git"),
         ) ||
         (v.files.hideIgnored !== undefined && typeof v.files.hideIgnored !== "boolean") ||
+        (v.files.scrollAnchor !== undefined && (!v.files.scrollAnchor ||
+          !validFile(v.files.scrollAnchor.path) || !Number.isFinite(v.files.scrollAnchor.offset) || v.files.scrollAnchor.offset < 0)) ||
         !Number.isFinite(v.files.scroll) ||
         v.files.scroll < 0)
     )

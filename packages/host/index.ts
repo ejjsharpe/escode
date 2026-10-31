@@ -45,7 +45,8 @@ class BoundedWebSocket extends WebSocket {
     options?: Parameters<WebSocket["send"]>[1] | ((error?: Error) => void),
     callback?: (error?: Error) => void,
   ): void {
-    if (this.bufferedAmount > maximumFrameBytes) { this.terminate(); return; }
+    // The socket also carries admitted file frames and ordinary replies up to 2 MiB.
+    if (this.bufferedAmount + Buffer.byteLength(data as string) > maximumFileFrameBytes) { this.terminate(); return; }
     if (typeof options === "function") super.send(data, options);
     else if (options) super.send(data, options, callback);
     else super.send(data, callback);

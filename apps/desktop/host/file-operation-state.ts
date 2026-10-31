@@ -53,6 +53,8 @@ export function reconcile(state: WorkspaceState, intent: Intent) {
         expanded: map(view.files.expanded),
         selected: map(view.files.selected),
         focus: map([view.files.focus])[0] ?? source.split("/").slice(0, -1).join("/"),
+        scrollAnchor: view.files.scrollAnchor && map([view.files.scrollAnchor.path])[0]
+          ? { ...view.files.scrollAnchor, path: map([view.files.scrollAnchor.path])[0] } : undefined,
       };
     }
     if (view.change && affected(view.change.path, source)) delete view.change;

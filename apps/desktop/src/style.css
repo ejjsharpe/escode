@@ -453,8 +453,15 @@ main[data-agents="true"] > .project-tabs button[aria-pressed="true"] {
   cursor: default;
   font-size: 13px;
 }
-.tree-row span {
-  overflow-wrap: anywhere;
+.tree-row:not(.tree-editing) {
+  height: 28px;
+}
+.tree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tree-row svg {
   flex-shrink: 0;

@@ -310,6 +310,22 @@ test("host approvals retain checkout identity independently of client navigation
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test("Files scroll anchors persist and reject invalid paths or offsets", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-scroll-anchor-"));
+  try {
+    const store = new Workspace(join(dir, "workspace.json"));
+    const state = { projects: [], selected: "", drafts: [], views: {
+      [dir]: { files: { expanded: [], selected: [], focus: "", scroll: 70, scrollAnchor: { path: "folder/file.txt", offset: 7 } } },
+    } };
+    await store.write(state);
+    expect((await store.read()).views[dir].files?.scrollAnchor).toEqual({ path: "folder/file.txt", offset: 7 });
+    for (const anchor of [{ path: "../escape", offset: 0 }, { path: "file", offset: -1 }, { path: "file", offset: Infinity }]) {
+      state.views[dir].files.scrollAnchor = anchor;
+      await expect(store.write(state)).rejects.toThrow();
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 test("fresh SQLite approvals preserve and ignore superseded approval bytes", async () => {
   const { writeFile, readFile } = await import("node:fs/promises");
   const dir = await mkdtemp(join(tmpdir(), "escode-approval-cutover-"));

@@ -201,7 +201,7 @@ test("uncertain rename retains inline input and dirty work, then restart reconci
     await expect(page.locator(".monaco-editor:visible")).toContainText("retained dirty text");
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
-    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock")); // Explicit fixture recovery after confirmed process exit.
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true }); // Explicit fixture recovery after confirmed process exit.
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(page.locator(".toolbar")).toContainText("actual.txt");
@@ -395,7 +395,7 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
-    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     childProcess = app.process();
     page = await app.firstWindow();
@@ -410,20 +410,19 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     );
     await resolved.press("Escape");
     await page.getByRole("button", { name: "Collapse All", exact: true }).click();
-    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByRole("treeitem", { name: "folder", exact: true })).toBeVisible();
     await app.evaluate(() => {
       const cp = process.getBuiltinModule("child_process") as any,
         execute = cp.execFileSync;
-      let remaining = 2;
+      (globalThis as any).failSelectedEntry = true;
       cp.execFileSync = (...args: any[]) => {
-        if (args[1]?.[0] === "list" && args[1][1] === "folder") {
-          if (--remaining === 0) cp.execFileSync = execute;
+        if ((globalThis as any).failSelectedEntry && args[1]?.[0] === "list" && args[1][1] === "folder") {
           throw Error("injected selected-entry listing unavailable");
         }
         return execute(...args);
       };
     });
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await page.getByRole("button", { name: "New File", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText(root + "/folder/deep");
     await expect(page.getByRole("alert")).toContainText(
@@ -440,6 +439,7 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     await app.evaluate(() => {
       const cp = process.getBuiltinModule("child_process") as any,
         execute = cp.execFileSync;
+      (globalThis as any).failSelectedEntry = false;
       (globalThis as any).restoreRootListing = () => { cp.execFileSync = execute; };
       cp.execFileSync = (...args: any[]) => {
         if (args[1]?.[0] === "list" && args[1][1] === ".") {
@@ -451,7 +451,9 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByText(/injected root listing unavailable/)).toBeVisible();
     const tree = page.getByRole("tree", { name: "Files", exact: true });
-    await expect(tree.getByRole("treeitem")).toHaveCount(0);
+    // Failed refresh retains the last successful root listing without retargeting the hidden selection.
+    await expect(tree.getByRole("treeitem", { name: "folder", exact: true })).toBeVisible();
+    await expect(tree).toHaveAttribute("data-row-count", "1");
     await tree.focus();
     await page.keyboard.press("Shift+F10");
     await expect(page.getByRole("menu")).toHaveAttribute("aria-label", "Actions for folder/deep");
@@ -461,10 +463,13 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     await hiddenRename.press("Escape");
     await expect(tree).toBeFocused();
     await app.evaluate(() => (globalThis as any).restoreRootListing());
+    // Capture the hidden target before successful observation prunes the vanished selection.
+    await page.keyboard.press("Shift+F10");
+    await expect(page.getByRole("menu")).toHaveAttribute("aria-label", "Actions for folder/deep");
     await rm(join(root, "folder/deep"), { recursive: true });
-    await page.getByRole("button", { name: "Refresh", exact: true }).click();
-    await expect(page.getByRole("treeitem", { name: "folder", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "New Folder", exact: true }).click();
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page.getByRole("button", { name: "Rename folder/deep", exact: true })).toHaveCount(0);
+    await page.getByRole("menuitem", { name: "New Folder", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText("Selected entry is missing");
     await expect(page.locator(".tree-edit input")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "New Folder", exact: true })).toBeEnabled();
@@ -590,9 +595,9 @@ test("pending entry resolution retains its source across selection and project c
     await writeFile(join(root, "folder/deep/a.txt"), "keep");
     await writeFile(join(root, "other.txt"), "other");
   }
-  const app = await launchDesktop(join(base, "user"));
+  let app = await launchDesktop(join(base, "user"));
   try {
-    const page = await app.firstWindow();
+    let page = await app.firstWindow();
     for (const root of roots) {
       await app.evaluate(({ dialog }, root) => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
@@ -604,7 +609,12 @@ test("pending entry resolution retains its source across selection and project c
     await page.getByRole("treeitem", { name: "folder", exact: true }).click();
     await page.getByRole("treeitem", { name: "deep", exact: true }).click();
     await page.getByRole("button", { name: "Collapse All", exact: true }).click();
-    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    // A fresh process excludes replies from the retired model from the interception below.
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(base, "user/client-workspace-v1.json"), "utf8")).views[roots[0]].files).toMatchObject({ expanded: [], selected: ["folder/deep"] });
+    const exited = new Promise(resolve => app.process().once("exit", resolve));
+    app.process().kill("SIGKILL"); await exited;
+    await rm(join(base, "user/durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
+    app = await launchDesktop(join(base, "user")); page = await app.firstWindow();
     await expect(page.getByRole("treeitem", { name: "other.txt", exact: true })).toBeVisible();
     await page.evaluate(() => {
       // Pause consumption of the real listing, without replacing host validation/data.
@@ -616,8 +626,8 @@ test("pending entry resolution retains its source across selection and project c
             this,
             (value: any) => {
               if (
-                Array.isArray(value?.entries) &&
-                value.entries.some((entry: any) => entry?.path === "folder/deep")
+                Array.isArray(value?.listing?.entries) &&
+                value.listing.entries.some((entry: any) => entry?.path === "folder/deep")
               ) {
                 // oxlint-disable-next-line unicorn/no-thenable -- Restore the original method before pausing.
                 Object.defineProperty(Promise.prototype, "then", { value: then });

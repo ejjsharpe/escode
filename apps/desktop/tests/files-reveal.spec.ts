@@ -91,13 +91,13 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
       });
     await row("ignored.log, unsaved").click({ button: "right" });
     await page.getByRole("menuitem", { name: "Copy Relative Path", exact: true }).click();
-    expect(await clipboardText()).toBe("folder/deep/ignored.log");
+    await expect.poll(clipboardText).toBe("folder/deep/ignored.log");
     await row("ignored.log, unsaved").click({ button: "right" });
     await page.getByRole("menuitem", { name: "Copy Path", exact: true }).click();
-    expect(await clipboardText()).toBe(join(root, "folder/deep/ignored.log"));
+    await expect.poll(clipboardText).toBe(join(root, "folder/deep/ignored.log"));
     await row("ignored.log, unsaved").click({ button: "right" });
     await page.getByRole("menuitem", { name: "Reveal in Finder", exact: true }).click();
-    expect(await app.evaluate(() => (globalThis as any).finderTargets)).toEqual([
+    await expect.poll(() => app.evaluate(() => (globalThis as any).finderTargets)).toEqual([
       join(root, "folder/deep/ignored.log"),
     ]);
     await page
@@ -106,7 +106,7 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
         el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })),
       );
     await page.getByRole("menuitem", { name: "Copy Path", exact: true }).click();
-    expect(await clipboardText()).toBe(root);
+    await expect.poll(clipboardText).toBe(root);
     await page.getByRole("button", { name: "Hide Git-ignored files", exact: true }).click();
     await app.evaluate(() => {
       const cp = process.getBuiltinModule("child_process") as any,
@@ -160,7 +160,7 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
     // Explicit recovery of the test-owned store after confirmed process death.
-    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(
@@ -177,7 +177,13 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
     ).toBe("ignored unsaved");
     await page.screenshot({ path: "test-results/files-reveal.png" });
     await page.getByRole("button", { name: "Collapse All", exact: true }).click();
-    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    // Exercise an actually pending reveal, with no cached or retired-model folder response.
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.expanded).toEqual([]);
+    const exited = new Promise(resolve => app.process().once("exit", resolve));
+    app.process().kill("SIGKILL"); await exited;
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
+    app = await launchDesktop(user); page = await app.firstWindow();
+    await expect(row("folder")).toBeVisible();
     await page.evaluate(() => {
       const then = Promise.prototype.then;
       // oxlint-disable-next-line unicorn/no-thenable -- Pause consumption of a real host listing for the origin race.
@@ -186,7 +192,7 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
           return then.call(
             this,
             (value: any) => {
-              if (value?.entries?.some((e: any) => e.path === "folder/deep")) {
+              if (value?.listing?.entries?.some((e: any) => e.path === "folder/deep")) {
                 // oxlint-disable-next-line unicorn/no-thenable -- Restore before holding the single response.
                 Object.defineProperty(Promise.prototype, "then", { value: then });
                 return new Promise((resolve) => {
@@ -309,7 +315,8 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
       expect(await app.evaluate(() => (globalThis as any).finderTargets)).toEqual(denied ? [] : [join(root, "context.txt")]);
       const listing = await page.evaluate((root) => window.escode.listDirectory(root, "").then((result) => { if (result.kind !== "available") throw Error(result.message); return result.listing; }).then(
         (value) => value, (error) => String(error)), root);
-      if (denied) expect(listing).toMatch(/replaced|quitting/);
+      if (change === "root replacement") expect(listing).toBe("Error: Directory unavailable. Refresh to retry.");
+      else if (change === "quit") expect(listing).toMatch(/quitting/);
       else {
         if (typeof listing === "string") throw Error(listing);
         expect(listing.ignored).toEqual(["active.log"]);

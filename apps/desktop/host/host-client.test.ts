@@ -167,3 +167,18 @@ test("bootstrap rejection retains its diagnostic and releases the failed session
     await expect(client.sendState(null,'chat')).rejects.toThrow('Invalid local bootstrap request 2');
   } finally {await client.close();}
 });
+
+test("large checkout status does not disconnect Files or ordinary queries", async () => {
+  const fixture = socketFixture();
+  const changes = Array.from({ length: 20000 }, (_, i) => ({ path: `folder-${String(i % 200).padStart(3, '0')}/file-${i}.txt`, area: 'untracked' as const }));
+  const host = await startHost({ hostId: 'host', clientId: 'client', origin: 'null',
+    list: async () => ({ kind: 'available', listing: { entries: [], ignored: [] } }),
+    gitStatus: async root => ({ project: root, root, branch: 'main', changes }),
+  });
+  const client = createHostClient(async () => host.bootstrap());
+  try {
+    const results = await Promise.all([client.gitStatus('/repo'), client.gitStatus('/repo')]);
+    expect(results.map(r => r.changes.length)).toEqual([20000, 20000]);
+    expect((await client.listDirectory('/repo', '')).kind).toBe('available');
+  } finally { await client.close(); await host.close(); fixture.restore(); }
+});

@@ -160,11 +160,16 @@ check. Recovery uses host-owned SQLite records keyed by client identity and auth
 that the latest keystroke survives a crash.
 
 **Files view**:
-The project-local lazy nested tree of files in the current checkout. Expansion, keyboard
+The project-local lazy tree of files in the current checkout. Its asynchronous model retains
+complete sorted directory listings independently of the viewport rows. Filenames use fixed-height,
+single-line labels with ellipsis; hover and accessibility retain the full name. Inline fields and
+diagnostics can use additional height. Expansion, keyboard
 focus, multiple selection and scroll are remembered independently per checkout; selection
 is separate from the active document. Coalesced host notifications reconcile loaded directories;
 window focus and explicit Refresh rescan missed events and retry unavailable watches. Expanding
-a cached folder revalidates its listing. External disappearance retains available unsaved buffers
+a resolved cached folder reuses its listing until invalidation; failed reads retain the last
+successful contents with an error. Ready contents appear immediately; only loading feedback
+is delayed. External disappearance retains available unsaved buffers
 and recovery drafts at their original paths. Notifications defer listing changes during inline
 editing until commit or cancel. The tree
 supports empty file/folder creation and basename-only inline Rename through the narrow

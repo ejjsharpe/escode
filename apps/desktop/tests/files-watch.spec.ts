@@ -132,12 +132,14 @@ test("generated tree loads only expanded directories and stays navigable", async
     }, root);
     const opened = performance.now();
     await page.getByRole("button", { name: "Open project…" }).click();
-    await expect(page.getByRole("treeitem")).toHaveCount(200);
+    await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute("data-row-count", "200");
+    expect(await page.getByRole("treeitem").count()).toBeLessThan(100);
     await expect.poll(() => app.evaluate(() => [...(globalThis as any).watched])).toEqual([root]);
     console.log(`LARGE root visible ${(performance.now() - opened).toFixed(0)}ms; 200 rows`);
     const expanded = performance.now();
     await page.getByRole("treeitem", { name: "folder-000", exact: true }).locator(":scope > .tree-row").click();
-    await expect(page.getByRole("treeitem")).toHaveCount(300);
+    await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute("data-row-count", "300");
+    expect(await page.getByRole("treeitem").count()).toBeLessThan(100);
     console.log(`LARGE expand ${(performance.now() - expanded).toFixed(0)}ms; 300 rows`);
     await expect.poll(() => app.evaluate(() => [...(globalThis as any).watched].sort())).toEqual([root, join(root, "folder-000")].sort());
     const navigation = performance.now();

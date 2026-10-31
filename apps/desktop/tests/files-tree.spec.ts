@@ -81,7 +81,7 @@ test("lazy tree keyboard, independent selection, menus, refresh and restart reco
     await expect
       .poll(
         async () =>
-          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.focus,
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.files?.focus,
       )
       .toBe("b.txt");
     app.process().kill("SIGKILL");
@@ -110,7 +110,7 @@ test("lazy tree keyboard, independent selection, menus, refresh and restart reco
   }
 });
 
-test("loaded directories revalidate on expansion; missing paths recover and scroll stays per project", async () => {
+test("cached directories reopen without reloading; explicit refresh recovers and scroll stays per project", async () => {
   const base = await realpath(await mkdtemp(join(tmpdir(), "escode-tree-cache-")));
   const root = join(base, "repo"),
     other = join(base, "other"),
@@ -133,6 +133,8 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
       cp.execFileSync = (...args: any[]) => {
         if (args[1]?.[0] === "list") {
           (globalThis as any).lists.push(args[1][1]);
+          if ((globalThis as any).denyDeep && args[1][1] === "folder/deep")
+            throw Error("ENOENT fixture");
           if ((globalThis as any).denyFolder && args[1][1] === "folder")
             throw Error("Permission denied fixture");
         }
@@ -147,7 +149,8 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
       await expect(page.locator(".view-nav:visible")).toContainText(path);
     };
     await open(root);
-    await expect(page.getByRole("treeitem")).toHaveCount(101);
+    await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute("data-row-count", "101");
+    expect(await page.getByRole("treeitem").count()).toBeLessThan(101);
     expect(new Set(await app.evaluate(() => (globalThis as any).lists))).toEqual(new Set(["."]));
     const folder = page
       .getByRole("treeitem", { name: "folder", exact: true })
@@ -155,11 +158,14 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
     await folder.click();
     await expect(page.getByRole("treeitem", { name: "deep", exact: true })).toBeVisible();
     expect(new Set(await app.evaluate(() => (globalThis as any).lists))).toEqual(new Set([".", "folder"]));
+    // Wait for watch readiness to close the initial listing/subscription gap.
+    await expect.poll(async () => (await app.evaluate(() => (globalThis as any).lists as string[])).filter(path => path === "folder").length).toBeGreaterThanOrEqual(2);
+    const beforeReopen = (await app.evaluate(() => (globalThis as any).lists as string[])).filter(path => path === "folder").length;
     await folder.click();
     await folder.click();
     await expect(page.getByRole("treeitem", { name: "deep", exact: true })).toBeVisible();
-    // Reopening a cached collapsed directory revalidates even after a missed notification.
-    expect((await app.evaluate(() => (globalThis as any).lists as string[])).filter((path) => path === "folder").length).toBeGreaterThanOrEqual(2);
+    // Cached reopening is immediate; explicit Refresh below handles missed notifications.
+    expect((await app.evaluate(() => (globalThis as any).lists as string[])).filter((path) => path === "folder").length).toBe(beforeReopen);
     await app.evaluate(() => {
       (globalThis as any).denyFolder = true;
     });
@@ -184,9 +190,11 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
         return emit.call(this, event, ...args);
       };
     }, root);
-    await rm(join(root, "folder/deep"), { recursive: true });
+    // Fail the requested listing before deleting: a readiness rescan may otherwise prune the click target.
+    await app.evaluate(() => { (globalThis as any).denyDeep = true; });
     await page.getByRole("treeitem", { name: "deep", exact: true }).click();
-    await expect(treeStatus()).toContainText("Use Refresh to retry");
+    await expect(treeStatus()).toContainText("ENOENT fixture");
+    await rm(join(root, "folder/deep"), { recursive: true });
     function treeStatus() {
       return page.getByRole("tree", { name: "Files", exact: true }).getByRole("status");
     }
@@ -227,16 +235,17 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
         return state.selected === root && state.views[root].files.scroll === scroll;
       })
       .toBe(true);
+    const rememberedAnchor = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.scrollAnchor;
+    const anchorOffset = await tree.locator(`[data-path="${rememberedAnchor.path}"]`).evaluate(el => el.getBoundingClientRect().top - el.closest("[role=tree]")!.getBoundingClientRect().top);
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
     await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
-    await expect
-      .poll(() =>
-        page.getByRole("tree", { name: "Files", exact: true }).evaluate((el) => el.scrollTop),
-      )
-      .toBe(scroll);
+    // Unmounted diagnostic rows use estimates after restart; preserve the visible identity and offset.
+    const restoredAnchor = page.locator(`[data-path="${rememberedAnchor.path}"]`);
+    await expect(restoredAnchor).toBeVisible();
+    await expect.poll(async () => Math.abs(await restoredAnchor.evaluate(el => el.getBoundingClientRect().top - el.closest("[role=tree]")!.getBoundingClientRect().top) - anchorOffset)).toBeLessThan(1);
     await page.screenshot({ path: "test-results/files-tree.png" });
   } finally {
     if (app.process().exitCode === null) {

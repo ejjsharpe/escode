@@ -222,6 +222,7 @@ test("Option drop uses shared dirty collision choices, keeps originals and leave
     await row(page, "b.ts").click();
     await page.getByRole("tree", { name: "Files", exact: true }).focus();
     await page.keyboard.press("Meta+c");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Copied references for");
     await app.evaluate(() => {
       (globalThis as any).choice = "Keep Both";
     });
@@ -337,13 +338,13 @@ test("cancelled hover and navigation clear timers and drop authority", async () 
         return d;
       }),
     });
-    await expect(page.getByRole("alert")).toContainText("Only a drag from this checkout");
+    await expect(page.locator('.tree-edit-help[role="alert"]')).toContainText("Only a drag from this checkout");
   } finally {
     await f.close();
   }
 });
 
-test("pending drag move keeps its checkout when a chat selects a linked worktree", async () => {
+test("pending drag move keeps its checkout when opening a linked worktree", async () => {
   const f = await fixture();
   const { page, app, root } = f;
   const linked = join(root, "..", "linked");
@@ -381,9 +382,12 @@ test("pending drag move keeps its checkout when a chat selects a linked worktree
     await begin(page, "a.ts", "target");
     await finish(page);
     await expect.poll(() => app.evaluate(() => typeof (globalThis as any).answer)).toBe("function");
-    await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: "Chat 2", exact: true }).click();
-    await page.getByRole("button", { name: "Files", exact: true }).click();
+    await app.evaluate(({ dialog }, linked) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [linked] });
+    }, linked);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await page.locator(`.project-tab button[aria-pressed][aria-description$=" · ${linked}"]`).click();
+    await page.locator(".view-nav:visible").getByRole("button", { name: "Files", exact: true }).click();
     await expect(page.locator(".view-nav:visible")).toContainText(linked);
     await app.evaluate(() => (globalThis as any).answer());
     await expect
@@ -436,6 +440,7 @@ for (const gesture of ["Option-drag", "clipboard"] as const) {
         await row(page, "a.ts").click();
         await page.getByRole("tree", { name: "Files", exact: true }).focus();
         await page.keyboard.press("Meta+c");
+        await expect(page.locator(".content:visible > [role=status]")).toContainText("Copied references for");
         await row(page, "target").click();
         await page.keyboard.press("Meta+v");
       }
