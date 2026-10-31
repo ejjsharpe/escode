@@ -126,6 +126,10 @@ test("closed editor membership persists independently of catalogue, checkout mem
     };
     expect(await restarted.read()).toEqual(migrated);
     expect(await restarted.approved()).toEqual(state.savedProjects);
+    // Invalid membership cannot erase an acknowledged closed-project recovery draft.
+    await expect(restarted.write({ ...closed, projects: [state.projects[0], state.projects[0]] }))
+      .rejects.toThrow("Duplicate checkout memory");
+    expect(await restarted.read()).toEqual(migrated);
     // Invalid updates cannot erase an acknowledged closed-project recovery draft.
     await expect(
       restarted.write({ ...closed, drafts: [{ ...state.drafts[0], path: "../outside" }] }),
@@ -200,5 +204,18 @@ test("fresh client recovery retains ownership and rejects unsupported or other-c
     await writeFile(file, JSON.stringify({ ...JSON.parse(bytes), storageVersion: 2 }));
     await expect(new Workspace(file, owner).read()).rejects.toThrow("Unsupported");
     expect((await readFile(file, "utf8"))).toContain("available edit");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("checkout approvals retain the native directory identity independently of client membership", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-checkout-approval-"));
+  try {
+    const store = new Workspace(join(dir, "workspace.json"));
+    await store.approve(dir, dir, "1:42");
+    await store.write({ projects: [], selected: "agents", views: {}, drafts: [] });
+    await expect(store.approve(dir, dir, "1:43")).rejects.toThrow("Checkout identity changed");
+    expect(await new Workspace(join(dir, "workspace.json")).approved()).toEqual([
+      { project: dir, root: dir, directoryIdentity: "1:42" },
+    ]);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

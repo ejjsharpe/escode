@@ -53,6 +53,8 @@ function validate(value: unknown): asserts value is WorkspaceState {
     )
   )
     throw Error("Invalid project memory");
+  if (new Set(s.projects.map(p => p.root)).size !== s.projects.length)
+    throw Error("Duplicate checkout memory");
   for (const d of s.drafts) {
     if (
       !d ||
@@ -112,7 +114,7 @@ export class Workspace {
       throw Error("Unsupported or wrongly owned client recovery store; retained for inspection.");
     return value;
   }
-  private async readApprovals(): Promise<{ project: string; root: string }[]> {
+  private async readApprovals(): Promise<{ project: string; root: string; directoryIdentity?: string }[]> {
     try {
       const value = JSON.parse(
         await readFile(join(dirname(this.file), "approved-projects.json"), "utf8"),
@@ -125,7 +127,8 @@ export class Workspace {
             typeof p.project !== "string" ||
             !isAbsolute(p.project) ||
             typeof p.root !== "string" ||
-            !isAbsolute(p.root),
+            !isAbsolute(p.root) ||
+            (p.directoryIdentity !== undefined && !/^\d+:\d+$/.test(p.directoryIdentity)),
         )
       )
         throw Error("Invalid project approvals. Existing data is retained.");
@@ -139,12 +142,18 @@ export class Workspace {
     await this.queue;
     return this.readApprovals();
   }
-  approve(project: string, root: string) {
+  approve(project: string, root: string, directoryIdentity?: string) {
     return this.change(async () => {
       if (!isAbsolute(project) || !isAbsolute(root)) throw Error("Invalid project approval");
       const approved = await this.readApprovals();
-      if (!approved.some((p) => p.project === project && p.root === root)) {
-        approved.push({ project, root });
+      if (directoryIdentity !== undefined && !/^\d+:\d+$/.test(directoryIdentity))
+        throw Error("Invalid checkout identity");
+      const previous = approved.find((p) => p.project === project && p.root === root);
+      if (previous?.directoryIdentity && directoryIdentity && previous.directoryIdentity !== directoryIdentity)
+        throw Error("Checkout identity changed. Restore the original directory.");
+      if (!previous || directoryIdentity && !previous.directoryIdentity) {
+        if (previous) previous.directoryIdentity = directoryIdentity;
+        else approved.push({ project, root, ...(directoryIdentity ? { directoryIdentity } : {}) });
         await this.replace(join(dirname(this.file), "approved-projects.json"), approved);
       }
     });

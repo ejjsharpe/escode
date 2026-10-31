@@ -8,13 +8,18 @@ import { launchDesktop, readChats } from "./desktop";
 
 test("approved projects reopen across repeated restarts without choosing directories again", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-reopen-")));
-  const roots = [join(dir, "alpha"), join(dir, "beta")];
+  const roots = [join(dir, "alpha"), join(dir, "linked"), join(dir, "beta")];
   const user = join(dir, "user");
-  for (const root of roots) {
+  for (const root of [roots[0], roots[2]]) {
     execFileSync("git", ["init", root]);
     await writeFile(join(root, "a.txt"), root);
   }
-  let app = await launchDesktop(user);
+  execFileSync("git", ["-C", roots[0], "add", "."]);
+  execFileSync("git", ["-C", roots[0], "-c", "user.name=Test", "-c", "user.email=t@example.com", "commit", "-m", "initial"]);
+  execFileSync("git", ["-C", roots[0], "worktree", "add", "-b", "linked", roots[1]]);
+  await writeFile(join(roots[1], "a.txt"), roots[1]);
+  await writeFile(join(dir, "codex"), "#!/bin/sh\nexit 127\n", { mode: 0o700 });
+  let app = await launchDesktop(user, dir);
   try {
     let page = await app.firstWindow();
     for (const root of roots) {
@@ -26,25 +31,42 @@ test("approved projects reopen across repeated restarts without choosing directo
       await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
       await expect(page.locator(".monaco-editor:visible")).toContainText(root);
     }
+    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.evaluate(async root => {
+      const chat = await window.escode.chat("create", root, root);
+      await window.escode.chat("draft", root, chat.id, "original checkout composer");
+    }, roots[0]);
+    await page.getByRole("navigation", { name: "Projects" }).locator(`button[aria-pressed][aria-description$="${roots[0]}"]`).click();
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await expect(page.getByLabel("Message Codex")).toHaveValue("original checkout composer");
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
     for (let restart = 0; restart < 2; restart++) {
+      await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); });
       await app.close();
-      app = await launchDesktop(user);
+      app = await launchDesktop(user, dir);
       page = await app.firstWindow();
       const loaded = await page.evaluate(() => window.escode.lifecycle("load"));
       expect(loaded.errors).toEqual([]);
       expect(loaded.restored.map((p) => p.root)).toEqual(roots);
       expect(loaded.restored.some((p) => p.approvalRequired)).toBe(false);
-      await expect(page.locator("header")).toContainText(roots[1]);
+      if (restart === 0) await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true");
+      else await expect(page.locator("header")).toContainText(roots[1]);
+      await expect(page.locator(".project-tab")).toHaveCount(3);
       for (const root of roots) {
         await page
           .getByRole("navigation", { name: "Projects" })
-          .getByRole("button", { name: root.split("/").pop()!, exact: true })
+          .locator(`button[aria-pressed][aria-description$="${root}"]`)
           .click();
-        await expect(page.locator(".monaco-editor:visible")).toContainText(root);
+        await expect(page.getByRole("navigation", { name: "Project views" }).getByRole("button", { name: root === roots[0] ? "Chats" : root === roots[2] ? "Source Control" : "Files", exact: true })).toHaveAttribute("aria-pressed", "true");
+        if (root === roots[0]) await expect(page.getByLabel("Message Codex")).toHaveValue("original checkout composer");
+        if (root === roots[1]) await expect(page.locator(".monaco-editor:visible")).toContainText(root);
       }
+      await page.getByRole("navigation", { name: "Projects" }).locator(`button[aria-pressed][aria-description$="${roots[1]}"]`).click();
       await expect(page.getByRole("alert").filter({ hasText: "approve" })).toHaveCount(0);
     }
   } finally {
+    await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); });
     await app.close();
     await rm(dir, { recursive: true, force: true });
   }
@@ -147,9 +169,15 @@ test("renderer state cannot grant file access or overwrite approvals; native reo
     expect(await readFile(file)).toEqual(bytes);
     expect(await readFile(join(outside, "private.txt"), "utf8")).toBe("outside");
     await page.evaluate((state) => window.escode.lifecycle("persist", state), original);
+    const recoveryBytes = await readFile(join(user, "client-workspace-v1.json"));
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async (_window: unknown, options?: any) => ({
+        response: options.buttons[0] === "Save" ? 1 : 0, checkboxChecked: false,
+      });
+    });
     await app.close();
-    await writeFile(join(user, "client-workspace-v1.json"), JSON.stringify(original));
-    await rm(file);
+    await writeFile(join(user, "client-workspace-v1.json"), recoveryBytes);
+    await writeFile(file, JSON.stringify([{ project: root, root }]));
     app = await launchDesktop(user, bin);
     page = await app.firstWindow();
     await expect(
@@ -189,7 +217,8 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
   for (const path of [root, other]) execFileSync("git", ["init", path]);
   await writeFile(join(root, "a.txt"), "original");
   await writeFile(join(other, "b.txt"), "other project");
-  let app = await launchDesktop(user);
+  await writeFile(join(dir, "codex"), "#!/bin/sh\nexit 127\n", { mode: 0o700 });
+  let app = await launchDesktop(user, dir);
   const cleanup = async () => {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async (_window: unknown, options?: any) => ({
@@ -216,6 +245,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
     const chat = await page.evaluate(async (root) => {
       const chat = await window.escode.chat("create", root, root);
       await window.escode.chat("draft", root, chat.id, "retained chat draft");
+      await window.escode.chat("open", root, chat.id).catch(() => {});
       return chat;
     }, root);
     await expect
@@ -243,34 +273,48 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
     app.process().kill("SIGKILL");
     await exited;
     await rm(join(user, "foundation", "owner.lock")); // Fixture-owned recovery after the confirmed crash.
-    app = await launchDesktop(user);
+    // A new repository at the same pathname must not inherit the original approval.
+    execFileSync("git", ["init", root]);
+    await writeFile(join(root, "a.txt"), "replacement bytes");
+    app = await launchDesktop(user, dir);
     page = await app.firstWindow();
+    expect((await page.evaluate(() => window.escode.lifecycle("load"))).restored.find(p => p.root === root)?.branch)
+      .toBe("Checkout unavailable");
     await expect(
       page
         .getByRole("navigation", { name: "Projects" })
         .getByRole("button", { name: "repo", exact: true }),
     ).toBeVisible();
     await expect(page.locator(".monaco-editor:visible")).toContainText("recovery edits");
+    await page.getByRole("button", { name: "Retry checkout", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: /^Checkout unavailable\./ })).toBeVisible();
+    expect(await readFile(join(root, "a.txt"), "utf8")).toBe("replacement bytes");
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "Chat 1", exact: true }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue(
       "retained chat draft",
     );
     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
-    await expect(page.getByRole("alert").filter({ hasText: "Checkout unavailable" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: /^Checkout unavailable or changed:/ })).toBeVisible();
     await page
       .getByRole("navigation", { name: "Projects" })
       .getByRole("button", { name: "other", exact: true })
       .click();
     await page.getByRole("treeitem", { name: "b.txt", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("other project");
-    await rename(root + "-away", root);
+    await rm(root, { recursive: true });
     await page
       .getByRole("navigation", { name: "Projects" })
       .getByRole("button", { name: "repo", exact: true })
       .click();
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await page.getByRole("button", { name: "Retry checkout", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: /^Checkout unavailable\./ })).toBeVisible();
+    await expect(realpath(root)).rejects.toThrow();
+    await expect(page.locator(".monaco-editor:visible")).toContainText("recovery edits");
+    await rename(root + "-away", root);
+    await page.getByRole("button", { name: "Retry checkout", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Retry checkout", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
     await expect.poll(() => readFile(join(root, "a.txt"), "utf8")).toBe("recovery edits");
     await expect(page.getByRole("status").filter({ hasText: "Saved a.txt" })).toBeVisible();
