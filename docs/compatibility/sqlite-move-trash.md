@@ -22,3 +22,11 @@ The new hard-crash cases cover move only, not actual native Trash mutation/resul
 No physical full-disk, power-loss, production capacity or latency claim is made. WAL NORMAL retains its accepted OS/power-loss limit. Existing native and external-writer race guarantees are unchanged.
 
 Started at integration 2fc88c1 in the clean isolated worktree t3-18ae04ab; accepted baseline 0a9c981 remains an ancestor. Integration was merged before reporting and was still 2fc88c1. No issue write, closure, PR or integration-branch merge was performed.
+
+## Final integration checks
+
+Merged integration e1fc441 (durable preparation), resolving the worker request-dispatch conflict by retaining preparation observation and adding fileFacts to the recovery-kind allowlist. On that merged tree, all 52 focused operation/journal/SQLite recovery tests and all five durable Send tests pass. Typecheck, lint, build and macOS package pass.
+
+The broad serial suite overlapped the integration merge and reported durable-Send and worktree-preparation failures. It is not a clean final full-suite result; durable Send passes on the subsequent isolated rerun. Complete broad regression qualification remains outstanding.
+
+A further integration gap is explicit: after restart, durable facts retain a handoff gate until an explicit client acknowledgement. The existing load-workspace route does not deliver a new acknowledgement obligation to the renderer. Automatic restart handoff delivery must be integrated before this branch is suitable for acceptance; otherwise a recovered client can remain blocked from subsequent file operations. The direct coordinator test explicitly acknowledges and therefore does not establish this UI behavior.
