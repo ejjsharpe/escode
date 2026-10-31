@@ -74,17 +74,38 @@ test("authenticated dropped socket response recovers status after reconnect with
   const store = new Chats(join(dir, "chats"));
   const db = store.database;
   let turns = 0;
-  const service = new ChatService(store, async () => ({
+  let notify: (message: any) => void = () => {};
+  const service = new ChatService(store, async (_cwd, receive) => { notify = receive; return ({
     async request(method: string, params: any) {
       if (method === "account/read") return { account: { type: "chatgpt" } };
       if (method === "thread/start" || method === "thread/resume") return { thread: { id: params.threadId ?? "provider" }, cwd: dir, model: "fixture", reasoningEffort: "high", approvalPolicy: "on-request", sandbox: { type: "workspaceWrite" } };
       if (method === "turn/start") { turns++; return { turn: { id: "turn" } }; }
       return {};
     }, respond() {}, close() {},
-  }));
+  }); });
   try {
+    const { execFileSync } = await import("node:child_process");
+    const { writeFile, mkdir, symlink } = await import("node:fs/promises");
+    execFileSync("git", ["init", dir]);
+    execFileSync("git", ["-C", dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "base"]);
+    await writeFile(join(dir, ".gitignore"), "chats*\nignored.txt\n");
+    await writeFile(join(dir, "tracked.txt"), "staged bytes");
+    execFileSync("git", ["-C", dir, "add", "tracked.txt"]);
+    await mkdir(join(dir, "deleted"));
+    await writeFile(join(dir, "deleted/file"), "removed");
+    execFileSync("git", ["-C", dir, "add", "deleted/file"]);
+    await rm(join(dir, "deleted"), { recursive: true });
+    await mkdir(join(dir, "empty"));
+    await symlink("tracked.txt", join(dir, "link"));
+    const index = await readFile(join(dir, ".git/index"));
+    await writeFile(join(dir, "tracked.txt"), "disk bytes");
+    await writeFile(join(dir, "ignored.txt"), "excluded");
+    await writeFile(join(dir, "manual.txt"), "saved before turn");
+    execFileSync("git", ["init", join(dir, "nested")]);
+    await writeFile(join(dir, "nested/secret"), "excluded nested contents");
     const chat = await store.create(dir);
     await service.open(dir, chat.id);
+    const status = execFileSync("git", ["--no-optional-locks", "-C", dir, "status", "--porcelain"], { encoding: "utf8" });
     const sends = new DurableSend(db);
     const host = await startHost({ ...await db.ready, origin: "null", list: async () => ({ kind: "denied", message: "unused" }),
       sendMessage: command => sends.execute(command, async () => { await service.send(command.project, command.id, command.text); }), sendStatus: id => sends.receipt(id) });
@@ -98,6 +119,39 @@ test("authenticated dropped socket response recovers status after reconnect with
       expect((await client.sendStatus("one"))?.status).toBe("accepted");
       await client.sendMessage(command);
       expect(turns).toBe(1);
+      const checkpoints = await db.command("checkpoints", { commandId: chat.id });
+      expect(checkpoints).toHaveLength(1);
+      expect(checkpoints[0].files["manual.txt"].content).toBe(Buffer.from("saved before turn").toString("base64"));
+      expect(checkpoints[0].files["tracked.txt"].content).toBe(Buffer.from("disk bytes").toString("base64"));
+      expect(checkpoints[0].files["ignored.txt"]).toBeUndefined();
+      expect(Object.keys(checkpoints[0].files).some(path => path.startsWith("nested"))).toBe(false);
+      expect(checkpoints[0].files["deleted/file"]).toBeNull();
+      expect(checkpoints[0].files.link).toEqual({ mode: 0o120000, content: Buffer.from("tracked.txt").toString("base64") });
+      expect(checkpoints[0].files.empty).toBeUndefined();
+      expect(execFileSync("git", ["--no-optional-locks", "-C", dir, "status", "--porcelain"], { encoding: "utf8" })).toBe(status);
+      expect(await readFile(join(dir, ".git/index"))).toEqual(index);
+      const complete = () => notify({ method: "turn/completed", params: { threadId: "provider", turn: { id: "turn", status: "completed" } } });
+      complete();
+      await writeFile(join(dir, "manual.txt"), "intervening manual save");
+      await client.sendMessage({ ...command, commandId: "two" });
+      const fresh = await db.command("checkpoints", { commandId: chat.id });
+      expect(fresh).toHaveLength(2);
+      expect(fresh[1].id).not.toBe(fresh[0].id);
+      expect(fresh[1].files["manual.txt"].content).toBe(Buffer.from("intervening manual save").toString("base64"));
+      complete();
+      await writeFile(join(dir, "large"), Buffer.alloc(8 * 1024 * 1024 + 1));
+      await client.sendMessage({ ...command, commandId: "exhausted" });
+      expect((await db.command("checkpoints", { commandId: chat.id }))[2]).toMatchObject({ availability: "unavailable", gitBase: checkpoints[0].gitBase });
+      expect(turns).toBe(3);
+      complete();
+      const { DatabaseSync } = await import("node:sqlite");
+      const fault = new DatabaseSync(join(dir, "chats.sqlite-state-v1/state.sqlite"));
+      fault.exec("CREATE TRIGGER fail_admission BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'admission failure'); END");
+      await expect(client.sendMessage({ ...command, commandId: "refused" })).rejects.toThrow();
+      expect(turns).toBe(3);
+      fault.close();
+      expect(checkpoints[0].threadId).toBe("provider");
+      expect(checkpoints[0].gitBase).toBe(execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim());
     } finally { await client.close(); await host.close(); }
   } finally { globalThis.WebSocket = original; service.close(); await db.close(); await rm(dir, { recursive: true, force: true }); }
 });

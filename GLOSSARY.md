@@ -93,7 +93,7 @@ A bounded portion of a saved chat's provider history, loaded explicitly through 
 The following historical-work terms describe the [accepted turn-level time-travel specification](docs/specifications/durable-state-and-time-travel.md), not implemented behavior.
 
 **Turn checkpoint**:
-A recorded boundary before or after an agent turn, identifying its historical conversation context and the availability of captured saved working files. It is distinct from a user's Git commit and from a client's unsaved recovery draft.
+A recorded boundary before or after an agent turn, identifying its historical conversation context and the availability of captured saved working files. It is distinct from a user's Git commit and from a client's unsaved recovery draft. A before-message boundary captures saved disk contents afresh before Send dispatch, with its provider thread, exact checkout identity and Git base retained independently of file coverage; missing coverage does not authorize historical file operations.
 
 **Conversation rewind**:
 An explicit return of an existing chat to an earlier conversation boundary, with a separate choice about restoring files. Looking through history does not rewind the conversation.
