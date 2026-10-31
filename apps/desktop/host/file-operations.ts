@@ -27,7 +27,7 @@ export class FileOperations {
     file: string,
     owner?: { hostId: string; clientId: string },
   ) {
-    this.journal = new FileOperationJournal(file, owner, workspace.database);
+    this.journal = new FileOperationJournal(file, owner ?? workspace.owner, workspace.database);
   }
   async recover(project: (root: string) => Promise<Checkout>) {
     const record = await this.journal.readIntent();

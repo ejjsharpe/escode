@@ -149,14 +149,8 @@ function validate(value: unknown): asserts value is WorkspaceState {
 export class Workspace {
   private queue: Promise<unknown> = Promise.resolve();
   private revision?: number;
-  constructor(private file: string, private owner?: { hostId: string; clientId: string }, readonly database?: DurableState) {}
-  private decode(value: unknown) {
-    if (!this.owner) return value;
-    const stored = value as { storageVersion?: number; hostId?: string; clientId?: string };
-    if (stored?.storageVersion !== 1 || stored.hostId !== this.owner.hostId || stored.clientId !== this.owner.clientId)
-      throw Error("Unsupported or wrongly owned client recovery store; retained for inspection.");
-    return value;
-  }
+  constructor(private file: string, readonly owner: { hostId: string; clientId: string }, readonly database: DurableState) {}
+
   private async readApprovals(): Promise<{ project: string; root: string; directoryIdentity?: string }[]> {
     try {
       const value = JSON.parse(
@@ -211,9 +205,9 @@ export class Workspace {
   async read(): Promise<WorkspaceState> {
     await this.queue;
     try {
-      const stored = this.database ? await this.database.recoveryRead(this.owner!.clientId, "workspace") : undefined;
-      if (stored) this.revision = stored.revision;
-      const state: unknown = stored ? stored.body ?? emptyWorkspace() : this.decode(JSON.parse(await readFile(this.file, "utf8")));
+      const stored = await this.database.recoveryRead(this.owner.clientId, "workspace");
+      this.revision = stored.revision;
+      const state: unknown = stored.body ?? emptyWorkspace();
       validate(state);
       for (const view of Object.values(state.views)) {
         if (!view.files) {
@@ -253,14 +247,12 @@ export class Workspace {
     return task;
   }
   private async replace(file: string, value: unknown) {
-    if (this.database && file === this.file) {
-      if (this.revision === undefined) this.revision = (await this.database.recoveryRead(this.owner!.clientId, "workspace")).revision;
-      await this.database.recoveryWrite(this.owner!.clientId, "workspace", value, this.revision);
+    if (file === this.file) {
+      if (this.revision === undefined) this.revision = (await this.database.recoveryRead(this.owner.clientId, "workspace")).revision;
+      await this.database.recoveryWrite(this.owner.clientId, "workspace", value, this.revision);
       this.revision++;
       return;
     }
-    return atomicWriteJson(file, () => this.owner && file === this.file
-      ? { ...(value === null ? { intent: null } : value as object), storageVersion: 1, ...this.owner }
-      : value);
+    return atomicWriteJson(file, () => value);
   }
 }

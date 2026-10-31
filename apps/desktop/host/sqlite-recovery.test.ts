@@ -89,18 +89,34 @@ test("authenticated Save fails closed on admission failure and retains edits aft
   } finally { globalThis.WebSocket = originalSocket; project.close(); await db.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
-test("SIGKILL retains acknowledged recovery text and interrupted Save evidence without replay", async () => {
-  const { spawn } = await import("node:child_process");
-  const { pathToFileURL } = await import("node:url");
-  const dir = await mkdtemp(join(tmpdir(), "escode-save-crash-"));
-  await writeFile(join(dir, "a.txt"), "external disk");
-  const script = `const { DurableState } = await import(${JSON.stringify(pathToFileURL(join(import.meta.dirname, "durable-state.ts")).href)});
-    const db = new DurableState(${JSON.stringify(join(dir, "db"))});
+test.each(["mutation", "outcome"])("SIGKILL after native Save %s retains edits and reconciles without replay", async window => {
+  const { spawn, execFileSync } = await import("node:child_process");
+  const { realpath } = await import("node:fs/promises");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-save-crash-")));
+  execFileSync("git", ["init", dir]);
+  await writeFile(join(dir, "a.txt"), "original");
+  const moduleUrl = (name: string) => JSON.stringify(join(import.meta.dirname, name + ".ts"));
+  const script = `const { DurableState } = await import(${moduleUrl("durable-state")});
+    const { Workspace, emptyWorkspace } = await import(${moduleUrl("workspace")});
+    const { FileOperations } = await import(${moduleUrl("file-operations")});
+    const { Checkout } = await import(${moduleUrl("project")});
+    const dir = ${JSON.stringify(dir)};
+    const db = new DurableState(dir + '/db');
     const owner = await db.ready;
-    await db.recoveryWrite(owner.clientId, 'workspace', { projects: [], selected: '', views: {}, drafts: [{ root: ${JSON.stringify(dir)}, path: 'a.txt', text: 'crash edit', disk: { text: 'old disk', version: 'old' } }] }, 0);
-    await db.recoveryWrite(owner.clientId, 'intent', { root: ${JSON.stringify(dir)}, checkoutIdentity: '1:2', source: 'a.txt', destination: '', kind: 'save', identity: '1:3', saveText: 'crash edit' }, 0);
-    console.log(JSON.stringify(owner)); setInterval(() => {}, 1000);`;
-  const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "pipe"] });
+    const project = await Checkout.open(dir);
+    const workspace = new Workspace(dir + '/unused', owner, db);
+    const state = emptyWorkspace();
+    const baseline = await project.read('a.txt');
+    state.drafts = [{ root: dir, path: 'a.txt', text: 'crash edit', disk: baseline }];
+    await workspace.write(state);
+    const pause = async () => { console.log(JSON.stringify(owner)); await new Promise(() => {}); };
+    ${window === "mutation" ? `const save = project.save.bind(project); project.save = async (...args) => { const result = await save(...args); await pause(); return result; };` : `workspace.write = pause;`}
+    await new FileOperations(workspace, dir + '/intent', owner).save(project, 'a.txt', 'crash edit', baseline.version, () => {});`;
+  const { build } = await import("esbuild");
+  const { copyFile } = await import("node:fs/promises");
+  await build({ stdin: { contents: script, resolveDir: import.meta.dirname }, outfile: join(dir, "child.mjs"), bundle: true, platform: "node", format: "esm" });
+  await copyFile(join(import.meta.dirname, "sqlite-worker.cjs"), join(dir, "sqlite-worker.cjs"));
+  const child = spawn(process.execPath, [join(dir, "child.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
   let db: DurableState | undefined;
   try {
     const owner = await new Promise<any>((resolve, reject) => {
@@ -112,11 +128,21 @@ test("SIGKILL retains acknowledged recovery text and interrupted Save evidence w
     });
     const exited = new Promise(resolve => child.once("exit", resolve));
     child.kill("SIGKILL"); await exited;
+    expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("crash edit");
     db = new DurableState(join(dir, "db"));
     expect(await db.ready).toMatchObject({ hostId: owner.hostId, clientId: owner.clientId });
-    expect((await new Workspace(join(dir, "old.json"), owner, db).read()).drafts[0]).toMatchObject({ text: "crash edit", disk: { text: "old disk", version: "old" } });
-    expect(await new FileOperationJournal(join(dir, "intent.json"), owner, db).readIntent()).toMatchObject({ kind: "save", saveText: "crash edit" });
-    expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("external disk");
+    const workspace = new Workspace(join(dir, "unused"), owner, db);
+    expect((await workspace.read()).drafts[0]).toMatchObject({ text: "crash edit", disk: { text: "original" } });
+    expect(await new FileOperationJournal(join(dir, "intent"), owner, db).readIntent()).toMatchObject({ kind: "save", saveText: "crash edit", ...(window === "outcome" ? { completed: true } : {}) });
+    await writeFile(join(dir, "a.txt"), "external after crash");
+    const { Checkout } = await import("./project");
+    const { FileOperations } = await import("./file-operations");
+    const project = await Checkout.open(dir);
+    try {
+      await new FileOperations(workspace, join(dir, "intent"), owner).recover(async () => project);
+      expect((await workspace.read()).drafts[0].text).toBe("crash edit");
+      expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("external after crash");
+    } finally { project.close(); }
   } finally { child.kill("SIGKILL"); await db?.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -134,4 +160,65 @@ test("a stale recovery writer cannot discard a newer client's available text", a
     await expect(stale.write(emptyWorkspace())).rejects.toThrow("Recovery storage changed");
     expect((await first.read()).drafts).toEqual(state.drafts);
   } finally { await db.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("independent authenticated clients retain text and baselines across Save, acknowledgement and late snapshots", async () => {
+  const { realpath } = await import("node:fs/promises");
+  const { execFileSync } = await import("node:child_process");
+  const { Checkout } = await import("./project");
+  const { FileOperations } = await import("./file-operations");
+  const { startHost } = await import("@escode/host");
+  const { createHostClient } = await import("@escode/client-runtime");
+  const { default: WebSocket } = await import("ws");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-independent-save-")));
+  execFileSync("git", ["init", dir]);
+  await writeFile(join(dir, "a.txt"), "original");
+  const project = await Checkout.open(dir);
+  const db = new DurableState(join(dir, "db"));
+  const originalSocket = globalThis.WebSocket;
+  globalThis.WebSocket = class extends WebSocket { constructor(url: string) { super(url, { origin: "null" }); } } as unknown as typeof globalThis.WebSocket;
+  const connections: { close(): Promise<void> }[] = [];
+  try {
+    const owner = await db.ready;
+    const baseline = await project.read("a.txt");
+    const connect = async (clientId: string, text: string) => {
+      const identity = { ...owner, clientId };
+      const workspace = new Workspace(join(dir, "unused"), identity, db);
+      const state = emptyWorkspace();
+      state.drafts = [{ root: dir, path: "a.txt", text, disk: baseline }];
+      await workspace.write(state);
+      const operations = new FileOperations(workspace, join(dir, "intent"), identity);
+      const host = await startHost({ ...identity, origin: "null", list: async () => ({ kind: "denied", message: "unused" }),
+        saveFile: (...args) => operations.save(project, args[1], args[2], args[3], () => {}),
+        ackFileOperation: async () => { await operations.ack(); },
+        persistWorkspace: value => operations.persist(value),
+        loadWorkspace: async () => ({ state: await workspace.read(), restored: [], errors: [] }),
+      });
+      connections.push(host);
+      const client = createHostClient(async () => host.bootstrap());
+      connections.push(client);
+      return { client, state };
+    };
+    const a = await connect(owner.clientId, "A edit"), b = await connect("second-client", "B edit");
+    expect(await a.client.saveFile(dir, "a.txt", "A edit", baseline.version)).toMatchObject({ kind: "saved", persistencePending: false });
+    await a.client.ackFileOperation(dir);
+    // This renderer snapshot was captured before Save's baseline handoff.
+    a.state.drafts[0].text = "A newer edit";
+    await a.client.persistWorkspace(a.state);
+    expect((await a.client.loadWorkspace()).state.drafts[0]).toMatchObject({ text: "A newer edit", disk: { text: "A edit" } });
+    expect((await b.client.loadWorkspace()).state.drafts[0]).toEqual(b.state.drafts[0]);
+    expect(await b.client.saveFile(dir, "a.txt", "B edit", baseline.version)).toMatchObject({ kind: "conflict" });
+    await b.client.ackFileOperation(dir);
+    await b.client.persistWorkspace(b.state);
+    expect((await b.client.loadWorkspace()).state.drafts[0]).toEqual(b.state.drafts[0]);
+    expect((await a.client.loadWorkspace()).state.drafts[0]).toMatchObject({ text: "A newer edit", disk: { text: "A edit" } });
+    expect(await b.client.saveFile(dir, "a.txt", "B edit", (await project.read("a.txt")).version)).toMatchObject({ kind: "saved", persistencePending: false });
+    await b.client.ackFileOperation(dir);
+    expect((await b.client.loadWorkspace()).state.drafts[0]).toMatchObject({ text: "B edit", disk: { text: "B edit" } });
+    expect((await a.client.loadWorkspace()).state.drafts[0]).toMatchObject({ text: "A newer edit", disk: { text: "A edit" } });
+    expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("B edit");
+  } finally {
+    for (const connection of connections.reverse()) await connection.close();
+    globalThis.WebSocket = originalSocket; project.close(); await db.close(); await rm(dir, { recursive: true, force: true });
+  }
 });

@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect, type Page } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, rename, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -87,7 +88,7 @@ test("real drag hover, Option copy and confirmed dirty move retain disk, drafts 
       .poll(() => readFile(join(root, "target/a.ts"), "utf8").catch(String))
       .toBe("source disk");
     const drafts = async () =>
-      JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts;
+      JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts;
     await expect
       .poll(async () => (await drafts()).find((d: any) => d.path === "target/a.ts")?.text)
       .toBe("unsaved source");
@@ -236,7 +237,7 @@ test("Option drop uses shared dirty collision choices, keeps originals and leave
     ]);
     expect(await readFile(join(root, "target/a.ts"), "utf8")).toBe("destination disk");
     expect(
-      JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+      JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
         (d: any) => d.path === "target/a.ts",
       ).text,
     ).toBe("destination unsaved");

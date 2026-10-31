@@ -1,3 +1,4 @@
+import { readRecoveryFixture, writeRecoveryFixture } from "./desktop";
 import { writeChatFixture, readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, realpath, rename, stat, rm } from "node:fs/promises";
@@ -51,10 +52,10 @@ test("saved-project registration and interrupted move recovery survive together 
     views: { [root]: { path: "folder/a.ts", directory: "folder" } },
     drafts: [{ root, path: "folder/a.ts", text: "unsaved recovered text", disk }],
   };
-  await writeFile(join(user, "client-workspace-v1.json"), JSON.stringify(legacy));
+  await writeRecoveryFixture(join(user, "client-workspace-v1.json"), JSON.stringify(legacy));
   const checkout = await stat(root),
     source = await stat(join(root, "folder"));
-  await writeFile(
+  await writeRecoveryFixture(
     join(user, "client-file-operation-v1.json"),
     JSON.stringify({
       root,
@@ -78,11 +79,11 @@ test("saved-project registration and interrupted move recovery survive together 
       await expect
         .poll(
           async () =>
-            JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).savedProjects,
+            JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).savedProjects,
         )
         .toEqual(expectedSaved);
       const durable: WorkspaceState = JSON.parse(
-        await readFile(join(user, "client-workspace-v1.json"), "utf8"),
+        await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"),
       );
       expect(durable.views[root]).toMatchObject({
         path: "moved/a.ts",
@@ -92,7 +93,7 @@ test("saved-project registration and interrupted move recovery survive together 
       expect(durable.drafts).toEqual([
         { root, path: "moved/a.ts", text: "unsaved recovered text", disk },
       ]);
-      expect(JSON.parse(await readFile(join(user, "client-file-operation-v1.json"), "utf8"))).toMatchObject({ storageVersion: 1, intent: null, records: [] });
+      expect(JSON.parse(await readRecoveryFixture(join(user, "client-file-operation-v1.json"), "utf8"))).toBeNull();
       await expect(readFile(join(root, "folder/a.ts"))).rejects.toThrow();
       expect(await readFile(join(root, "moved/a.ts"), "utf8")).toBe(disk.text);
       await page.getByRole("button", { name: "Agents", exact: true }).click();
@@ -124,13 +125,13 @@ test("saved-project registration and interrupted move recovery survive together 
       if (restart === 0) {
         await expect
           .poll(
-            async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected,
+            async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).selected,
           )
           .toBe(root);
         const exit = new Promise((resolve) => app.process().once("exit", resolve));
         app.process().kill("SIGKILL");
         await exit;
-        await rm(join(user, "foundation/owner.lock"));
+        await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
         app = await launchDesktop(user);
       }
     }
@@ -164,7 +165,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
   ]);
   execFileSync("git", ["-C", root, "worktree", "add", "-b", "linked", linked]);
   await writeFile(join(user, "approved-projects.json"), JSON.stringify([{ project: root, root }]));
-  await writeFile(
+  await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
@@ -184,7 +185,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
   );
   const checkout = await stat(root),
     source = await stat(join(root, "folder"));
-  await writeFile(
+  await writeRecoveryFixture(
     join(user, "client-file-operation-v1.json"),
     JSON.stringify({
       root,
@@ -210,10 +211,10 @@ test("closed editor retains recovered move mappings and drafts through restart a
       await expect
         .poll(
           async () =>
-            JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).savedProjects,
+            JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).savedProjects,
         )
         .toEqual([{ project: root, root }]);
-      const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+      const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
       expect(state.projects).toEqual([]);
       expect(state.agentsChat).toBe("retained-unavailable-selection");
       expect(state.views[root]).toMatchObject({
@@ -225,12 +226,12 @@ test("closed editor retains recovered move mappings and drafts through restart a
       expect(state.drafts).toEqual([
         { root, path: "moved/a.ts", text: "retained closed edits", disk },
       ]);
-      expect(JSON.parse(await readFile(join(user, "client-file-operation-v1.json"), "utf8"))).toMatchObject({ storageVersion: 1, intent: null, records: [] });
+      expect(JSON.parse(await readRecoveryFixture(join(user, "client-file-operation-v1.json"), "utf8"))).toBeNull();
       if (restart === 0) {
         const exited = new Promise((resolve) => app.process().once("exit", resolve));
         app.process().kill("SIGKILL");
         await exited;
-        await rm(join(user, "foundation/owner.lock"));
+        await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
         app = await launchDesktop(user);
       }
     }

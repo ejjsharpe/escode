@@ -1,3 +1,4 @@
+import { writeRecoveryFixture } from "./desktop";
 import { readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
@@ -30,7 +31,7 @@ test("saved project drafts move with text, survive restart and bind exactly once
   await symlink(process.execPath, join(dir, "node"));
   const saved = [alpha, beta].map((root) => ({ project: root, root }));
   await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
-  await writeFile(
+  await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],

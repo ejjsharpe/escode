@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm, realpath, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,13 +18,13 @@ test("missing restored files retain selection and retry current disk without rep
     await page.getByRole("button", { name: "Open project…" }).click();
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).dblclick();
     await page.getByRole("treeitem", { name: "b.txt", exact: true }).click();
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.path).toBe("b.txt");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.path).toBe("b.txt");
     await page.getByRole("button", { name: "Close repo project", exact: true }).click();
     await expect(page.getByRole("tablist", { name: "Open files" })).toHaveCount(0);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt", "b.txt"]);
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).projects).toContainEqual({ project: root, root });
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected).toBe(root);
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).projects).toContainEqual({ project: root, root });
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).selected).toBe(root);
     await rm(join(root, "b.txt"));
     await page.reload();
     const tabs = page.getByRole("tablist", { name: "Open files" });
@@ -58,12 +59,12 @@ test("restart and Retry reject a replacement checkout while retaining exact tabs
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("retained recovery text");
     await page.getByRole("treeitem", { name: "b.txt", exact: true }).click();
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text).toBe("retained recovery text");
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.path).toBe("b.txt");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text).toBe("retained recovery text");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.path).toBe("b.txt");
     const exited = new Promise(resolve => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
-    await rm(join(user, "foundation", "owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1", "receipts", "owner.lock"));
     await rename(root, original);
     execFileSync("git", ["init", root]);
     await writeFile(join(root, "a.txt"), "replacement a");
@@ -114,8 +115,8 @@ test("restored conflict comparisons read current disk and retain the loaded reco
     await writeFile(join(root, "a.txt"), "first external");
     await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
     await page.getByRole("button", { name: "Compare", exact: true }).click();
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.fileViews?.["a.txt"]).toBe("conflict");
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text).toBe("my recovered draft");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.fileViews?.["a.txt"]).toBe("conflict");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text).toBe("my recovered draft");
     await writeFile(join(root, "a.txt"), "latest external");
     await page.reload();
     await expect(page.getByRole("combobox", { name: "File view", exact: true })).toHaveValue("conflict");
