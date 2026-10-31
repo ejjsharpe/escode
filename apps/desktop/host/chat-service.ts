@@ -57,7 +57,44 @@ export type ChatEnvironment = {
   currentTarget: (project: string) => Promise<string>;
   managedRoot: string;
 };
+const permissionPolicy = (choice: SavedChat["nextPermission"]) => {
+  if (choice === undefined) return {};
+  if (!["supervised", "edits", "full"].includes(choice)) throw Error("Unsupported permission choice");
+  return { approvalPolicy: choice === "full" ? "never" : "on-request", approvalsReviewer: "user",
+    sandboxPolicy: choice === "full" ? { type: "dangerFullAccess" } : choice === "supervised"
+      ? { type: "readOnly", networkAccess: false }
+      : { type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false } };
+};
 export class ChatService {
+  async permissions(project: string | null, id: string, choice?: string) {
+    await this.environment?.authorize(project);
+    const chat = await this.store.get(project, id);
+    const rpc = await this.connect(chat.worktree?.source || chat.checkout || process.cwd(), () => {}, () => {});
+    try {
+      const config = await rpc.request("config/read", { includeLayers: false }) as { config?: Record<string, unknown> };
+      const requirements = await rpc.request("configRequirements/read", {}) as { requirements?: unknown };
+      if (!config.config || typeof config.config !== "object" || Array.isArray(config.config) || !("requirements" in requirements)) throw Error("Permission capabilities unavailable");
+      const c = config.config;
+      // Custom profiles, roots and managed policy require resolution in Codex configuration first.
+      const effective = this.sessions.get(id)?.settings as { sandbox?: Record<string, unknown>; approval?: unknown } | undefined;
+      const sandbox = effective?.sandbox;
+      const customSession = sandbox && (!["readOnly", "workspaceWrite", "dangerFullAccess"].includes(sandbox.type as string) || sandbox.networkAccess === true ||
+        sandbox.excludeTmpdirEnvVar === true || sandbox.excludeSlashTmp === true ||
+        Object.keys(sandbox).some(key => !["type", "networkAccess", "writableRoots", "excludeTmpdirEnvVar", "excludeSlashTmp"].includes(key)) ||
+        (Array.isArray(sandbox.writableRoots) && sandbox.writableRoots.length > 0) ||
+        (effective?.approval != null && !["on-request", "never"].includes(effective.approval as string)));
+      const blocked = !!customSession || requirements.requirements != null ||
+        (c.sandbox_mode != null && !["read-only", "workspace-write", "danger-full-access"].includes(c.sandbox_mode as string)) || ["permissions", "default_permissions", "sandbox_workspace_write", "network"].some(k => c[k] != null)
+        || (c.approval_policy != null && !["on-request", "never"].includes(c.approval_policy as string));
+      const message = blocked ? "Custom or managed Codex policy retained. Resolve it in Codex configuration before choosing a preset." : "";
+      if (choice !== undefined) {
+        if (blocked) throw Error(message);
+        permissionPolicy(choice as SavedChat["nextPermission"]);
+        await this.store.update(project, id, { nextPermission: choice as SavedChat["nextPermission"] });
+      }
+      return { choice: choice ?? chat.nextPermission ?? null, blocked, message };
+    } finally { rpc.close(); }
+  }
   async models(project: string | null, id: string, model?: string, effort?: string): Promise<import("@escode/contracts").ModelChoices> {
     await this.environment?.authorize(project);
     const chat = await this.store.get(project, id);
@@ -536,11 +573,15 @@ export class ChatService {
         this.validateCheckout(s, chat.checkout);
         if (chat.phase === "draft")
           await this.store.update(project, id, { phase: "bound", initialSend: "creating" });
+        if (chat.nextPermission) {
+          const policy = await this.permissions(project, id);
+          if (policy.blocked) throw Error(policy.message);
+        }
         const result = await rpc.request(
           resume ? "thread/resume" : "thread/start",
           resume
             ? { threadId: chat.threadId, cwd: chat.checkout, excludeTurns: true }
-            : { cwd: chat.checkout },
+            : { cwd: chat.checkout, ...(chat.nextPermission ? { approvalPolicy: permissionPolicy(chat.nextPermission).approvalPolicy, approvalsReviewer: "user", sandbox: chat.nextPermission === "full" ? "danger-full-access" : chat.nextPermission === "edits" ? "workspace-write" : "read-only" } : {}) },
         ) as import("./vendor/codex/src/schema").V2ThreadStartResponse;
         // Retain returned identity even if later response validation or persistence fails.
         if (
@@ -579,6 +620,17 @@ export class ChatService {
           approval: result.approvalPolicy,
           sandbox: result.sandbox,
         };
+        if (chat.nextPermission) {
+          const policy = await this.permissions(project, id);
+          if (policy.blocked) throw Error(policy.message);
+          const applied = resume ? await rpc.request("thread/resume", { threadId: s.threadId, cwd: chat.checkout, excludeTurns: true,
+            approvalPolicy: permissionPolicy(chat.nextPermission).approvalPolicy, approvalsReviewer: "user",
+            sandbox: chat.nextPermission === "full" ? "danger-full-access" : chat.nextPermission === "edits" ? "workspace-write" : "read-only" }) as import("./vendor/codex/src/schema").V2ThreadResumeResponse : result;
+          if (applied.approvalsReviewer !== "user" || applied.approvalPolicy !== permissionPolicy(chat.nextPermission).approvalPolicy ||
+            Object.entries(permissionPolicy(chat.nextPermission).sandboxPolicy!).some(([key, value]) => JSON.stringify((applied.sandbox as unknown as Record<string, unknown>)[key]) !== JSON.stringify(value)))
+            throw Error("Codex did not apply the selected permission policy; no message submitted.");
+          s.settings = { ...s.settings, approval: applied.approvalPolicy, sandbox: applied.sandbox };
+        }
         if (resume) {
           await s.output.writing;
           const page = await this.readHistory(s, null);
@@ -1036,6 +1088,7 @@ export class ChatService {
     s.sending = true;
     s.preparation = { id: randomUUID(), cancelled: false };
     let capturedModel: SavedChat["nextModel"];
+    let capturedPermission: SavedChat["nextPermission"];
     let launched = false;
     let sendIntent = false;
     let chat: Readonly<SavedChat> | undefined;
@@ -1050,6 +1103,12 @@ export class ChatService {
       };
       check();
       chat = Object.freeze(await this.store.get(project, id));
+      capturedPermission = chat.nextPermission;
+      if (capturedPermission) {
+        const policy = await this.permissions(project, id);
+        if (policy.blocked) throw Error(policy.message);
+        permissionPolicy(capturedPermission);
+      }
       capturedModel = chat.nextModel;
       if (capturedModel) {
         const catalog = await this.models(project, id);
@@ -1118,6 +1177,7 @@ export class ChatService {
         threadId: s.threadId,
         ...(capturedModel ? { model: capturedModel.model, effort: capturedModel.effort } : {}),
         input: [{ type: "text", text, text_elements: [] }],
+        ...permissionPolicy(capturedPermission),
       }) as import("./vendor/codex/src/schema").V2TurnStartResponse;
       if (s.turn.phase === "starting") s.turn = { phase: "running", id: result.turn.id };
       await s.completing;
