@@ -20,7 +20,7 @@ type ChatArguments =
   | [operation: "create", project: string, checkout: string]
   | [operation: "open" | "composer" | "disconnect" | "resolveSend", project: string | null, id: string]
   | [operation: "send" | "draft", project: string | null, id: string, text: string]
-  | [operation: "stop", project: string | null, id: string, target?: string]
+  | [operation: "stop" | "emergencyStop", project: string | null, id: string, target?: string]
   | [operation: "answer", project: string | null, id: string, token: string, answer: unknown];
 const hostClient = createHostClient(() => ipcRenderer.invoke("local-bootstrap"));
 const chatClient = createChatClient(hostClient, {
@@ -38,7 +38,14 @@ async function createEntry(root: string, parent: string, name: string, kind: "fi
   if (receipt.status !== "accepted") throw Error(receipt.message);
   return receipt.path;
 }
-async function control(operation: "stop" | "answer", project: string | null, id: string, target: string | undefined, token = "", answer: unknown = null) {
+async function control(operation: "stop" | "answer" | "emergencyStop", project: string | null, id: string, target: string | undefined, token = "", answer: unknown = null) {
+  if (operation === "emergencyStop") {
+    if (!target) throw Error("Missing captured Stop target.");
+    const state = await hostClient.sendState(project, id);
+    const receipt = await hostClient.sendMessage({ ...state, commandId: crypto.randomUUID(), project, id, text: "",
+      control: { operation: "stop", emergency: true, target, token: "", answer: null } });
+    throw Error(receipt.message);
+  }
   const key = `escode-control:${JSON.stringify([project, id, operation, target, token])}`;
   const saved = localStorage.getItem(key);
   const state = await hostClient.sendState(project, id);
@@ -117,7 +124,7 @@ contextBridge.exposeInMainWorld(
       ? chatClient.open(call[1], call[2])
       : call[0] === "composer" ? Promise.resolve().then(() => chatClient.composer(call[1], call[2]))
       : call[0] === "resolveSend" ? chatClient.resolveSend(call[1], call[2])
-      : call[0] === "stop" ? control("stop", call[1], call[2], call[3])
+      : (call[0] === "stop" || call[0] === "emergencyStop") ? control(call[0], call[1], call[2], call[3])
       : call[0] === "answer" ? control("answer", call[1], call[2], "", call[3], call[4])
       : call[0] === "send" ? chatClient.send(call[1], call[2], call[3])
       : ipcRenderer.invoke("chat", operation, ...args);
