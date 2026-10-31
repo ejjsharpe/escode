@@ -676,5 +676,6 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
   padding: 6px 12px;
   flex-shrink: 0;
 }
+.file-tab { display: flex; flex-shrink: 0; }
 .file-tabs button { white-space: nowrap; }
 .file-tabs [aria-selected="true"] { background: #48405f; }
