@@ -121,7 +121,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await page.getByRole("button", { name: /^Chat 1 ·/ }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
     await expect(page.locator(".view-nav:visible")).toContainText(worktree);
-    expect((await readFile(join(dir, "events"), "utf8")).match(/initialize/g)).toHaveLength(1);
+    expect((await readFile(join(dir, "events"), "utf8")).match(/thread\/resume/g)).toHaveLength(1);
     const dragComposerHandle = async (distance: number) => {
       const textarea = page.getByRole("textbox", { name: "Message Codex" });
       await textarea.scrollIntoViewIfNeeded();

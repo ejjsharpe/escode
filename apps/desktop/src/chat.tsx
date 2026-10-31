@@ -508,7 +508,7 @@ export function ChatView({
                   store.edit(selected, e.target.value);
                 }}
               />
-              <ModelControls key={selected} project={project} id={selected} onSaving={setSettingsSaving} />
+              <ModelControls key={selected} project={project} id={selected} onSaving={setSettingsSaving} existingError={error || snapshot?.contextError} />
               <Button
                 type="submit"
                 disabled={

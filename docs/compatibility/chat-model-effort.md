@@ -28,3 +28,29 @@ Limits: permissions (#152) and defaults surfaces/precedence (#153) remain separa
 No live paid turn, packaged-app qualification, VoiceOver or exhaustive multi-client
 race qualification is claimed. UI uses existing desktop styling and labelled native
 selects. Catalog lookups use short-lived provider connections; no catalog cache added.
+
+## Fresh merger qualification
+
+Merged effort tip `b068626` with title integration `c31eb80` on
+`merge/144-effort-fresh`. Sidebar/recency remain included. The combined Electron
+run passed 13 of 14 scenarios (all six titles, model persistence, recency,
+navigation and sidebar recovery). Its first Agents scenario exposed duplicate
+context/catalog alerts. The existing failing application test drove suppression
+of the catalog alert when the chat already displays an error. The same scenario
+then exposed an obsolete initialization-count assertion: catalog discovery uses
+short-lived connections. It now checks exactly one thread resume across view
+switches, preserving the original no-reconnect-work assertion.
+
+Focused host runs after title integration: 30 passed/one installed-provider skip
+(models, chat, durable Send, project drafts), plus 13 passed (Agents, commands,
+SQLite controls). Typecheck, lint and build pass. No timeout was increased.
+The reconnect test passed in the combined default-15-second host run both before
+and after title integration (whole runs 14.29s and 10.29s). A separate detached
+pre-effort `18df68f` baseline passed that test at the default bound (4.74s whole
+run). Earlier timing failures remain recorded above; this bounded comparison
+cannot reproduce them or establish their cause and does not claim load stability.
+
+Final Agents/model Electron rerun after the alert repair and assertion update:
+all five passed (38.3s), including the previously failing shared-context scenario.
+The full fourteen-scenario command was not repeated after this localized repair;
+title/navigation results above are from the pre-repair combined run.
