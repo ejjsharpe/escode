@@ -591,7 +591,7 @@ test("Agents composition retains deliberate editor project recency and checkout 
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header")).toContainText(roots[3]);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.keyboard.press("Meta+p");
     await page.getByLabel("Exact file path").fill(join(linked, "lookup.txt"));
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog", { name: "Find file", exact: true })).toHaveCount(0);

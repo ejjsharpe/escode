@@ -76,7 +76,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await page.keyboard.press("Escape");
     await expect(page.locator(".monaco-editor textarea:focus")).toHaveCount(1);
     await page.getByRole("button", { name: "Diff", exact: true }).click();
-    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.keyboard.press("Meta+p");
     await expect(exactPath).toHaveValue("");
     await exactPath.fill(join(b, "a.txt"));
     await page.keyboard.press("Enter");
@@ -86,7 +86,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(lookup).toHaveCount(0);
     await expect(page.locator(".monaco-editor:visible")).toContainText("deliberately excluded");
     await expect(page.getByRole("tab", { name: "node_modules/known.txt", exact: true })).not.toHaveAccessibleDescription(/Preview/);
-    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.keyboard.press("Meta+p");
     await exactPath.fill("a.txt");
     await page.keyboard.press("Enter");
     await expect(lookup).toHaveCount(0);
@@ -318,7 +318,7 @@ test("cancelled and edited lookup invocations reject delayed validation and file
         (globalThis as any).lookupNeedle = needle;
         (globalThis as any).releaseLookup = undefined;
       }, needle);
-      await page.getByRole("button", { name: "Find file", exact: true }).click();
+      await page.keyboard.press("Meta+p");
       await page.getByLabel("Exact file path").fill("slow.txt");
       await page.keyboard.press("Enter");
       await expect.poll(() => app.evaluate(() => typeof (globalThis as any).releaseLookup)).toBe("function");
@@ -337,7 +337,7 @@ test("cancelled and edited lookup invocations reject delayed validation and file
       await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
       await expect(page.locator(".monaco-editor:visible")).toContainText("original editor");
     }
-    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.keyboard.press("Meta+p");
     await page.getByLabel("Exact file path").fill("slow.txt");
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog", { name: "Find file", exact: true })).toHaveCount(0);
@@ -373,7 +373,7 @@ test("cancelled and edited lookup invocations reject delayed validation and file
       (globalThis as any).releaseLookup = undefined;
     });
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.keyboard.press("Meta+p");
     await page.getByLabel("Exact file path").fill("slow.txt");
     await expect.poll(() => app.evaluate(() => typeof (globalThis as any).releaseLookup)).toBe("function");
     await page.evaluate(root => window.escode.lookupFile(root, "a.txt"), root);
