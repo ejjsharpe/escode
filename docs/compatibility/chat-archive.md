@@ -13,3 +13,7 @@ Final focused result: 14 host admission tests passed. The expanded global/local 
 The five host files that failed under concurrent load subsequently passed with one worker: 32 passed, one opt-in test skipped (`checkpoint-expiry`, `durable-send`, `lookup`, `shutdown`, `worktree-drafts`). This bounds the observed failures without claiming completion of the interrupted full suite.
 
 Final complete Agents rerun: all four tests passed in 40.9 seconds with the command-line 120-second allowance. The global/local archive test passed in 12.2 seconds. Settings remains available in Files/Diff sidebar footers and chat-list footers without duplicating it in the top strip.
+
+Integration: merged `integration/agents-sidebar-144` at `c31eb80` (title slice). Resolved combined validation and consolidated Rename/Regenerate/Archive/Restore into one Chat actions menu. Combined host archive/chat checks passed: 23 passed, one opt-in live-provider test skipped. Typecheck/build passed; lint now reports eight inherited warnings, including the title slice's control-character validation expressions.
+
+Final combined Electron qualification after merging titles: all ten Agents and chat-title scenarios passed in 1.0 minute (`--timeout=120000`).
