@@ -63,7 +63,7 @@ send({id:m.id,result});});`,
         return exec(command, ...args);
       };
     });
-    await expect(page.getByRole("button", { name: "New chat", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "New chat", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Start without a project", exact: true }).click();
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
     await message().fill("first scratch");
@@ -82,6 +82,7 @@ send({id:m.id,result});});`,
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option", { name: "No project", exact: true }).click();
     await expect(page.locator(".agent-row").filter({ hasText: "Chat 2" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -196,7 +197,7 @@ test("one repository offers No project and text-bearing local drafts move throug
     await expect(
       page.getByRole("combobox", { name: "New chat project", exact: true }),
     ).toBeVisible();
-    await page.getByRole("combobox", { name: "New chat project", exact: true }).selectOption(repo);
+    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: repo }).click();
     await expect(
       page.locator(".agent-row").filter({ hasText: "Chat 1" }).filter({ hasText: "Alpha" }),
     ).toHaveAttribute("aria-pressed", "true");

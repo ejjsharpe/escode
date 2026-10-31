@@ -56,7 +56,7 @@ A checkout with a project tab open in the current desktop window.
 The accepted filename/path search within the active checkout tab, or exactly the open checkout tabs from Agents. Implementation follows the [navigation specification](docs/specifications/checkout-tabs-file-lookup.md).
 
 **Project picker**:
-The accepted searchable all-saved-project selection for Agents New chat, ordered by recent use, including No project. Implementation follows the navigation specification.
+The searchable all-saved-project selection always opened by Agents New chat, including No project and projects with closed editor tabs. Ordered-character project-name filtering, path disambiguation and cancellation are implemented. Persisted recent-use ordering and remembered checkout defaults follow separately in #108; until then draft creation retains the existing validated default.
 
 **Project tab**:
 An editor view of one checkout of a project, with its own Files, Source Control and checkout-scoped Chats views. Different checkouts of the same project can have separate tabs; reopening an open checkout focuses its existing tab.

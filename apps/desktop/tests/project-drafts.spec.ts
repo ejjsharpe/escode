@@ -61,7 +61,7 @@ send({id:m.id,result});});`,
   try {
     let page = await app.firstWindow();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("combobox", { name: "New chat project", exact: true }).selectOption(alpha);
+    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: alpha }).click();
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
     await expect(page.getByText("Effective Codex settings · fixture", { exact: true })).toBeVisible();
     await message().fill("Retain this draft");
@@ -89,7 +89,7 @@ send({id:m.id,result});});`,
     await page.screenshot({ path: "test-results/escode-33-draft.png" });
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("combobox", { name: "New chat project", exact: true }).selectOption(beta);
+    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: beta }).click();
     await expect(page.locator(".agent-row").filter({ hasText: "Chat 2" })).toHaveAttribute(
       "aria-pressed",
       "true",
