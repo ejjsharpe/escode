@@ -22,3 +22,15 @@ Checks before merging the concurrently completed restoration slice:
 - Final focused development Electron: four of four passed, including read-only comparison focus. Earlier packaged Electron: three of three passed before that fourth slice was added.
 - Broad development retry: 19/20 passed. The existing editable-diff journey timed out at 45 seconds and worker teardown also timed out; no clean broad run is claimed. The first attempt was stopped after the same timeout. An overlapping follow-up excluding editable-diff was stopped during arrangement and is not counted as evidence. Concurrent GUI harnesses existed; causation is unestablished.
 - `git diff --check` passed. The mechanical UI detector reported no findings; a packaged narrow picker capture was visually inspected.
+
+## Integration merge and final qualification
+
+Merged latest local integration `33f2b96f26f9ab24f29185220f06483f2a3ab52d` into this branch, including the concurrently completed #99 restoration slice. Source merged automatically; README/glossary conflict resolution retains both slices. The twelve-scenario mapping now cites #99's bounded evidence and leaves #100/#101 pending. No full parent acceptance is claimed.
+
+Post-merge typecheck, lint, build and arm64 packaging passed. The combined development run across recent navigation, restoration, arrangement, safe close, file tabs, editable comparisons and checkout navigation passed 23/24; all four recent-navigation journeys and all three restoration journeys passed. Arrangement's overflow journey retained nine instead of eleven tabs because its rapid opening loop did not wait for asynchronous Keep Open before the next preview. The fixture now waits for the visible tab's Preview description to clear before continuing; no product behavior changed for that failure. Earlier failed broad runs remain above.
+
+The first post-merge full unit run passed 265 tests with four skipped and failed three checks in shutdown/worktrees (cleanup polling and two 15-second worktree timeouts). Other worktrees were running GUI/unit harnesses concurrently; this is observation, not established causation. Final serial verification is recorded below.
+
+Final focused development Electron: seven of seven passed across recent navigation and arrangement. Final packaged Electron with restricted PATH: the same seven of seven passed, including the fourth recent-navigation read-only focus slice and the corrected overflow fixture. All 24 combined development scenarios have passed across runs; the final broad run itself remains 23/24, not a clean pass. The four navigation journeys passed on both sides of the restoration merge.
+
+Final serial full unit run (`node scripts/filesystem.mjs`, then `vp test run --maxWorkers=1 --no-file-parallelism`): 268 passed, four skipped; 29 passing files and one skipped. This passing rerun does not erase the earlier timeout failures. Latest local integration remained `33f2b96f26f9ab24f29185220f06483f2a3ab52d` at final ancestry verification. Only this isolated branch/worktree was changed; no issue or PR writes were made.

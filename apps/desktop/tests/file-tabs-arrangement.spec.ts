@@ -71,7 +71,10 @@ test("tabs disambiguate names, expose unsaved state and reveal the active file i
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.type(" unsaved");
     await expect(tabs.getByRole("tab", { name: "right/same.txt", exact: true })).toHaveAccessibleDescription("Unsaved");
-    for (const name of names) await page.getByRole("treeitem", { name, exact: true }).dblclick();
+    for (const name of names) {
+      await page.getByRole("treeitem", { name, exact: true }).dblclick();
+      await expect(tabs.getByRole("tab", { name, exact: true })).not.toHaveAccessibleDescription("Preview");
+    }
     await page.setViewportSize({ width: 650, height: 700 });
     const revealed = () => tabs.evaluate(row => {
       const tab = row.querySelector('[aria-selected="true"]')!;
