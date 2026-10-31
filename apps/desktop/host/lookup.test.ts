@@ -25,7 +25,7 @@ test('pinned filename/path scorer contract and positions', () => {
   expect(scorePath('src/workbench.ts', 'work')!.score).toBeGreaterThan(scorePath('work/other.ts', 'work')!.score);
 });
 
-import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, rmSync, symlinkSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -51,8 +51,17 @@ test('native discovery honors only local ignore sources and fixed prunes', async
  const work=[project.discover('txt',first.signal),project.discover('txt',second.signal)];
  await expect(project.discover('txt',new AbortController().signal)).rejects.toThrow('busy');
  first.abort();second.abort();await Promise.allSettled(work);
+ symlinkSync(join(base,'global-ignore'),join(root,'deep/.ignore-link'));
+ renameSync(join(root,'deep/.ignore'),join(root,'deep/.ignore-old'));
+ renameSync(join(root,'deep/.ignore-link'),join(root,'deep/.ignore'));
+ const unsafe=await project.discover('txt',new AbortController().signal);
+ expect(unsafe.partial).toBe(true);expect(unsafe.message).toMatch(/ignore.*unavailable/i);
+ rmSync(join(root,'deep/.ignore'));renameSync(join(root,'deep/.ignore-old'),join(root,'deep/.ignore'));
  for(let i=0;i<101;i++) writeFileSync(join(root,`cap-${i}.txt`),'text');
  const capped=await project.discover('cap',new AbortController().signal);expect(capped.partial).toBe(true);expect(capped.results).toHaveLength(100);
+ const nested=join(root,...Array.from({length:130},()=> 'nested'));mkdirSync(nested,{recursive:true});
+ const depth=await project.discover('txt',new AbortController().signal);
+ expect(depth.partial).toBe(true);expect(depth.message).toMatch(/ignore.*unavailable/i);
  } finally {if(oldGlobal===undefined) delete process.env.GIT_CONFIG_GLOBAL;else process.env.GIT_CONFIG_GLOBAL=oldGlobal;if(oldConfig===undefined) delete process.env.RIPGREP_CONFIG_PATH;else process.env.RIPGREP_CONFIG_PATH=oldConfig;project.close();rmSync(base,{recursive:true,force:true});}
 });
 
@@ -78,4 +87,33 @@ test('recursive observation coalesces unloaded changes, bounds admission and rel
    project.close();
    expect(()=>project.observeFiles(()=>{})).toThrow('closed');
  } finally { releases.forEach(release=>release());project.close();rmSync(base,{recursive:true,force:true}); }
+});
+
+
+test('linked checkout observes repository excludes and rejects replaced policy metadata', async () => {
+ const base=realpathSync(mkdtempSync(join(tmpdir(),'lookup-policy-'))), root=join(base,'repo'), linked=join(base,'linked');
+ execFileSync('git',['init',root]);
+ execFileSync('git',['-C',root,'-c','user.name=Test','-c','user.email=test@example.com','commit','--allow-empty','-m','fixture']);
+ execFileSync('git',['-C',root,'worktree','add',linked]);
+ writeFileSync(join(linked,'policy.txt'),'text');
+ const project=await Checkout.open(linked);
+ let notifications=0, failure='';
+ const release=project.observeFiles(error=>{notifications++;failure=error??'';});
+ try {
+   writeFileSync(join(root,'.git/info/exclude'),'policy.txt\n');
+   await expect.poll(()=>notifications).toBeGreaterThan(0);
+   expect((await project.discover('policy',new AbortController().signal)).results).toEqual([]);
+   const changed=notifications;
+   rmSync(join(root,'.git/info/exclude'));
+   await expect.poll(()=>notifications).toBeGreaterThan(changed);
+   expect((await project.discover('policy',new AbortController().signal)).results.map(row=>row.path)).toEqual(['policy.txt']);
+   const before=notifications;
+   renameSync(join(root,'.git/info'),join(root,'.git/info-old'));
+   symlinkSync(join(root,'.git/info-old'),join(root,'.git/info'));
+   await expect.poll(()=>failure).toMatch(/policy|symbolic|link/i);
+   expect(notifications).toBeGreaterThan(before);
+   expect(()=>project.observeFiles(()=>{})).toThrow(/policy|link/i);
+   rmSync(join(root,'.git/info'));renameSync(join(root,'.git/info-old'),join(root,'.git/info'));
+   const retry=project.observeFiles(()=>{});retry();
+ } finally {release();project.close();rmSync(base,{recursive:true,force:true});}
 });

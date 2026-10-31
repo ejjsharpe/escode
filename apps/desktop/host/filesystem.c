@@ -33,6 +33,37 @@ static int scoped_open(int dir, const char *path, int flags) {
   return fd;
 }
 
+// shortcut: preflight precedes ripgrep reads; use descriptor-owned enumeration if atomic policy snapshots become required.
+static void lookup_policy(int fd, unsigned depth, unsigned *entries) {
+  if (depth > 128) { errno = EOVERFLOW; fail("Ignore policy depth capped"); }
+  DIR *dir = fdopendir(fd);
+  if (!dir) fail("Inspect ignore policy directory");
+  struct dirent *entry;
+  for (;;) {
+    errno = 0;
+    entry = readdir(dir);
+    if (!entry) { if (errno) fail("Read ignore policy directory"); break; }
+    const char *name = entry->d_name;
+    if (!strcmp(name, ".") || !strcmp(name, "..")) continue;
+    if (++*entries > 20000) { errno = EOVERFLOW; fail("Ignore policy coverage capped"); }
+    size_t len = strlen(name);
+    if (!strcmp(name, ".git") || !strcmp(name, ".svn") || !strcmp(name, ".hg") ||
+        !strcmp(name, ".jj") || !strcmp(name, ".DS_Store") || !strcmp(name, "Thumbs.db") ||
+        !strcmp(name, "node_modules") || !strcmp(name, "bower_components") ||
+        (len >= 12 && !strcmp(name + len - 12, ".code-search"))) continue;
+    struct stat info;
+    if (fstatat(fd, name, &info, AT_SYMLINK_NOFOLLOW)) fail("Inspect ignore policy entry");
+    if (!strcmp(name, ".gitignore") || !strcmp(name, ".ignore") || !strcmp(name, ".rgignore")) {
+      if (!S_ISREG(info.st_mode)) { errno = EINVAL; fail("Ignore policy must be a regular file without links"); }
+      int policy = scoped_open(fd, name, O_RDONLY);
+      close(policy);
+    } else if (S_ISDIR(info.st_mode)) {
+      lookup_policy(scoped_open(fd, name, O_RDONLY | O_DIRECTORY), depth + 1, entries);
+    }
+  }
+  closedir(dir);
+}
+
 static void revalidate_source(const char *path, const struct stat *expected) {
   int current = scoped_open(3, path, O_RDONLY);
   struct stat actual;
@@ -241,7 +272,11 @@ int main(int argc, char **argv) {
     fail("Invalid filesystem request");
   }
   const char *operation = argv[1];
-  if (!strcmp(operation, "git")) {
+  if (!strcmp(operation, "lookup")) {
+    unsigned entries = 0;
+    lookup_policy(scoped_open(3, ".", O_RDONLY | O_DIRECTORY), 0, &entries);
+  }
+  if (!strcmp(operation, "git") || !strcmp(operation, "lookup")) {
     if (fchdir(3) || fcntl(3, F_SETFD, FD_CLOEXEC)) fail("Enter checkout");
     execv(argv[2], argv + 2);
     fail("Start Git");

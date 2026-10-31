@@ -8,6 +8,7 @@ import {
   fstatSync,
   constants,
   statSync,
+  lstatSync,
   watch,
   type FSWatcher,
 } from "node:fs";
@@ -27,6 +28,7 @@ export class Checkout {
   readonly repositoryGit: CheckoutRepository;
   private directory: number | undefined;
   private filesOnly = false;
+  private policyDirectory?: { path: string; dev: number; ino: number };
   private constructor(
     readonly root: string,
     private executable: string,
@@ -53,6 +55,12 @@ export class Checkout {
       );
       project.repositoryGit.gitIdentity = statSync(project.repositoryGit.gitDirectory);
       project.repositoryGit.repository();
+      const common = resolve(root, project.git(["rev-parse", "--git-common-dir"]).toString().trim());
+      const policy = openSync(common, directoryFlags);
+      try {
+        const { dev, ino } = fstatSync(policy);
+        project.policyDirectory = { path: common, dev, ino };
+      } finally { closeSync(policy); }
       return project;
     } catch (error) {
       closeSync(fd);
@@ -168,36 +176,64 @@ export class Checkout {
     }
     return dispose;
   }
+  private checkPolicyDirectory() {
+    const policy = this.policyDirectory;
+    if (!policy) throw Error("Repository ignore policy unavailable. Reopen the project.");
+    const fd = openSync(policy.path, directoryFlags);
+    try {
+      const live = fstatSync(fd);
+      if (live.dev !== policy.dev || live.ino !== policy.ino) throw Error("Repository ignore policy directory replaced. Reopen the project.");
+    } finally { closeSync(fd); }
+    for (const path of [join(policy.path, "info"), join(policy.path, "info/exclude")]) {
+      try {
+        const info = lstatSync(path);
+        if (info.isSymbolicLink()) throw Error("Repository ignore policy cannot follow symbolic links.");
+        const check = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK | 0x20000000);
+        try {
+          const live = fstatSync(check);
+          if (path === join(policy.path, "info") ? !live.isDirectory() : !live.isFile()) throw Error("Repository ignore policy unavailable.");
+        } finally { closeSync(check); }
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    }
+    return policy.path;
+  }
   observeFiles(notify: (error?: string) => void) {
     this.checkoutIdentity();
     if (activeObservations >= 16) throw Error("Lookup observation limit reached. Refresh to retry.");
     activeObservations++;
-    let watcher: FSWatcher | undefined;
+    const watchers: FSWatcher[] = [];
     let timer: ReturnType<typeof setTimeout> | undefined;
     let disposed = false;
     const dispose = () => {
       if (disposed) return;
       disposed = true;
       clearTimeout(timer);
-      watcher?.close();
+      watchers.forEach(watcher => watcher.close());
       activeObservations--;
       this.watchDisposers.delete(dispose);
     };
     const failed = (error: unknown) => {
+      if (disposed) return;
       dispose();
       notify(String(error).slice(0, 2048));
     };
     try {
-      // Notifications invalidate candidates only; discovery and activation retain no-follow authority.
-      watcher = watch(this.root, { recursive: true, persistent: false }, () => {
+      const policy = this.checkPolicyDirectory();
+      const changed = () => {
         if (disposed || timer) return;
         timer = setTimeout(() => {
           timer = undefined;
-          try { this.checkoutIdentity(); notify(); } catch (error) { failed(error); }
+          try { this.checkoutIdentity(); this.checkPolicyDirectory(); notify(); } catch (error) { failed(error); }
         }, 500);
-      });
-      watcher.on("error", failed);
+      };
+      // Both sources share one invalidation timer; events never grant filesystem authority.
+      watchers.push(watch(this.root, { recursive: true, persistent: false }, changed));
+      if (!policy.startsWith(this.root + "/")) watchers.push(watch(policy, { recursive: true, persistent: false }, (_event, path) => {
+        if (!path || path.toString() === ".git" || path.toString() === "info" || path.toString().startsWith("info/")) changed();
+      }));
+      watchers.forEach(watcher => watcher.on("error", failed));
       this.checkoutIdentity();
+      this.checkPolicyDirectory();
       this.watchDisposers.add(dispose);
       return dispose;
     } catch (error) { dispose(); throw error; }
@@ -226,10 +262,12 @@ export class Checkout {
     const fd = this.checkedDirectory();
     activeLookups++;
     try {
+      this.repositoryGit.validateRepository();
+      this.checkPolicyDirectory();
       const result = await new Promise<import("@escode/contracts").LookupResult>((resolve, reject) => {
         const args = ["--files", "--hidden", "--null", "--no-config", "--no-ignore-parent", "--no-ignore-global", "--threads", "1"];
         for (const name of [".git", ".svn", ".hg", ".jj", ".DS_Store", "Thumbs.db", "node_modules", "bower_components", "*.code-search"]) args.push("--glob", `!**/${name}`);
-        const child = spawn(this.helper, ["git", join(dirname(this.helper), "ripgrep"), ...args, "."], { stdio: ["ignore", "pipe", "pipe", fd], env: { ...process.env, RIPGREP_CONFIG_PATH: "" } });
+        const child = spawn(this.helper, ["lookup", join(dirname(this.helper), "ripgrep"), ...args, "."], { stdio: ["ignore", "pipe", "pipe", fd], env: { ...process.env, RIPGREP_CONFIG_PATH: "" } });
         let bytes = 0, count = 0, pending = Buffer.alloc(0), partial = false, failure = "", resultBytes = 0;
         const paths: string[] = [];
         const results: RankedPath[] = [];
@@ -568,6 +606,7 @@ export class Checkout {
           this.executable = live.executable;
           this.repositoryGit.gitDirectory = live.repositoryGit.gitDirectory;
           this.repositoryGit.gitIdentity = live.repositoryGit.gitIdentity;
+          this.policyDirectory = live.policyDirectory;
           this.filesOnly = false;
         } finally {
           live.close();
