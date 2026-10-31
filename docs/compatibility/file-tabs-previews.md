@@ -1,0 +1,31 @@
+# File-tab previews and Keep Open — issue 96
+
+Scope: [previews and every Keep Open entry point](https://github.com/ejjsharpe/escode/issues/96), under [file tabs](https://github.com/ejjsharpe/escode/issues/92). Built from integration commit `5e426d7fd1af3801c23fb7ed05cec6498d6ae8f7` on isolated branch `t3/preview-promotion`. This does not certify the complete parent specification.
+
+Files and Source Control share one preview identity per exact checkout/client. A successful new preview replaces the previous clean preview and releases its working model in an effect after the editor detaches. Failed opens and stale file/comparison replies leave the previous presentation and preview intact. Opening an existing file reuses its tab without removing a different preview. Preview labels are italic with an accessible Preview description. New insertion remains immediately right of the active tab before removing the old preview.
+
+Double-click on Files entries, Source Control entries or file tabs promotes the existing identity. Keep Open is available in the editor toolbar and the tab context menu (also Shift+F10). Editing the shared Monaco model promotes both normal and comparison views. Save and undo back to clean do not demote. New File, Files context-menu Open File and Cmd+Down open kept open; explicit opening focuses the editable editor on success. Plain Files clicks and Space preview with tree focus retained. Existing arrows, modified selection, Enter Rename, inline editing and operation controls retain their handlers.
+
+`src/workspace.ts` retains the exact-target `openFile({ root, path, view, intent })` contract. Confirmed lookup opens use `intent: "keep"`, retain existing dirty text and focus the editor after success. The real lookup popup, scope validation and confirmation wiring belong to checkout/search; result selection must not invoke this function. `keepFileOpen(root, path)` promotes without changing selection/view or reading the host, for subsequent ordering work. This slice adds no Save, staging or Send to activation.
+
+Validated `views[root].preview` metadata persists clean previews, follows known move/Trash outcomes and rejects orphan or malformed identities. Available recovered dirty buffers override preview metadata and reopen kept open. Text and loaded disk baselines still use existing client recovery; navigation metadata adds no filesystem authority or stronger recovery guarantee. Close/MRU/reopen, drag ordering and the remaining parent behavior belong to their own tickets.
+
+## Verification
+
+The existing Electron harness is the agreed public seam. The first new journey failed with both A and B retained before preview replacement was implemented, then passed. It exposed an insertion-position error during green work, corrected before qualification. The deliberate-opening journey failed at missing Open File, then passed after adding the action to the existing Files context menu. Tests exercise tree and editor focus, shared Files/Source Control replacement, existing-tab reuse, all promotion/opening triggers, Save and clean undo, clean-preview restoration and recovered dirty text overriding stale preview metadata. Existing races now include failed opens against a clean preview and delayed file and comparison replies. No internal provider mocks or alternate buffer registry were added.
+
+The unit workspace test rejects malformed/orphan preview metadata without replacing retained state. Existing workspace and file-operation suites cover the surrounding ownership, storage and operation gates. Existing Electron Files, comparison, navigation and lifecycle suites remain regression gates.
+
+The focus journey also failed in a serial rerun: the animation-frame callback could focus an editor before its replacement mounted. Focusing in an effect after editor creation fixed that race; three consecutive deliberate-opening journeys passed. Preview-model disposal uses the same post-editor effect ordering. The earlier [comparison evidence](file-tabs-comparisons.md) retains its intermittent mock-provider Send uncertainty; this slice does not establish its cause or erase that limitation. No manual VoiceOver gate applies under the user's 2026-10-31 amendment.
+
+Final verification on 2026-10-31:
+
+- Desktop typecheck, lint and `git diff --check`: passed.
+- Full unit suite: 267 passed, four skipped (29 passing test files, one skipped). Focused workspace/file-operation suite after extending the known-move fixture: 41 passed.
+- Final development Electron run: eight passed across `file-tabs`, `editable-diff` and `navigation`. Final packaged Electron run (`ESCODE_PACKAGED=1`): the same eight passed with the harness restricted PATH. These final runs include the focus and disposal effect fixes, clean-preview restoration, dirty recovery override, New File and tab-menu keyboard focus.
+- Build and macOS arm64 package: passed with the existing bundle-size warning, default icon and unsigned local development configuration.
+- The broad development run across `file-tabs`, `editable-diff`, `navigation`, `lifecycle`, `agents-files-recovery`, `files-inline` and `files-trash-handoffs` passed 41 of 43. The comparison fixture still assumed all clicked tabs remained open; making its deliberate first open a double-click retained the original two-file scenario. The deliberate-opening focus assertion also failed. An overlapping diagnostic GUI run made initial attribution uncertain; the subsequent serial run reproduced that failure and led to the editor-effect focus fix described above. All other scenarios, including the mock-provider Send lifecycle cases, passed in that broad run. No clean single broad run is claimed.
+
+No live provider turns, manual VoiceOver sessions, exhaustive desktop suite or complete parent-spec qualification were run. The real lookup popup and drag wiring remain with their owning tickets. Recovery remains best effort; packaging produces an unsigned local development artifact. The earlier intermittent mock-provider Send uncertainty is retained as a testing limitation.
+
+Combined preview/safe-close merge checks and repairs are recorded in [integration evidence](file-tabs-integration.md); the original startup and mock-provider uncertainties above remain qualification limits.

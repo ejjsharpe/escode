@@ -31,10 +31,16 @@ export function reconcile(state: WorkspaceState, intent: Intent) {
   );
   const view = state.views[root];
   if (view) {
-    for (const field of ["path", "directory"] as const) {
+    for (const field of ["path", "directory", "preview"] as const) {
       if (view[field] && affected(view[field], source))
         view[field] = kind === "trash" ? "" : moved(view[field], source, destination);
     }
+    if (view.openFiles) view.openFiles = view.openFiles.flatMap(p =>
+      kind === "trash" && affected(p, source) ? [] : [moved(p, source, destination)]);
+    const mapFiles = <T>(values: Record<string, T>) => Object.fromEntries(Object.entries(values).flatMap(([p, value]) =>
+      kind === "trash" && affected(p, source) ? [] : [[moved(p, source, destination), value]]));
+    if (view.fileViews) view.fileViews = mapFiles(view.fileViews);
+    if (view.editorPositions) view.editorPositions = mapFiles(view.editorPositions);
     if (view.files) {
       const map = (paths: string[]) =>
         paths.flatMap((p) =>

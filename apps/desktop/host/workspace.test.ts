@@ -234,5 +234,60 @@ test("client project use validates exact paths and unique MRU entries without lo
       await expect(store.write({ ...state, projectUse })).rejects.toThrow("Invalid project use");
       expect(await store.read()).toEqual(state);
     }
+
+test("ordered file identities validate before replacing client recovery", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-open-files-"));
+  try {
+    const store = new Workspace(join(dir, "workspace.json"));
+    const state = { projects: [], selected: "", drafts: [], views: {
+      [dir]: { openFiles: ["a.txt", "folder/b.txt"], path: "folder/b.txt" },
+    } };
+    await store.write(state);
+    expect((await store.read()).views[dir].openFiles).toEqual(["a.txt", "folder/b.txt"]);
+    for (const openFiles of [["../escape"], ["/absolute"], [".git/config"], ["a", "a"], [""], "bad"]) {
+      await expect(store.write({ ...state, views: { [dir]: { openFiles } } })).rejects.toThrow("Invalid open files");
+    }
+    await expect(store.write({ ...state, views: { [dir]: { openFiles: ["a.txt"], path: "missing.txt" } } })).rejects.toThrow("Invalid open files");
+    expect((await store.read()).views[dir].openFiles).toEqual(["a.txt", "folder/b.txt"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("file views and positions reject malformed metadata without replacing recovery", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-file-views-"));
+  try {
+    const store = new Workspace(join(dir, "workspace.json"));
+    const state = { projects: [], selected: "", drafts: [], views: {
+      [dir]: { openFiles: ["a.txt"], path: "a.txt", fileViews: { "a.txt": "unstaged" as const },
+        editorPositions: { "a.txt": { file: { line: 4, column: 2, top: 80, left: 0 } } } },
+    } };
+    await store.write(state);
+    expect((await store.read()).views[dir].fileViews).toEqual({ "a.txt": "unstaged" });
+    for (const invalid of [
+      { fileViews: { "../escape": "file" } },
+      { fileViews: { "a.txt": "unknown" } },
+      { editorPositions: { "a.txt": { file: { line: -1, column: 1, top: 0, left: 0 } } } },
+      { editorPositions: { "a.txt": { unknown: { line: 1, column: 1, top: 0, left: 0 } } } },
+    ]) {
+      await expect(store.write({ ...state, views: { [dir]: { ...state.views[dir], ...invalid } } })).rejects.toThrow();
+      expect((await store.read()).views[dir].fileViews).toEqual({ "a.txt": "unstaged" });
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("preview metadata retains an exact open identity and rejects orphan previews", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-preview-state-"));
+  try {
+    const store = new Workspace(join(dir, "workspace.json"));
+    const state = { projects: [], selected: "", drafts: [], views: {
+      [dir]: { openFiles: ["a.txt"], path: "a.txt", preview: "a.txt" },
+    } };
+    await store.write(state);
+    expect((await store.read()).views[dir].preview).toBe("a.txt");
+    for (const preview of ["../escape", "missing.txt", "/absolute", 3]) {
+      await expect(store.write({ ...state, views: { [dir]: { ...state.views[dir], preview } } })).rejects.toThrow("Invalid preview");
+    }
+    expect((await store.read()).views[dir].preview).toBe("a.txt");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

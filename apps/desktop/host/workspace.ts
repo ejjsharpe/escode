@@ -76,6 +76,28 @@ function validate(value: unknown): asserts value is WorkspaceState {
       throw Error("Invalid recovery draft");
   }
   for (const v of Object.values(s.views)) {
+    const validFile = (p: string) => typeof p === "string" && !!p && !isAbsolute(p) &&
+      !p.split("/").some(c => !c || c === "." || c === ".." || c.toLowerCase() === ".git");
+    const views = ["file", "staged", "unstaged", "untracked", "conflict"];
+    const record = (x: unknown) => !!x && typeof x === "object" && !Array.isArray(x);
+    if (v?.preview !== undefined && v.preview !== "" &&
+      (!validFile(v.preview) || !v.openFiles?.includes(v.preview))) throw Error("Invalid preview");
+    if (v?.fileViews !== undefined && (!record(v.fileViews) ||
+      Object.entries(v.fileViews).some(([p, selected]) => !validFile(p) || !views.includes(selected))))
+      throw Error("Invalid file views");
+    if (v?.editorPositions !== undefined && (!record(v.editorPositions) ||
+      Object.entries(v.editorPositions).some(([p, positions]) => !validFile(p) || !record(positions) ||
+        Object.entries(positions).some(([selected, pos]) =>
+          !views.includes(selected.replace(/:original$/, "")) || !record(pos) ||
+          !Number.isInteger(pos.line) || pos.line < 1 || !Number.isInteger(pos.column) || pos.column < 1 ||
+          !Number.isFinite(pos.top) || pos.top < 0 || !Number.isFinite(pos.left) || pos.left < 0))))
+      throw Error("Invalid editor positions");
+    if (v?.openFiles !== undefined &&
+      (!Array.isArray(v.openFiles) || new Set(v.openFiles).size !== v.openFiles.length ||
+        v.openFiles.some(p => typeof p !== "string" || !p || isAbsolute(p) ||
+          p.split("/").some(c => !c || c === "." || c === ".." || c.toLowerCase() === ".git")) ||
+        (v.path && !v.openFiles.includes(v.path))))
+      throw Error("Invalid open files");
     if (
       v?.files !== undefined &&
       (!v.files ||

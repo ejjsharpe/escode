@@ -688,3 +688,14 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .project-picker strong, .project-picker small { display: block; }
 .project-picker small { color: #bcb8c9; margin-top: 4px; }
 .project-picker [role="status"] { padding: 8px 0 12px; border: 0; color: #bcb8c9; }
+
+.file-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 6px 12px;
+  flex-shrink: 0;
+}
+.file-tab { display: flex; flex-shrink: 0; }
+.file-tabs button { white-space: nowrap; }
+.file-tabs [aria-selected="true"] { background: #48405f; }

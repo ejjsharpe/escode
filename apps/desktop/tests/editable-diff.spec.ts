@@ -28,7 +28,7 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
     }, root);
     await page.getByRole("button", { name: "Open project…", exact: true }).click();
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
-    await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "a.txt", exact: true }).click();
+    await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "a.txt", exact: true }).dblclick();
     await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "missing.txt", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("Working file unavailable");
     await expect(page.getByRole("textbox", { name: "staged · missing.txt modified", exact: true })).not.toBeEditable();
@@ -42,7 +42,12 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
     await expect(page.locator(".toolbar")).toContainText("Unsaved");
     expect(await readFile(join(root, "a.txt"), "utf8")).toBe("working\n");
     await page.getByRole("button", { name: "Files", exact: true }).click();
-    await expect(page.locator(".editor .monaco-editor")).toContainText("edited in diff");
+    await expect(modified).toContainText("edited in diff");
+    await expect(page.getByRole("combobox", { name: "File view", exact: true })).toHaveValue("staged");
+    await page.getByRole("combobox", { name: "File view", exact: true }).selectOption("file");
+    await expect(page.getByRole("textbox", { name: "a.txt editor", exact: true })).toBeEditable();
+    await page.getByRole("combobox", { name: "File view", exact: true }).selectOption("unstaged");
+    await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveCount(2);
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
     await expect(modified).toContainText("edited in diff");
     await modified.click();
@@ -61,9 +66,23 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
     await page.getByRole("button", { name: "Compare", exact: true }).click();
     await expect(page.getByRole("textbox", { name: "Disk versus your edits original", exact: true })).not.toBeEditable();
     await expect(modified).toContainText("unsaved diff work");
+    await expect.poll(async () => JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.fileViews?.["a.txt"]).toBe("conflict");
+    await rm(join(root, "a.txt"));
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Retry comparison", exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "File view", exact: true })).toHaveValue("conflict");
+    await writeFile(join(root, "a.txt"), "external change");
+    await page.getByRole("button", { name: "Retry comparison", exact: true }).click();
+    await expect(page.locator(".conflict")).toBeVisible();
+    await expect(modified).toContainText("unsaved diff work");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(page.locator(".editor .monaco-editor")).toContainText("unsaved diff work");
+    await page.getByRole("textbox", { name: "a.txt editor", exact: true }).focus();
+    await page.keyboard.press("Meta+s");
+    await expect(page.locator(".conflict")).toBeVisible();
+    expect(await readFile(join(root, "a.txt"), "utf8")).toBe("external change");
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
     await page.getByRole("heading", { name: "untracked", exact: true }).locator("..").getByRole("button", { name: "new.txt", exact: true }).click();
     await expect(modified).toContainText("untracked text");
@@ -87,6 +106,16 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
     await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "a.txt", exact: true }).click();
     await expect(modified).toContainText("unsaved diff work");
+    expect(git("show", ":a.txt")).toBe("staged\n");
+    await writeFile(join(root, "a.txt"), "another external change");
+    await page.getByRole("textbox", { name: "staged · a.txt · working copy modified", exact: true }).focus();
+    await page.keyboard.press("Meta+s");
+    await expect(page.locator(".conflict")).toBeVisible();
+    await page.getByRole("button", { name: "Compare", exact: true }).click();
+    await page.getByRole("button", { name: "Overwrite", exact: true }).click();
+    await expect.poll(() => readFile(join(root, "a.txt"), "utf8")).toBe("unsaved diff work");
+    await expect(page.getByRole("combobox", { name: "File view", exact: true })).toHaveValue("conflict");
+    await expect(page.getByText("No changes", { exact: true })).toBeVisible();
     expect(git("show", ":a.txt")).toBe("staged\n");
   } finally {
     await app.evaluate(({ dialog }) => {

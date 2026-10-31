@@ -864,6 +864,7 @@ export function FilesTree({
                     else void open(entry.path, false);
                   }
                 }}
+                onDoubleClick={() => { if (!disabled && !entry.directory) void open(entry.path, true); }}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -1064,6 +1065,10 @@ export function FilesTree({
             }
           }}
         >
+          {rows.some(row => row.path === menu && !row.directory) && <button role="menuitem"
+            disabled={disabled || !!edit} onClick={() => { const file = menu; dismiss(); void open(file, true); }}>
+            Open File
+          </button>}
           <button role="menuitem" onClick={() => void entryAction("copy-path")}>
             Copy Path
           </button>

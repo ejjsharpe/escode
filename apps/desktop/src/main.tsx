@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@base-ui/react/button";
@@ -17,7 +17,7 @@ import { useProjectChats } from "./chat-state";
 import { WorktreeChoices } from "./worktrees";
 import type { ChatBridge } from "./chat";
 import "./style.css";
-import { memory, initialize, persist, flush, useMemory, closers, rememberProjectUse } from "./workspace";
+import { memory, initialize, persist, flush, useMemory, closers, rememberProjectUse, fileOpeners, fileKeepers, openFile } from "./workspace";
 type Status = {
   project: string;
   root: string;
@@ -101,8 +101,7 @@ function CheckoutView({
   onBlocked: (root: string, blocked: boolean) => void;
 }) {
   const projectCall = window.escode.project;
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
+  const editorVisible = mode !== "Chats";
   const container = useRef<HTMLDivElement>(null);
   const buffers = useRef(new Map<string, BufferState>());
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -111,15 +110,67 @@ function CheckoutView({
   const [filesRevision, setFilesRevision] = useState(0);
   const [transferProgress, setTransferProgress] = useState(false);
   const [path, setPath] = useMemory(root, "path", "");
+  const [openFiles, setOpenFiles] = useMemory(root, "openFiles", [
+    ...new Set([...(memory.views[root]?.path ? [memory.views[root].path!] : []),
+      ...memory.drafts.filter(d => d.root === root).map(d => d.path)]),
+  ]);
+  const recentFiles = useRef<string[]>(path ? [path] : []);
+  const content = useRef<HTMLElement>(null);
+  const focusAfterClose = useRef(false);
+  const [tabMenu, setTabMenu] = useState<{ file: string; order: string[] } | null>(null);
+  const replacedPreviews = useRef<string[]>([]);
+  const [preview, setPreview] = useMemory(root, "preview", "");
+  function keepOpen(file: string) {
+    if (memory.views[root]?.preview === file) setPreview("");
+  }
+  function activateFile(file: string, intent?: "preview" | "keep") {
+    recentFiles.current = [file, ...recentFiles.current.filter(p => p !== file)];
+    const existing = memory.views[root]?.openFiles?.includes(file);
+    const previous = memory.views[root]?.preview;
+    if (intent === "keep") keepOpen(file);
+    let replaced = "";
+    if (!existing && intent === "preview") {
+      if (previous && previous !== file) {
+        const buffer = buffers.current.get(previous);
+        if (!buffer || buffer.model.getValue() === buffer.disk.text) {
+          replaced = previous;
+          replacedPreviews.current.push(previous);
+        }
+      }
+      setPreview(file);
+    }
+    setOpenFiles(old => {
+      if (old.includes(file)) return old;
+      const next = [...old];
+      next.splice(next.indexOf(memory.views[root]?.path ?? "") + 1, 0, file);
+      return next.filter(p => p !== replaced);
+    });
+    setPath(file);
+  }
+  const [fileViews, setFileViews] = useMemory(root, "fileViews", {});
+  const view = fileViews[path] ?? "file";
+  const viewRef = useRef({ path, view });
+  viewRef.current = { path, view };
+  const [comparisonError, setComparisonError] = useState("");
+  function rememberView(file: string, selected: typeof view) {
+    setFileViews(old => ({ ...old, [file]: selected }));
+    setComparisonError("");
+    selectedChange.current = selected === "file" || selected === "conflict" ? null : { path: file, area: selected };
+  }
   const [message, setMessage] = useState("Open a local Git checkout to begin.");
   const [conflict, setConflict] = useState<{ path: string; disk: Document } | null>(null);
-  const selectedChange = useRef<Change | null>(memory.views[root]?.change ?? null);
+  const selectedChange = useRef<Change | null>(
+    path && view !== "file" && view !== "conflict" ? { path, area: view } : null,
+  );
   const presentation = useRef(0);
+  const opening = useRef(0);
+  const [focusRequest, setFocusRequest] = useState<{ file: string; generation: number } | null>(null);
   const [diff, setDiff] = useState<{ original: string; modified: string; title: string; file?: string } | null>(
     null,
   );
   const [bufferRevision, setBufferRevision] = useState(0);
   const [dirty, setDirty] = useState(false);
+  const [, updateText] = useState(0);
   const [saving, setSaving] = useState(false);
   const [fileClosing, setFileClosing] = useState(false);
   const closeInFlight = useRef(false);
@@ -153,8 +204,7 @@ function CheckoutView({
       }
       setStatus(value);
       onStatus(value);
-      if (value.gitError) setDiff(null);
-      else if (selectedChange.current && modeRef.current === "Source Control") {
+      if (selectedChange.current && !opening.current && !closeInFlight.current) {
         await showDiff(selectedChange.current);
       }
     } finally { statusRefreshing.current = false; }
@@ -184,14 +234,23 @@ function CheckoutView({
     };
     buffers.current.set(file, b);
     b.model.onDidChangeContent(() => {
+      if (b.model.getValue() !== b.disk.text) keepOpen(file);
       void record(file, b);
+      updateText(old => old + 1);
     });
     return b;
   }
   useEffect(() => {
-    for (const d of memory.drafts.filter((d) => d.root === root)) addBuffer(d.path, d.disk, d.text);
-    if (path) void select(path, false);
+    for (const d of memory.drafts.filter((d) => d.root === root)) {
+      keepOpen(d.path);
+      addBuffer(d.path, d.disk, d.text);
+    }
+    setOpenFiles(old => [...new Set([...old, ...memory.drafts.filter(d => d.root === root).map(d => d.path)])]);
+    if (path) void restoreView(path);
     return () => {
+      presentation.current++;
+      fileOpeners.delete(root);
+      fileKeepers.delete(root);
       closers.delete(root);
     };
   }, []);
@@ -205,18 +264,13 @@ function CheckoutView({
     void refresh().catch(report);
     return () => { statusRequest.current++; };
   }, []);
-  useLayoutEffect(() => {
-    presentation.current++;
-    setDiff(null);
-    if (mode === "Source Control" && selectedChange.current) void showDiff(selectedChange.current);
-  }, [mode]);
   useEffect(() => {
     if (!status) return;
     const id = setInterval(() => void refresh().catch(report), 2000);
     return () => clearInterval(id);
   }, [status?.root, mode]);
   useEffect(() => {
-    if (!container.current || !path || diff || mode !== "Files") return;
+    if (!editorVisible || !container.current || !path || diff || view !== "file") return;
     const b = buffers.current.get(path);
     if (!b) return;
     const instance = monaco.editor.create(container.current, {
@@ -236,19 +290,21 @@ function CheckoutView({
     container.current.dataset.language = b.model.getLanguageId();
     editor.current = instance;
     if (b.view) instance.restoreViewState(b.view);
+    const position = trackPosition(instance, path, "file");
     instance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveAction.current());
     const update = () => setDirty(b.model.getValue() !== b.disk.text);
     update();
     const listener = b.model.onDidChangeContent(update);
     return () => {
       listener.dispose();
+      position();
       b.view = instance.saveViewState();
       instance.dispose();
       editor.current = null;
     };
-  }, [path, diff, mode, bufferRevision]);
+  }, [path, diff, view, bufferRevision, editorVisible]);
   useEffect(() => {
-    if (!diff || !container.current) return;
+    if (!editorVisible || !diff || !container.current) return;
     const original = monaco.editor.createModel(diff.original, "plaintext");
     const buffer = diff.file ? buffers.current.get(diff.file) : undefined;
     const modified = buffer?.model ?? monaco.editor.createModel(diff.modified, "plaintext");
@@ -276,6 +332,8 @@ function CheckoutView({
       domReadOnly: true,
     });
     const modifiedEditor = instance.getModifiedEditor();
+    const position = trackPosition(modifiedEditor, path, view);
+    const originalPosition = trackPosition(instance.getOriginalEditor(), path, view + ":original");
     modifiedEditor.updateOptions({ ariaLabel: diff.title + " modified" });
     if (buffer) editor.current = modifiedEditor;
     modifiedEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveAction.current());
@@ -284,31 +342,110 @@ function CheckoutView({
     const listener = modified.onDidChangeContent(update);
     return () => {
       listener.dispose();
+      position();
+      originalPosition();
       if (editor.current === modifiedEditor) editor.current = null;
       instance.dispose();
       original.dispose();
       if (!buffer) modified.dispose();
     };
-  }, [diff]);
-  async function select(file: string, present = true) {
+  }, [diff, path, view, editorVisible]);
+  useEffect(() => {
+    if (fileClosing || !focusAfterClose.current || !active || !editorVisible) return;
+    const frame = requestAnimationFrame(() => {
+      focusAfterClose.current = false;
+      if (path && editor.current) editor.current.focus();
+      else content.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [fileClosing, path, diff, bufferRevision, active, editorVisible]);
+  // These effects run after the editors above detach from replaced models.
+  useEffect(() => {
+    for (const file of replacedPreviews.current.splice(0)) {
+      if (memory.views[root]?.openFiles?.includes(file)) continue;
+      buffers.current.get(file)?.model.dispose();
+      buffers.current.delete(file);
+    }
+  }, [openFiles]);
+  useEffect(() => {
+    if (focusRequest && focusRequest.generation === presentation.current &&
+      memory.views[root]?.path === focusRequest.file && container.current?.getClientRects().length)
+      editor.current?.focus();
+  }, [focusRequest]);
+  function trackPosition(instance: monaco.editor.ICodeEditor, file: string, selected: string) {
+    const stored = memory.views[root]?.editorPositions?.[file]?.[selected];
+    if (stored) {
+      instance.setPosition({ lineNumber: stored.line, column: stored.column });
+      instance.setScrollPosition({ scrollTop: stored.top, scrollLeft: stored.left });
+    }
+    const recordPosition = () => {
+      if (!memory.views[root]?.openFiles?.includes(file)) return;
+      const cursor = instance.getPosition();
+      if (!cursor) return;
+      const positions = memory.views[root]?.editorPositions ?? {};
+      memory.views[root] = { ...memory.views[root], editorPositions: { ...positions,
+        [file]: { ...positions[file], [selected]: { line: cursor.lineNumber, column: cursor.column,
+          top: instance.getScrollTop(), left: instance.getScrollLeft() } } } };
+      void persist();
+    };
+    const cursor = instance.onDidChangeCursorPosition(recordPosition);
+    const scroll = instance.onDidScrollChange(recordPosition);
+    return () => { recordPosition(); cursor.dispose(); scroll.dispose(); };
+  }
+  async function restoreView(file: string) {
+    const selected = memory.views[root]?.fileViews?.[file] ?? "file";
+    if (selected === "conflict") {
+      const generation = ++presentation.current;
+      try {
+        const disk = await projectCall("read", root, file);
+        if (generation !== presentation.current) return false;
+        if (!buffers.current.has(file)) addBuffer(file, disk);
+        activateFile(file);
+        setConflict(buffers.current.get(file)!.disk.version === disk.version ? null : { path: file, disk });
+        compareConflict(file, disk);
+        return true;
+      } catch (error) {
+        if (generation !== presentation.current) return false;
+        activateFile(file);
+        rememberView(file, "conflict");
+        setDiff(null);
+        setComparisonError("Comparison unavailable. " + String(error));
+        report(error);
+        return false;
+      }
+    }
+    return selected === "file" ? select(file) : showDiff({ path: file, area: selected }, true);
+  }
+  function compareConflict(file: string, disk: Document) {
+    presentation.current++;
+    rememberView(file, "conflict");
+    setDiff({ original: disk.text, modified: buffers.current.get(file)!.model.getValue(),
+      title: "Disk versus your edits", file });
+  }
+  async function select(file: string, present = true, intent?: "preview" | "keep") {
+    opening.current++;
     const generation = present ? ++presentation.current : presentation.current;
     try {
       if (!buffers.current.has(file)) {
         const disk: Document = await projectCall("read", root, file);
+        if (generation !== presentation.current) return false;
         if (!buffers.current.has(file)) addBuffer(file, disk);
       }
       if (!present) {
         setBufferRevision((old) => old + 1);
-        return;
+        return true;
       }
-      if (generation !== presentation.current) return;
-      setPath(file);
+      if (generation !== presentation.current) return false;
+      activateFile(file, intent);
+      rememberView(file, "file");
       setDiff(null);
       setBufferRevision((old) => old + 1);
       setMessage("Cmd+S to save.");
+      return true;
     } catch (e) {
-      report(e);
-    }
+      if (generation === presentation.current) report(e);
+      return false;
+    } finally { opening.current--; }
   }
   async function save(version?: string, target = path) {
     if (!target || saveInFlight.current) return false;
@@ -325,6 +462,11 @@ function CheckoutView({
         version ?? b.disk.version,
       );
       if (result.kind === "conflict") {
+        if (target !== path) {
+          activateFile(target);
+          rememberView(target, "file");
+          setDiff(null);
+        }
         setConflict({ path: target, disk: result.disk });
         setMessage("Disk changed. Compare, overwrite this disk version, or reload.");
       } else {
@@ -333,9 +475,9 @@ function CheckoutView({
           return false;
         }
         b.disk = result.disk;
-        setDirty(b.model.getValue() !== b.disk.text);
+        if (target === viewRef.current.path) setDirty(b.model.getValue() !== b.disk.text);
         setConflict(null);
-        setDiff(null);
+        if (viewRef.current.view === "conflict") compareConflict(target, result.disk);
         await record(target, b);
         await refresh();
         setMessage("Saved " + target);
@@ -359,7 +501,7 @@ function CheckoutView({
       b.disk = disk;
       b.model.setValue(disk.text);
       setConflict(null);
-      setDiff(null);
+      if (view === "conflict") compareConflict(conflict.path, disk);
       setDirty(false);
       await record(conflict.path, b);
       setMessage("Reloaded from disk.");
@@ -367,22 +509,19 @@ function CheckoutView({
       report(e);
     }
   }
-  async function showDiff(change: Change) {
-    if (modeRef.current !== "Source Control") return;
+  async function showDiff(change: Change, retain = false, intent?: "preview" | "keep") {
+    opening.current++;
     const generation = ++presentation.current;
     try {
-      selectedChange.current = change;
-      memory.views[root] = { ...memory.views[root], change };
-      void persist();
       const value = await projectCall("diff", root, change.path, change.area);
-      if (generation !== presentation.current || modeRef.current !== "Source Control") return;
+      if (generation !== presentation.current) return;
       let file: string | undefined;
       let unavailable = "";
       try {
         const buffer = buffers.current.get(change.path);
         if (!buffer || buffer.model.getValue() === buffer.disk.text) {
           const disk = await projectCall("read", root, change.path);
-          if (generation !== presentation.current || modeRef.current !== "Source Control") return;
+          if (generation !== presentation.current) return;
           if (!buffers.current.has(change.path)) addBuffer(change.path, disk);
           else if (buffer && buffer.model.getValue() === buffer.disk.text) {
             buffer.disk = disk;
@@ -393,8 +532,10 @@ function CheckoutView({
       } catch (error) {
         unavailable = "Working file unavailable; comparison is read-only. " + String(error);
       }
-      if (generation !== presentation.current || modeRef.current !== "Source Control") return;
-      if (file) setPath(file);
+      if (generation !== presentation.current) return;
+      rememberView(change.path, change.area);
+      memory.views[root] = { ...memory.views[root], change };
+      activateFile(change.path, intent);
       const title =
         change.area + " · " + change.path +
         (file && change.area === "staged" ? " · working copy" : "");
@@ -407,68 +548,111 @@ function CheckoutView({
           : { ...value, title, file },
       );
       setMessage(unavailable || "Edit the new side · Cmd+S to save the working file.");
+      return true;
     } catch (e) {
       if (generation !== presentation.current) return;
-      setDiff(null);
+      if (retain || (viewRef.current.path === change.path && viewRef.current.view === change.area)) {
+        activateFile(change.path);
+        rememberView(change.path, change.area);
+        setDiff(null);
+        setComparisonError("Comparison unavailable. " + String(e));
+      }
       report(e);
-    }
+      return false;
+    } finally { opening.current--; }
   }
-  async function closeFile(file: string, dispose = true, discards?: (() => () => void)[]) {
+  async function prepareFileClose(file: string, discards: (() => () => void)[]) {
     const b = buffers.current.get(file);
-    if (!b || saveInFlight.current || closeInFlight.current) return false;
+    if (!b || b.model.getValue() === b.disk.text) return true;
+    const choice = await window.escode.lifecycle("dirty", root + "/" + file);
+    if (choice === 2) return false;
+    if (choice === 1) {
+      discards.push(() => {
+        memory.drafts = memory.drafts.filter(d => d.root !== root || d.path !== file);
+        return () => b.model.setValue(b.disk.text);
+      });
+      return true;
+    }
+    if (await save(undefined, file)) return true;
+    window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
+    return false;
+  }
+  async function closeFiles(files: string[]) {
+    if (saveInFlight.current || closeInFlight.current || conflict) return false;
+    const targets = new Set(files.filter(file => memory.views[root]?.openFiles?.includes(file)));
+    if (!targets.size) return true;
     closeInFlight.current = true;
+    presentation.current++;
     setFileClosing(true);
     editor.current?.updateOptions({ readOnly: true });
+    const activeFile = memory.views[root]?.path ?? "";
     try {
-      if (b.model.getValue() !== b.disk.text) {
-        const choice = await window.escode.lifecycle("dirty", root + "/" + file);
-        if (choice === 2) return false;
-        if (choice === 1 && discards) {
-          discards.push(() => {
-            memory.drafts = memory.drafts.filter((d) => d.root !== root || d.path !== file);
-            return () => b.model.setValue(b.disk.text);
-          });
-          return true;
-        }
-        if (choice === 0 && !(await save(undefined, file))) {
-          setPath(file);
-          window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
-          return false;
-        }
-      }
-      // Workspace closure publishes its captured choices before releasing models.
-      if (discards) return true;
-      // Remove the durable draft before disposing the only in-memory copy.
+      const discards: (() => () => void)[] = [];
+      for (const file of targets) if (!(await prepareFileClose(file, discards))) return false;
+      await persist();
+      const previous = memory.views[root];
       const drafts = memory.drafts;
-      memory.drafts = drafts.filter((d) => d.root !== root || d.path !== file);
+      const remaining = (previous?.openFiles ?? []).filter(file => !targets.has(file));
+      const survivor = targets.has(activeFile)
+        ? recentFiles.current.find(file => remaining.includes(file)) ?? remaining[0] ?? ""
+        : activeFile;
+      for (const discard of discards) discard();
+      memory.drafts = memory.drafts.filter(d => d.root !== root || !targets.has(d.path));
+      memory.views[root] = { ...previous, openFiles: remaining, path: survivor,
+        preview: targets.has(previous?.preview ?? "") ? "" : previous?.preview ?? "" };
       try {
         await persist();
       } catch (error) {
-        memory.drafts = [
-          ...memory.drafts.filter((d) => d.root !== root || d.path !== file),
-          ...drafts.filter((d) => d.root === root && d.path === file),
-        ];
-        report(error);
-        return false;
+        memory.views[root] = previous;
+        memory.drafts = [...memory.drafts.filter(d => d.root !== root || !targets.has(d.path)),
+          ...drafts.filter(d => d.root === root && targets.has(d.path))];
+        void persist();
+        throw error;
       }
-      if (!dispose) {
-        b.model.setValue(b.disk.text);
-        return true;
-      }
-      buffers.current.delete(file);
-      b.model.dispose();
-      if (path === file) {
-        setPath("");
+      setOpenFiles(remaining);
+      setPreview(memory.views[root]?.preview ?? "");
+      recentFiles.current = recentFiles.current.filter(file => !targets.has(file));
+      if (targets.has(activeFile)) {
+        setPath(survivor);
         setDiff(null);
+        selectedChange.current = null;
         setConflict(null);
         setDirty(false);
+        if (survivor) await restoreView(survivor);
+      }
+      for (const file of targets) {
+        buffers.current.get(file)?.model.dispose();
+        buffers.current.delete(file);
       }
       return true;
+    } catch (error) {
+      report(error);
+      return false;
     } finally {
       closeInFlight.current = false;
       setFileClosing(false);
       editor.current?.updateOptions({ readOnly: false });
+      focusAfterClose.current = true;
     }
+  }
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (!active || !editorVisible || !event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.key.toLowerCase() !== "w") return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[role=dialog], [role=alertdialog], [role=menu]") ||
+        (target?.closest("input, textarea, select, [contenteditable=true]") && !target.closest(".monaco-editor"))) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!closeInFlight.current && !saveInFlight.current && !conflict) void closeFiles(path ? [path] : []);
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  });
+  function dismissTabMenu() {
+    const file = tabMenu?.file;
+    setTabMenu(null);
+    const tabs = content.current?.querySelectorAll<HTMLButtonElement>("[role=tab]");
+    Array.from(tabs ?? []).find(tab => tab.title === root + "/" + file)?.focus();
   }
   async function fileOperation(
     kind: "move" | "trash" | "paste" | "duplicate" | "drag-move" | "drag-copy" | "import",
@@ -584,7 +768,7 @@ function CheckoutView({
         const current = editor.current?.getModel();
         for (const [file, b] of Array.from(buffers.current)) {
           if (!affected(file, source)) continue;
-          if (current === b.model) b.view = editor.current?.saveViewState();
+          if (current === b.model && view === "file") b.view = editor.current?.saveViewState();
           buffers.current.delete(file);
           if (operationKind === "move") {
             const next = addBuffer(moved(file, source, target), b.disk, b.model.getValue());
@@ -600,9 +784,13 @@ function CheckoutView({
               ? ""
               : nextPath;
       }
+      setPreview(memory.views[root]?.preview ?? "");
+      setOpenFiles(memory.views[root]?.openFiles ?? []);
       setPath(nextPath);
       setDiff(null);
       selectedChange.current = null;
+      setFileViews(memory.views[root]?.fileViews ?? {});
+      if (nextPath) void restoreView(nextPath);
       setBufferRevision((n) => n + 1);
       setDirty(
         !!buffers.current.get(nextPath) &&
@@ -625,10 +813,10 @@ function CheckoutView({
       } catch (error) {
         refreshError = `\nRefresh failed: ${String(error)}`;
       }
-      if (batch && "open" in batch) for (const file of batch.open) await select(file);
+      if (batch && "open" in batch) for (const file of batch.open) await open(file);
       const failed = batch && "saves" in batch ? batch.results.find((r) => r.conflict) : undefined;
       if (failed?.conflict) {
-        await select(failed.conflict.path);
+        await open(failed.conflict.path);
         setConflict(failed.conflict);
       }
       const message =
@@ -647,12 +835,29 @@ function CheckoutView({
       editor.current?.updateOptions({ readOnly: false });
     }
   }
+  fileKeepers.set(root, keepOpen);
+  fileOpeners.set(root, async request => {
+    if (request.root !== root || closeInFlight.current) return false;
+    const opened = request.view === "file"
+      ? await select(request.path, true, request.intent)
+      : !!(await showDiff({ path: request.path, area: request.view }, false, request.intent));
+    if (opened && request.intent === "keep")
+      setFocusRequest({ file: request.path, generation: presentation.current });
+    return opened;
+  });
+  const open = (file: string, view: import("./workspace").FileOpenRequest["view"] = "file",
+    intent: "preview" | "keep" = "keep") => openFile({ root, path: file, view, intent });
   closers.set(root, {
     project,
     close: async (discards) => {
       if (closeInFlight.current) return false;
-      for (const file of [...buffers.current.keys()]) if (!(await closeFile(file, false, discards))) return false;
-      return true;
+      if (saveInFlight.current) return false;
+      closeInFlight.current = true;
+      setFileClosing(true);
+      try {
+        for (const file of buffers.current.keys()) if (!(await prepareFileClose(file, discards))) return false;
+        return true;
+      } finally { closeInFlight.current = false; setFileClosing(false); }
     },
   });
   return (
@@ -700,15 +905,7 @@ function CheckoutView({
                 return !!b && b.model.getValue() !== b.disk.text;
               }}
               open={async (file, focusEditor) => {
-                await select(file);
-                if (focusEditor)
-                  requestAnimationFrame(() => {
-                    if (
-                      container.current?.getClientRects().length &&
-                      editor.current?.getModel() === buffers.current.get(file)?.model
-                    )
-                      editor.current?.focus();
-                  });
+                await open(file, "file", focusEditor ? "keep" : "preview");
               }}
               rename={(source, destination) => fileOperation("move", source, destination, true)}
               create={async (parent, name, kind) => {
@@ -723,7 +920,7 @@ function CheckoutView({
                   throw Error("Destination has an open buffer. Close it or choose a free name.");
                 const file = await projectCall("create-entry", root, parent, name, kind);
                 setFilesRevision((n) => n + 1);
-                if (kind === "file") await select(file);
+                if (kind === "file") await open(file);
                 return file;
               }}
               transfer={async (kind, sources, parent) => {
@@ -752,7 +949,8 @@ function CheckoutView({
                             selectedChange.current?.path === c.path &&
                             selectedChange.current.area === area
                           }
-                          onClick={() => void showDiff(c)}
+                          onClick={() => void open(c.path, c.area, "preview")}
+                          onDoubleClick={() => void open(c.path, c.area, "keep")}
                         >
                           {c.path}
                         </Button>
@@ -764,21 +962,79 @@ function CheckoutView({
           </>
         )}
       </aside>
-      <section className="content" aria-label="Main editor">
+      <section ref={content} tabIndex={-1} className="content" aria-label="Main editor">
         {mode !== "Chats" && (
           <>
+            <div className="file-tabs" role="tablist" aria-label="Open files">
+              {openFiles.map(file => (
+                <span key={file} className="file-tab">
+                <button role="tab" aria-selected={path === file}
+                  aria-description={preview === file ? "Preview" : undefined}
+                  style={{ fontStyle: preview === file ? "italic" : undefined }}
+                  onDoubleClick={() => keepOpen(file)}
+                  title={root + "/" + file} disabled={saving || fileClosing || !!conflict}
+                  onContextMenu={event => {
+                    event.preventDefault(); setTabMenu({ file, order: [...openFiles] });
+                  }} onKeyDown={event => {
+                    if (event.shiftKey && event.key === "F10") {
+                      event.preventDefault(); setTabMenu({ file, order: [...openFiles] });
+                    }
+                  }} onClick={() => void restoreView(file)}>{file}</button>
+                <button aria-label={"Close " + file} disabled={saving || fileClosing || !!conflict}
+                  onClick={() => void closeFiles([file])}>×</button>
+                </span>
+              ))}
+            </div>
+            {tabMenu && <div role="menu" aria-label={"File tab actions for " + tabMenu.file}
+              className="files-menu" onBlur={event => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setTabMenu(null);
+              }} onKeyDown={event => {
+                if (event.key === "Escape") { event.preventDefault(); dismissTabMenu(); }
+                if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+                  event.preventDefault();
+                  const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+                  const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                  items[event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 :
+                    (index + (event.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+                }
+              }}>
+              <button role="menuitem" autoFocus onClick={() => { keepOpen(tabMenu.file); dismissTabMenu(); }}>Keep Open</button>
+              {["Close", "Close Others", "Close to the Right", "Close All"].map(action =>
+                <button key={action} role="menuitem" onClick={() => {
+                  const { file, order } = tabMenu;
+                  const files = action === "Close" ? [file] : action === "Close Others" ? order.filter(p => p !== file) :
+                    action === "Close to the Right" ? order.slice(order.indexOf(file) + 1) : order;
+                  dismissTabMenu();
+                  void closeFiles(files);
+                }}>{action}</button>)}
+            </div>}
             <div className="toolbar">
               <span>
-                {diff?.title || path || "No file selected"}
+                {diff?.title || (path && view !== "file" ? view + " · " + path : path) || "No file selected"}
                 {dirty && path && (!diff || diff.file) ? " • Unsaved" : ""}
               </span>
-              {path && (mode === "Files" || diff?.file) && (
+              {path && <label>File view <select aria-label="File view" value={view}
+                disabled={saving || fileClosing} onChange={event => {
+                  const next = event.target.value;
+                  if (next === "conflict" && conflict) compareConflict(path, conflict.disk);
+                  else if (next === "file") void select(path);
+                  else if (next === "staged" || next === "unstaged" || next === "untracked")
+                    void showDiff({ path, area: next }, true);
+                }}>
+                <option value="file">File</option>
+                {(["staged", "unstaged", "untracked"] as const).filter(area =>
+                  area === view || status?.changes.some(c => c.path === path && c.area === area)
+                ).map(area => <option key={area} value={area}>{area}</option>)}
+                {(conflict || view === "conflict") && <option value="conflict">Save conflict</option>}
+              </select></label>}
+              {path && preview === path && <Button onClick={() => { keepOpen(path); editor.current?.focus(); }}>Keep Open</Button>}
+              {path && buffers.current.has(path) && (
                 <Button disabled={saving} onClick={() => void save(undefined, diff?.file ?? path)}>
                   Save ⌘S
                 </Button>
               )}
-              {path && mode === "Files" && (
-                <Button disabled={saving || fileClosing} onClick={() => void closeFile(path)}>
+              {path && (
+                <Button disabled={saving || fileClosing} onClick={() => void closeFiles([path])}>
                   Close file
                 </Button>
               )}
@@ -788,14 +1044,7 @@ function CheckoutView({
                 <p>{conflict.path} changed on disk. Your edits are retained.</p>
                 <Button
                   disabled={saving}
-                  onClick={() =>
-                    setDiff({
-                      original: conflict.disk.text,
-                      modified: buffers.current.get(conflict.path)!.model.getValue(),
-                      title: "Disk versus your edits",
-                      file: conflict.path,
-                    })
-                  }
+                  onClick={() => compareConflict(conflict.path, conflict.disk)}
                 >
                   Compare
                 </Button>
@@ -809,13 +1058,18 @@ function CheckoutView({
                   disabled={saving}
                   onClick={() => {
                     setConflict(null);
-                    setDiff(null);
+                    if (view === "conflict") { rememberView(path, "file"); setDiff(null); }
                   }}
                 >
                   Cancel
                 </Button>
               </div>
             )}
+            {diff && !diff.file && !comparisonError && <Button onClick={() => void restoreView(path)}>Retry comparison</Button>}
+            {comparisonError && <div role="alert">{comparisonError}
+              <Button onClick={() => void restoreView(path)}>Retry comparison</Button>
+            </div>}
+            {diff && !comparisonError && diff.original === (diff.file ? buffers.current.get(diff.file)?.model.getValue() : diff.modified) && <p role="status">No changes</p>}
             <p
               role="status"
               tabIndex={0}

@@ -64,3 +64,20 @@ export function useMemory<K extends keyof ViewMemory>(
   return [value, update] as const;
 }
 export const closers = new Map<string, { project: string; close: (discards: (() => () => void)[]) => Promise<boolean> }>();
+
+// One exact checkout target; lookup must validate scope before calling this client path.
+export type FileOpenRequest = {
+  root: string;
+  path: string;
+  view: "file" | "staged" | "unstaged" | "untracked";
+  intent: "preview" | "keep";
+};
+// Ordering can promote without changing the selected file/view or issuing a host read.
+export const fileKeepers = new Map<string, (path: string) => void>();
+export function keepFileOpen(root: string, path: string) { fileKeepers.get(root)?.(path); }
+export const fileOpeners = new Map<string, (request: FileOpenRequest) => Promise<boolean>>();
+export async function openFile(request: FileOpenRequest) {
+  const open = fileOpeners.get(request.root);
+  if (!open) throw Error("The exact checkout editor is not open.");
+  return open(request);
+}
