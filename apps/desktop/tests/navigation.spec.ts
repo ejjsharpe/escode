@@ -246,9 +246,9 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(sidebar.getByRole("button", { name: "Files", exact: true })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: "Diff", exact: true })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: "Chats", exact: true })).toBeVisible();
-    await page.getByText("Settings", { exact: true }).click();
+    await sidebar.getByText("Settings", { exact: true }).click();
     await expect(page.getByRole("heading", { name: "Checkpoint retention", exact: true })).toBeVisible();
-    await page.getByText("Settings", { exact: true }).click();
+    await sidebar.getByText("Settings", { exact: true }).click();
     await page.screenshot({ path: "test-results/navigation-narrow-short.png" });
   } finally {
     await app.evaluate(({ dialog }) => {

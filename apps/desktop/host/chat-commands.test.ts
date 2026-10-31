@@ -177,6 +177,28 @@ test("archive rejects uncertain work without changing saved metadata", async () 
   } finally { await f.close(); }
 });
 
+test("delayed title and composer writes preserve archive metadata and original recency", async () => {
+  const f = await fixture();
+  try {
+    await f.store.update(f.root, f.chat.id, { latestUserMessageAt: 1234 });
+    const request = await f.store.titleGeneration(f.root, f.chat.id, "Fix checkout navigation");
+    await f.service.draftAction({ operation: "archive", project: f.root, id: f.chat.id,
+      expected: await f.service.expectation(f.root, f.chat.id), archived: true });
+    await Promise.all([
+      f.store.title(f.root, f.chat.id, "Generated navigation title", request!.request),
+      f.store.draft(f.root, f.chat.id, "retained composer"),
+    ]);
+    await f.store.title(f.root, f.chat.id, "Manual navigation title");
+    await f.store.title(f.root, f.chat.id, "Stale generated title", request!.request);
+    expect(await f.store.get(f.root, f.chat.id)).toMatchObject({ archived: true,
+      title: "Manual navigation title", draft: "retained composer", latestUserMessageAt: 1234 });
+    await f.service.draftAction({ operation: "archive", project: f.root, id: f.chat.id,
+      expected: await f.service.expectation(f.root, f.chat.id), archived: false });
+    expect(await f.store.get(f.root, f.chat.id)).toMatchObject({ archived: false,
+      title: "Manual navigation title", draft: "retained composer", latestUserMessageAt: 1234 });
+  } finally { await f.close(); }
+});
+
 test("archive and Send admission arbitrate through the same durable chat", async () => {
   const f = await fixture();
   try {

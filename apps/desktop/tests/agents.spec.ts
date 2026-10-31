@@ -114,8 +114,10 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await page.getByRole("button", { name: "Show archived chats", exact: true }).click();
     await expect(rows.filter({ hasText: "alpha" })).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Show recent chats", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Show recent chats", exact: true })).toBeFocused();
     await page.getByRole("button", { name: "Restore chat", exact: true }).click();
     await page.getByRole("button", { name: "Show recent chats", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Show archived chats", exact: true })).toBeFocused();
     await expect(rows.filter({ hasText: "alpha" })).toHaveCount(1);
 
     await page
