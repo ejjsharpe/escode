@@ -37,6 +37,10 @@ export function reconcile(state: WorkspaceState, intent: Intent) {
     }
     if (view.openFiles) view.openFiles = view.openFiles.flatMap(p =>
       kind === "trash" && affected(p, source) ? [] : [moved(p, source, destination)]);
+    const mapFiles = <T>(values: Record<string, T>) => Object.fromEntries(Object.entries(values).flatMap(([p, value]) =>
+      kind === "trash" && affected(p, source) ? [] : [[moved(p, source, destination), value]]));
+    if (view.fileViews) view.fileViews = mapFiles(view.fileViews);
+    if (view.editorPositions) view.editorPositions = mapFiles(view.editorPositions);
     if (view.files) {
       const map = (paths: string[]) =>
         paths.flatMap((p) =>

@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@base-ui/react/button";
@@ -101,8 +101,7 @@ function CheckoutView({
   onBlocked: (root: string, blocked: boolean) => void;
 }) {
   const projectCall = window.escode.project;
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
+  const editorVisible = mode !== "Chats";
   const container = useRef<HTMLDivElement>(null);
   const buffers = useRef(new Map<string, BufferState>());
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -124,15 +123,29 @@ function CheckoutView({
     });
     setPath(file);
   }
+  const [fileViews, setFileViews] = useMemory(root, "fileViews", {});
+  const view = fileViews[path] ?? "file";
+  const viewRef = useRef({ path, view });
+  viewRef.current = { path, view };
+  const [comparisonError, setComparisonError] = useState("");
+  function rememberView(file: string, selected: typeof view) {
+    setFileViews(old => ({ ...old, [file]: selected }));
+    setComparisonError("");
+    selectedChange.current = selected === "file" || selected === "conflict" ? null : { path: file, area: selected };
+  }
   const [message, setMessage] = useState("Open a local Git checkout to begin.");
   const [conflict, setConflict] = useState<{ path: string; disk: Document } | null>(null);
-  const selectedChange = useRef<Change | null>(memory.views[root]?.change ?? null);
+  const selectedChange = useRef<Change | null>(
+    path && view !== "file" && view !== "conflict" ? { path, area: view } : null,
+  );
   const presentation = useRef(0);
+  const opening = useRef(0);
   const [diff, setDiff] = useState<{ original: string; modified: string; title: string; file?: string } | null>(
     null,
   );
   const [bufferRevision, setBufferRevision] = useState(0);
   const [dirty, setDirty] = useState(false);
+  const [, updateText] = useState(0);
   const [saving, setSaving] = useState(false);
   const [fileClosing, setFileClosing] = useState(false);
   const closeInFlight = useRef(false);
@@ -166,8 +179,7 @@ function CheckoutView({
       }
       setStatus(value);
       onStatus(value);
-      if (value.gitError) setDiff(null);
-      else if (selectedChange.current && modeRef.current === "Source Control") {
+      if (selectedChange.current && !opening.current) {
         await showDiff(selectedChange.current);
       }
     } finally { statusRefreshing.current = false; }
@@ -198,13 +210,14 @@ function CheckoutView({
     buffers.current.set(file, b);
     b.model.onDidChangeContent(() => {
       void record(file, b);
+      updateText(old => old + 1);
     });
     return b;
   }
   useEffect(() => {
     for (const d of memory.drafts.filter((d) => d.root === root)) addBuffer(d.path, d.disk, d.text);
     setOpenFiles(old => [...new Set([...old, ...memory.drafts.filter(d => d.root === root).map(d => d.path)])]);
-    if (path) void select(path, false);
+    if (path) void restoreView(path);
     return () => {
       presentation.current++;
       fileOpeners.delete(root);
@@ -221,18 +234,13 @@ function CheckoutView({
     void refresh().catch(report);
     return () => { statusRequest.current++; };
   }, []);
-  useLayoutEffect(() => {
-    presentation.current++;
-    setDiff(null);
-    if (mode === "Source Control" && selectedChange.current) void showDiff(selectedChange.current);
-  }, [mode]);
   useEffect(() => {
     if (!status) return;
     const id = setInterval(() => void refresh().catch(report), 2000);
     return () => clearInterval(id);
   }, [status?.root, mode]);
   useEffect(() => {
-    if (!container.current || !path || diff || mode !== "Files") return;
+    if (!editorVisible || !container.current || !path || diff || view !== "file") return;
     const b = buffers.current.get(path);
     if (!b) return;
     const instance = monaco.editor.create(container.current, {
@@ -252,19 +260,21 @@ function CheckoutView({
     container.current.dataset.language = b.model.getLanguageId();
     editor.current = instance;
     if (b.view) instance.restoreViewState(b.view);
+    const position = trackPosition(instance, path, "file");
     instance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveAction.current());
     const update = () => setDirty(b.model.getValue() !== b.disk.text);
     update();
     const listener = b.model.onDidChangeContent(update);
     return () => {
       listener.dispose();
+      position();
       b.view = instance.saveViewState();
       instance.dispose();
       editor.current = null;
     };
-  }, [path, diff, mode, bufferRevision]);
+  }, [path, diff, view, bufferRevision, editorVisible]);
   useEffect(() => {
-    if (!diff || !container.current) return;
+    if (!editorVisible || !diff || !container.current) return;
     const original = monaco.editor.createModel(diff.original, "plaintext");
     const buffer = diff.file ? buffers.current.get(diff.file) : undefined;
     const modified = buffer?.model ?? monaco.editor.createModel(diff.modified, "plaintext");
@@ -292,6 +302,8 @@ function CheckoutView({
       domReadOnly: true,
     });
     const modifiedEditor = instance.getModifiedEditor();
+    const position = trackPosition(modifiedEditor, path, view);
+    const originalPosition = trackPosition(instance.getOriginalEditor(), path, view + ":original");
     modifiedEditor.updateOptions({ ariaLabel: diff.title + " modified" });
     if (buffer) editor.current = modifiedEditor;
     modifiedEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveAction.current());
@@ -300,13 +312,66 @@ function CheckoutView({
     const listener = modified.onDidChangeContent(update);
     return () => {
       listener.dispose();
+      position();
+      originalPosition();
       if (editor.current === modifiedEditor) editor.current = null;
       instance.dispose();
       original.dispose();
       if (!buffer) modified.dispose();
     };
-  }, [diff]);
+  }, [diff, path, view, editorVisible]);
+  function trackPosition(instance: monaco.editor.ICodeEditor, file: string, selected: string) {
+    const stored = memory.views[root]?.editorPositions?.[file]?.[selected];
+    if (stored) {
+      instance.setPosition({ lineNumber: stored.line, column: stored.column });
+      instance.setScrollPosition({ scrollTop: stored.top, scrollLeft: stored.left });
+    }
+    const recordPosition = () => {
+      if (!memory.views[root]?.openFiles?.includes(file)) return;
+      const cursor = instance.getPosition();
+      if (!cursor) return;
+      const positions = memory.views[root]?.editorPositions ?? {};
+      memory.views[root] = { ...memory.views[root], editorPositions: { ...positions,
+        [file]: { ...positions[file], [selected]: { line: cursor.lineNumber, column: cursor.column,
+          top: instance.getScrollTop(), left: instance.getScrollLeft() } } } };
+      void persist();
+    };
+    const cursor = instance.onDidChangeCursorPosition(recordPosition);
+    const scroll = instance.onDidScrollChange(recordPosition);
+    return () => { recordPosition(); cursor.dispose(); scroll.dispose(); };
+  }
+  async function restoreView(file: string) {
+    const selected = memory.views[root]?.fileViews?.[file] ?? "file";
+    if (selected === "conflict") {
+      const generation = ++presentation.current;
+      try {
+        const disk = await projectCall("read", root, file);
+        if (generation !== presentation.current) return false;
+        if (!buffers.current.has(file)) addBuffer(file, disk);
+        activateFile(file);
+        setConflict(buffers.current.get(file)!.disk.version === disk.version ? null : { path: file, disk });
+        compareConflict(file, disk);
+        return true;
+      } catch (error) {
+        if (generation !== presentation.current) return false;
+        activateFile(file);
+        rememberView(file, "conflict");
+        setDiff(null);
+        setComparisonError("Comparison unavailable. " + String(error));
+        report(error);
+        return false;
+      }
+    }
+    return selected === "file" ? select(file) : showDiff({ path: file, area: selected }, true);
+  }
+  function compareConflict(file: string, disk: Document) {
+    presentation.current++;
+    rememberView(file, "conflict");
+    setDiff({ original: disk.text, modified: buffers.current.get(file)!.model.getValue(),
+      title: "Disk versus your edits", file });
+  }
   async function select(file: string, present = true) {
+    opening.current++;
     const generation = present ? ++presentation.current : presentation.current;
     try {
       if (!buffers.current.has(file)) {
@@ -320,6 +385,7 @@ function CheckoutView({
       }
       if (generation !== presentation.current) return false;
       activateFile(file);
+      rememberView(file, "file");
       setDiff(null);
       setBufferRevision((old) => old + 1);
       setMessage("Cmd+S to save.");
@@ -327,7 +393,7 @@ function CheckoutView({
     } catch (e) {
       if (generation === presentation.current) report(e);
       return false;
-    }
+    } finally { opening.current--; }
   }
   async function save(version?: string, target = path) {
     if (!target || saveInFlight.current) return false;
@@ -354,7 +420,7 @@ function CheckoutView({
         b.disk = result.disk;
         setDirty(b.model.getValue() !== b.disk.text);
         setConflict(null);
-        setDiff(null);
+        if (viewRef.current.view === "conflict") compareConflict(target, result.disk);
         await record(target, b);
         await refresh();
         setMessage("Saved " + target);
@@ -378,7 +444,7 @@ function CheckoutView({
       b.disk = disk;
       b.model.setValue(disk.text);
       setConflict(null);
-      setDiff(null);
+      if (view === "conflict") compareConflict(conflict.path, disk);
       setDirty(false);
       await record(conflict.path, b);
       setMessage("Reloaded from disk.");
@@ -386,19 +452,19 @@ function CheckoutView({
       report(e);
     }
   }
-  async function showDiff(change: Change) {
-    if (modeRef.current !== "Source Control") return;
+  async function showDiff(change: Change, retain = false) {
+    opening.current++;
     const generation = ++presentation.current;
     try {
       const value = await projectCall("diff", root, change.path, change.area);
-      if (generation !== presentation.current || modeRef.current !== "Source Control") return;
+      if (generation !== presentation.current) return;
       let file: string | undefined;
       let unavailable = "";
       try {
         const buffer = buffers.current.get(change.path);
         if (!buffer || buffer.model.getValue() === buffer.disk.text) {
           const disk = await projectCall("read", root, change.path);
-          if (generation !== presentation.current || modeRef.current !== "Source Control") return;
+          if (generation !== presentation.current) return;
           if (!buffers.current.has(change.path)) addBuffer(change.path, disk);
           else if (buffer && buffer.model.getValue() === buffer.disk.text) {
             buffer.disk = disk;
@@ -409,8 +475,8 @@ function CheckoutView({
       } catch (error) {
         unavailable = "Working file unavailable; comparison is read-only. " + String(error);
       }
-      if (generation !== presentation.current || modeRef.current !== "Source Control") return;
-      selectedChange.current = change;
+      if (generation !== presentation.current) return;
+      rememberView(change.path, change.area);
       memory.views[root] = { ...memory.views[root], change };
       activateFile(change.path);
       const title =
@@ -428,9 +494,15 @@ function CheckoutView({
       return true;
     } catch (e) {
       if (generation !== presentation.current) return;
+      if (retain || (viewRef.current.path === change.path && viewRef.current.view === change.area)) {
+        activateFile(change.path);
+        rememberView(change.path, change.area);
+        setDiff(null);
+        setComparisonError("Comparison unavailable. " + String(e));
+      }
       report(e);
       return false;
-    }
+    } finally { opening.current--; }
   }
   async function closeFile(file: string, dispose = true, discards?: (() => () => void)[]) {
     const b = buffers.current.get(file);
@@ -602,7 +674,7 @@ function CheckoutView({
         const current = editor.current?.getModel();
         for (const [file, b] of Array.from(buffers.current)) {
           if (!affected(file, source)) continue;
-          if (current === b.model) b.view = editor.current?.saveViewState();
+          if (current === b.model && view === "file") b.view = editor.current?.saveViewState();
           buffers.current.delete(file);
           if (operationKind === "move") {
             const next = addBuffer(moved(file, source, target), b.disk, b.model.getValue());
@@ -622,6 +694,8 @@ function CheckoutView({
       setPath(nextPath);
       setDiff(null);
       selectedChange.current = null;
+      setFileViews(memory.views[root]?.fileViews ?? {});
+      if (nextPath) void restoreView(nextPath);
       setBufferRevision((n) => n + 1);
       setDirty(
         !!buffers.current.get(nextPath) &&
@@ -799,20 +873,34 @@ function CheckoutView({
               {openFiles.map(file => (
                 <button key={file} role="tab" aria-selected={path === file}
                   title={root + "/" + file} disabled={saving || fileClosing || !!conflict}
-                  onClick={() => void open(file)}>{file}</button>
+                  onClick={() => void restoreView(file)}>{file}</button>
               ))}
             </div>
             <div className="toolbar">
               <span>
-                {diff?.title || path || "No file selected"}
+                {diff?.title || (path && view !== "file" ? view + " · " + path : path) || "No file selected"}
                 {dirty && path && (!diff || diff.file) ? " • Unsaved" : ""}
               </span>
-              {path && (mode === "Files" || diff?.file) && (
+              {path && <label>File view <select aria-label="File view" value={view}
+                disabled={saving || fileClosing} onChange={event => {
+                  const next = event.target.value;
+                  if (next === "conflict" && conflict) compareConflict(path, conflict.disk);
+                  else if (next === "file") void select(path);
+                  else if (next === "staged" || next === "unstaged" || next === "untracked")
+                    void showDiff({ path, area: next }, true);
+                }}>
+                <option value="file">File</option>
+                {(["staged", "unstaged", "untracked"] as const).filter(area =>
+                  area === view || status?.changes.some(c => c.path === path && c.area === area)
+                ).map(area => <option key={area} value={area}>{area}</option>)}
+                {(conflict || view === "conflict") && <option value="conflict">Save conflict</option>}
+              </select></label>}
+              {path && buffers.current.has(path) && (
                 <Button disabled={saving} onClick={() => void save(undefined, diff?.file ?? path)}>
                   Save ⌘S
                 </Button>
               )}
-              {path && mode === "Files" && (
+              {path && (
                 <Button disabled={saving || fileClosing} onClick={() => void closeFile(path)}>
                   Close file
                 </Button>
@@ -823,14 +911,7 @@ function CheckoutView({
                 <p>{conflict.path} changed on disk. Your edits are retained.</p>
                 <Button
                   disabled={saving}
-                  onClick={() =>
-                    setDiff({
-                      original: conflict.disk.text,
-                      modified: buffers.current.get(conflict.path)!.model.getValue(),
-                      title: "Disk versus your edits",
-                      file: conflict.path,
-                    })
-                  }
+                  onClick={() => compareConflict(conflict.path, conflict.disk)}
                 >
                   Compare
                 </Button>
@@ -844,13 +925,18 @@ function CheckoutView({
                   disabled={saving}
                   onClick={() => {
                     setConflict(null);
-                    setDiff(null);
+                    if (view === "conflict") { rememberView(path, "file"); setDiff(null); }
                   }}
                 >
                   Cancel
                 </Button>
               </div>
             )}
+            {diff && !diff.file && !comparisonError && <Button onClick={() => void restoreView(path)}>Retry comparison</Button>}
+            {comparisonError && <div role="alert">{comparisonError}
+              <Button onClick={() => void restoreView(path)}>Retry comparison</Button>
+            </div>}
+            {diff && !comparisonError && diff.original === (diff.file ? buffers.current.get(diff.file)?.model.getValue() : diff.modified) && <p role="status">No changes</p>}
             <p
               role="status"
               tabIndex={0}

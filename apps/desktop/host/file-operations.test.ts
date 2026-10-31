@@ -57,11 +57,15 @@ test("real folder move preserves descendant drafts and conflict baseline through
     const before = await store.read();
     before.views[p.root].files!.hideIgnored = true;
     before.views[p.root].openFiles = ["folder/b.ts", "folder/a.ts"];
+    before.views[p.root].fileViews = { "folder/a.ts": "unstaged" };
+    before.views[p.root].editorPositions = { "folder/a.ts": { unstaged: { line: 3, column: 2, top: 50, left: 0 } } };
     await store.write(before);
     const ops = new FileOperations(store, join(base, "intent.json"));
     await ops.run(p, "move", "folder", "renamed");
     const state = await new Workspace(join(base, "workspace.json")).read();
     expect(state.views[p.root].openFiles).toEqual(["renamed/b.ts", "renamed/a.ts"]);
+    expect(state.views[p.root].fileViews).toEqual({ "renamed/a.ts": "unstaged" });
+    expect(state.views[p.root].editorPositions?.["renamed/a.ts"].unstaged.line).toBe(3);
     expect(state.drafts.map((d) => d.path)).toEqual(["renamed/a.ts", "renamed/b.ts"]);
     expect(state.drafts[0].text).toBe("a unsaved");
     expect(state.views[p.root].files).toEqual({
