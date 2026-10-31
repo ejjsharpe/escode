@@ -144,3 +144,69 @@ single-worker scheduling path; resolve the dropped-response host regression;
 rebuild/requalify the merged tip. Human accessibility/native checks, live-provider
 work, physical ENOSPC/power loss and production capacity remain unperformed.
 Issue #139 is not complete on this evidence.
+
+## Save root cause and single-worker follow-up
+
+Isolated `fix/139-save-rootcause` started at integration `0ba393e`, then merged
+exact partial qualification `1aa09cf495eaf19a44bb0bba858fc24800ffda99` and
+integration `298b243` (#140). `0a9c981` remains an ancestor. Standalone #117
+implementation and its confirmed host/client and packaged test seams apply.
+
+The competing-connection fixture reproduced a 1,591.9 ms renderer Save with a
+1,388.6 ms recovery write. Native Save helper operations were approximately
+3–5 ms each; neither their sum nor assertion polling explains that stall.
+Moving load to the actual app worker removed the competing SQLite writer, but
+exposed a production cleanup stall: three full-store cleanup requests took
+602.6–743.9 ms and queued recovery reads reached 609.0 ms. This distinguishes
+external lock contention from production worker scheduling.
+
+The cleanup candidate query correlated a pending-completion scan with every
+candidate checkpoint. With 47 one-MiB JSON payloads it repeatedly parsed the
+same large bodies. The minimal production change selects pending chat identities
+once with an uncorrelated subquery. Checkpoint chat identities are NOT NULL;
+all existing activity, pending completion, recovery, branch, uncertain receipt,
+capacity, intent and admission protections remain. There is no effect retry,
+validation bypass or protected evidence eviction.
+
+TDD: the existing real-worker capacity seam now requires full-store cleanup
+under 300 ms on this local qualification workload. Before the query change it
+failed at 1,403.7 ms; afterward it passed at 106.0 ms. Main database remained
+50,466,816 bytes before/after reclamation (reusable pages, no shrink claim).
+The latency budget is a regression guard for this workload, not a production SLA.
+
+The packaged fixture injects one request at a time into the app worker mailbox
+using separate negative test request IDs, rather than opening another writer.
+It waits for an initial complete fill/reclaim cycle before interaction and pauses
+100 ms after no progress. This exercises the production worker and SQLite query,
+not real Git capture scheduling or DurableState queue admission; those remain
+covered separately by host tests. Production cleanup remains periodic. Native
+helper and worker timings are test instrumentation only. Prior failures and
+multi-second results above are retained.
+
+Merged-source checks: typecheck, lint (existing warnings), build and unsigned
+packaging passed. Sequential host suite (capacity, expiry, durable Send, recovery,
+controls and recovery copies): **41/41 passed**, 23.59 seconds. The formerly
+failing dropped-response/reconnect case passes; no reconnect production change
+was needed on the current history-cancellation-fixed integration source.
+
+Final packaged verification on merged production source `55a5a2c` (including
+#140): **6/6 passed**, 35.6 seconds, one Playwright worker, after the host run
+finished. No other Playwright/test-runner process was observed at the handoff
+between those runs; this is still a shared installation, not controlled hardware.
+Every test completed an initial 47 x 1 MiB fill/reclaim cycle (2.26–2.70 seconds)
+before interaction. Observed WAL was zero at successful cleanup boundaries.
+
+- Renderer Save: 328.2 / 391.1 / 356.9 / 354.2 / 360.8 / 389.5 ms.
+- Outer Save: 432.9–585.7 ms; editing: 98.6–171.8 ms.
+- Send: 398.5 / 396.0 / 407.1 ms.
+- Ordinary Stop: 143.9 / 168.5 / 142.5 ms.
+- Emergency Stop: 107.1 / 63.7 / 145.9 ms.
+- Slowest observed cleanup request across editing runs: 198.9 ms;
+  recovery requests in those slowest-request lists reached 72.2 ms.
+
+These are bounded samples, not percentile or general production responsiveness
+claims. No known implementation gap remains for the measured workload. Human
+accessibility/native validation, live-provider work, physical ENOSPC/power loss,
+and wider production capacity remain unperformed. No issue closure, PR or merge
+into integration was made. The final fixture/evidence commit does not change
+the packaged production source just qualified.

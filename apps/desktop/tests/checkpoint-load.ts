@@ -19,6 +19,8 @@ export async function checkpointLoad(user: string, app: import("@playwright/test
   let stopped = false;
   const point = { chatId: "capacity-measurement", createdAt: 1, availability: "available", files: { a: { mode: 33188, content: "a".repeat(1024 * 1024) } } };
   let cycle = 0;
+  let loaded!: () => void;
+  const firstCycle = new Promise<void>(resolve => { loaded = resolve; });
   const run = (async () => {
     while (!stopped) {
       const start = performance.now();
@@ -32,11 +34,13 @@ export async function checkpointLoad(user: string, app: import("@playwright/test
       const reclaimed = await command("expireCheckpoints", { body: { now: Date.now() + 31 * 86400000, active: [] } });
       if (count || reclaimed || cycle === 0) console.log("#139 packaged checkpoint load", JSON.stringify({ cycle, count, reclaimed, ms: performance.now() - start, databaseBytes: before, walBytes: (await stat(path + "-wal")).size }));
       cycle++;
+      loaded();
       // Protected recovery can prevent progress; avoid a no-progress busy loop.
       if (!count && !reclaimed) await new Promise(resolve => setTimeout(resolve, 100));
     }
   })();
   // Keep rejection observed until the caller joins and reports it.
   void run.catch(() => {});
+  await Promise.race([firstCycle, run]);
   return async () => { stopped = true; await run; };
 }
