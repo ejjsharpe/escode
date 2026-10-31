@@ -57,6 +57,7 @@ test("worktree draft prepares only on Send from closed-project Agents, retains e
       projects: [],
       savedProjects: saved,
       selected: "agents",
+      projectUse: [{ project: beta, checkout: worktree }],
       views: { [beta]: { checkout: worktree } },
       drafts: [recovery],
     }),

@@ -351,7 +351,7 @@ app.whenReady().then(async () => {
     ];
     const p = saved.find((p) => p.project === identity);
     if (!p) throw Error("Unknown saved project.");
-    return state.views[identity]?.checkout ?? p.root;
+    return state.projectUse?.find(p => p.project === identity)?.checkout ?? p.root;
   };
   const host = await startHost({
     gitStatus: async root => (await checkout(root)).status(),
@@ -553,14 +553,16 @@ app.whenReady().then(async () => {
       const state = await workspace.read();
       const approved = await workspace.approved();
       const saved = [...(state.savedProjects ?? []), ...state.projects, ...approved];
-      const unique = [...new Map(saved.map((p) => [p.project, p])).values()];
+      const unique = saved.filter((p, i) => saved.findIndex(other => other.project === p.project) === i);
       for (const p of unique)
         if (approved.some((a) => a.project === p.project))
           projectSessions.set(p.project, projectSessions.get(p.project) ?? {});
       const targets: { project: string | null; checkout: string }[] = unique.map((p) => ({
         project: p.project,
-        checkout: state.views[p.project]?.checkout ?? p.root,
+        checkout: state.projectUse?.find(use => use.project === p.project)?.checkout ?? p.root,
       }));
+      const recency = new Map((state.projectUse ?? []).map((p, i) => [p.project, i]));
+      targets.sort((a, b) => (recency.get(a.project ?? "") ?? recency.size) - (recency.get(b.project ?? "") ?? recency.size));
       if ((await store.all()).some((c) => c.project === null))
         targets.push({ project: null, checkout: "" });
       return targets;

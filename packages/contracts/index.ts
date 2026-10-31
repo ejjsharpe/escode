@@ -109,6 +109,7 @@ export const FileSaveResult = Schema.Struct({ kind: Schema.Literals(["saved", "c
 export const WorkspaceState = Schema.Struct({
   projects: Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String })),
   savedProjects: Schema.optionalKey(Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String }))),
+  projectUse: Schema.optionalKey(Schema.Array(Schema.Struct({ project: Schema.String, checkout: Schema.optionalKey(Schema.String) }))),
   agentsChat: Schema.optionalKey(Schema.String), selected: Schema.String,
   views: Schema.Record(Schema.String, Schema.Struct({
     files: Schema.optionalKey(Schema.Struct({ expanded: Schema.Array(Schema.String), selected: Schema.Array(Schema.String),

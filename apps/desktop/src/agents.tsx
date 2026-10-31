@@ -4,7 +4,7 @@ import type { ChatSummary } from "@escode/contracts";
 import { compareChats } from "./chat-order";
 import { ChatView } from "./chat";
 import { useChatSummaries } from "./chat-state";
-import { memory, persist } from "./workspace";
+import { memory, persist, flush, rememberProjectUse } from "./workspace";
 
 function ChatRow({
   chat,
@@ -124,7 +124,9 @@ export function AgentsView() {
   const dismissPicker = () => { setPicking(false); };
   const create = async (project: string | null) => {
     try {
+      await flush();
       const draft = await window.escode.chat("createDraft", project);
+      if (project) rememberProjectUse(project);
       memory.agentsChat = draft.id;
       await persist();
       setTargets(await window.escode.chat("targets"));
@@ -138,6 +140,7 @@ export function AgentsView() {
     let live = true;
     const load = async () => {
       try {
+        await flush();
         const available = await window.escode.chat("targets");
         if (live) setTargets(available);
         if (live) setTargetError("");
@@ -183,6 +186,7 @@ export function AgentsView() {
                 chat={c}
                 selected={selected === c.id}
                 select={() => {
+                  if (c.project) rememberProjectUse(c.project);
                   memory.agentsChat = c.id;
                   void persist();
                   setSelected(c.id);

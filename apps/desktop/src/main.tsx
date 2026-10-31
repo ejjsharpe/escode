@@ -17,7 +17,7 @@ import { useProjectChats } from "./chat-state";
 import { WorktreeChoices } from "./worktrees";
 import type { ChatBridge } from "./chat";
 import "./style.css";
-import { memory, initialize, persist, flush, useMemory, closers } from "./workspace";
+import { memory, initialize, persist, flush, useMemory, closers, rememberProjectUse } from "./workspace";
 type Status = {
   project: string;
   root: string;
@@ -1059,7 +1059,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
       memory.savedProjects ??= [];
       if (!memory.savedProjects.some((p) => p.project === value.project))
         memory.savedProjects.push({ project: value.project, root: value.root });
-      void persist();
+      rememberProjectUse(value.project, value.root);
       setSelected(value.root);
     } catch (e) {
       setError(String(e));
@@ -1093,7 +1093,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
                 void close(p.root);
               }
             }}
-            onClick={() => setSelected(p.root)}
+            onClick={() => { rememberProjectUse(p.project, p.root); setSelected(p.root); }}
           >
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m12 3 9 5v8l-9 5-9-5V8Z M3 8l9 5 9-5 M12 13v8" /></svg>
             <span className="project-tab-name">{p.project.split("/").at(-1)}{projects.filter(other => other.project === p.project).length > 1 ? ` · ${p.branch} · ${p.root.split("/").at(-1)}` : ""}</span>

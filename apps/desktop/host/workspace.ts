@@ -53,6 +53,11 @@ function validate(value: unknown): asserts value is WorkspaceState {
     )
   )
     throw Error("Invalid project memory");
+  if (s.projectUse !== undefined && (
+    !Array.isArray(s.projectUse) || s.projectUse.some(p => !p || typeof p.project !== "string" || !isAbsolute(p.project)
+      || (p.checkout !== undefined && (typeof p.checkout !== "string" || !isAbsolute(p.checkout))))
+    || new Set(s.projectUse.map(p => p.project)).size !== s.projectUse.length
+  )) throw Error("Invalid project use");
   if (new Set(s.projects.map(p => p.root)).size !== s.projects.length)
     throw Error("Duplicate checkout memory");
   for (const d of s.drafts) {

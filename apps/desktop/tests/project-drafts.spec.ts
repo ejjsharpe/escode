@@ -35,6 +35,7 @@ test("saved project drafts move with text, survive restart and bind exactly once
       projects: [],
       savedProjects: saved,
       selected: "agents",
+      projectUse: [{ project: beta, checkout: worktree }],
       views: { [beta]: { checkout: worktree } },
       drafts: [],
     }),
