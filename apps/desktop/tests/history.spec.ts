@@ -70,7 +70,8 @@ createInterface({input:process.stdin}).on('line',line=>{
     if (mode === "restoration") {
       await app.evaluate(({ dialog }, isolated) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [isolated] }); }, join(dir, "isolated"));
       await page.getByRole("button", { name: "Open project…" }).click();
-      await page.getByRole("button", { name: "Files", exact: true }).click();
+      await expect(page.locator('.project-tab[data-active="true"] > button[aria-pressed]')).toHaveAttribute("aria-description", "isolated · " + join(dir, "isolated"));
+      await page.getByRole("button", { name: "Files", exact: true }).filter({ visible: true }).click();
       await page.getByRole("treeitem", { name: "saved.txt", exact: true }).filter({ visible: true }).click();
       await expect(page.locator(".monaco-editor:visible")).toContainText("today saved text");
       await page.locator(".monaco-editor:visible").click();
@@ -119,7 +120,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       expect(await readFile(join(dir, "isolated", "saved.txt"), "utf8")).toBe("captured saved text");
       await expect(composer).toHaveValue("retained unsent text");
       await page.screenshot({ path: "test-results/protected-restoration.png" });
-      await page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "project · isolated · isolated", exact: true }).click();
+      await page.getByRole("button", { name: "Open checkout", exact: true }).click();
       const editor = page.locator(".monaco-editor:visible");
       await expect(editor).toContainText("unsaved editor text");
       await expect(page.getByText("saved.txt • Unsaved", { exact: true })).toBeVisible();
@@ -250,5 +251,8 @@ createInterface({input:process.stdin}).on('line',line=>{
         return handler({ sender: contents, senderFrame: contents.mainFrame }, operation, null, id);
       }, { operation, id: chatId })).rejects.toThrow("Invalid chat request");
     }
-  } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });
+    await app.close(); await rm(dir, { recursive: true, force: true });
+  }
 });
