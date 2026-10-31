@@ -294,3 +294,21 @@ test("preview metadata retains an exact open identity and rejects orphan preview
     expect((await store.read()).views[dir].preview).toBe("a.txt");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("recent file metadata is bounded, exact and independent of checkout membership and approvals", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-recents-"));
+  try {
+    const store = new Workspace(join(dir, "workspace.json"));
+    const target = { root: dir, path: "ignored/file.txt" };
+    const state = { projects: [], selected: "agents", views: {}, drafts: [], recentFiles: [target] };
+    await store.write(state);
+    expect((await new Workspace(join(dir, "workspace.json")).read()).recentFiles).toEqual([target]);
+    expect(await store.approved()).toEqual([]);
+    for (const recentFiles of [[target, target], [{ ...target, path: "../escape" }], [{ ...target, root: "relative" }],
+      Array.from({ length: 201 }, (_, i) => ({ root: dir, path: `${i}.txt` })),
+      Array.from({ length: 20 }, (_, i) => ({ root: dir, path: `${i}${"x".repeat(4000)}` }))]) {
+      await expect(store.write({ ...state, recentFiles })).rejects.toThrow("Invalid recent files");
+    }
+    expect((await store.read()).recentFiles).toEqual([target]);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

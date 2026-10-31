@@ -71,10 +71,10 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     transferAction: (action: import("@escode/contracts").TransferAction) => chatQuery(client => client.transferAction({ action }), true),
     trashEntries: (root: string, paths: readonly string[]) => chatQuery(client => client.trashEntries({ root, paths }), true),
     readDiff: (root: string, path: string, area: typeof import("@escode/contracts").DiffArea.Type) => chatQuery(client => client.readDiff({ root, path, area })),
-    searchFiles(root: string, query: string, apply: (result: import("@escode/contracts").LookupResult) => void, error: (message: string) => void) {
+    searchFiles(root: string, query: string, apply: (result: import("@escode/contracts").LookupResult) => void, error: (message: string) => void, history?: readonly string[]) {
       const controller = new AbortController();
       const current = connect();
-      void current.then(client => runQuery(current, client.searchFiles({ root, query }), controller.signal)).then(result => { if (!controller.signal.aborted) apply(result); }, failure => { if (!controller.signal.aborted) error(String(failure)); });
+      void current.then(client => runQuery(current, client.searchFiles({ root, query, history }), controller.signal)).then(result => { if (!controller.signal.aborted) apply(result); }, failure => { if (!controller.signal.aborted) error(String(failure)); });
       return () => controller.abort();
     },
     lookupFile: (root: string, query: string) => chatQuery(client => client.lookupFile({ root, query })),

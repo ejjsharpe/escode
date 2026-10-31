@@ -46,6 +46,7 @@ test('native discovery honors only local ignore sources and fixed prunes', async
  expect((await project.discover('hidden',new AbortController().signal)).results.map(r=>r.path)).toEqual(['.hidden']);
  expect((await project.discover('output',new AbortController().signal)).results.map(r=>r.path)).toEqual(['dist/output.js']);
  for (const query of ['', 'x'.repeat(257), 'a\0b']) await expect(project.discover(query,new AbortController().signal)).rejects.toThrow('Invalid lookup');
+ for (const history of [Array.from({length:201},()=> 'a'), ['../escape'], Array.from({length:20},()=> 'x'.repeat(4000))]) await expect(project.discover('',new AbortController().signal,history)).rejects.toThrow('Invalid lookup history');
  const cancel=new AbortController();cancel.abort();await expect(project.discover('txt',cancel.signal)).rejects.toThrow('cancelled');
  const first=new AbortController(), second=new AbortController();
  const work=[project.discover('txt',first.signal),project.discover('txt',second.signal)];

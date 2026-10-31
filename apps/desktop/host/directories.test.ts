@@ -440,7 +440,7 @@ test("recursive lookup validates wire sizes before dispatch and interruption can
  let calls=0;let cancelled=false;
  const host=await startHost({hostId:"host",clientId:"client",origin:"null",list:async()=>({kind:"denied",message:"unused"}),searchFiles:async (_root,_query,signal)=>{calls++;return await new Promise((resolve)=>{signal.addEventListener("abort",()=>{cancelled=true;resolve({results:[],partial:true,message:"cancelled"});});});}});
  try { const socket=await connect(host.bootstrap().url);
- for(const [id,payload] of [["1",{root:"/repo",query:42}],["2",{root:"/repo",query:"x".repeat(257)}],["3",{root:"x".repeat(4097),query:"a"}]] as const){const response=new Promise<string>(resolve=>socket.once("message",data=>resolve(String(data))));socket.send(JSON.stringify({_tag:"Request",id,tag:"searchFiles",payload,headers:[]}));expect(await response).toContain("Failure");}
+ for(const [id,payload] of [["1",{root:"/repo",query:42}],["2",{root:"/repo",query:"x".repeat(257)}],["3",{root:"x".repeat(4097),query:"a"}], ["5",{root:"/repo",query:"a",history:[42]}], ["6",{root:"/repo",query:"a",history:Array.from({length:201},()=>"a")}]] as const){const response=new Promise<string>(resolve=>socket.once("message",data=>resolve(String(data))));socket.send(JSON.stringify({_tag:"Request",id,tag:"searchFiles",payload,headers:[]}));expect(await response).toContain("Failure");}
  expect(calls).toBe(0);
  socket.send(JSON.stringify({_tag:"Request",id:"4",tag:"searchFiles",payload:{root:"/repo",query:"a"},headers:[]}));
  await expect.poll(()=>calls).toBe(1);socket.send(JSON.stringify({_tag:"Interrupt",requestId:"4"}));await expect.poll(()=>cancelled).toBe(true);

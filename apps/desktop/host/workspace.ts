@@ -1,3 +1,4 @@
+import { maximumRecentFiles, maximumRecentUnits } from "@escode/contracts";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { atomicWriteJson } from "./atomic-write";
@@ -60,6 +61,20 @@ function validate(value: unknown): asserts value is WorkspaceState {
   )) throw Error("Invalid project use");
   if (new Set(s.projects.map(p => p.root)).size !== s.projects.length)
     throw Error("Duplicate checkout memory");
+  if (s.recentFiles !== undefined) {
+    if (!Array.isArray(s.recentFiles) || s.recentFiles.length > maximumRecentFiles) throw Error("Invalid recent files");
+    let units = 0;
+    const targets = new Set<string>();
+    for (const entry of s.recentFiles) {
+      if (!entry || typeof entry.root !== "string" || !isAbsolute(entry.root) || entry.root.length > 4096 || entry.root.includes("\0") ||
+        typeof entry.path !== "string" || !entry.path || entry.path.length > 4096 || isAbsolute(entry.path) || entry.path.includes("\0") ||
+        entry.path.split("/").some(c => !c || c === "." || c === ".." || c.toLowerCase() === ".git")) throw Error("Invalid recent files");
+      units += entry.root.length + entry.path.length;
+      const key = JSON.stringify([entry.root, entry.path]);
+      if (units > maximumRecentUnits || targets.has(key)) throw Error("Invalid recent files");
+      targets.add(key);
+    }
+  }
   for (const d of s.drafts) {
     if (
       !d ||

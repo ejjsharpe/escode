@@ -1,3 +1,4 @@
+import { rememberFileUse } from "./workspace";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as stylex from "@stylexjs/stylex";
@@ -46,7 +47,7 @@ declare global {
       chatSummaries: (apply: (value: import("@escode/contracts").ChatSummaries) => void, error: (message: string) => void) => () => void;
       toolStatus(): Promise<unknown>;
       project: ProjectBridge;
-      searchFiles(root: string, query: string, apply: (result: import("@escode/contracts").LookupResult) => void, error: (message: string) => void): () => void;
+      searchFiles(root: string, query: string, apply: (result: import("@escode/contracts").LookupResult) => void, error: (message: string) => void, history?: readonly string[]): () => void;
       lookupFile(root: string, query: string): Promise<string>;
       listDirectory(root: string, path: string): Promise<import("@escode/contracts").DirectoryResult>;
       watchFiles(root: string, paths: string[], callback: (error?: string, ready?: boolean) => void): () => void;
@@ -403,6 +404,7 @@ function CheckoutView({
         const disk = await projectCall("read", root, file);
         if (generation !== presentation.current) return false;
         if (!buffers.current.has(file)) addBuffer(file, disk);
+        rememberFileUse(root, file);
         activateFile(file);
         setConflict(buffers.current.get(file)!.disk.version === disk.version ? null : { path: file, disk });
         compareConflict(file, disk);
@@ -439,6 +441,7 @@ function CheckoutView({
         return true;
       }
       if (generation !== presentation.current || !current()) return false;
+      rememberFileUse(root, file);
       activateFile(file, intent);
       rememberView(file, "file");
       setDiff(null);
@@ -538,6 +541,7 @@ function CheckoutView({
       if (generation !== presentation.current) return;
       rememberView(change.path, change.area);
       memory.views[root] = { ...memory.views[root], change };
+      if (file) rememberFileUse(root, file);
       activateFile(change.path, intent);
       const title =
         change.area + " · " + change.path +
