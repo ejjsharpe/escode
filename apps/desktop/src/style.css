@@ -770,3 +770,12 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .project-tabs > header { flex-shrink: 0; }
 .project-tabs .retention-settings summary { white-space: nowrap; }
 .project-tabs .retention-settings form { position: fixed; top: 48px; right: 14px; }
+.agent-row { width: 100%; min-width: 0; text-align: left; display: flex; flex-direction: column; gap: 4px; }
+.agent-row .chat-row-heading { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; color: inherit; }
+.agent-row strong, .agent-row .chat-row-context { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.agent-row .chat-row-heading strong { flex: 1; }
+.agent-row svg, .agent-row time { flex-shrink: 0; }
+.agent-row time { margin-left: auto; font-size: 11px; color: #a4a3b0; }
+.agent-row .chat-row-context { font-size: 12px; color: #a4a3b0; }
+.agents .agent-row { margin-bottom: 0; border-color: transparent; border-radius: 4px; padding: 8px 12px; }
+.agents .agent-row[aria-pressed="true"] { border-color: #756b9c; }

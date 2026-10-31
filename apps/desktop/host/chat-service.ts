@@ -940,6 +940,10 @@ export class ChatService {
     if (s.output.failed && (p.item || typeof p.delta === "string")) return;
     const items = [...(s.output.pending ?? s.items)];
     if (message.method === "item/started" || message.method === "item/completed") {
+      if (p.item.type === "userMessage") {
+        void this.store.update(s.project, s.chatId, { latestUserMessageAt: this.clock() })
+          .catch(error => { s.error = `User-message recency persistence failed: ${String(error)}`; });
+      }
       const value = this.item(p.turnId, p.item);
       const index = items.findIndex((i) => i.id === value.id && i.turnId === value.turnId);
       if (index < 0) items.push(value);
@@ -1066,6 +1070,7 @@ export class ChatService {
           reason: "Completion not observed or capture interrupted; no automatic capture on restart", gitBase: null } });
       } catch (error) { s.error = `Completion boundary persistence failed: ${String(error)}`; }
       check();
+      const userMessageAt = this.clock();
       launched = true;
       if (!chat.hasSent) void this.initialTitle(project, id, text).catch(() => {});
       const result = await s.connection.rpc.request("turn/start", {
@@ -1076,6 +1081,7 @@ export class ChatService {
       await s.completing;
       await this.store.update(project, id, {
         draft: "",
+        latestUserMessageAt: userMessageAt,
         ...(chat.phase ? { initialSend: "accepted" as const } : {}),
       });
     } catch (error) {

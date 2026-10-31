@@ -87,6 +87,9 @@ A saved Codex conversation, including the user's messages and the agent's work a
 **Chat summary**:
 The host's metadata and activity projection for one saved chat or chat draft, shared by Agents and project Chats. It excludes unsent message text, transcript bodies and live request payloads. Summary delivery does not subscribe to background conversation details. See [host summary evidence](docs/compatibility/chat-summaries.md).
 
+**Last user message**:
+Chat-list recency uses the latest user-role message update, then user-message creation, then chat update/creation. Descending chat identity breaks ties. Relative row times use that same event; assistant output, completion, opening and sent-chat title changes do not promote a chat.
+
 **History page**:
 A bounded portion of a saved chat's provider history, loaded explicitly through the execution host. Message bodies and pages carry content revisions; choosing another page replaces the displayed portion. Unloaded or unavailable portions are disclosed. See [saved history evidence](docs/compatibility/saved-history.md).
 

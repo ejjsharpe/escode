@@ -1,3 +1,4 @@
+import { ChatRow } from "./chat-row";
 import { Boundaries } from "./boundaries";
 import { DraftWorktreeChoices, CheckoutBranch } from "./worktrees";
 import { useProjectChats } from "./chat-state";
@@ -226,16 +227,7 @@ export function ChatView({
             </Button>
             <ul>
               {[...scopedChats].sort(compareChats).map((c) => (
-                <li key={c.id}>
-                  <Button aria-pressed={selected === c.id} onClick={() => void select(c.id)}>
-                    {c.title || `Chat ${chats.findIndex((chat) => chat.id === c.id) + 1}`}
-                    {c.needsInput
-                      ? " · Needs input"
-                      : c.busy
-                        ? " · Running"
-                        : ""}
-                  </Button>
-                </li>
+                <ChatRow key={c.id} fallbackTitle={`Chat ${chats.findIndex(chat => chat.id === c.id) + 1}`} chat={c} selected={selected === c.id} select={() => void select(c.id)} />
               ))}
             </ul>
           </div>,

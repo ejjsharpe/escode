@@ -34,6 +34,10 @@ export type SavedChat = {
   initialSend?: "preparing" | "creating" | "unaccepted" | "uncertain" | "accepted";
   removed?: boolean;
   draft: string;
+  title?: string;
+  latestUserMessageAt?: number;
+  latestUserMessageCreatedAt?: number;
+  updatedAt?: number;
   createdAt?: number;
   legacyOrder?: number;
 };
@@ -347,6 +351,7 @@ export class Chats {
         | "threadId"
         | "draft"
         | "hasSent"
+        | "latestUserMessageAt"
         | "removed"
         | "phase"
         | "initialSend"
@@ -359,7 +364,9 @@ export class Chats {
     return this.change((chats) => {
       const chat = chats.find((c) => c.id === id && c.project === project);
       if (!chat) throw Error("Unknown chat in this project.");
-      Object.assign(chat, fields);
+      const latestUserMessageAt = fields.latestUserMessageAt === undefined ? chat.latestUserMessageAt
+        : Math.max(chat.latestUserMessageAt ?? 0, fields.latestUserMessageAt);
+      Object.assign(chat, fields, latestUserMessageAt === undefined ? {} : { latestUserMessageAt });
     });
   }
 }
