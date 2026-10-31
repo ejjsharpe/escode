@@ -22,6 +22,8 @@ test("missing restored files retain selection and retry current disk without rep
     await expect(page.getByRole("tablist", { name: "Open files" })).toHaveCount(0);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt", "b.txt"]);
+    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).projects).toContainEqual({ project: root, root });
+    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected).toBe(root);
     await rm(join(root, "b.txt"));
     await page.reload();
     const tabs = page.getByRole("tablist", { name: "Open files" });
@@ -80,6 +82,7 @@ test("restart and Retry reject a replacement checkout while retaining exact tabs
     await rename(root, join(dir, "replacement"));
     await rename(original, root);
     await page.getByRole("button", { name: "Retry checkout", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Retry file", exact: true })).toHaveCount(0);
     await tabs.getByRole("tab", { name: "b.txt", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("clean original");
     await tabs.getByRole("tab", { name: "a.txt", exact: true }).click();

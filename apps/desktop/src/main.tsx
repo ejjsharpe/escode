@@ -918,7 +918,7 @@ function CheckoutView({
                 void (async () => {
                   await refresh();
                   setFilesRevision((n) => n + 1);
-                  if (path) await select(path, false);
+                  if (path) await restoreView(path);
                 })().catch(report)
               }
             >
@@ -1139,7 +1139,7 @@ function CheckoutView({
               </div>
             )}
             {diff && !diff.file && !comparisonError && <Button onClick={() => void restoreView(path)}>Retry comparison</Button>}
-            {fileError && <div role="alert">{fileError}
+            {path && fileError && <div role="alert">{fileError}
               <Button onClick={() => void restoreView(path)}>Retry file</Button>
             </div>}
             {comparisonError && <div role="alert">{comparisonError}
