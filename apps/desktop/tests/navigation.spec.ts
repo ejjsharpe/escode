@@ -268,6 +268,21 @@ test("cancelled and edited lookup invocations reject delayed validation and file
     }, root);
     await page.getByRole("button", { name: "Open project…", exact: true }).click();
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
+    // Native dialogs and text entry own Cmd+W; cancellation retains the editor.
+    await expect(page.locator(".monaco-editor:visible")).toContainText("original editor");
+    await page.locator(".monaco-editor:visible").click();
+    await page.keyboard.press("Meta+p");
+    const lookup = page.getByRole("dialog", { name: "Find file", exact: true });
+    await lookup.getByLabel("Exact file path").fill("a.txt");
+    await page.keyboard.press("Meta+w");
+    await expect(lookup.getByLabel("Exact file path")).toHaveValue("a.txt");
+    await lookup.getByRole("button", { name: "Refresh", exact: true }).focus();
+    await page.keyboard.press("Meta+w");
+    await expect(lookup).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".monaco-editor textarea:focus")).toHaveCount(1);
+    await expect(page.locator(".monaco-editor:visible")).toContainText("original editor");
     for (const needle of ['"slow.txt"', "delayed lookup document"]) {
       await app.evaluate((_electron, needle) => {
         (globalThis as any).lookupNeedle = needle;

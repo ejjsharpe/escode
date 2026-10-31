@@ -610,7 +610,23 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
     }, linked);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator(".view-nav:visible")).toContainText(linked);
-    await page.getByRole("button", { name: "Close Alpha project" }).click();
+    // A file activated from Agents becomes the project's next draft default.
+    await writeFile(join(linked, "lookup.txt"), "linked lookup target");
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, roots[3]);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await expect(page.locator("header")).toContainText(roots[3]);
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.getByLabel("Exact file path").fill(join(linked, "lookup.txt"));
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog", { name: "Find file", exact: true })).toHaveCount(0);
+    await expect(page.locator("header")).toContainText(linked);
+    await expect(page.locator(".monaco-editor:visible")).toContainText("linked lookup target");
+    await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
+    await expect(page.locator(".project-tab")).toHaveCount(1);
+    await page.locator(".project-tab-close").click();
     await expect(page.getByRole("navigation", { name: "Projects" }).locator(".project-tab")).toHaveCount(0);
     await expect(composer).toHaveValue("captured original prompt");
     await expect(page.locator(".chat-conversation")).toContainText(roots[3]);
@@ -618,7 +634,7 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
     await page.keyboard.press("Enter");
     await expect(picker).not.toBeVisible();
     await expect(rows).toHaveCount(5);
-    await expect(page.locator(".chat-conversation")).toContainText(linked);
+    await expect(page.locator(".chat-conversation > .directory")).toHaveText(`Checkout: ${linked}`);
     await composer.fill("captured alternate prompt");
     // Use another project deliberately, without opening an editor or changing checkout defaults.
     await page.locator(".agent-row").filter({ hasText: "Gamma" }).click();

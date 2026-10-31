@@ -28,7 +28,9 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
     }, root);
     await page.getByRole("button", { name: "Open project…", exact: true }).click();
     await page.getByRole("button", { name: "Source Control", exact: true }).click();
-    await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "a.txt", exact: true }).dblclick();
+    await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "a.txt", exact: true }).click();
+    await expect(page.locator(".monaco-diff-editor .modified .monaco-editor")).toContainText("working");
+    await page.getByRole("tab", { name: "a.txt", exact: true }).dblclick();
     await page.getByRole("heading", { name: "staged", exact: true }).locator("..").getByRole("button", { name: "missing.txt", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("Working file unavailable");
     await expect(page.getByRole("textbox", { name: "staged · missing.txt modified", exact: true })).not.toBeEditable();
@@ -117,6 +119,7 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
     await expect(page.getByRole("combobox", { name: "File view", exact: true })).toHaveValue("conflict");
     await expect(page.getByText("No changes", { exact: true })).toBeVisible();
     expect(git("show", ":a.txt")).toBe("staged\n");
+    await expect(page.getByRole("button", { name: "Save ⌘S", exact: true })).toBeEnabled();
   } finally {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });

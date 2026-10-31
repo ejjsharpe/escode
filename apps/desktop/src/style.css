@@ -363,6 +363,12 @@ main[data-agents="true"] > .project-tabs {
 .agents .chat-conversation > * {
   flex-shrink: 0;
 }
+.agents .chat-actions {
+  margin: 8px 0;
+}
+.agents .chat-compose {
+  margin-top: 16px;
+}
 .agents .transcript {
   flex: 1 1 0;
   min-height: 80px;
@@ -636,7 +642,7 @@ aside > ul { margin-top: 8px; }
 .files-menu button:hover { background: #343044; }
 input, textarea, select { font: inherit; color: #dedee5; background: #18191d; border: 1px solid #484351; border-radius: 4px; padding: 6px 8px; caret-color: var(--accent); }
 input::placeholder, textarea::placeholder { color: #a4a3b0; }
-.agents-heading { padding: 20px 24px; background: #1e1f23; }
+.agents-heading { padding: 12px 24px; background: #1e1f23; }
 .agents-heading h1 { font-size: 20px; letter-spacing: -.02em; }
 .agents .workspace { grid-template-columns: 300px minmax(0, 1fr); }
 .agents aside { display: block; }

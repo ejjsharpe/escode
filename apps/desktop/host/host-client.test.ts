@@ -130,7 +130,7 @@ test("a lost directory watch retires the failed session before the next explicit
   } finally { off(); await client.close(); await host.close(); fixture.restore(); }
 });
 
-test("watch setup rejection preserves concurrent workspace persistence and the shared session", async () => {
+for (const method of ["watchFiles", "observeFiles"] as const) test(`${method} setup rejection preserves concurrent workspace persistence and the shared session`, async () => {
   const fixture = socketFixture();
   const held = gate();
   let entered = false, bootstraps = 0;
@@ -139,6 +139,7 @@ test("watch setup rejection preserves concurrent workspace persistence and the s
     list: async () => ({ kind: "denied", message: "unused" }),
     persistWorkspace: async () => { entered = true; await held.promise; },
     watch: () => { throw Error("App state is unavailable in Files."); },
+    observeFiles: () => { throw Error("App state is unavailable in Files."); },
   });
   const client = createHostClient(async () => { bootstraps++; return host.bootstrap(); });
   const query = client.persistWorkspace({ projects: [], selected: "agents", views: {}, drafts: [] });
@@ -146,7 +147,8 @@ test("watch setup rejection preserves concurrent workspace persistence and the s
   let off = () => {};
   try {
     await expect.poll(() => entered).toBe(true);
-    off = client.watchFiles("/approved", [""], error => { if (error) errors.push(error); });
+    const notify = (error?: string) => { if (error) errors.push(error); };
+    off = method === "watchFiles" ? client.watchFiles("/approved", [""], notify) : client.observeFiles("/approved", notify);
     await expect.poll(() => errors.length).toBe(1);
     expect(errors[0]).toContain("App state is unavailable in Files.");
     held.release();

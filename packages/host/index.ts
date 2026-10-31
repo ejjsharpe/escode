@@ -6,9 +6,26 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult } from "@escode/contracts";
+import { maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult, DirectoryChange } from "@escode/contracts";
 
 const fileMethods = ["readDiff", "transferAction", "trashEntries", "readFile", "saveFile", "loadWorkspace", "persistWorkspace"];
+
+function watchChanges(subscribe: (notify: (error?: string) => void) => () => void) {
+  return Stream.callback<typeof DirectoryChange.Type>(queue => Effect.acquireRelease(
+    Effect.try({ try: () => {
+      let failure: string | undefined;
+      const release = subscribe(error => {
+        failure = error ?? failure;
+        Queue.offerUnsafe(queue, failure ? { error: failure } : {});
+      });
+      Queue.offerUnsafe(queue, { ready: true }); // Revalidate after the watch is installed.
+      return release;
+    }, catch: String }).pipe(Effect.catch(error => Effect.sync(() => {
+      Queue.offerUnsafe(queue, { error });
+      return () => {};
+    }))), release => Effect.sync(release),
+  ), { bufferSize: 1, strategy: "sliding" });
+}
 
 // Guard parser/error writes too; they bypass the RPC response budget.
 class BoundedWebSocket extends WebSocket {
@@ -188,21 +205,10 @@ export async function startHost(options: {
         readDiff: ({ root, path, area }) => Effect.tryPromise({ try: async () => {
           if (!options.readDiff) throw Error("Diffs unavailable"); return options.readDiff(root, path, area);
         }, catch: String }),
-        observeFiles: ({ root }) => Stream.callback(queue => Effect.acquireRelease(
-          Effect.try({ try: () => {
-            if (!options.observeFiles) throw Error("Lookup observation unavailable");
-            let failure: string | undefined;
-            const release = options.observeFiles(root, error => {
-              failure = error ?? failure;
-              Queue.offerUnsafe(queue, failure ? { error: failure } : {});
-            });
-            Queue.offerUnsafe(queue, { ready: true });
-            return release;
-          }, catch: String }).pipe(Effect.catch(error => Effect.sync(() => {
-            Queue.offerUnsafe(queue, { error });
-            return () => {};
-          }))), release => Effect.sync(release),
-        ), { bufferSize: 1, strategy: "sliding" }),
+        observeFiles: ({ root }) => watchChanges(notify => {
+          if (!options.observeFiles) throw Error("Lookup observation unavailable");
+          return options.observeFiles(root, notify);
+        }),
         searchFiles: ({ root, query, history }) => Effect.tryPromise({ try: signal => { if (!options.searchFiles) throw Error("Lookup unavailable"); return options.searchFiles(root, query, signal, history); }, catch: String }),
         lookupFile: ({ root, query }) => Effect.tryPromise({ try: async () => {
           if (!options.lookupFile) throw Error("Files unavailable"); return options.lookupFile(root, query);
@@ -285,22 +291,10 @@ export async function startHost(options: {
         }, catch: String }), Schedule.spaced("300 millis")), listDirectory: ({ root, path }) =>
         Effect.tryPromise(() => options.list(root, path)).pipe(Effect.catch(() =>
           Effect.succeed({ kind: "unavailable" as const, message: "Directory unavailable. Refresh to retry." }))),
-        watchDirectories: ({ root, paths }) => Stream.callback((queue) => Effect.acquireRelease(
-          Effect.try({ try: () => {
-            if (!options.watch) throw Error("Directory watches unavailable");
-            let failure: string | undefined;
-            const release = options.watch(root, paths, (error) => {
-              failure = error ?? failure;
-              Queue.offerUnsafe(queue, failure ? { error: failure } : {});
-            });
-            Queue.offerUnsafe(queue, { ready: true }); // Revalidate after the watch is installed.
-            return release;
-          }, catch: String }).pipe(Effect.catch(error => Effect.sync(() => {
-            Queue.offerUnsafe(queue, { error });
-            return () => {};
-          }))),
-          (release) => Effect.sync(release),
-        ), { bufferSize: 1, strategy: "sliding" }),
+        watchDirectories: ({ root, paths }) => watchChanges(notify => {
+          if (!options.watch) throw Error("Directory watches unavailable");
+          return options.watch(root, paths, notify);
+        }),
       })), Effect.forkScoped,
     );
     let connections = 0;
