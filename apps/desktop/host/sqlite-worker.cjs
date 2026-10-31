@@ -36,23 +36,26 @@ try {
   db = new DatabaseSync(file);
   db.exec('PRAGMA busy_timeout=3000');
   if (fresh) {
-    db.exec(`BEGIN IMMEDIATE; PRAGMA user_version=1;
+    db.exec(`BEGIN IMMEDIATE; PRAGMA user_version=2;
       CREATE TABLE identity (singleton INTEGER PRIMARY KEY CHECK(singleton=1), hostId TEXT NOT NULL, clientId TEXT NOT NULL, revision INTEGER NOT NULL);
       CREATE TABLE chats (id TEXT PRIMARY KEY, body TEXT NOT NULL);
+      CREATE TABLE submissions (id TEXT PRIMARY KEY, body TEXT NOT NULL, association TEXT NOT NULL);
     `);
     db.prepare('INSERT INTO identity VALUES (1, ?, ?, 0)').run(randomUUID(), randomUUID());
     db.exec('COMMIT');
   }
-  if (db.prepare('PRAGMA user_version').get().user_version !== 1 || db.prepare('PRAGMA quick_check').get().quick_check !== 'ok') throw Error('Unsupported or corrupt SQLite storage');
+  if (db.prepare('PRAGMA user_version').get().user_version === 1) db.exec('BEGIN IMMEDIATE; CREATE TABLE submissions (id TEXT PRIMARY KEY, body TEXT NOT NULL, association TEXT NOT NULL); PRAGMA user_version=2; COMMIT');
+  if (db.prepare('PRAGMA user_version').get().user_version !== 2 || db.prepare('PRAGMA quick_check').get().quick_check !== 'ok') throw Error('Unsupported or corrupt SQLite storage');
   const identity = db.prepare('SELECT * FROM identity').all();
   if (identity.length !== 1 || !/^[0-9a-f-]{36}$/.test(identity[0].hostId) || !/^[0-9a-f-]{36}$/.test(identity[0].clientId) || !Number.isSafeInteger(identity[0].revision)) throw Error('Invalid established SQLite identities');
   validate(db.prepare('SELECT body FROM chats').all().map(row => JSON.parse(row.body)));
   db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA checkpoint_fullfsync=ON');
   const settings = { journalMode: db.prepare('PRAGMA journal_mode').get().journal_mode, synchronous: db.prepare('PRAGMA synchronous').get().synchronous, checkpointFullfsync: db.prepare('PRAGMA checkpoint_fullfsync').get().checkpoint_fullfsync };
   if (settings.journalMode !== 'wal' || settings.synchronous !== 1 || settings.checkpointFullfsync !== 1) throw Error('SQLite durability settings unavailable');
+  db.exec(`UPDATE submissions SET body=json_set(body, '$.status', 'uncertain', '$.message', 'Host restarted; inspect provider history. Work was not resent.') WHERE json_extract(body, '$.status') IN ('admitted', 'dispatching')`);
   parentPort.postMessage({ id: 0, value: { ...identity[0], settings } });
 } catch (e) { parentPort.postMessage({ id: 0, error: String(e) }); db?.close(); process.exitCode = 1; }
-if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision }) => {
+if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt }) => {
   try {
     let value;
     if (operation === 'read') value = { chats: db.prepare('SELECT body FROM chats ORDER BY rowid').all().map(row => JSON.parse(row.body)), revision: db.prepare('SELECT revision FROM identity').get().revision };
@@ -65,6 +68,36 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         const insert = db.prepare('INSERT INTO chats VALUES (?, ?)');
         for (const chat of chats) insert.run(chat.id, JSON.stringify(chat));
         db.exec('UPDATE identity SET revision=revision+1');
+        db.exec('COMMIT');
+      } catch (e) { db.exec('ROLLBACK'); throw e; }
+    } else if (operation === 'status') {
+      const row = db.prepare('SELECT body FROM submissions WHERE id=?').get(commandId);
+      value = row ? JSON.parse(row.body) : null;
+    } else if (operation === 'admit') {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const row = db.prepare('SELECT body FROM submissions WHERE id=?').get(command.commandId);
+        if (row) {
+          const previous = JSON.parse(row.body);
+          if (JSON.stringify(previous.command) !== JSON.stringify(command)) throw Error('Command identity conflict');
+          value = { fresh: false, receipt: previous };
+        } else {
+          if (command.admissionEpoch !== epoch) throw Error('Expired admission epoch; work was not resent');
+          const association = db.prepare('SELECT body FROM chats WHERE id=?').get(command.id);
+          if (!association || JSON.parse(association.body).project !== command.project) throw Error('Chat association unavailable');
+          if (db.prepare('SELECT count(*) AS n FROM submissions').get().n >= 1000) throw Error('Submission capacity exhausted');
+          const admitted = { hostId, clientId, command, status: 'admitted', message: '' };
+          db.prepare('INSERT INTO submissions VALUES (?, ?, ?)').run(command.commandId, JSON.stringify(admitted), association.body);
+          value = { fresh: true, receipt: admitted };
+        }
+        db.exec('COMMIT');
+      } catch (e) { db.exec('ROLLBACK'); throw e; }
+    } else if (operation === 'outcome') {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const row = db.prepare('SELECT body FROM submissions WHERE id=?').get(receipt.command.commandId);
+        if (!row || JSON.stringify(JSON.parse(row.body).command) !== JSON.stringify(receipt.command)) throw Error('Missing or changed submission');
+        db.prepare('UPDATE submissions SET body=? WHERE id=?').run(JSON.stringify(receipt), receipt.command.commandId);
         db.exec('COMMIT');
       } catch (e) { db.exec('ROLLBACK'); throw e; }
     } else throw Error('Unknown SQLite operation');
