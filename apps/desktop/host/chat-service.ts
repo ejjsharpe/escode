@@ -1,3 +1,4 @@
+import { captureBeforeTurn } from "./checkpoints";
 import type { Checkout } from "./project";
 import type { DraftAction } from "@escode/contracts";
 import { LiveSpool } from "./live-spool";
@@ -634,9 +635,10 @@ export class ChatService {
     id: string,
     text: string,
     expected?: string,
+    commandId?: string,
   ) {
     return this.inContext(project, id, () =>
-      this.sendInContext(project, id, text, expected),
+      this.sendInContext(project, id, text, expected, commandId),
     );
   }
   private async sendInContext(
@@ -644,6 +646,7 @@ export class ChatService {
     id: string,
     text: string,
     expected?: string,
+    commandId?: string,
   ) {
     const s = this.session(project, id);
     if (s.sending || s.turn.phase !== "idle") throw Error("This chat already has an active turn.");
@@ -702,6 +705,8 @@ export class ChatService {
         ...(chat.phase ? { initialSend: "uncertain" as const } : {}),
       });
       sendIntent = true;
+      check();
+      s.error = await captureBeforeTurn(this.store.database, chat, s.threadId, commandId);
       check();
       s.preparation = undefined;
       this.store.validateWorktree(chat);

@@ -2,7 +2,7 @@
 
 The administrative host utility captures the current SQLite store, its external
 foundation receipt journal, and published live-spool indexes and referenced chunks.
-It excludes provider history, project files, and future checkpoint contents.
+It excludes provider history and current project files. Since #128, checkpoint metadata and saved contents reside within the consistent SQLite copy.
 No legacy import, scheduled backup, command replay or turn continuation is provided.
 
 ## Operator procedure

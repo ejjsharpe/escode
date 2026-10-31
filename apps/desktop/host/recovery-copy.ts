@@ -10,7 +10,7 @@ async function regular(file: string) {
   return readFile(file);
 }
 function validate(db: DatabaseSync, expected?: Pick<DurableIdentity, "hostId" | "clientId">) {
-  if (db.prepare("PRAGMA user_version").get()!.user_version !== 3 || db.prepare("PRAGMA integrity_check").get()!.integrity_check !== "ok") throw Error("Unsupported or corrupt recovery copy");
+  if (db.prepare("PRAGMA user_version").get()!.user_version !== 4 || db.prepare("PRAGMA integrity_check").get()!.integrity_check !== "ok") throw Error("Unsupported or corrupt recovery copy");
   const rows = db.prepare("SELECT * FROM identity").all();
   const owner = rows[0];
   if (rows.length !== 1 || !owner || !/^[0-9a-f-]{36}$/.test(String(owner.hostId)) || !/^[0-9a-f-]{36}$/.test(String(owner.clientId)) || !Number.isSafeInteger(owner.revision) || (expected && (owner.hostId !== expected.hostId || owner.clientId !== expected.clientId))) throw Error("Recovery identity mismatch");
@@ -65,7 +65,7 @@ export async function createRecoveryCopy(source: string, destination: string, sp
   } catch { missing.push("live-spool-v1"); }
 
   const manifest = { version: 1, ...owner, complete: missing.length === 0, missing, files,
-    coverage: "SQLite consistent cut including command receipts; individually captured spool indexes/chunks; no provider history, project files or checkpoint content. Spool may be newer than SQLite." };
+    coverage: "SQLite consistent cut including command receipts; individually captured spool indexes/chunks; checkpoint metadata and saved file contents in SQLite; no provider history or current project files. Spool may be newer than SQLite." };
   await writeFile(join(destination, "manifest.json"), JSON.stringify(manifest, null, 2), { mode: 0o600, flag: "wx" });
   return manifest;
 }

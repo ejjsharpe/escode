@@ -401,7 +401,7 @@ app.whenReady().then(async () => {
           const { operation, target, token, answer } = command.control;
           if (operation === "stop") await chats.stop(command.project, command.id, target);
           else await chats.answer(command.project, command.id, token, answer);
-        } else await chats.send(command.project, command.id, command.text, command.expected);
+        } else await chats.send(command.project, command.id, command.text, command.expected, command.commandId);
       };
       return sends.execute(command, dispatch);
     },

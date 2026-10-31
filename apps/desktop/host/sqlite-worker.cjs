@@ -47,7 +47,8 @@ try {
   }
   if (db.prepare('PRAGMA user_version').get().user_version === 1) db.exec('BEGIN IMMEDIATE; CREATE TABLE submissions (id TEXT PRIMARY KEY, body TEXT NOT NULL, association TEXT NOT NULL); PRAGMA user_version=2; COMMIT');
   if (db.prepare('PRAGMA user_version').get().user_version === 2) db.exec('BEGIN IMMEDIATE; CREATE TABLE preparation_results (id TEXT PRIMARY KEY, previous TEXT NOT NULL, result TEXT NOT NULL); PRAGMA user_version=3; COMMIT');
-  if (db.prepare('PRAGMA user_version').get().user_version !== 3 || db.prepare('PRAGMA quick_check').get().quick_check !== 'ok') throw Error('Unsupported or corrupt SQLite storage');
+  if (db.prepare('PRAGMA user_version').get().user_version === 3) db.exec('BEGIN IMMEDIATE; CREATE TABLE checkpoints (id TEXT PRIMARY KEY, chatId TEXT NOT NULL, body TEXT NOT NULL); PRAGMA user_version=4; COMMIT');
+  if (db.prepare('PRAGMA user_version').get().user_version !== 4 || db.prepare('PRAGMA quick_check').get().quick_check !== 'ok') throw Error('Unsupported or corrupt SQLite storage');
   const identity = db.prepare('SELECT * FROM identity').all();
   if (identity.length !== 1 || !/^[0-9a-f-]{36}$/.test(identity[0].hostId) || !/^[0-9a-f-]{36}$/.test(identity[0].clientId) || !Number.isSafeInteger(identity[0].revision)) throw Error('Invalid established SQLite identities');
   db.exec('BEGIN IMMEDIATE');
@@ -69,6 +70,7 @@ try {
   const settings = { journalMode: db.prepare('PRAGMA journal_mode').get().journal_mode, synchronous: db.prepare('PRAGMA synchronous').get().synchronous, checkpointFullfsync: db.prepare('PRAGMA checkpoint_fullfsync').get().checkpoint_fullfsync };
   if (settings.journalMode !== 'wal' || settings.synchronous !== 1 || settings.checkpointFullfsync !== 1) throw Error('SQLite durability settings unavailable');
   db.exec('CREATE TABLE IF NOT EXISTS client_recovery (clientId TEXT NOT NULL, kind TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(clientId, kind))');
+  db.prepare('SELECT id, chatId, body FROM checkpoints LIMIT 1').all();
   // Admission counts protected metadata across every table; exceeding it rolls back the whole mutation.
   const storageBytes = `(SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM chats) +
     (SELECT coalesce(sum(length(CAST(body AS BLOB))+length(CAST(association AS BLOB))),0) FROM submissions) +
@@ -87,7 +89,15 @@ try {
 if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body }) => {
   try {
     let value;
-    if (operation === 'publishFileFact') {
+    if (operation === 'checkpoints') {
+      value = db.prepare('SELECT body FROM checkpoints WHERE chatId=? ORDER BY rowid').all(commandId).map(row => JSON.parse(row.body));
+    } else if (operation === 'checkpoint') {
+      if (!body || !body.id || !body.chatId || !['available', 'unavailable'].includes(body.availability)) throw Error('Invalid checkpoint');
+      const encoded = JSON.stringify(body);
+      const used = db.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))),0) AS n FROM checkpoints').get().n;
+      if (used + Buffer.byteLength(encoded) > (body.availability === 'available' ? 50331648 : 67108864)) throw Error('Checkpoint storage capacity exhausted');
+      db.prepare('INSERT INTO checkpoints VALUES (?, ?, ?)').run(body.id, body.chatId, encoded);
+    } else if (operation === 'publishFileFact') {
       if (!body || !body.completed || !['move', 'trash'].includes(body.kind)) throw Error('Invalid shared file fact');
       db.exec('BEGIN IMMEDIATE');
       try {
