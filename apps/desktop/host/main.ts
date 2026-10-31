@@ -372,7 +372,20 @@ app.whenReady().then(async () => {
     if (!p) throw Error("Unknown saved project.");
     return state.projectUse?.find(p => p.project === identity)?.checkout ?? p.root;
   };
+  let chatStorageWrites: Promise<unknown> = Promise.resolve();
   const host = await startHost({
+    clientChatStorage: state => {
+      const run = chatStorageWrites.then(async () => {
+        const { clientId } = await store.database.ready;
+        const saved = await store.database.recoveryRead(clientId, "chatClient");
+        const value = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(state ?? saved.body ?? {});
+        if (Buffer.byteLength(JSON.stringify(value)) > 4 * 1024 * 1024 || Object.keys(value).some(key => !/^escode-(composer|composer-revision|send|control):/.test(key))) throw Error("Invalid client chat recovery data");
+        if (state) await store.database.recoveryWrite(clientId, "chatClient", value, saved.revision);
+        return value;
+      });
+      chatStorageWrites = run.catch(() => {});
+      return run;
+    },
     gitStatus: async root => (await checkout(root)).status(),
     worktreeOptions: async root => (await checkout(root)).repositoryGit.worktreeOptions(),
     draftAction: action => chats.draftAction(action),

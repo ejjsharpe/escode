@@ -108,7 +108,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         // Recovery/uncertain evidence is deliberately conservative: never infer safety from missing metadata.
         const recovery = db.prepare('SELECT kind, body FROM client_recovery').all().some(row => {
           const saved = JSON.parse(row.body);
-          if (row.kind === 'approvals') return false; // Checkout authority does not depend on historical file contents.
+          if (row.kind === 'approvals' || row.kind === 'chatClient') return false; // Authority and composer/command identities do not depend on historical file bytes.
           return row.kind === 'workspace' ? !!saved?.drafts?.length : saved != null && JSON.stringify(saved) !== '{}' && JSON.stringify(saved) !== '[]';
         });
         const uncertain = db.prepare("SELECT 1 FROM rewinds WHERE json_extract(body,'$.result.status')='uncertain' LIMIT 1").get();
@@ -202,7 +202,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
       if (!row || row.body !== JSON.stringify(previous)) throw Error('Preparation context changed');
       db.prepare('INSERT INTO preparation_results VALUES (?, ?, ?)').run(previous.id, JSON.stringify(previous), JSON.stringify(result));
     } else if (operation === 'recoveryRead' || operation === 'recoveryWrite') {
-      if (typeof clientId !== 'string' || !clientId || clientId.length > 256 || !['workspace', 'intent', 'fileCommands', 'fileFacts', 'approvals'].includes(kind)) throw Error('Invalid recovery owner');
+      if (typeof clientId !== 'string' || !clientId || clientId.length > 256 || !['chatClient', 'workspace', 'intent', 'fileCommands', 'fileFacts', 'approvals'].includes(kind)) throw Error('Invalid recovery owner');
       if (operation === 'recoveryRead') {
         const row = db.prepare('SELECT body, revision FROM client_recovery WHERE clientId=? AND kind=?').get(clientId, kind);
         value = row ? { body: JSON.parse(row.body), revision: row.revision } : { body: null, revision: 0 };

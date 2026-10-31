@@ -1,0 +1,69 @@
+$ node scripts/filesystem.mjs && vp test run host/client-chat.test.ts "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop
+
+ ❯ host/client-chat.test.ts (20 tests | 2 failed) 16ms
+   × failed accepted-composer flush 4 retains the original identity for status-only retry 4ms
+   × pending Send persistence failure prevents provider dispatch and retains its identity 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/client-chat.test.ts > failed accepted-composer flush 4 retains the original identity for status-only retry
+AssertionError: promise resolved "''" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+""
+
+ ❯ host/client-chat.test.ts:132:54
+    130|     return accepted(command);
+    131|   });
+    132|   await expect(client.send(null, "chat", "original")).rejects.toThrow(…
+       |                                                      ^
+    133|   expect(values.has(key)).toBe(true);
+    134|   expect(await client.send(null, "chat", "original")).toBe("");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  host/client-chat.test.ts > pending Send persistence failure prevents provider dispatch and retains its identity
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "admissionEpoch": "epoch",
+        "commandId": "f0b795ef-bac4-4cc6-b418-3ee87860f47d",
+        "expected": "context",
+        "id": "chat",
+        "project": null,
+        "text": "original",
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ host/client-chat.test.ts:197:32
+    195|   adapter.flush.mockResolvedValueOnce().mockRejectedValueOnce(Error("h…
+    196|   await expect(client.send(null, "chat", "original")).rejects.toThrow(…
+    197|   expect(host.sendMessage).not.toHaveBeenCalled();
+       |                                ^
+    198|   expect(values.has(key)).toBe(true);
+    199| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 18 passed (20)
+   Start at  13:46:52
+   Duration  302ms (import 75%, transform 17%, tests 8%, worker 1%)
+
+error: script "test" exited with code 1

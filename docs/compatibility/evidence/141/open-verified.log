@@ -1,0 +1,11 @@
+$ node scripts/filesystem.mjs && vp test run host/shutdown.test.ts host/project-drafts.test.ts "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop
+
+Preparing worktree (new branch 'linked')
+
+ Test Files  2 passed (2)
+      Tests  18 passed (18)
+   Start at  13:26:04
+   Duration  6.04s (tests 91%, import 8%, transform 1%)
+

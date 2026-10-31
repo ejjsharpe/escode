@@ -95,6 +95,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     lookupFile: (root: string, query: string) => chatQuery(client => client.lookupFile({ root, query })),
     readFile: (root: string, path: string) => chatQuery(client => client.readFile({ root, path })),
     saveFile: (root: string, path: string, text: string, version: string) => chatQuery(client => client.saveFile({ root, path, text, version })),
+    clientChatStorage: (state?: Record<string, string>) => chatQuery(client => client.clientChatStorage(state === undefined ? {} : { state })),
     loadWorkspace: () => chatQuery(client => client.loadWorkspace()),
     persistWorkspace: (state: typeof import("@escode/contracts").WorkspaceState.Type) => chatQuery(client => client.persistWorkspace({ state })),
     moveEntry: (command: import("@escode/contracts").MoveEntry) => chatQuery(client => client.moveEntry({ command })),

@@ -23,9 +23,19 @@ type ChatArguments =
   | [operation: "stop" | "emergencyStop", project: string | null, id: string, target?: string]
   | [operation: "answer", project: string | null, id: string, token: string, answer: unknown];
 const hostClient = createHostClient(() => ipcRenderer.invoke("local-bootstrap"));
+const chatStorageReady = hostClient.clientChatStorage().then(state => {
+  for (const [key, value] of Object.entries(state)) localStorage.setItem(key, value);
+});
+void chatStorageReady.catch(() => {});
+async function flushChatStorage() {
+  await hostClient.clientChatStorage(Object.fromEntries(Object.keys(localStorage)
+    .filter(key => /^escode-(composer|composer-revision|send|control):/.test(key))
+    .map(key => [key, localStorage.getItem(key)!])));
+  await ipcRenderer.invoke("lifecycle", "flushClientStorage");
+}
 const chatClient = createChatClient(hostClient, {
   storage: localStorage,
-  flush: () => ipcRenderer.invoke("lifecycle", "flushClientStorage"),
+  flush: flushChatStorage,
   confirmResolve: (project, id) => ipcRenderer.invoke("chat", "resolveSend", project, id),
 });
 async function createEntry(root: string, parent: string, name: string, kind: "file" | "folder") {
@@ -51,10 +61,14 @@ async function control(operation: "stop" | "answer" | "emergencyStop", project: 
   const state = await hostClient.sendState(project, id);
   const command = saved ? JSON.parse(saved) : { ...state, commandId: crypto.randomUUID(), project, id, text: "", control: { operation, target, token, answer } };
   localStorage.setItem(key, JSON.stringify(command));
+  try { await flushChatStorage(); }
+  catch (error) { if (operation !== "stop") throw error; } // Stop still reaches host emergency admission on storage failure.
   const receipt = saved ? (await hostClient.sendStatus(command.commandId) ?? await hostClient.sendMessage(command)) : await hostClient.sendMessage(command);
   if (!receipt) throw Error("Control outcome unavailable; command identity retained. Refresh to inspect current work.");
   if (receipt.status !== "accepted") throw Error(`${operation} ${receipt.status}: ${receipt.message}`);
   localStorage.removeItem(key);
+  try { await flushChatStorage(); }
+  catch (error) { localStorage.setItem(key, JSON.stringify(command)); throw error; }
 }
 async function transfer(root: string, kind: "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", parent: string, paths: string[]) {
   const key = `escode-transfer:${JSON.stringify([root, kind, parent, paths])}`;
@@ -109,7 +123,8 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("close-request", listener);
       return () => ipcRenderer.removeListener("close-request", listener);
     },
-    chat: (...call: ChatArguments) => {
+    chat: async (...call: ChatArguments) => {
+      await chatStorageReady;
       const [operation, ...args] = call;
       return ["createDraft", "context", "execution"].includes(operation)
       ? (async () => {

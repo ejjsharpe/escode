@@ -8,7 +8,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { RewindResult, FileInspection, CheckpointPage, BoundaryInspection, maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult, DirectoryChange } from "@escode/contracts";
 
-const fileMethods = ["readDiff", "transferAction", "trashEntries", "readFile", "saveFile", "loadWorkspace", "persistWorkspace"];
+const fileMethods = ["readDiff", "transferAction", "trashEntries", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "clientChatStorage"];
 
 function watchChanges(subscribe: (notify: (error?: string) => void) => () => void) {
   return Stream.callback<typeof DirectoryChange.Type>(queue => Effect.acquireRelease(
@@ -72,6 +72,7 @@ export async function startHost(options: {
   moveEntry?: (command: import("@escode/contracts").MoveEntry) => Promise<unknown>;
   ackFileOperation?: (root: string) => Promise<void>;
   draftAction?: (action: import("@escode/contracts").DraftAction) => Promise<unknown>;
+  clientChatStorage?: (state?: Record<string, string>) => Promise<Record<string, string>>;
   sendState?: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
   sendMessage?: (command: SendCommand) => Promise<SendReceipt>;
   sendStatus?: (commandId: string) => Promise<SendReceipt | null>;
@@ -143,7 +144,7 @@ export async function startHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["checkpointRetention", "observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "branchHistory", "inspectFiles", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["checkpointRetention", "observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "clientChatStorage", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "branchHistory", "inspectFiles", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -228,6 +229,10 @@ export async function startHost(options: {
         }, catch: String }),
         saveFile: ({ root, path, text, version }) => Effect.tryPromise({ try: async () => {
           if (!options.saveFile) throw Error("Files unavailable"); return options.saveFile(root, path, text, version);
+        }, catch: String }),
+        clientChatStorage: ({ state }) => Effect.tryPromise({ try: async () => {
+          if (!options.clientChatStorage) throw Error("Client recovery unavailable");
+          return options.clientChatStorage(state);
         }, catch: String }),
         loadWorkspace: () => Effect.tryPromise({ try: async () => {
           if (!options.loadWorkspace) throw Error("Recovery unavailable"); return options.loadWorkspace();

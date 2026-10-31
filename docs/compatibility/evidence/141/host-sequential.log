@@ -1,0 +1,41 @@
+$ node scripts/filesystem.mjs && vp test run "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop
+
+Preparing worktree (new branch 'linked')
+From /private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-worktrees-5rG7gS/repo
+ * branch            main       -> FETCH_HEAD
+Already on 'main'
+Cloning into '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-worktrees-BYH8ik/other'...
+done.
+Preparing worktree (new branch 'sibling')
+Switched to a new branch 'different'
+Preparing worktree (new branch 'linked')
+ ❯ host/shutdown.test.ts (4 tests | 1 failed) 3035ms
+   × shutdown cancels an open still reading saved-chat metadata before any process starts 537ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/shutdown.test.ts > shutdown cancels an open still reading saved-chat metadata before any process starts
+AssertionError: expected 'connected' to be 'cancelled' // Object.is equality
+
+Expected: "cancelled"
+Received: "connected"
+
+ ❯ host/shutdown.test.ts:242:27
+    240|     release();
+    241|     await shutdown;
+    242|     expect(await opening).toBe("cancelled");
+       |                           ^
+    243|     expect(activeBeforeShutdown).toBe(true);
+    244|     const { readdir } = await import("node:fs/promises");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 41 passed | 2 skipped (44)
+      Tests  1 failed | 361 passed | 6 skipped (368)
+   Start at  13:13:26
+   Duration  329.77s (tests 97%, import 3%)
+
+error: script "test" exited with code 1

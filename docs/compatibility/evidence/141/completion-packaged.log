@@ -1,0 +1,53 @@
+$ playwright test tests/history.spec.ts tests/checkpoints.spec.ts tests/retention.spec.ts tests/durable-state.spec.ts tests/navigation.spec.ts tests/agents-files-recovery.spec.ts tests/sqlite-qualification.spec.ts tests/emergency-stop.spec.ts
+
+Running 21 tests using 1 worker
+
+(node:1256) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   1 tests/agents-files-recovery.spec.ts:13:1 › saved-project registration and interrupted move recovery survive together across restart (6.4s)
+Preparing worktree (new branch 'linked')
+  ✓   2 tests/agents-files-recovery.spec.ts:155:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening (3.7s)
+{"threeSendsMs":1126.5182080000013,"checkpoints":["available","available","unavailable"]}
+  ✓   3 tests/checkpoints.spec.ts:10:1 › packaged Send captures fresh saved bytes and permits unavailable coverage (2.5s)
+  ✓   4 tests/durable-state.spec.ts:8:1 › packaged SQLite worker retains authenticated drafts and identities on restart (2.6s)
+#139 fault setup ms 1.4007500000006985
+#127 visible Send/emergency control ms {"phase":"baseline","sendMs":390.62254100000064,"stopMs":129.0956249999981,"controlMs":57.81683300000077}
+  ✓   5 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) (2.6s)
+#139 fault setup ms 0.8690829999977723
+#127 visible Send/emergency control ms {"phase":"followup","sendMs":391.4211660000001,"stopMs":112.30612499999916,"controlMs":43.91700000000128}
+  ✓   6 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (followup) (3.0s)
+#127 visible Send/emergency control ms {"phase":"worker-loss","sendMs":387.6322910000017,"stopMs":118.16241699999955,"controlMs":54.05333299999984}
+  ✓   7 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss) (1.8s)
+  ✓   8 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) (2.1s)
+
+  ✓   9 tests/history.spec.ts:11:129 › saved new-format history: navigation (10.6s)
+
+  ✓  10 tests/history.spec.ts:11:129 › saved new-format history: streaming (5.3s)
+
+  ✓  11 tests/history.spec.ts:11:129 › saved new-format history: files (3.4s)
+
+  ✓  12 tests/history.spec.ts:11:129 › saved new-format history: branch (6.5s)
+
+  ✓  13 tests/history.spec.ts:11:129 › saved new-format history: branch-after (6.5s)
+
+  ✓  14 tests/history.spec.ts:11:129 › saved new-format history: summary (7.9s)
+
+  ✓  15 tests/history.spec.ts:11:129 › saved new-format history: restoration (9.3s)
+
+  ✓  16 tests/history.spec.ts:11:129 › saved new-format history: expiry (3.3s)
+Preparing worktree (new branch 'other')
+Switched to a new branch 'changed-branch'
+  ✓  17 tests/navigation.spec.ts:8:1 › projects and checkout selections retain buffers, drafts and mode without duplicate tabs (11.2s)
+
+  ✓  18 tests/navigation.spec.ts:235:1 › cancelled and edited lookup invocations reject delayed validation and file activation (6.1s)
+  ✓  19 tests/retention.spec.ts:7:1 › packaged retention settings support keyboard editing and persisted Never (2.8s)
+#127 packaged evidence {"settings":{"journalMode":"wal","synchronous":1,"checkpointFullfsync":1},"before":114936,"after":551656,"samples":100,"medianMs":0.1265830000000392,"p95Ms":0.24187499999999318,"maxMs":2.0717500000000086}
+  ✓  20 tests/sqlite-qualification.spec.ts:7:1 › packaged worker durability readback and recovery write measurement (678ms)
+#127 packaged editing/Save ms {"phase":"baseline","editMs":137.89108299999498,"saveMs":275.5117920000048,"rendererSaveMs":240.5}
+#127 packaged editing/Save ms {"phase":"followup","editMs":54.29200000000128,"saveMs":324.8787500000035,"rendererSaveMs":252.40000000596046}
+#139 native helper timings [{"operation":"git","ms":28.01608299999998},{"operation":"git","ms":26.60904100000016},{"operation":"git","ms":23.26783300000011},{"operation":"git","ms":22.27079200000003},{"operation":"git","ms":21.868999999999915},{"operation":"git","ms":21.606457999999975},{"operation":"git","ms":21.378625000000056},{"operation":"git","ms":20.981499999999983},{"operation":"git","ms":20.245000000000005},{"operation":"git","ms":20.226832999999942}]
+#139 app worker slowest requests [{"operation":"read","ms":41.853000000000065},{"operation":"recoveryRead","ms":24.83745799999997},{"operation":"recoveryRead","ms":24.308708000000024},{"operation":"recoveryRead","ms":6.436499999999796},{"operation":"recoveryRead","ms":3.5534170000000245},{"operation":"recoveryWrite","ms":2.530291000000034},{"operation":"recoveryWrite","ms":2.056542000000036},{"operation":"recoveryWrite","ms":1.909249999999929},{"operation":"recoveryRead","ms":1.424041000000102},{"operation":"recoveryRead","ms":1.38087500000006}]
+  ✓  21 tests/sqlite-qualification.spec.ts:42:2 › packaged editing and Save baseline and loaded-store followup (2.3s)
+
+  21 passed (1.7m)

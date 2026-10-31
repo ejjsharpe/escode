@@ -1,0 +1,14 @@
+$ playwright test tests/checkpoints.spec.ts tests/history.spec.ts --grep "captures|navigation|restoration" --output "/tmp/escode-141-last-results"
+
+Running 3 tests using 1 worker
+
+(node:67455) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"threeSendsMs":1017.2528750000001,"checkpoints":["available","available","unavailable"]}
+  ✓  1 tests/checkpoints.spec.ts:10:1 › packaged Send captures fresh saved bytes and permits unavailable coverage (4.5s)
+
+  ✓  2 tests/history.spec.ts:11:129 › saved new-format history: navigation (10.5s)
+
+  ✓  3 tests/history.spec.ts:11:129 › saved new-format history: restoration (9.3s)
+
+  3 passed (24.7s)

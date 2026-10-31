@@ -26,7 +26,7 @@ function validate(db: DatabaseSync, expected?: Pick<DurableIdentity, "hostId" | 
     if (receipt.command?.commandId !== row.id || receipt.hostId !== owner.hostId || receipt.clientId !== owner.clientId || receipt.command.id !== association.id) throw Error("Invalid recovered command identity");
   }
   for (const row of db.prepare("SELECT * FROM client_recovery").all()) {
-    if (!row.clientId || !["workspace", "intent", "fileCommands", "fileFacts", "approvals"].includes(String(row.kind)) || !Number.isSafeInteger(row.revision)) throw Error("Invalid recovered client ownership");
+    if (!row.clientId || !["chatClient", "workspace", "intent", "fileCommands", "fileFacts", "approvals"].includes(String(row.kind)) || !Number.isSafeInteger(row.revision)) throw Error("Invalid recovered client ownership");
     JSON.parse(String(row.body));
   }
   return { hostId: String(owner.hostId), clientId: String(owner.clientId) };

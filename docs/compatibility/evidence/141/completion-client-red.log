@@ -1,0 +1,35 @@
+$ node scripts/filesystem.mjs && vp test run host/client-chat.test.ts "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop
+
+ ❯ host/client-chat.test.ts (19 tests | 1 failed) 15ms
+   × failed accepted-composer flush 3 retains the original identity for status-only retry 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/client-chat.test.ts > failed accepted-composer flush 3 retains the original identity for status-only retry
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ host/client-chat.test.ts:133:27
+    131|   });
+    132|   await expect(client.send(null, "chat", "original")).rejects.toThrow(…
+    133|   expect(values.has(key)).toBe(true);
+       |                           ^
+    134|   expect(await client.send(null, "chat", "original")).toBe("");
+    135|   expect(host.sendMessage).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+   Start at  13:43:52
+   Duration  470ms (import 83%, transform 10%, tests 6%, worker 1%)
+
+error: script "test" exited with code 1

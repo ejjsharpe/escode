@@ -121,9 +121,10 @@ test("failure to retain a command blocks dispatch and keeps the composer", async
   expect(host.sendMessage).not.toHaveBeenCalled();
 });
 
-test("failed accepted-composer flushing retains the original identity for status-only retry", async () => {
+for (const failAt of [3, 4]) test(`failed accepted-composer flush ${failAt} retains the original identity for status-only retry`, async () => {
   const { client, adapter, host, values } = fixture();
-  adapter.flush.mockResolvedValueOnce().mockRejectedValueOnce(Error("flush failed"));
+  let flushes = 0;
+  adapter.flush.mockImplementation(async () => { if (++flushes === failAt) throw Error("flush failed"); });
   host.sendMessage.mockImplementation(async command => {
     host.sendStatus.mockResolvedValue(accepted(command));
     return accepted(command);
@@ -187,4 +188,12 @@ test.each(["invalid JSON", JSON.stringify({ ...command, id: "other-chat" })])("i
   await expect(client.send(null, "chat", "original")).rejects.toThrow();
   expect(values.get(key)).toBe(saved);
   expect(host.sendMessage).not.toHaveBeenCalled();
+});
+
+test("pending Send persistence failure prevents provider dispatch and retains its identity", async () => {
+  const { client, adapter, host, values } = fixture();
+  adapter.flush.mockResolvedValueOnce().mockRejectedValueOnce(Error("host storage unavailable"));
+  await expect(client.send(null, "chat", "original")).rejects.toThrow("host storage unavailable");
+  expect(host.sendMessage).not.toHaveBeenCalled();
+  expect(values.has(key)).toBe(true);
 });

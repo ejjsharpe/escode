@@ -1,0 +1,46 @@
+$ playwright test tests/emergency-stop.spec.ts --output "/tmp/escode-141-stop-fixed"
+
+Running 4 tests using 1 worker
+
+(node:5171) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+#139 fault setup ms 0.4800419999996848
+#127 visible Send/emergency control ms {"phase":"baseline","sendMs":393.93545900000026,"stopMs":116.52187500000036,"controlMs":54.45112500000005}
+  ✓  1 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) (4.5s)
+#139 fault setup ms 0.5672909999993863
+#127 visible Send/emergency control ms {"phase":"followup","sendMs":390.36162499999955,"stopMs":111.7407090000006,"controlMs":59.14287499999955}
+  ✓  2 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (followup) (2.8s)
+#127 visible Send/emergency control ms {"phase":"worker-loss","sendMs":382.67133399999875,"stopMs":113.65345799999886,"controlMs":44.566749999999956}
+  ✓  3 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss) (1.8s)
+  ✘  4 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) (6.8s)
+
+
+  1) tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('alert').filter({ hasText: 'Stale Stop target.' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('alert').filter({ hasText: 'Stale Stop target.' }) with timeout 5000ms
+      - waiting for getByRole('alert').filter({ hasText: 'Stale Stop target.' })
+
+
+      106 |     await page.getByRole("button", { name: "Emergency Stop", exact: true }).click();
+      107 |     if (phase === "worker-loss-superseded") {
+    > 108 |       await expect(page.getByRole("alert").filter({ hasText: "Stale Stop target." })).toBeVisible();
+          |                                                                                       ^
+      109 |       expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+      110 |       return;
+      111 |     }
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/emergency-stop.spec.ts:108:87
+
+    Error Context: ../../../../../../../../tmp/escode-141-stop-fixed/emergency-stop-emergency-S-075d6-app-worker-loss-superseded-/error-context.md
+
+  1 failed
+    tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) 
+  3 passed (16.2s)
+error: script "smoke" exited with code 1

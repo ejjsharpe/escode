@@ -13,7 +13,7 @@ for (const phase of ["baseline", "followup", "worker-loss", "worker-loss-superse
   await writeFile(join(tools, "codex"), `#!/usr/bin/env node
 const {createInterface}=require('node:readline');
 if(process.argv.includes('--version')){console.log('codex-cli 0.165.0');process.exit(0);}
-const timer=setInterval(()=>{if(require('node:fs').existsSync(${JSON.stringify(join(dir, "supersede"))})){clearInterval(timer);process.stdout.write(JSON.stringify({method:'turn/started',params:{threadId:'saved-provider',turn:{id:'newer'}}})+'\\n');require('node:fs').writeFileSync(${JSON.stringify(join(dir, "superseded"))},'yes');}},10);
+const timer=setInterval(()=>{if(require('node:fs').existsSync(${JSON.stringify(join(dir, "supersede"))})){clearInterval(timer);process.stdout.write(JSON.stringify({method:'turn/completed',params:{threadId:'saved-provider',turn:{id:'sent',status:'completed'}}})+'\\n');setTimeout(()=>{process.stdout.write(JSON.stringify({method:'turn/started',params:{threadId:'saved-provider',turn:{id:'newer'}}})+'\\n');require('node:fs').writeFileSync(${JSON.stringify(join(dir, "superseded"))},'yes');},100);}},10);
 createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line); if(!m.id)return; let result={};
  if(m.method==='initialize')result={userAgent:'fixture'};
