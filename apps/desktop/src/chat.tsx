@@ -45,7 +45,7 @@ export interface ChatBridge {
     answer: unknown,
   ): Promise<void>;
 }
-function ModelControls({ project, id, onSaving }: { project: string | null; id: string; onSaving: (saving: boolean) => void }) {
+function ModelControls({ project, id, onSaving, existingError }: { project: string | null; id: string; onSaving: (saving: boolean) => void; existingError?: string | null }) {
   const [catalog, setCatalog] = useState<import("@escode/contracts").ModelChoices | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -72,7 +72,7 @@ function ModelControls({ project, id, onSaving }: { project: string | null; id: 
       {!model?.efforts.includes(catalog.choice.effort) && <option value={catalog.choice.effort}>{catalog.choice.effort} (unavailable)</option>}
       {model?.efforts.map(e => <option key={e} value={e}>{e}</option>)}
     </select></label>}
-    {error && <span role="alert">{error}</span>}
+    {error && !existingError && <span role="alert">{error}</span>}
   </div>;
 }
 function Request({
@@ -499,7 +499,7 @@ export function ChatView({
                   store.edit(selected, e.target.value);
                 }}
               />
-              <ModelControls key={selected} project={project} id={selected} onSaving={setSettingsSaving} />
+              <ModelControls key={selected} project={project} id={selected} onSaving={setSettingsSaving} existingError={error || snapshot?.contextError} />
               <Button
                 type="submit"
                 disabled={
