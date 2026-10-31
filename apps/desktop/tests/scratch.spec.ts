@@ -198,6 +198,7 @@ test("one repository offers No project and text-bearing local drafts move throug
     await expect(
       page.getByRole("combobox", { name: "Project context", exact: true }),
     ).toBeVisible();
+    await expect(message).toHaveValue("");
     await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(repo);
     await expect(
       page.locator(".agent-row").filter({ hasText: "Chat 1" }).filter({ hasText: "Alpha" }),

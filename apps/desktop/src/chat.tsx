@@ -426,7 +426,7 @@ export function ChatView({
               }}
             >
               {unsent && !record?.scratch && !record?.worktree?.reservation && (
-                <label>
+                <label className="draft-context">
                   Project context
                   <select
                     aria-label="Project context"

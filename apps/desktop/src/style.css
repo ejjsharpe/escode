@@ -793,3 +793,9 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .chat-sidebar-footer { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-top: 1px solid #303138; }
 .agents aside, .chat-list { display: flex; flex-direction: column; }
 .chat-sidebar-footer button[aria-pressed="true"] { background: var(--surface-selected, #363636); }
+
+.chat-compose .draft-context { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+.chat-compose .draft-context select { width: auto; max-width: min(300px, 100%); min-width: 0; }
+.chat-compose .worktree-choices:not([open]) { padding-bottom: 0; border-bottom: 0; font-size: 12px; }
+.execution-context { font-size: 12px; overflow-wrap: anywhere; }
+.execution-context summary { cursor: pointer; }
