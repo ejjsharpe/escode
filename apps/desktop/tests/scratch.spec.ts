@@ -217,7 +217,7 @@ test("one repository offers No project and text-bearing local drafts move throug
       draft: "move this prompt",
     });
     expect(await readdir(user)).not.toContain("scratch");
-    await expect(page.getByRole("button", { name: "No project", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "No project", exact: true })).toHaveCount(0);
   } finally {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async (_window: unknown, options?: any) => ({

@@ -116,9 +116,10 @@ createInterface({input:process.stdin}).on('line',line=>{
       "Input received: keyboard answer",
     );
     await activate(page.getByRole("button", { name: "Agents", exact: true }));
-    await activate(page.getByRole("button", { name: "No project", exact: true }));
+    await activate(page.getByRole("button", { name: "New chat", exact: true }));
     const context = page.getByRole("combobox", { name: "Project context", exact: true });
     await reach(context);
+    await context.selectOption("");
     await expect(context).toHaveValue("");
     await reach(compose);
     await page.keyboard.type("keyboard scratch question");

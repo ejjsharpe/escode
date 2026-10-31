@@ -74,11 +74,10 @@ export function AgentsView() {
       <div className="workspace">
         <SidebarResize />
         <aside aria-label="Agents chats">
-          <Button disabled={busy} onClick={() => {
+          <Button className="new-agent-chat" disabled={busy} onClick={() => {
             setError("");
             void create();
-          }}>New chat</Button>
-          <Button onClick={() => void create(null)}>No project</Button>
+          }}><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 5v14M5 12h14" /></svg>New chat</Button>
           {!targets.length && (
             <Button onClick={() => void create(null)}>Start without a project</Button>
           )}

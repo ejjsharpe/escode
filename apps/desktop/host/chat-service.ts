@@ -124,7 +124,7 @@ export class ChatService {
         || (c.approval_policy != null && !["on-request", "never"].includes(c.approval_policy as string));
       const session = this.sessions.get(id);
       const conflict = session?.permissionConflict && (session.permissionReviewer !== "user" || !matchesPermission((choice ?? chat.nextPermission) as SavedChat["nextPermission"], effective?.approval, sandbox));
-      const message = conflict ? permissionResolution : !blocked && rpc.installation?.version === "codex-cli 0.166.0" ? networkUnsupported : blocked ? "Custom or managed Codex policy retained. Resolve it in Codex configuration before choosing a preset." : "";
+      const message = conflict ? permissionResolution : blocked ? "Custom or managed Codex policy retained. Resolve it in Codex configuration before choosing a preset." : "";
       if (!chat.nextPermission && !chat.hasSent && !chat.threadId && !blocked) {
         const defaults = await this.configured(project);
         chat.nextPermission = defaults.permission ?? "full";

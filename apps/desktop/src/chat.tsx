@@ -111,17 +111,17 @@ function ModelControls({ project, id, onSaving, existingError }: { project: stri
   };
   const model = catalog?.models.find(m => m.model === catalog.choice?.model);
   return <div className="chat-model-controls" aria-label="Next message settings" title="Applies only to your next explicit Send">
-    <span>Next message</span>
-    <label>Model <select aria-label="Next message model" disabled={saving || !catalog} value={catalog?.choice?.model ?? ""} onChange={e => void choose(e.target.value)}>
+    <span className="control-label">Next message</span>
+    <label><span className="control-label">Model</span> <select aria-label="Next message model" disabled={saving || !catalog} value={catalog?.choice?.model ?? ""} onChange={e => void choose(e.target.value)}>
       <option value="" disabled>Codex configured default</option>
       {catalog?.choice && !model && <option value={catalog.choice.model}>{catalog.choice.model} (unavailable)</option>}
       {catalog?.models.map(m => <option key={m.model} value={m.model}>{m.name}</option>)}
     </select></label>
-    {catalog?.choice && <label>Effort <select aria-label="Next message effort" disabled={saving || !model} value={catalog.choice.effort} onChange={e => void choose(catalog.choice!.model, e.target.value)}>
+    {catalog?.choice && <label><span className="control-label">Effort</span> <select aria-label="Next message effort" disabled={saving || !model} value={catalog.choice.effort} onChange={e => void choose(catalog.choice!.model, e.target.value)}>
       {!model?.efforts.includes(catalog.choice.effort) && <option value={catalog.choice.effort}>{catalog.choice.effort} (unavailable)</option>}
       {model?.efforts.map(e => <option key={e} value={e}>{e}</option>)}
     </select></label>}
-    <label title="Supervised: read-only with approval. Auto-accept edits: workspace and temporary-directory writes, command networking requested off (provider enforcement required); broader access needs approval. Full access: no sandbox or command approval.">Permissions <select aria-label="Next message permissions" disabled={saving || !permissions || permissions.blocked} value={permissions?.blocked ? "" : permissions?.choice ?? ""} onChange={async e => {
+    <label title="Supervised: read-only with approval. Auto-accept edits: workspace and temporary-directory writes, command networking requested off (provider enforcement required); broader access needs approval. Full access: no sandbox or command approval."><span className="control-label">Permissions</span> <select aria-label="Next message permissions" disabled={saving || !permissions || permissions.blocked} value={permissions?.blocked ? "" : permissions?.choice ?? ""} onChange={async e => {
       setSaving(true); onSaving(true);
       try { setPermissions(await window.escode.chat("permissions", project, id, e.target.value as "supervised" | "edits" | "full")); setError(""); }
       catch (e) { setError(String(e)); } finally { setSaving(false); onSaving(false); }
@@ -306,45 +306,7 @@ export function ChatView({
         window.dispatchEvent(new Event("draft-context-changed"));
       }
     });
-  return (
-    <>
-      {!global &&
-        document.getElementById(sidebarId) &&
-        createPortal(
-          <div className="chat-list" aria-label="Saved chats">
-            <Button
-              disabled={working}
-              onClick={() =>
-                void run(async () => {
-                  await createChat?.(checkout);
-                })
-              }
-            >
-              New chat on current checkout
-            </Button>
-            <ul>
-              {[...scopedChats].filter(c => !!c.archived === archived).sort(compareChats).map((c) => (
-                <ChatRow key={c.id} fallbackTitle={`Chat ${chats.findIndex(chat => chat.id === c.id) + 1}`} chat={c} selected={selected === c.id} select={() => void select(c.id)} />
-              ))}
-            </ul>
-            <ArchiveFooter archived={archived} toggle={() => setArchived(!archived)} />
-          </div>,
-          document.getElementById(sidebarId)!,
-        )}
-      <>
-        {!record ? (
-          <p>Create or select a saved chat to begin. Choose the current checkout or a worktree.</p>
-        ) : (
-          <div className={`conversation-layout ${!unsent || items.length ? "has-messages" : "is-empty"}`}>
-            {!global && !!record.archived !== archived && <p role="status">This conversation belongs to the {record.archived ? "Archived" : "Recent"} list.</p>}
-
-            {!record.archived && ["uncertain", "creating", "preparing"].includes(record.initialSend ?? "") && <p role="status">Archive is blocked until the pending or uncertain operation is resolved.</p>}
-            {record.archived && <p role="status">Archived conversation. Restore to send another message.</p>}
-            {chats.find((c) => c.id === selected)?.removed && (
-              <p role="status">
-                Checkout removed. History and drafts are retained; this chat cannot run.
-              </p>
-            )}
+  const conversationToolbar = record && (<>
             <div className="conversation-heading">
               <h2 title={record.title}>{record.title || `Chat ${chats.findIndex((c) => c.id === selected) + 1}`}</h2>
               <TitleActions project={project} id={selected} title={record.title ?? ""}>
@@ -393,6 +355,47 @@ export function ChatView({
                                 : "Disconnected"}
               </span>
             </div>
+  </>);
+  return (
+    <>
+      {!global &&
+        document.getElementById(sidebarId) &&
+        createPortal(
+          <div className="chat-list" aria-label="Saved chats">
+            <Button
+              disabled={working}
+              onClick={() =>
+                void run(async () => {
+                  await createChat?.(checkout);
+                })
+              }
+            >
+              New chat on current checkout
+            </Button>
+            <ul>
+              {[...scopedChats].filter(c => !!c.archived === archived).sort(compareChats).map((c) => (
+                <ChatRow key={c.id} fallbackTitle={`Chat ${chats.findIndex(chat => chat.id === c.id) + 1}`} chat={c} selected={selected === c.id} select={() => void select(c.id)} />
+              ))}
+            </ul>
+            <ArchiveFooter archived={archived} toggle={() => setArchived(!archived)} />
+          </div>,
+          document.getElementById(sidebarId)!,
+        )}
+      <>
+        {!record ? (
+          <p>Create or select a saved chat to begin. Choose the current checkout or a worktree.</p>
+        ) : (
+          <div className={`conversation-layout ${!unsent || items.length ? "has-messages" : "is-empty"}`}>
+            {!global && !!record.archived !== archived && <p role="status">This conversation belongs to the {record.archived ? "Archived" : "Recent"} list.</p>}
+
+            {!record.archived && ["uncertain", "creating", "preparing"].includes(record.initialSend ?? "") && <p role="status">Archive is blocked until the pending or uncertain operation is resolved.</p>}
+            {record.archived && <p role="status">Archived conversation. Restore to send another message.</p>}
+            {chats.find((c) => c.id === selected)?.removed && (
+              <p role="status">
+                Checkout removed. History and drafts are retained; this chat cannot run.
+              </p>
+            )}
+            {!global && conversationToolbar}
             {(error || snapshot?.error || snapshot?.contextError || record.initialSend === "uncertain" || (!unsent && !snapshot?.connected)) && <div className="chat-recovery">
               <Button
                 disabled={working}
@@ -451,33 +454,10 @@ export function ChatView({
                 />
               ))}
             </div>
-            <details className="execution-context">
-              <summary>{project?.split("/").at(-1) ?? "No project"} · {record?.worktree && !record.worktree.reservation ? "New worktree on first Send" : record?.checkout.split("/").at(-1) || "Scratch on first Send"}</summary>
-            <p className="directory">
-              {project === null
-                ? "Scratch folder: "
-                : record?.worktree && !record.worktree.reservation
-                  ? "Source checkout: "
-                  : "Checkout: "}
-              {record?.checkout || "Allocated on first Send"}
-            </p>
-            {record?.checkout && (project === null || record.worktree && !record.worktree.reservation) && <Button type="button" onClick={() => void run(() => navigator.clipboard.writeText(record.checkout))}>Copy execution path</Button>}
-            {project !== null &&
-              record?.checkout &&
-              (record.phase !== "draft" || !record.worktree) && (
-                <CheckoutBranch root={record.checkout} />
-              )}
-            </details>
-            <form
-              className="chat-compose"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!record.archived && !settingsSaving) void store.send(selected);
-              }}
-            >
+            <div className="compose-context">
               {unsent && !record?.scratch && !record?.worktree?.reservation && (
                 <label className="draft-context">
-                  Project context
+                  <span className="control-label">Project context</span>
                   <select
                     aria-label="Project context"
                     value={project ?? ""}
@@ -490,19 +470,10 @@ export function ChatView({
                       .filter((t) => t.project !== null)
                       .map((t) => (
                         <option key={t.project!} value={t.project!}>
-                          {t.project?.split("/").at(-1) ?? "No project"} · {t.project}
+                          {t.project?.split("/").at(-1) ?? "No project"}
                         </option>
                       ))}
                   </select>
-                  {project !== null && (
-                    <Button
-                      type="button"
-                      disabled={working}
-                      onClick={() => void changeContext(project)}
-                    >
-                      Use current checkout
-                    </Button>
-                  )}
                 </label>
               )}
               {record && project !== null && unsent && !record.worktree?.reservation && (
@@ -564,11 +535,48 @@ export function ChatView({
                     : "Copy execution path"}
                 </Button>
               )}
+            <details className="execution-context">
+              <summary>{global && unsent ? "Chat details" : `${project?.split("/").at(-1) ?? "No project"}${record.checkout && record.checkout !== project ? ` · ${record.checkout.split("/").at(-1)}` : ""}`}</summary>
+              {global && conversationToolbar}
+                  {unsent && project !== null && !record.scratch && !record.worktree?.reservation && (
+                    <Button
+                      type="button"
+                      disabled={working}
+                      onClick={() => void changeContext(project)}
+                    >
+                      Use current checkout
+                    </Button>
+                  )}
+            <p className="directory">
+              {project === null
+                ? "Scratch folder: "
+                : record?.worktree && !record.worktree.reservation
+                  ? "Source checkout: "
+                  : "Checkout: "}
+              {record?.checkout || "Allocated on first Send"}
+            </p>
+            {record?.checkout && (project === null || record.worktree && !record.worktree.reservation) && <Button type="button" onClick={() => void run(() => navigator.clipboard.writeText(record.checkout))}>Copy execution path</Button>}
+            {project !== null &&
+              record?.checkout &&
+              (record.phase !== "draft" || !record.worktree) && (
+                <CheckoutBranch root={record.checkout} />
+              )}
+            </details>
+            </div>
+            <form
+              className="chat-compose"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!record.archived && !settingsSaving) void store.send(selected);
+              }}
+            >
+              <div className="compose-field">
               <label htmlFor={sidebarId + "-message"}>Message Codex</label>
               <textarea
                 ref={composer}
                 disabled={working}
                 id={sidebarId + "-message"}
+                placeholder="Ask Codex anything…"
                 maxLength={100000}
                 value={draft}
                 onChange={(e) => {
@@ -578,6 +586,8 @@ export function ChatView({
               <ModelControls key={selected} project={project} id={selected} onSaving={setSettingsSaving} existingError={error || snapshot?.contextError} />
               <div className="compose-actions"><Button
                 type="submit"
+                aria-label="Send message"
+                title="Send message"
                 disabled={
                   record.archived || working || settingsSaving ||
                   !!snapshot?.contextError ||
@@ -587,10 +597,11 @@ export function ChatView({
                   !draft.trim()
                 }
               >
-                Send message
+                <span className="send-label">Send message</span><svg className="send-icon" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5m-6 6 6-6 6 6" /></svg>
               </Button>
               {(snapshot?.busy || snapshot?.preparing || !!snapshot?.requests.length) && snapshot?.controlTarget && <Button type="button" onClick={() => void store.stop(selected)}>Stop</Button>}
               {emergencyTargets[selected] && <><Button type="button" onClick={() => void store.emergencyStop(selected)}>Emergency Stop</Button><span>Emergency Stop may not be recorded. External effects may remain; reserved resources are retained.</span></>}
+              </div>
               </div>
             </form>
           </div>

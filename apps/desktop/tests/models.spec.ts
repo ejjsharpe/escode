@@ -26,7 +26,7 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
   let app = await launchDesktop(join(dir, "user"), dir);
   try {
     let page = await app.firstWindow();
-    await page.getByRole("button", { name: "No project", exact: true }).click();
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
     await page.getByLabel("Message Codex").fill("retain my text");
     await expect(page.getByLabel("Next message permissions")).toHaveValue("full");
     await page.getByText("New chat defaults", { exact: true }).click();
@@ -82,7 +82,7 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
       await window.escode.chat("models", null, id, "a", undefined, true);
     }, next.id);
     // Reactivating the saved B chat must supersede the last edited A chat.
-    await page.getByRole("button", { name: "No project", exact: true }).click();
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
     await expect(page.getByLabel("Next message model")).toHaveValue("a");
     await page.getByLabel("Next message effort").selectOption("high");
     await page.locator(".agent-row").filter({ hasText: "retain my text" }).click();
@@ -92,7 +92,7 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
       const fresh = await window.escode.chat("createDraft", null);
       return (await window.escode.chat("models", null, fresh.id)).choice;
     })).toEqual({ model: "b", effort: "medium" });
-    await page.getByRole("button", { name: "No project", exact: true }).click();
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
     await expect(page.getByLabel("Next message model")).toHaveValue("b");
     await expect(page.getByLabel("Next message effort")).toHaveValue("medium");
     await page.evaluate(async id => { await window.escode.chat("send", null, id, "background validation"); }, next.id);

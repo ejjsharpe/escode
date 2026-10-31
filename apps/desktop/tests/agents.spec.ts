@@ -162,7 +162,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
       .height;
     expect(await dragComposerHandle(120)).toBeGreaterThan(localHeight + 60);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await rows.filter({ hasText: "beta / beta" }).click();
+    await rows.filter({ has: page.getByText("beta", { exact: true }) }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("beta text");
     await expect(
       page.getByRole("navigation", { name: "Projects" }).locator("button[aria-pressed]"),
@@ -568,7 +568,7 @@ test("Agents composition retains deliberate editor project recency and checkout 
   try {
     let page = await app.firstWindow();
     const rows = page.locator(".agent-row .chat-row-context");
-    await expect(rows).toHaveText(["Gamma / Gamma", "Beta / Beta", "Alpha / Alpha"]);
+    await expect(rows).toHaveText(["Gamma", "Beta", "Alpha"]);
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Choose project" })).toHaveCount(0);
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeFocused();

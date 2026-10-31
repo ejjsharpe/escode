@@ -25,7 +25,7 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
   let app = await launchDesktop(join(dir, "user"), dir);
   try {
     let page = await app.firstWindow();
-    await page.getByRole("button", { name: "No project", exact: true }).click();
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
     await page.getByLabel("Message Codex").fill("retain my text");
     await page.getByLabel("Next message model").selectOption("a");
     await page.getByLabel("Next message effort").selectOption("high");

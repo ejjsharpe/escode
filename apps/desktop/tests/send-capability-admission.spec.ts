@@ -39,7 +39,7 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
       await page.getByRole("button", { name: "New chat on current checkout" }).click();
       await page.getByText("Execution checkout choices", { exact: true }).click();
       await page.getByRole("button", { name: "Use new managed worktree on first Send" }).click();
-    } else await page.getByRole("button", { name: "No project", exact: true }).click();
+    } else await page.getByRole("button", { name: "New chat", exact: true }).click();
     const message = page.getByLabel("Message Codex");
     await message.fill("retain rejected draft");
     await page.getByLabel("Next message permissions").selectOption(kind === "scratch" ? "supervised" : "edits");
