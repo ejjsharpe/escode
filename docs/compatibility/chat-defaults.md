@@ -32,3 +32,22 @@ A saved/provider policy mismatch still fails closed and remains a release qualif
 limit under #144. Packaged application, installed Codex, manual VoiceOver/native,
 narrow/short-window and 200% zoom qualification remain with the parent integration.
 No PR was created and no issue state was changed by this slice.
+
+## Saved-chat activation follow-up (#144/#153 P2)
+
+Foreground model controls explicitly activate their actual chat identity through the
+existing authenticated model contract. Host activation generations prevent an older
+activation from overwriting the latest foreground selection. Catalog reads and Send
+validation do not activate chats; background explicit edits retain effort memory but
+cannot replace the foreground current-model default. Existing draft choices and
+project/app precedence remain unchanged.
+
+The host activation regression failed before the fix (A inherited instead of B).
+The Electron regression also failed with renderer activation disabled (A/high instead
+of B/medium). With activation restored, `host/models.test.ts` and
+`host/permissions.test.ts` pass (4 tests), and `tests/models.spec.ts` passes (1 test),
+including saved B activation after editing A, background Send, fresh defaults,
+configured precedence, per-model memory and restart/draft preservation. Build,
+typecheck, lint and diff whitespace checks passed; lint retains existing warnings.
+This follow-up uses the controllable provider fixture; installed-provider and manual
+native/accessibility qualification were not rerun.

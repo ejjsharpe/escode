@@ -138,7 +138,11 @@ export class ChatService {
       return { choice: choice ?? chat.nextPermission ?? null, blocked, message };
     } finally { rpc.close(); }
   }
-  async models(project: string | null, id: string, model?: string, effort?: string): Promise<import("@escode/contracts").ModelChoices> {
+  private currentChat?: string;
+  private modelActivation = 0;
+  async models(project: string | null, id: string, model?: string, effort?: string, activate = false): Promise<import("@escode/contracts").ModelChoices> {
+    const activation = activate || model !== undefined && (!this.currentChat || this.currentChat === id) ? ++this.modelActivation : this.modelActivation;
+    if (activate) this.currentChat = id;
     await this.environment?.authorize(project);
     const chat = await this.store.get(project, id);
     const rpc = await this.connect(chat.worktree?.source || chat.checkout || process.cwd(), () => {}, () => {});
@@ -176,7 +180,7 @@ export class ChatService {
         await this.store.update(project, id, { nextModel: choice });
         await this.store.database.command("chatDefaults", { scope: "remembered", body: { model, efforts: { ...memory.efforts, [model]: chosen } } });
       }
-      if (model !== undefined && choice) await this.store.database.command("chatDefaults", { scope: "current", body: { model: choice.model, effort: choice.effort } });
+      if ((activate || model !== undefined) && activation === this.modelActivation && (!this.currentChat || this.currentChat === id) && choice) await this.store.database.command("chatDefaults", { scope: "current", body: { model: choice.model, effort: choice.effort } });
       return { models, choice: choice ? { model: choice.model, effort: choice.effort } : null };
     } finally { rpc.close(); }
   }

@@ -17,7 +17,7 @@ export interface ChatBridge {
   (operation: "archive", project: string | null, id: string, archived: boolean): Promise<unknown>;
   (operation: "renameTitle", project: string | null, id: string, title: string): Promise<void>;
   (operation: "regenerateTitle", project: string | null, id: string): Promise<void>;
-  (operation: "models", project: string | null, id: string, model?: string, effort?: string): Promise<import("@escode/contracts").ModelChoices>;
+  (operation: "models", project: string | null, id: string, model?: string, effort?: string, activate?: boolean): Promise<import("@escode/contracts").ModelChoices>;
   (operation: "composer", project: string | null, id: string): Promise<string>;
   (operation: "targets"): Promise<{ project: string | null; checkout: string }[]>;
   (operation: "createDraft", project: string | null, checkout?: string): Promise<SavedChat>;
@@ -100,7 +100,7 @@ function ModelControls({ project, id, onSaving, existingError }: { project: stri
   useEffect(() => {
     let current = true;
     void window.escode.chat("permissions", project, id).then(value => { if (current) setPermissions(value); }).catch(e => { if (current) setError(String(e)); });
-    void window.escode.chat("models", project, id).then(value => { if (current) setCatalog(value); }).catch(e => { if (current) setError(String(e)); });
+    void window.escode.chat("models", project, id, undefined, undefined, true).then(value => { if (current) setCatalog(value); }).catch(e => { if (current) setError(String(e)); });
     return () => { current = false; };
   }, [project, id]);
   const choose = async (model: string, effort?: string) => {

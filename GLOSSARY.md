@@ -300,7 +300,7 @@ Editing a choice never sends work.
 
 **New chat defaults**:
 Host-owned app settings and per-project overrides for model, effort and permissions.
-Current model selection is updated only by an explicit model/effort selection; catalog
+Current model selection is updated by foreground chat activation or an explicit model/effort selection in that chat; catalog
 reads and Send validation cannot change it. New drafts use project overrides before
 app defaults, current chat model, remembered
 Codex model/effort and the catalog default. Explicit draft choices survive changes.
