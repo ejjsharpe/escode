@@ -35,6 +35,8 @@ export function reconcile(state: WorkspaceState, intent: Intent) {
       if (view[field] && affected(view[field], source))
         view[field] = kind === "trash" ? "" : moved(view[field], source, destination);
     }
+    if (view.openFiles) view.openFiles = view.openFiles.flatMap(p =>
+      kind === "trash" && affected(p, source) ? [] : [moved(p, source, destination)]);
     if (view.files) {
       const map = (paths: string[]) =>
         paths.flatMap((p) =>

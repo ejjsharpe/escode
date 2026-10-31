@@ -69,6 +69,12 @@ function validate(value: unknown): asserts value is WorkspaceState {
       throw Error("Invalid recovery draft");
   }
   for (const v of Object.values(s.views)) {
+    if (v?.openFiles !== undefined &&
+      (!Array.isArray(v.openFiles) || new Set(v.openFiles).size !== v.openFiles.length ||
+        v.openFiles.some(p => typeof p !== "string" || !p || isAbsolute(p) ||
+          p.split("/").some(c => !c || c === "." || c === ".." || c.toLowerCase() === ".git")) ||
+        (v.path && !v.openFiles.includes(v.path))))
+      throw Error("Invalid open files");
     if (
       v?.files !== undefined &&
       (!v.files ||
