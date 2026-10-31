@@ -87,3 +87,8 @@ passes **9/9**, including both restoration and historical-branch SIGKILL cases.
 Build and unsigned arm64 packaging pass. Source checkout, index and recovery
 preservation checks remain in both workflows. The integration branch itself was
 not changed by this task.
+
+Final rebuilt/repackaged combined-tip history suite: **5/5 passed (40.2s)**,
+including historical branching and protected restoration. The merged restoration
+result screenshot was visually inspected. The remaining qualification and
+conservative collision-refusal limits above are unchanged.
