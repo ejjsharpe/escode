@@ -228,3 +228,13 @@ ordinary Stop whose intent could not be persisted. The host rechecks authority a
 rejects a superseded target. Its result may be non-durable or uncertain; external
 effects may remain. Reservations and prior command evidence are retained. This
 exception never admits Send, approval or reply without a durable intent.
+
+### Recovery copy
+
+An explicit escode-owned consistent SQLite export with a checksummed inventory and
+declared external spool/content coverage. Missing required content makes coverage
+incomplete. Recovery validates a separate copy and quarantines it until exact
+roots, file baselines, provider identities and uncertain operations are reconciled;
+it does not undo external effects, replay commands or resume live requests.
+
+Recovery copies retain the fenced current receipt journal alongside the SQLite cut. Unresolved receipts and missing required content retain quarantine; receipt rotation is not reconciliation. The administrative provider inspector reads exact saved thread and checkout identities without resuming work.

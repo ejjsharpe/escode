@@ -30,7 +30,7 @@ export type FoundationRecord = {
 type State = { version: 1; hostId: string; clientId: string; records: FoundationRecord[]; receipts?: SendReceipt[] };
 const maximumBytes = 1024 * 1024;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-function validate(value: unknown): asserts value is State {
+export function validateFoundationState(value: unknown): asserts value is State {
   const state = value as State;
   if (!state || state.version !== 1) throw Error("Unsupported foundation storage version");
   if (
@@ -126,7 +126,7 @@ export class FoundationState {
         if (!info.isFile() || info.size > maximumBytes)
           throw Error("Invalid foundation state file or size");
         state = JSON.parse(readFileSync(input, "utf8"));
-        validate(state);
+        validateFoundationState(state);
         if (identity && (state.hostId !== identity.hostId || state.clientId !== identity.clientId)) throw Error("Established identity mismatch");
       } finally {
         closeSync(input);
@@ -154,7 +154,7 @@ export class FoundationState {
     const index = state.records.findIndex((entry) => entry.id === record.id);
     if (index < 0) state.records.push(structuredClone(record));
     else state.records[index] = structuredClone(record);
-    validate(state);
+    validateFoundationState(state);
     this.persist(state);
     this.state = state;
   }
@@ -172,7 +172,7 @@ export class FoundationState {
     state.receipts ??= [];
     const index = state.receipts.findIndex(r => r.command.commandId === receipt.command.commandId);
     if (index < 0) state.receipts.push(receipt); else state.receipts[index] = receipt;
-    validate(state);
+    validateFoundationState(state);
     this.persist(state);
     this.state = state;
   }

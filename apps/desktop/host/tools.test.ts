@@ -40,15 +40,17 @@ async function fixture(
   await writeFile(
     path,
     `#!/usr/bin/env node
-import {writeFileSync} from 'node:fs';
+import {writeFileSync,appendFileSync} from 'node:fs';
 import {createInterface} from 'node:readline';
 if(process.argv.includes('--version')) {console.log(${JSON.stringify("codex-cli " + version)}); process.exit(0);}
 writeFileSync(${JSON.stringify(marker)}, 'started');
 createInterface({input:process.stdin}).on('line', line => {
  const m=JSON.parse(line); if(!m.id) return;
+ appendFileSync(${JSON.stringify(marker)}, '\\n'+m.method);
  let result={};
  if(m.method==='initialize') result=${JSON.stringify(validInitialize ? { userAgent: "codex/" + version } : {})};
  if(m.method==='account/read') result={account:{type:'chatgpt'}};
+ if(m.method==='thread/read' && m.params.threadId!=='missing-thread') result={thread:{id:m.params.threadId==='wrong-id'?'substitute':m.params.threadId,cwd:m.params.threadId==='wrong-cwd'?'/wrong':process.cwd(),cliVersion:'0.200.0',createdAt:1,updatedAt:1,ephemeral:false,modelProvider:'fixture',preview:'',projectId:null,sessionId:'session',source:'cli',status:{type:'idle'},turns:[]}};
  if(m.method==='config/read') result={config:{model:'fixture'}};
  process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');
 });
@@ -164,4 +166,16 @@ test.each(["oversize", "malformed", "split"])("bounded provider frame decoding: 
       if (kind === "split") expect(await rpc.request("fixture/frame", {})).toEqual({ text: "£ saved" });
       else await expect(rpc.request("fixture/frame", {})).rejects.toThrow(kind === "oversize" ? "exceeds 1 MiB" : "Incompatible Codex protocol");
     } finally { rpc.close(); await rpc.finished; }
+  }));
+
+test("recovery provider inspection uses read-only history and rejects unavailable history", () =>
+  fixture("0.200.0", true, async (path, marker) => {
+    const { inspectRecoveryProvider } = await import("./recovery-provider");
+    // This real protocol process has no saved thread: inspection must fail closed.
+    expect(await inspectRecoveryProvider("missing-thread", tmpdir(), path)).toBe(false);
+    expect(await inspectRecoveryProvider("exact", process.cwd(), path)).toBe(true);
+    expect(await inspectRecoveryProvider("wrong-id", process.cwd(), path)).toBe(false);
+    expect(await inspectRecoveryProvider("wrong-cwd", process.cwd(), path)).toBe(false);
+    const calls = (await readFile(marker, "utf8")).split("\n").slice(1);
+    expect(calls).toEqual(["initialize", "account/read", "thread/read"]);
   }));
