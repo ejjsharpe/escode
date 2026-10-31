@@ -547,3 +547,61 @@ for (const change of [
     }
   });
 }
+
+for (const action of ["Overwrite", "Reload"] as const) {
+  test(`inactive Save-before-Trash conflict activates and targets its captured file: ${action}`, async () => {
+    const f = await fixture();
+    try {
+      await writeFile(join(f.root, "b.txt"), "same external bytes");
+      await edit(f.page, "a.txt", "A retained edits");
+      await edit(f.page, "b.txt", "B retained edits");
+      await writeFile(join(f.root, "a.txt"), "same external bytes");
+      await f.page.locator('[data-path="a.txt"] > .tree-row').click({ button: "right" });
+      await f.page.getByRole("menuitem", { name: "Move to Trash", exact: true }).click();
+      await expect(f.page.locator(".conflict")).toContainText("a.txt changed on disk");
+      await expect(f.page.getByRole("tab", { name: "a.txt", exact: true })).toHaveAttribute("aria-selected", "true");
+      if (action === "Reload") {
+        await f.page.getByRole("button", { name: "Compare", exact: true }).click();
+        await expect(f.page.locator(".modified-in-monaco-diff-editor:visible")).toContainText("A retained edits");
+      }
+      await f.page.getByRole("button", { name: action, exact: true }).click();
+      await expect(f.page.locator(".conflict")).toHaveCount(0);
+      await expect(f.page.getByRole("tab", { name: "a.txt", exact: true })).toHaveAttribute("aria-selected", "true");
+      expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe(action === "Overwrite" ? "A retained edits" : "same external bytes");
+      expect(await readFile(join(f.root, "b.txt"), "utf8")).toBe("same external bytes");
+      await f.page.getByRole("tab", { name: "b.txt", exact: true }).click();
+      await expect(f.page.getByRole("textbox", { name: "b.txt editor", exact: true })).toBeVisible();
+      await expect(f.page.locator(".monaco-editor:visible")).toContainText("B retained edits");
+    } finally { await cleanup(f.app, f.base); }
+  });
+}
+
+test("Open affected files activates dirty transfer destinations without changing either disk file", async () => {
+  const f = await fixture();
+  try {
+    await writeFile(join(f.root, "folder/a.txt"), "destination disk");
+    await f.page.getByRole("treeitem", { name: "folder", exact: true }).click();
+    await f.page.locator('[data-path="a.txt"] > .tree-row').click();
+    await f.page.locator(".monaco-editor:visible").click();
+    await f.page.keyboard.press("Meta+a");
+    await f.page.keyboard.type("source edits");
+    await f.page.locator('[data-path="folder/a.txt"] > .tree-row').click();
+    await f.page.locator(".monaco-editor:visible").click();
+    await f.page.keyboard.press("Meta+a");
+    await f.page.keyboard.type("destination edits");
+    await f.page.locator('[data-path="a.txt"] > .tree-row').click();
+    await f.page.getByRole("tree", { name: "Files", exact: true }).focus();
+    await f.page.keyboard.press("Meta+c");
+    await f.app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = (async (_: unknown, options: any) => ({
+        response: options.buttons.indexOf("Open affected files"), checkboxChecked: false,
+      })) as typeof dialog.showMessageBox;
+    });
+    await f.page.getByRole("treeitem", { name: "folder", exact: true }).locator(":scope > .tree-row").click();
+    await f.page.keyboard.press("Meta+v");
+    await expect(f.page.locator('.file-tabs [aria-selected="true"]')).toHaveAttribute("title", f.root + "/folder/a.txt");
+    await expect(f.page.locator(".monaco-editor:visible")).toContainText("destination edits");
+    expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe("disk a.txt");
+    expect(await readFile(join(f.root, "folder/a.txt"), "utf8")).toBe("destination disk");
+  } finally { await cleanup(f.app, f.base); }
+});
