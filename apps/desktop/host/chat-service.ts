@@ -1174,7 +1174,7 @@ export class ChatService {
         const policy = await this.permissions(project, id);
         if (policy.blocked) throw Error(policy.message);
         permissionPolicy(capturedPermission);
-        if (capturedPermission !== "full" && policy.restrictedExecutionUnsupported) throw Error(networkUnsupported);
+        if (capturedPermission !== "full" && policy.restrictedExecutionUnsupported) throw Object.assign(Error(networkUnsupported), { rejected: true });
       }
       capturedModel = chat.nextModel;
       if (capturedModel) {

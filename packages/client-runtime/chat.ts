@@ -71,6 +71,11 @@ export function createChatClient(host: Host, {
         }
         if (receipt === null)
           throw Error("Send status unavailable; identity and text retained. Inspect history, then Resolve previous Send…");
+        if (receipt.status === "rejected") {
+          storage.removeItem(sendKey(project, id));
+          try { await flush(); }
+          catch (error) { storage.setItem(sendKey(project, id), JSON.stringify(command)); throw error; }
+        }
         if (receipt.status !== "accepted")
           throw Error(`Send ${receipt.status}. ${receipt.message} Inspect history; work was not resent.`);
         if (storage.getItem(revisionKey(id)) === revision && storage.getItem(composerKey(id)) === command.text) storage.setItem(composerKey(id), "");

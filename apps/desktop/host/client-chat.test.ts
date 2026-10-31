@@ -69,7 +69,7 @@ test.each([null, "admitted", "dispatching", "uncertain", "rejected"] as const)("
   host.sendStatus.mockResolvedValue(status === null ? null : { ...accepted(command), status });
   await client.open(null, "chat");
   await expect(client.send(null, "chat", "newer")).rejects.toThrow("Send");
-  expect(values.get(key)).toBe(JSON.stringify(command));
+  expect(values.get(key)).toBe(status === "rejected" ? undefined : JSON.stringify(command));
   expect(client.composer(null, "chat")).toBe("newer");
   expect(host.sendMessage).not.toHaveBeenCalled();
   expect(host.sendState).not.toHaveBeenCalled();
@@ -196,4 +196,27 @@ test("pending Send persistence failure prevents provider dispatch and retains it
   await expect(client.send(null, "chat", "original")).rejects.toThrow("host storage unavailable");
   expect(host.sendMessage).not.toHaveBeenCalled();
   expect(values.has(key)).toBe(true);
+});
+
+test("terminal rejected Send releases identity, retains text and requires a new explicit Send", async () => {
+  const { client, host, values } = fixture();
+  host.sendMessage.mockImplementationOnce(async command => ({ ...accepted(command), status: "rejected" }));
+  await expect(client.send(null, "chat", "original")).rejects.toThrow("Send rejected");
+  expect(values.has(key)).toBe(false);
+  expect(client.composer(null, "chat")).toBe("original");
+  expect(host.sendMessage).toHaveBeenCalledTimes(1);
+  expect(await client.send(null, "chat", "explicit follow-up")).toBe("");
+  expect(host.sendMessage).toHaveBeenCalledTimes(2);
+  expect(host.sendMessage.mock.calls[1][0].commandId).not.toBe(host.sendMessage.mock.calls[0][0].commandId);
+});
+
+test("rejected receipt cleanup failure retains identity without replay", async () => {
+  const { client, host, adapter, values } = fixture();
+  values.set(key, JSON.stringify(command));
+  host.sendStatus.mockResolvedValue({ ...accepted(command), status: "rejected" });
+  adapter.flush.mockImplementation(async () => { if (!values.has(key)) throw Error("cleanup failed"); });
+  await expect(client.send(null, "chat", "retained")).rejects.toThrow("cleanup failed");
+  expect(JSON.parse(values.get(key)!)).toEqual(command);
+  expect(client.composer(null, "chat")).toBe("retained");
+  expect(host.sendMessage).not.toHaveBeenCalled();
 });

@@ -149,7 +149,7 @@ for (const kind of ["scratch", "worktree"] as const) {
       checkout: async path => { if (path === root) return checkout; const target = await Checkout.open(path); opened.push(target); return target; },
     });
     try {
-      await expect(service.send(project, chat.id, "retained prompt")).rejects.toThrow("network isolation");
+      await expect(service.send(project, chat.id, "retained prompt")).rejects.toMatchObject({ message: expect.stringContaining("network isolation"), rejected: true });
       expect(await store.get(project, chat.id)).toEqual({ ...before, initialSend: "unaccepted" });
       expect(starts).toBe(0); expect(turns).toBe(0);
       expect(existsSync(join(dir, "scratch"))).toBe(false);
