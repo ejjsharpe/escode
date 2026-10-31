@@ -14,8 +14,6 @@ export function Boundaries({ project, id }: { project: string | null; id: string
   const [filePath, setFilePath] = useState("");
   const fileDetail = useRef<HTMLDivElement>(null);
   const fileOutput = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => { if (files) fileOutput.current?.focus(); }, [files]);
-  useLayoutEffect(() => { if (file) fileDetail.current?.focus(); }, [file]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const output = useRef<HTMLDivElement>(null);
