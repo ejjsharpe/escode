@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
 
@@ -210,30 +211,35 @@ test.skipIf(process.env.ESCODE_LIVE_CHAT !== "1")(
   300000,
 );
 
-test("folder-to-record failure retains a visible reservation and never reconstructs it", async () => {
+test("folder-to-record failure recovers the observed identity without reconstructing it", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-scratch-handoff-")));
   const store = new Chats(join(dir, "chats.json"));
   const chat = await store.createDraft(null, "");
-  const update = store.update.bind(store);
-  store.update = async (...args) => {
-    if (args[2].scratch?.ino) throw Error("ownership persistence failed");
-    return update(...args);
-  };
+  const fault = new DatabaseSync(join(dir, "chats.json.sqlite-state-v1/state.sqlite"));
+  fault.exec("CREATE TRIGGER fail_ownership BEFORE INSERT ON chats WHEN json_extract(NEW.body, '$.scratch.ino') IS NOT NULL BEGIN SELECT RAISE(ABORT, 'ownership persistence failed'); END");
   const service = new ChatService(store, async () => {
     throw Error("provider must not start");
   });
   try {
     await expect(service.send(null, chat.id, "retained")).rejects.toThrow(
-      "ownership persistence failed",
+      "storage unavailable",
     );
     const saved = await store.get(null, chat.id);
     expect(saved.scratch).toEqual({ path: saved.checkout });
     expect(await readdir(saved.checkout)).toEqual([]);
-    store.update = update;
-    await expect(service.send(null, chat.id, "retained")).rejects.toThrow(saved.checkout);
-    expect((await store.get(null, chat.id)).draft).toBe("retained");
+    fault.exec("DROP TRIGGER fail_ownership");
+    await store.database.close();
+    const recovered = new Chats(join(dir, "chats.json"));
+    const retained = await recovered.get(null, chat.id);
+    expect(retained.scratch?.ino).toBeGreaterThan(0);
+    expect(retained.checkout).toBe(saved.checkout);
+    expect(await recovered.prepareScratch(retained)).toEqual(retained);
+    await recovered.database.close();
+    expect(retained.draft).toBe("retained");
   } finally {
     service.close();
+    fault.close();
+    await store.database.close();
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -377,4 +383,47 @@ test("legacy interrupted association evidence is preserved without import", asyn
     expect(await store.all()).toEqual([]);
     expect(await readFile(file + ".tmp", "utf8")).toBe("interrupted reservation");
   } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("a stale draft cannot reserve scratch resources after its context changed", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-stale-preparation-")));
+  const store = new Chats(join(dir, "chats"));
+  try {
+    const stale = await store.createDraft(null, "");
+    await store.context(null, stale.id, null, "changed-context");
+    await expect(store.prepareScratch(stale)).rejects.toThrow("context changed");
+    expect((await store.get(null, stale.id)).checkout).toBe("changed-context");
+    expect(await readdir(dir)).not.toContain("scratch");
+  } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("opening a scratch chat during first Send retains its live session without replay", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-scratch-reconnect-")));
+  const store = new Chats(join(dir, "chats"));
+  let release!: () => void;
+  let turns = 0;
+  const service = new ChatService(store, async cwd => ({
+    async request(method: string) {
+      if (method === "account/read") return { account: {} };
+      if (method === "thread/start") return { thread: { id: "provider" }, cwd, model: "fixture", approvalPolicy: "on-request", sandbox: { type: "workspaceWrite" } };
+      if (method === "thread/turns/list") return { data: [], nextCursor: null };
+      if (method === "turn/start") {
+        turns++;
+        await new Promise<void>(resolve => { release = resolve; });
+        return { turn: { id: "turn" } };
+      }
+      return {};
+    }, respond() {}, close() {},
+  }));
+  const chat = await store.createDraft(null, "");
+  const sending = service.send(null, chat.id, "first");
+  try {
+    await expect.poll(() => turns).toBe(1);
+    await expect(service.open(null, chat.id)).resolves.toMatchObject({ busy: true });
+    await expect(service.history(null, chat.id, null)).resolves.toMatchObject({ items: [] });
+    expect(turns).toBe(1);
+  } finally {
+    release?.(); await sending; service.close(); await store.database.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
