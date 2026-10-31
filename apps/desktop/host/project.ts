@@ -1,3 +1,4 @@
+import { maximumRecentFiles, maximumRecentUnits } from "@escode/contracts";
 import { scorePath, comparePathScores, type RankedPath } from "./lookup-score";
 import { CheckoutRepository } from "./checkout-repository";
 import { spawn, execFileSync } from "node:child_process";
@@ -256,7 +257,40 @@ export class Checkout {
       throw error;
     }
   }
-  async discover(query: string, signal: AbortSignal): Promise<import("@escode/contracts").LookupResult> {
+  async discover(query: string, signal: AbortSignal, history?: readonly string[]): Promise<import("@escode/contracts").LookupResult> {
+    if (history !== undefined) {
+      if (!Array.isArray(history) || history.length > maximumRecentFiles ||
+        history.some(p => typeof p !== "string" || !p || p.length > 4096 || isAbsolute(p) || p.includes("\0") || p.split("/").some(c => !c || c === "." || c === "..")) ||
+        history.reduce((n, p) => n + p.length, 0) > maximumRecentUnits) throw Error("Invalid lookup history");
+      if (query.length > 256 || query.includes("\0")) throw Error("Invalid lookup query");
+      if (signal.aborted) throw Error("Lookup cancelled");
+      this.checkoutIdentity();
+      const recent: import("@escode/contracts").LookupResult["results"][number][] = [];
+      let cells = 0, processed = 0, partial = false;
+      for (const path of new Set(history)) {
+        if (signal.aborted) throw Error("Lookup cancelled");
+        // Default **/name globs match the target basename, not all descendants of ignored folders.
+        const name = path.split("/").at(-1)!;
+        if ([".git", ".svn", ".hg", ".jj", ".DS_Store", "Thumbs.db", "node_modules", "bower_components"].includes(name) || name.endsWith(".code-search")) continue;
+        cells += path.length * query.length;
+        if (cells > 16 * 1024 * 1024) { partial = true; break; }
+        const match = query.trim() ? scorePath(path, query) : { score: 0, positions: [] };
+        if (match) recent.push({ path, ...match, recent: true });
+        if (recent.length === 100) { partial = true; break; }
+        if (++processed % 32 === 0) await new Promise<void>(done => setImmediate(done));
+      }
+      const discovered = query.trim() ? await this.discover(query, signal) : { results: [], partial: false, message: "" };
+      const seen = new Set(recent.map(r => r.path));
+      const combined = [...recent, ...discovered.results.filter(r => !seen.has(r.path))];
+      let bytes = 0;
+      const results = combined.filter((r, i) => {
+        bytes += Buffer.byteLength(r.path) + r.positions.length * 8 + 80;
+        if (i >= 100 || bytes > 512 * 1024) { partial = true; return false; }
+        return true;
+      });
+      this.checkoutIdentity();
+      return { results, partial: partial || discovered.partial, message: discovered.message || (partial ? "Search capped; refine your query." : "") };
+    }
     if (!query.trim() || query.length > 256 || query.includes("\0")) throw Error("Invalid lookup query (maximum 256 characters).");
     if (activeLookups >= 2) throw Error("Lookup busy. Refresh to retry.");
     const fd = this.checkedDirectory();

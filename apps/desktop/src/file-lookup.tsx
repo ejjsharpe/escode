@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@base-ui/react/button";
-import { openFile } from "./workspace";
+import { memory, openFile } from "./workspace";
 
 function highlightedPath(path: string, positions: readonly number[]) {
   const parts = [];
@@ -50,26 +50,25 @@ export function FileLookup({ root, project, onClose }: {
   }, [root, refresh]);
   useEffect(() => {
     setResults([]); setSelected(0);
-    if (!query.trim()) return;
     const request = generation.current;
-    setMessage("Searching checkout…");
+    setMessage(query.trim() ? "Searching checkout…" : "Loading recent files…");
     let stop: (() => void) | undefined;
     const timer = setTimeout(() => {
       stop = window.escode.searchFiles(root, query, result => {
         if (request !== generation.current || !dialog.current?.open) return;
         setResults(result.results);
-        setMessage(result.partial ? (result.message || "Partial coverage. Refine the query or Refresh.") : result.results.length ? `${result.results.length} matches` : "No eligible matches. You can still open an exact path.");
-      }, error => { if (request === generation.current) setMessage(`Search unavailable: ${error}. Refresh to retry or open an exact path.`); });
+        setMessage(result.partial ? (result.message || "Partial coverage. Refine the query or Refresh.") : result.results.length ? `${result.results.length} matches` : query.trim() ? "No eligible matches. You can still open an exact path." : "No recent files in this checkout. Type a filename or path.");
+      }, error => { if (request === generation.current) setMessage(`Search unavailable: ${error}. Refresh to retry or open an exact path.`); }, (memory.recentFiles ?? []).filter(f => f.root === root).map(f => f.path));
     }, 120);
     return () => { clearTimeout(timer); stop?.(); };
   }, [root, query, refresh, invalidation]);
   useEffect(() => { document.getElementById(`lookup-result-${selected}`)?.scrollIntoView({ block: "nearest" }); }, [selected]);
   const activate = async (target = query) => {
-    if (!query || busy.current) return;
+    if (!target || busy.current) return;
     const request = ++generation.current;
     const current = () => request === generation.current && !!dialog.current?.open;
     busy.current = true;
-    setMessage("Opening exact path…");
+    setMessage("Opening file…");
     try {
       const path = await window.escode.lookupFile(root, target);
       if (!current()) return;
@@ -100,10 +99,16 @@ export function FileLookup({ root, project, onClose }: {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setSelected(index => results.length ? (index + (event.key === "ArrowDown" ? 1 : results.length - 1)) % results.length : 0); }
         }} />
       <div id="lookup-results" role="listbox" aria-label="Matching files" className="lookup-results">
-        {results.map((result, index) => <div key={result.path} id={`lookup-result-${index}`} role="option" aria-selected={index === selected}
-          onMouseDown={event => event.preventDefault()} onClick={() => void activate(result.path)}>
-          {highlightedPath(result.path, result.positions)}
-        </div>)}
+        {[true, false].map(recent => {
+          const rows = results.map((result, index) => ({ result, index })).filter(({ result }) => !!result.recent === recent);
+          return rows.length > 0 && <div key={String(recent)} role="group" aria-label={recent ? "Recent files" : "File results"}>
+            <h3>{recent ? "Recent files" : "File results"}</h3>
+            {rows.map(({ result, index }) => <div key={result.path} id={`lookup-result-${index}`} role="option" aria-selected={index === selected}
+              onMouseDown={event => event.preventDefault()} onClick={() => void activate(result.path)}>
+              {highlightedPath(result.path, result.positions)}
+            </div>)}
+          </div>;
+        })}
       </div>
       <p role="status">{message}{observationError && ` ${observationError}`}</p>
       <Button onClick={() => { generation.current++; setRefresh(value => value + 1); }}>Refresh</Button>

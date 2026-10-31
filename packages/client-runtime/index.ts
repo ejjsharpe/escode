@@ -85,10 +85,10 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
       });
       return () => controller.abort();
     },
-    searchFiles(root: string, query: string, apply: (result: import("@escode/contracts").LookupResult) => void, error: (message: string) => void) {
+    searchFiles(root: string, query: string, apply: (result: import("@escode/contracts").LookupResult) => void, error: (message: string) => void, history?: readonly string[]) {
       const controller = new AbortController();
       const current = connect();
-      void current.then(client => runQuery(current, client.searchFiles({ root, query }), controller.signal)).then(result => { if (!controller.signal.aborted) apply(result); }, failure => { if (!controller.signal.aborted) error(String(failure)); });
+      void current.then(client => runQuery(current, client.searchFiles({ root, query, history }), controller.signal)).then(result => { if (!controller.signal.aborted) apply(result); }, failure => { if (!controller.signal.aborted) error(String(failure)); });
       return () => controller.abort();
     },
     lookupFile: (root: string, query: string) => chatQuery(client => client.lookupFile({ root, query })),

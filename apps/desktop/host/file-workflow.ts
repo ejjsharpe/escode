@@ -765,9 +765,9 @@ export function createFileWorkflow({
         else notify(error);
       });
     },
-    searchFiles: async (root, query, signal) => {
+    searchFiles: async (root, query, signal, history) => {
       const { project, check } = await fileContext(root, "");
-      const result = await project.discover(query, signal);
+      const result = await project.discover(query, signal, history);
       check();
       return result;
     },
