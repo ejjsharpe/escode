@@ -82,7 +82,9 @@ export class CheckoutRepository {
     return { bases, defaultRef, checkouts };
   }
   reserveWorktree(managedRoot: string, ref: string, commit: string) {
-    const base = this.worktreeOptions().bases.find((b) => b.ref === ref);
+    const base = ref === commit && /^[a-f0-9]{40,64}$/.test(commit)
+      ? { commit: this.git(["rev-parse", "--verify", commit + "^{commit}"]).toString().trim() }
+      : this.worktreeOptions().bases.find((b) => b.ref === ref);
     if (!base || base.commit !== commit)
       throw Error(
         "Base is missing or changed. Refresh bases and choose again. Empty repositories need a first commit.",
@@ -132,7 +134,9 @@ export class CheckoutRepository {
     const { root, branch } = reservation;
     const container = dirname(root);
     try {
-      const base = this.worktreeOptions().bases.find((b) => b.ref === ref);
+      const base = ref === commit && /^[a-f0-9]{40,64}$/.test(commit)
+      ? { commit: this.git(["rev-parse", "--verify", commit + "^{commit}"]).toString().trim() }
+      : this.worktreeOptions().bases.find((b) => b.ref === ref);
       if (!base || base.commit !== commit) throw Error("Base is missing or changed. Choose again.");
       // Git accepts an existing empty path, so reserve it exclusively ourselves.
       mkdirSync(root, { mode: 0o700 });

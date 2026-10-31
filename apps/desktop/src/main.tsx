@@ -1,3 +1,4 @@
+import { RetentionSettings } from "./retention-settings";
 import { preserveClose } from "./close-preservation";
 import { createFileActivation } from "./file-activation";
 import type { BufferState } from "./file-activation";
@@ -40,6 +41,12 @@ declare global {
       sendState: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
       sendMessage: (command: import("@escode/contracts").SendCommand) => Promise<unknown>;
       sendStatus: (commandId: string) => Promise<unknown>;
+      checkpointRetention: (days?: number | null) => Promise<number | null>;
+      checkpointPoints: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").CheckpointPage>;
+      rewind: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles?: boolean) => Promise<import("@escode/contracts").RewindResult>;
+      branchHistory: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, summarized?: boolean) => Promise<import("@escode/contracts").RewindResult>;
+      inspectFiles: (project: string | null, id: string, boundary: string, path: string | null, cursor: string | null) => Promise<import("@escode/contracts").FileInspection>;
+      inspectBoundary: (project: string | null, id: string, boundary: string, cursor: string | null) => Promise<import("@escode/contracts").BoundaryInspection>;
       chatHistory: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").HistoryPage>;
       chatSummaries: (apply: (value: import("@escode/contracts").ChatSummaries) => void, error: (message: string) => void) => () => void;
       toolStatus(): Promise<unknown>;
@@ -199,6 +206,7 @@ function CheckoutView({
   const [saving, setSaving] = useState(false);
   const [fileClosing, setFileClosing] = useState(false);
   const closeInFlight = useRef(false);
+  const transferNavigation = useRef(false);
   useEffect(
     () => onBlocked(root, !!conflict || saving || fileClosing),
     [conflict, saving, fileClosing, root, onBlocked],
@@ -721,6 +729,7 @@ function CheckoutView({
     closeInFlight.current = true;
     setFileClosing(!transferring);
     setTransferProgress(transferring);
+    transferNavigation.current = transferring;
     setMessage(
       transferring
         ? "Transferring files… Navigation and chat Stop remain available. Earlier move undo history resets."
@@ -752,6 +761,7 @@ function CheckoutView({
           : transferring
             ? await projectCall("transfer", root, kind, destination, sources)
             : null;
+      transferNavigation.current = false;
       const results = batch
         ? batch.results
         : [
@@ -894,12 +904,13 @@ function CheckoutView({
       closeInFlight.current = false;
       setFileClosing(false);
       setTransferProgress(false);
+      transferNavigation.current = false;
       editor.current?.updateOptions({ readOnly: false });
     }
   }
   fileKeepers.set(root, keepOpen);
   fileOpeners.set(root, async request => {
-    if (request.root !== root || closeInFlight.current && !transferProgress) return false;
+    if (request.root !== root || (closeInFlight.current && !transferNavigation.current)) return false;
     const opened = await activation.open({ file: request.path, view: request.view, intent: request.intent, current: request.current });
     if (opened && request.intent === "keep")
       setFocusRequest({ file: request.path, current: activation.checkpoint() });
@@ -1453,6 +1464,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
       <header>
         <strong>escode</strong>
         <span>{selected}</span>
+        <RetentionSettings />
       </header>
       <nav className="project-tabs" aria-label="Projects">
         <Button aria-pressed={selected === "agents"} onClick={() => setSelected("agents")}>
@@ -1517,8 +1529,17 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
 }
 window.escode
   .lifecycle("load")
-  .then(({ state, restored, errors }) => {
+  .then(async ({ state, restored, errors, acknowledgementRoots }) => {
     initialize(state);
+    try {
+      if (acknowledgementRoots?.length) {
+        await persist();
+        for (const root of acknowledgementRoots)
+          await window.escode.project("file-operation-ack", root);
+      }
+    } catch (error) {
+      errors.push(`Recovery acknowledgement failed; available edits retained: ${String(error)}`);
+    }
     const root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
     if (import.meta.hot) import.meta.hot.data.root = root;
     root.render(<App restored={restored} errors={errors} />);

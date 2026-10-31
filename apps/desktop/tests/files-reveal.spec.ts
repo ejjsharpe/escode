@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -148,7 +149,7 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
     ).toHaveAttribute("aria-pressed", "true");
     await expect
       .poll(async () => {
-        const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+        const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
         return (
           state.selected === root &&
           state.views[root].files.hideIgnored &&
@@ -159,7 +160,7 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
     // Explicit recovery of the test-owned store after confirmed process death.
-    await rm(join(user, "foundation/owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(
@@ -170,17 +171,17 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
     await page.getByRole("button", { name: "Reveal Active File", exact: true }).click();
     await expect(page.getByRole("treeitem", { name: "normal.txt", exact: true })).toBeVisible();
     expect(
-      JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+      JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
         (d: any) => d.path === "folder/deep/ignored.log",
       )?.text,
     ).toBe("ignored unsaved");
     await page.screenshot({ path: "test-results/files-reveal.png" });
     await page.getByRole("button", { name: "Collapse All", exact: true }).click();
     // Exercise an actually pending reveal, with no cached or retired-model folder response.
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.expanded).toEqual([]);
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.expanded).toEqual([]);
     const exited = new Promise(resolve => app.process().once("exit", resolve));
     app.process().kill("SIGKILL"); await exited;
-    await rm(join(user, "foundation/owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user); page = await app.firstWindow();
     await expect(row("folder")).toBeVisible();
     await page.evaluate(() => {
@@ -257,28 +258,27 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
       }
       await page.getByRole("button", { name: "Hide Git-ignored files", exact: true }).click();
       await expect.poll(async () => {
-        const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+        const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
         return state.views[root]?.files?.hideIgnored &&
           (change === "editor close" || state.drafts.some((d: any) => d.text === "retained ignored draft"));
       }).toBe(true);
       await app.evaluate(({ shell, ipcMain }) => {
         (globalThis as any).finderTargets = [];
         shell.showItemInFolder = (path: string) => { (globalThis as any).finderTargets.push(path); };
-        const fs = process.getBuiltinModule("fs/promises") as any;
-        const read = fs.readFile;
+        const fs = (process.getBuiltinModule("worker_threads") as any).Worker.prototype;
+        const read = fs.postMessage;
         const { AsyncLocalStorage } = process.getBuiltinModule("async_hooks") as any;
         const context = new AsyncLocalStorage();
         const handlers = (ipcMain as any)._invokeHandlers;
         const handler = handlers.get("project");
         handlers.set("project", (event: unknown, operation: string, ...args: unknown[]) =>
           context.run(operation === "entry-action", () => handler(event, operation, ...args)));
-        fs.readFile = (...args: any[]) => {
-          const result = read(...args);
-          if (!context.getStore() || !String(args[0]).endsWith("/host-chats-v1.json")) return result;
-          fs.readFile = read;
+        fs.postMessage = function(this: any, ...args: any[]) {
+          if (!context.getStore() || args[0]?.operation !== "read") return read.apply(this, args);
+          fs.postMessage = read;
           handlers.set("project", handler);
           return new Promise((resolve, reject) => {
-            (globalThis as any).releaseContext = () => result.then(resolve, reject);
+            (globalThis as any).releaseContext = () => { try { resolve(read.apply(this, args)); } catch (error) { reject(error); } };
           });
         };
       });
@@ -338,7 +338,7 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
         }).toBe("changed");
       }
       await page.evaluate(() => (window as any).releaseWatch());
-      const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+      const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
       expect(state.views[root].files.hideIgnored).toBe(true);
       if (change !== "editor close") expect(state.drafts.find((d: any) => d.root === root)).toMatchObject({
         text: "retained ignored draft", disk: { text: "active disk" },

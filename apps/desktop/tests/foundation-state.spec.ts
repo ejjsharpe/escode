@@ -1,5 +1,6 @@
+import { DatabaseSync } from "node:sqlite";
 import { test, expect } from "@playwright/test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { launchDesktop } from "./desktop";
@@ -14,9 +15,10 @@ test("desktop publishes its window only after durable identities and retains the
       try {
         const window = await app.firstWindow();
         await expect(window.getByRole("button", { name: "Open project…" })).toBeVisible();
-        const bytes = await readFile(join(user, "foundation/state.json"), "utf8");
+        const db = new DatabaseSync(join(user, "durable-chats-v1.sqlite-state-v1/state.sqlite"), { readOnly: true });
+        let bytes: string;
+        try { bytes = JSON.stringify(db.prepare("SELECT hostId, clientId FROM identity").get()); } finally { db.close(); }
         const state = JSON.parse(bytes);
-        expect(state.version).toBe(1);
         expect(state.hostId).toMatch(/^[0-9a-f-]{36}$/);
         expect(state.clientId).toMatch(/^[0-9a-f-]{36}$/);
         if (startup) expect(bytes).toBe(original);

@@ -135,3 +135,31 @@ test("Trash confirmation can outlive the ordinary query timeout", async () => {
   try { expect((await client.trashEntries("/approved", ["a"])).message).toBe("Cancelled; edits retained."); }
   finally { await client.close(); await host.close(); globalThis.WebSocket = original; }
 }, 40000);
+
+test("a delayed live snapshot preserves an admitted historical branch result", async () => {
+  const original = globalThis.WebSocket;
+  globalThis.WebSocket = class extends WebSocket {
+    constructor(url: string) { super(url, { origin: "null" }); }
+  } as unknown as typeof globalThis.WebSocket;
+  let bootstraps = 0;
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "unused" }),
+    chatSnapshot: async () => {
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      return { project: null, chatId: "chat", threadId: "provider", connected: true,
+        busy: false, turnId: null, settings: null, requests: [], error: null, items: [] };
+    },
+    branchHistory: async () => {
+      await new Promise(resolve => setTimeout(resolve, 4500));
+      return { status: "applied", token: null, message: "Historical chat created at isolated checkout" };
+    },
+  });
+  const client = createHostClient(async () => { bootstraps++; return host.bootstrap(); });
+  const off = client.chatLive(null, "chat", () => {}, () => {});
+  try {
+    expect(await client.branchHistory(null, "chat", "boundary", "choice", "command")).toEqual({
+      status: "applied", token: null, message: "Historical chat created at isolated checkout",
+    });
+    expect(bootstraps).toBe(1);
+  } finally { off(); await client.close(); await host.close(); globalThis.WebSocket = original; }
+}, 10000);

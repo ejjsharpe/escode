@@ -1,0 +1,40 @@
+$ node scripts/filesystem.mjs && vp test run host/checkpoint-expiry.test.ts "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop
+
+ ❯ host/checkpoint-expiry.test.ts (5 tests | 1 failed) 2839ms
+   × authenticated polling expires inactive file coverage without deleting conversation or reviving files 457ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/checkpoint-expiry.test.ts > authenticated polling expires inactive file coverage without deleting conversation or reviving files
+AssertionError: expected { id: 'point', …(6) } to match object { availability: 'unavailable', …(1) }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "availability": "unavailable",
+-   "reason": "File checkpoint expired after 30 days of chat inactivity",
++   "availability": "available",
++   "reason": null,
+  }
+
+ ❯ host/checkpoint-expiry.test.ts:38:76
+     36|     expect((await client.checkpointPoints(null, chat.id, null)).points…
+     37|     now = 60 * 86400000;
+     38|     expect((await client.checkpointPoints(null, chat.id, null)).points…
+       |                                                                            ^
+     39|     expect((await store.get(null, chat.id)).id).toBe(chat.id);
+     40|     expect(await readFile(join(dir, "saved.txt"), "utf8")).toBe("retai…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  13:57:48
+   Duration  3.44s (tests 85%, import 14%, transform 1%)
+
+error: script "test" exited with code 1

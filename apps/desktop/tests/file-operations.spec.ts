@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -56,7 +57,7 @@ test("dirty descendants move through Monaco and bridge, undo, save conflict and 
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
             (d: any) => d.path === "moved/a.ts",
           )?.text,
       )
@@ -65,12 +66,12 @@ test("dirty descendants move through Monaco and bridge, undo, save conflict and 
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
             (d: any) => d.path === "moved/a.ts",
           )?.text,
       )
       .not.toContain("subsequent");
-    const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+    const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
     expect(state.drafts.map((d: any) => d.path).sort()).toEqual(["moved/a.ts", "moved/b.txt"]);
     expect(state.drafts[0].text).toContain("dirty");
     expect(await readFile(join(root, "moved/b.txt"), "utf8")).toBe("disk b");
@@ -80,7 +81,7 @@ test("dirty descendants move through Monaco and bridge, undo, save conflict and 
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
     // Explicit recovery of the test-owned store after confirmed process death.
-    await rm(join(user, "foundation/owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(page.locator(".monaco-editor:visible")).toContainText("dirty a");
@@ -156,7 +157,7 @@ test("Trash cancellation, conflict and native failure retain dirty drafts; pendi
     });
     await page.getByRole("button", { name: "Move to Trash a.txt", exact: true }).click();
     await expect(page.locator(".content:visible > [role=status]")).toContainText("Save conflict");
-    expect(JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0].text).toBe(
+    expect(JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts[0].text).toBe(
       "unsaved",
     );
     await expect(page.locator(".conflict")).toContainText("a.txt changed on disk");
@@ -189,7 +190,7 @@ test("Trash cancellation, conflict and native failure retain dirty drafts; pendi
     );
     expect(await readFile(join(roots[0], "a.txt"), "utf8")).toBe("external");
     expect(await readFile(join(roots[1], "a.txt"), "utf8")).toBe("disk");
-    expect(JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0].text).toBe(
+    expect(JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts[0].text).toBe(
       "unsaved",
     );
     // Capture the actual native result solely to inspect and clean up test-owned Trash fixtures.
@@ -208,7 +209,7 @@ test("Trash cancellation, conflict and native failure retain dirty drafts; pendi
     await expect(page.locator(".content:visible > [role=status]")).toContainText(
       "Moved to macOS Trash",
     );
-    expect(JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts).toEqual([]);
+    expect(JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts).toEqual([]);
     await page.getByRole("button", { name: "two", exact: true }).click();
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
@@ -436,7 +437,7 @@ for (const choice of ["Save", "Discard", "Cancel"] as const) {
         await expect(page.locator(".content:visible > [role=status]")).toContainText("Cancelled");
         expect(await readFile(join(root, "folder/a.txt"), "utf8")).toBe("disk a");
         expect(
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
             (d: any) => d.path === "folder/a.txt",
           ).text,
         ).toBe("unsaved a");
@@ -455,7 +456,7 @@ for (const choice of ["Save", "Discard", "Cancel"] as const) {
           choice === "Save" ? "unsaved a" : "disk a",
         );
         expect(await readFile(fixtures[1], "utf8")).toBe("clean bytes");
-        const retained = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts;
+        const retained = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts;
         expect(retained.map((d: any) => d.path)).toEqual(["fail.txt"]);
         expect(retained[0].text).toBe("unsaved failed");
         await expect(page.getByRole("tree", { name: "Files", exact: true })).toBeFocused();
@@ -588,7 +589,7 @@ test("mixed batch save conflict retains the failed draft and uses ordinary confl
       "b.txt: Moved to macOS Trash",
     );
     expect(await readFile(join(root, "a.txt"), "utf8")).toBe("external a");
-    const drafts = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts;
+    const drafts = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts;
     expect(drafts).toHaveLength(1);
     expect(drafts[0].text).toBe("retained a");
     await page.locator(".conflict").getByRole("button", { name: "Overwrite", exact: true }).click();

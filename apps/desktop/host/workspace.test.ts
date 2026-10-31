@@ -2,7 +2,7 @@ import { test, expect } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Workspace } from "./workspace";
+import { Workspace } from "./recovery-fixture";
 test("renderer workspace data cannot change host project approvals", async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-approvals-"));
   try {
@@ -186,34 +186,6 @@ test("legacy Files navigation migrates through a fresh store while drafts and ap
   }
 });
 
-test("fresh client recovery retains ownership and rejects unsupported or other-client stores", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "escode-client-recovery-"));
-  try {
-    const file = join(dir, "client-workspace-v1.json");
-    const owner = { hostId: "host", clientId: "client" };
-    const store = new Workspace(file, owner);
-    await store.write({ projects: [], selected: "", views: { [dir]: {
-      openFiles: ["a"], path: "a", fileViews: { a: "unstaged" },
-      editorPositions: { a: { unstaged: { line: 3, column: 2, top: 20, left: 0 } } },
-    } }, drafts: [{
-      root: dir, path: "a", text: "available edit", disk: { text: "loaded disk", version: "loaded hash" },
-    }] });
-    expect((await new Workspace(file, owner).read()).drafts[0]).toMatchObject({
-      text: "available edit", disk: { text: "loaded disk", version: "loaded hash" },
-    });
-    await expect(new Workspace(file, { ...owner, clientId: "other" }).read()).rejects.toThrow("wrongly owned");
-    const other = new Workspace(join(dir, "other-client.json"), { ...owner, clientId: "other" });
-    await other.write({ projects: [], selected: "", drafts: [], views: { [dir]: { openFiles: ["b"], path: "b" } } });
-    expect((await store.read()).views[dir].openFiles).toEqual(["a"]);
-    expect((await other.read()).views[dir].openFiles).toEqual(["b"]);
-    const { readFile, writeFile } = await import("node:fs/promises");
-    const bytes = await readFile(file, "utf8");
-    await writeFile(file, JSON.stringify({ ...JSON.parse(bytes), storageVersion: 2 }));
-    await expect(new Workspace(file, owner).read()).rejects.toThrow("Unsupported");
-    expect((await readFile(file, "utf8"))).toContain("available edit");
-  } finally { await rm(dir, { recursive: true, force: true }); }
-});
-
 test("checkout approvals retain the native directory identity independently of client membership", async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-checkout-approval-"));
   try {
@@ -351,5 +323,21 @@ test("Files scroll anchors persist and reject invalid paths or offsets", async (
       state.views[dir].files.scrollAnchor = anchor;
       await expect(store.write(state)).rejects.toThrow();
     }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("fresh SQLite approvals preserve and ignore superseded approval bytes", async () => {
+  const { writeFile, readFile } = await import("node:fs/promises");
+  const dir = await mkdtemp(join(tmpdir(), "escode-approval-cutover-"));
+  try {
+    const legacy = join(dir, "approved-projects.json");
+    await writeFile(legacy, "preserved old bytes");
+    const store = new Workspace(join(dir, "workspace.json"));
+    expect(await store.approved()).toEqual([]);
+    await store.approve(dir, dir, "1:2");
+    expect(await new Workspace(join(dir, "workspace.json")).approved()).toEqual([
+      { project: dir, root: dir, directoryIdentity: "1:2" },
+    ]);
+    expect(await readFile(legacy, "utf8")).toBe("preserved old bytes");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect, type Page } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -271,7 +272,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect.poll(() => app.evaluate(() => (globalThis as any).copyRunning)).toBe(true);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     const stopStart = Date.now();
-    await page.evaluate(({ root, chat }) => new Promise<void>((resolve, reject) => { const off = window.escode.chatLive(root, chat, snapshot => { off(); window.escode.chat("stop", root, chat, snapshot.controlTarget).then(resolve, reject); }, reject); }), { root, chat });
+    await page.evaluate(({ root, chat }) => new Promise<void>((resolve, reject) => { const off = window.escode.chatLive(root, chat, snapshot => { off(); window.escode.chat("stop", root, chat, snapshot.controlTarget).then(() => resolve(), reject); }, reject); }), { root, chat });
     const stopMs = Date.now() - stopStart;
     expect(await app.evaluate(() => (globalThis as any).copyRunning)).toBe(true);
     await expect
@@ -315,7 +316,7 @@ test("imports never carry source drafts; same-folder import preserves original; 
       .toBe("source disk");
     await expect(f.page.locator(".content:visible > [role=status]")).toContainText("Copied;");
     expect(await readFile(join(f.root, "a.ts"), "utf8")).toBe("source disk");
-    const drafts = JSON.parse(await readFile(join(f.user, "client-workspace-v1.json"), "utf8")).drafts;
+    const drafts = JSON.parse(await readRecoveryFixture(join(f.user, "client-workspace-v1.json"), "utf8")).drafts;
     expect(drafts.find((d: any) => d.path === "a.ts")?.text).toBe("source draft");
     expect(drafts.find((d: any) => d.path === "a copy.ts")).toBeUndefined();
     await clipboardFiles(f, [join(f.other, "a.ts")]);

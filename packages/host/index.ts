@@ -6,9 +6,9 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult, DirectoryChange } from "@escode/contracts";
+import { RewindResult, FileInspection, CheckpointPage, BoundaryInspection, maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult, DirectoryChange } from "@escode/contracts";
 
-const fileMethods = ["readDiff", "transferAction", "trashEntries", "readFile", "saveFile", "loadWorkspace", "persistWorkspace"];
+const fileMethods = ["readDiff", "transferAction", "trashEntries", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "clientChatStorage"];
 
 function watchChanges(subscribe: (notify: (error?: string) => void) => () => void) {
   return Stream.callback<typeof DirectoryChange.Type>(queue => Effect.acquireRelease(
@@ -62,11 +62,18 @@ export async function startHost(options: {
   worktreeOptions?: (root: string) => Promise<typeof import("@escode/contracts").WorktreeOptions.Type>;
   summaries?: () => Promise<ChatSummaries["chats"]>;
   chatSnapshot?: (project: string | null, id: string) => Promise<ChatDetail>;
+  checkpointRetention?: (days?: number | null) => Promise<number | null>;
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
+  checkpointPoints?: (project: string | null, id: string, cursor: string | null) => Promise<typeof CheckpointPage.Type>;
+  rewind?: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles?: boolean) => Promise<RewindResult>;
+  branchHistory?: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, summarized?: boolean) => Promise<RewindResult>;
+  inspectFiles?: (project: string | null, id: string, boundary: string, path: string | null, cursor: string | null) => Promise<import("@escode/contracts").FileInspection>;
+  inspectBoundary?: (project: string | null, id: string, boundary: string, cursor: string | null) => Promise<typeof BoundaryInspection.Type>;
   history?: (project: string | null, id: string, cursor: string | null) => Promise<HistoryPage>;
   moveEntry?: (command: import("@escode/contracts").MoveEntry) => Promise<unknown>;
   ackFileOperation?: (root: string) => Promise<void>;
   draftAction?: (action: import("@escode/contracts").DraftAction) => Promise<unknown>;
+  clientChatStorage?: (state?: Record<string, string>) => Promise<Record<string, string>>;
   sendState?: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
   sendMessage?: (command: SendCommand) => Promise<SendReceipt>;
   sendStatus?: (commandId: string) => Promise<SendReceipt | null>;
@@ -138,7 +145,7 @@ export async function startHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["checkpointRetention", "observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "clientChatStorage", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "branchHistory", "inspectFiles", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -224,6 +231,10 @@ export async function startHost(options: {
         saveFile: ({ root, path, text, version }) => Effect.tryPromise({ try: async () => {
           if (!options.saveFile) throw Error("Files unavailable"); return options.saveFile(root, path, text, version);
         }, catch: String }),
+        clientChatStorage: ({ state }) => Effect.tryPromise({ try: async () => {
+          if (!options.clientChatStorage) throw Error("Client recovery unavailable");
+          return options.clientChatStorage(state);
+        }, catch: String }),
         loadWorkspace: () => Effect.tryPromise({ try: async () => {
           if (!options.loadWorkspace) throw Error("Recovery unavailable"); return options.loadWorkspace();
         }, catch: String }),
@@ -273,11 +284,42 @@ export async function startHost(options: {
             return batch;
           }, catch: String }), Schedule.spaced("100 millis"));
         }),
+        checkpointRetention: ({ days }) => Effect.tryPromise({ try: async () => {
+          if (days !== undefined && days !== null && (!Number.isSafeInteger(days) || days < 1 || days > 36500)) throw Error("Retention must be 1–36500 whole days or Never");
+          if (!options.checkpointRetention) throw Error("Retention settings unavailable");
+          return options.checkpointRetention(days);
+        }, catch: String }),
         openChat: ({ project, id }) => Effect.tryPromise({ try: async () => {
           if (!options.openChat) throw Error("Chat unavailable");
           const detail = await options.openChat(project, id);
           if (Buffer.byteLength(JSON.stringify(detail)) > maximumFrameBytes / 2) throw Error("Chat detail unavailable: capacity exhausted");
           return Schema.decodeUnknownSync(ChatDetail)(detail);
+        }, catch: String }),
+        checkpointPoints: ({ project, id, cursor }) => Effect.tryPromise({ try: async () => {
+          if (!options.checkpointPoints) throw Error("Checkpoints unavailable");
+          const result = await options.checkpointPoints(project, id, cursor);
+          if (Buffer.byteLength(JSON.stringify(result)) > maximumFrameBytes / 2) throw Error("Checkpoint capacity exhausted");
+          return Schema.decodeUnknownSync(CheckpointPage)(result);
+        }, catch: String }),
+        rewind: ({ project, id, boundary, token, commandId, restoreFiles }) => Effect.tryPromise({ try: async () => {
+          if (!options.rewind) throw Error("Rewind unavailable");
+          return Schema.decodeUnknownSync(RewindResult)(await options.rewind(project, id, boundary, token, commandId, restoreFiles));
+        }, catch: String }),
+        branchHistory: ({ project, id, boundary, token, commandId, summarized }) => Effect.tryPromise({ try: async () => {
+          if (!options.branchHistory) throw Error("Historical branching unavailable");
+          return Schema.decodeUnknownSync(RewindResult)(await options.branchHistory(project, id, boundary, token, commandId, summarized));
+        }, catch: String }),
+        inspectFiles: ({ project, id, boundary, path, cursor }) => Effect.tryPromise({ try: async () => {
+          if (!options.inspectFiles) throw Error("File inspection unavailable");
+          const result = await options.inspectFiles(project, id, boundary, path, cursor);
+          if (Buffer.byteLength(JSON.stringify(result)) > maximumFrameBytes / 2) throw Error("Inspection capacity exhausted");
+          return Schema.decodeUnknownSync(FileInspection)(result);
+        }, catch: String }),
+        inspectBoundary: ({ project, id, boundary, cursor }) => Effect.tryPromise({ try: async () => {
+          if (!options.inspectBoundary) throw Error("Inspection unavailable");
+          const result = await options.inspectBoundary(project, id, boundary, cursor);
+          if (Buffer.byteLength(JSON.stringify(result)) > maximumFrameBytes / 2) throw Error("Inspection capacity exhausted");
+          return Schema.decodeUnknownSync(BoundaryInspection)(result);
         }, catch: String }),
         chatHistory: ({ project, id, cursor }) => Effect.tryPromise({ try: async () => {
           if (!options.history) throw Error("History unavailable");

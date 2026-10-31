@@ -9,6 +9,8 @@ const Index = Schema.Struct({ version: Schema.Literal(1), chatId: Schema.String,
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
 // No live chunks are evicted to admit work. Quota exhaustion retains the indexed output and provider control.
 export class LiveSpool {
+  private queuedBytes = 0;
+  private queued = 0;
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private directory: string, private quota = 64 * 1024 * 1024) {}
   private async sync(path: string) { const fd = await open(path, "r"); try { await fd.sync(); } finally { await fd.close(); } }
@@ -45,7 +47,11 @@ export class LiveSpool {
     return { items, partial: record.partial };
   }
   write(chatId: string, threadId: string, items: readonly typeof HistoryItem.Type[], partial: boolean) {
-    const task = this.queue.then(() => this.persist(chatId, threadId, items, partial));
+    const bytes = Buffer.byteLength(JSON.stringify([chatId, threadId, items, partial]));
+    if (this.queued >= 64 || this.queuedBytes + bytes > 8 * 1024 * 1024) return Promise.reject(Error("Live spool queue capacity exhausted"));
+    const captured = structuredClone(items);
+    this.queued++; this.queuedBytes += bytes;
+    const task = this.queue.then(() => this.persist(chatId, threadId, captured, partial)).finally(() => { this.queued--; this.queuedBytes -= bytes; });
     this.queue = task.catch(() => {});
     return task;
   }

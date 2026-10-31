@@ -1,4 +1,5 @@
-import { mkdir, open, readFile, rename } from "node:fs/promises";
+import { mkdir, open } from "node:fs/promises";
+import { DurableState } from "./durable-state";
 import { accessSync, constants, lstatSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Checkout } from "./project";
@@ -24,6 +25,7 @@ export type SavedChat = {
   directoryIdentity?: { path: string; dev: number; ino: number };
   availabilityError?: string | null;
   threadId: string | null;
+  historicalPending?: boolean;
   hasSent?: boolean;
   phase?: "draft" | "bound";
   initialSend?: "preparing" | "creating" | "unaccepted" | "uncertain" | "accepted";
@@ -35,33 +37,11 @@ export type SavedChat = {
 export class Chats {
   private queue: Promise<unknown> = Promise.resolve();
   private failed = false;
-  private checkedRecovery = false;
+  private sqlite?: DurableState;
+  get database() { return this.sqlite ??= new DurableState(this.file + ".sqlite-state-v1"); }
   constructor(private file: string) {}
   get spoolDirectory() { return join(dirname(this.file), "live-spool-v1"); }
-  private async read(): Promise<SavedChat[]> {
-    try {
-      if (!this.checkedRecovery) {
-        try {
-          const temporary = await open(this.file + ".tmp", "r");
-          await temporary.close();
-          throw Error("Incomplete chat write; explicit recovery required.");
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
-        this.checkedRecovery = true;
-      }
-      const value = JSON.parse(await readFile(this.file, "utf8"));
-      if (value.version !== 1 || !Array.isArray(value.chats)) throw Error("Unsupported chat association store");
-      const chats: SavedChat[] = value.chats;
-      return chats.map((chat, index) => ({
-        ...chat,
-        ...(chat.createdAt === undefined ? { legacyOrder: chat.legacyOrder ?? index } : {}),
-      }));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw error;
-    }
-  }
+  private async read(): Promise<SavedChat[]> { return (await this.database.read()).chats; }
   async all() {
     await this.queue;
     return this.read();
@@ -73,23 +53,10 @@ export class Chats {
   private change<T>(edit: (chats: SavedChat[]) => T) {
     const task = this.queue.then(async () => {
       if (this.failed) throw Error("Chat storage unavailable; explicit recovery required.");
-      const chats = await this.read();
-      const result = edit(chats);
-      await mkdir(dirname(this.file), { recursive: true, mode: 0o700 });
-      const temporary = this.file + ".tmp";
-      try {
-        const output = await open(temporary, "wx", 0o600);
-        try {
-          await output.writeFile(JSON.stringify({ version: 1, chats }));
-          await output.sync();
-        } finally { await output.close(); }
-        await rename(temporary, this.file);
-        const directory = await open(dirname(this.file), constants.O_RDONLY | constants.O_DIRECTORY);
-        try { await directory.sync(); } finally { await directory.close(); }
-      } catch (error) {
-        this.failed = true;
-        throw error;
-      }
+      const { chats, revision } = await this.database.read();
+      const result = await edit(chats);
+      try { await this.database.write(chats, revision); }
+      catch (error) { this.failed = true; throw error; }
       return result;
     });
     this.queue = task.catch(() => {});
@@ -117,7 +84,7 @@ export class Chats {
       return chat;
     });
   }
-  createDraft(project: string | null, checkout: string, fresh = false) {
+  createDraft(project: string | null, checkout: string, fresh = false, historicalPending = false) {
     return this.change((chats) => {
       const empty = chats.find(
         (c) =>
@@ -126,6 +93,7 @@ export class Chats {
           c.checkout === checkout &&
           !c.draft &&
           !c.worktree &&
+          !c.historicalPending &&
           !c.initialSend,
       );
       if (empty && !fresh) return empty;
@@ -136,6 +104,7 @@ export class Chats {
         threadId: null,
         hasSent: false,
         phase: "draft",
+        historicalPending,
         draft: "",
         createdAt: Date.now(),
         legacyOrder: chats.length,
@@ -166,6 +135,26 @@ export class Chats {
       return chat;
     });
   }
+  private reserve(chat: Readonly<SavedChat>, fields: Pick<SavedChat, "checkout"> & Partial<Pick<SavedChat, "scratch" | "worktree">>) {
+    return this.change(chats => {
+      const current = chats.find(value => value.id === chat.id && value.project === chat.project);
+      if (!current || current.phase !== "draft" || current.checkout !== chat.checkout ||
+          current.threadId !== chat.threadId || current.scratch || current.worktree?.reservation ||
+          JSON.stringify(current.worktree) !== JSON.stringify(chat.worktree))
+        throw Error("Draft context changed; inspect before preparing resources.");
+      Object.assign(current, fields);
+    });
+  }
+  // Keep returned identities recoverable even when the related chat transaction fails.
+  async prepared(project: string | null, id: string, fields: Partial<Pick<SavedChat, "threadId" | "scratch" | "worktree">>) {
+    await this.change(async chats => {
+      const previous = chats.find(chat => chat.id === id && chat.project === project);
+      if (!previous) throw Error("Unknown chat in this project.");
+      const result = { ...previous, ...fields };
+      await this.database.command("observePreparation", { previous, result });
+      Object.assign(previous, fields);
+    });
+  }
   async prepareWorktree(chat: Readonly<SavedChat>, project: Checkout, managedRoot: string) {
     const choice = chat.worktree;
     if (!choice || choice.reservation) {
@@ -175,7 +164,7 @@ export class Chats {
     const reservation = project.repositoryGit.reserveWorktree(managedRoot, choice.ref, choice.commit);
     try {
       // Persist before Git mutation: an interrupted preparation is never silently repeated.
-      await this.update(chat.project, chat.id, {
+      await this.reserve(chat, {
         checkout: reservation.root,
         worktree: { ...choice, reservation },
       });
@@ -186,7 +175,7 @@ export class Chats {
             .repositoryGit.managedWorktrees(managedRoot)
             .find((record) => record.root === result.root && record.branch === result.branch);
       if (!result.error && !identity) throw Error("Managed ownership record is missing.");
-      await this.update(chat.project, chat.id, {
+      await this.prepared(chat.project, chat.id, {
         worktree: {
           ...choice,
           reservation: {
@@ -262,7 +251,7 @@ export class Chats {
     if (chat.phase !== "draft") throw Error("Bound scratch ownership is missing.");
     const path = join(dirname(this.file), "scratch", chat.id);
     // Reserve before any allocation, including creation of the scratch parent.
-    await this.update(null, chat.id, { checkout: path, scratch: { path } });
+    await this.reserve(chat, { checkout: path, scratch: { path } });
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     if (realpathSync(dirname(path)) !== dirname(path))
       throw Error(`Scratch storage is unavailable or changed: ${dirname(path)}`);
@@ -271,7 +260,7 @@ export class Chats {
       const parent = await open(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
       try { await parent.sync(); } finally { await parent.close(); }
       const identity = lstatSync(path);
-      await this.update(null, chat.id, {
+      await this.prepared(null, chat.id, {
         scratch: { path, dev: identity.dev, ino: identity.ino },
       });
     } catch (error) {
@@ -325,6 +314,7 @@ export class Chats {
     fields: Partial<
       Pick<
         SavedChat,
+        | "historicalPending"
         | "directoryIdentity"
         | "availabilityError"
         | "threadId"

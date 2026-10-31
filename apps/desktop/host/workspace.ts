@@ -1,7 +1,6 @@
+import type { DurableState } from "./durable-state";
 import { maximumRecentFiles, maximumRecentUnits } from "@escode/contracts";
-import { readFile } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
-import { atomicWriteJson } from "./atomic-write";
+import { isAbsolute } from "node:path";
 export type WorkspaceState = import("@escode/contracts").Mutable<import("@escode/contracts").WorkspaceState>;
 export type RecoveryDraft = WorkspaceState["drafts"][number];
 export type ViewMemory = WorkspaceState["views"][string];
@@ -17,7 +16,7 @@ export type RestoredStatus = {
 export interface LifecycleBridge {
   (
     operation: "load",
-  ): Promise<{ state: WorkspaceState; restored: RestoredStatus[]; errors: string[] }>;
+  ): Promise<{ state: WorkspaceState; restored: RestoredStatus[]; errors: string[]; acknowledgementRoots?: string[] }>;
   (operation: "persist", state: WorkspaceState): Promise<void>;
   (operation: "dirty", path: string): Promise<0 | 1 | 2>;
   (operation: "prepare", project?: string): Promise<boolean>;
@@ -149,19 +148,15 @@ function validate(value: unknown): asserts value is WorkspaceState {
 }
 export class Workspace {
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(private file: string, private owner?: { hostId: string; clientId: string }) {}
-  private decode(value: unknown) {
-    if (!this.owner) return value;
-    const stored = value as { storageVersion?: number; hostId?: string; clientId?: string };
-    if (stored?.storageVersion !== 1 || stored.hostId !== this.owner.hostId || stored.clientId !== this.owner.clientId)
-      throw Error("Unsupported or wrongly owned client recovery store; retained for inspection.");
-    return value;
-  }
+  private revision?: number;
+  private approvalRevision = 0;
+  constructor(private file: string, readonly owner: { hostId: string; clientId: string }, readonly database: DurableState) {}
+
   private async readApprovals(): Promise<{ project: string; root: string; directoryIdentity?: string }[]> {
     try {
-      const value = JSON.parse(
-        await readFile(join(dirname(this.file), "approved-projects.json"), "utf8"),
-      );
+      const stored = await this.database.recoveryRead(this.owner.hostId, "approvals");
+      this.approvalRevision = stored.revision;
+      const value = stored.body ?? [];
       if (
         !Array.isArray(value) ||
         value.some(
@@ -204,14 +199,16 @@ export class Workspace {
       if (!previous || directoryIdentity && !previous.directoryIdentity) {
         if (previous) previous.directoryIdentity = directoryIdentity;
         else approved.push({ project, root, ...(directoryIdentity ? { directoryIdentity } : {}) });
-        await this.replace(join(dirname(this.file), "approved-projects.json"), approved);
+        await this.database.recoveryWrite(this.owner.hostId, "approvals", approved, this.approvalRevision);
       }
     });
   }
   async read(): Promise<WorkspaceState> {
     await this.queue;
     try {
-      const state: unknown = this.decode(JSON.parse(await readFile(this.file, "utf8")));
+      const stored = await this.database.recoveryRead(this.owner.clientId, "workspace");
+      this.revision = stored.revision;
+      const state: unknown = stored.body ?? emptyWorkspace();
       validate(state);
       for (const view of Object.values(state.views)) {
         if (!view.files) {
@@ -250,9 +247,13 @@ export class Workspace {
     this.queue = task.catch(() => {});
     return task;
   }
-  private replace(file: string, value: unknown) {
-    return atomicWriteJson(file, () => this.owner && file === this.file
-      ? { ...(value === null ? { intent: null } : value as object), storageVersion: 1, ...this.owner }
-      : value);
+  private async replace(file: string, value: unknown) {
+    if (file === this.file) {
+      if (this.revision === undefined) this.revision = (await this.database.recoveryRead(this.owner.clientId, "workspace")).revision;
+      await this.database.recoveryWrite(this.owner.clientId, "workspace", value, this.revision);
+      this.revision++;
+      return;
+    }
+    throw Error("Unknown workspace persistence target");
   }
 }

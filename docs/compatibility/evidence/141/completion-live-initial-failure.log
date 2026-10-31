@@ -1,0 +1,36 @@
+$ playwright test tests/historical-live.spec.ts
+
+Running 1 test using 1 worker
+
+(node:5984) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:6652) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `escode --trace-warnings ...` to show where the warning was created)
+(node:7526) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `escode --trace-warnings ...` to show where the warning was created)
+(node:7528) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `escode --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/historical-live.spec.ts:10:1 › installed provider historical UI survives restart and recovery without replay (2.6m)
+
+
+  1) tests/historical-live.spec.ts:10:1 › installed provider historical UI survives restart and recovery without replay
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "retained unsent recovery text"
+    Received: ""
+
+      62 |     run("recover", join(dir, "copy"), destination, String(owner.hostId), String(owner.clientId));
+      63 |     expect(run("reconcile", destination, String(owner.hostId), String(owner.clientId)).ready).toBe(true);
+    > 64 |     app = await launchDesktop(recovered, process.env.ESCODE_TEST_CODEX_DIR, true);
+         |                               ^
+      65 |     page = await app.firstWindow();
+      66 |     const restored = await page.evaluate(readChats, root);
+      67 |     expect(restored).toHaveLength(1); expect(restored[0].threadId).toBe(thread);
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop/tests/historical-live.spec.ts:64:31
+
+    Error Context: test-results/historical-live-installed--01c68-and-recovery-without-replay/error-context.md
+
+  1 failed
+    tests/historical-live.spec.ts:10:1 › installed provider historical UI survives restart and recovery without replay
+error: script "smoke" exited with code 1

@@ -1,5 +1,6 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
-import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -80,12 +81,12 @@ test("lazy tree keyboard, independent selection, menus, refresh and restart reco
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.files?.focus,
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.files?.focus,
       )
       .toBe("b.txt");
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
-    await rm(join(user, "foundation/owner.lock"), { force: true });
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     tree = page.getByRole("tree", { name: "Files", exact: true });
@@ -218,7 +219,7 @@ test("cached directories reopen without reloading; explicit refresh recovers and
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.scroll,
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.scroll,
       )
       .toBe(scroll);
     await open(other);
@@ -230,18 +231,18 @@ test("cached directories reopen without reloading; explicit refresh recovers and
     expect(await tree.evaluate((el) => el.scrollTop)).toBe(scroll);
     await expect
       .poll(async () => {
-        const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+        const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
         return state.selected === root && state.views[root].files.scroll === scroll;
       })
       .toBe(true);
-    const rememberedAnchor = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.scrollAnchor;
+    const rememberedAnchor = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.scrollAnchor;
     const anchorOffset = await tree.locator(`[data-path="${rememberedAnchor.path}"]`).evaluate(el => el.getBoundingClientRect().top - el.closest("[role=tree]")!.getBoundingClientRect().top);
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
-    await rm(join(user, "foundation/owner.lock"), { force: true });
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
-    // Unmounted wrapped/status rows use estimates after restart; preserve the visible identity and offset.
+    // Unmounted diagnostic rows use estimates after restart; preserve the visible identity and offset.
     const restoredAnchor = page.locator(`[data-path="${rememberedAnchor.path}"]`);
     await expect(restoredAnchor).toBeVisible();
     await expect.poll(async () => Math.abs(await restoredAnchor.evaluate(el => el.getBoundingClientRect().top - el.closest("[role=tree]")!.getBoundingClientRect().top) - anchorOffset)).toBeLessThan(1);

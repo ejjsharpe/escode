@@ -1,0 +1,98 @@
+$ node scripts/filesystem.mjs && vp test run "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop
+
+From /private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-worktrees-UvypKK/repo
+ * branch            main       -> FETCH_HEAD
+Already on 'main'
+Cloning into '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-worktrees-DeCWdx/other'...
+done.
+Preparing worktree (new branch 'sibling')
+Switched to a new branch 'different'
+Preparing worktree (new branch 'linked')
+Preparing worktree (new branch 'linked')
+ ❯ host/client-chat.test.ts (20 tests | 3 failed) 15ms
+   × failed accepted-composer flush 3 retains the original identity for status-only retry 3ms
+   × failed accepted-composer flush 4 retains the original identity for status-only retry 1ms
+   × pending Send persistence failure prevents provider dispatch and retains its identity 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/client-chat.test.ts > failed accepted-composer flush 3 retains the original identity for status-only retry
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ host/client-chat.test.ts:133:27
+    131|   });
+    132|   await expect(client.send(null, "chat", "original")).rejects.toThrow(…
+    133|   expect(values.has(key)).toBe(true);
+       |                           ^
+    134|   expect(await client.send(null, "chat", "original")).toBe("");
+    135|   expect(host.sendMessage).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  host/client-chat.test.ts > failed accepted-composer flush 4 retains the original identity for status-only retry
+AssertionError: promise resolved "''" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+""
+
+ ❯ host/client-chat.test.ts:132:54
+    130|     return accepted(command);
+    131|   });
+    132|   await expect(client.send(null, "chat", "original")).rejects.toThrow(…
+       |                                                      ^
+    133|   expect(values.has(key)).toBe(true);
+    134|   expect(await client.send(null, "chat", "original")).toBe("");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  host/client-chat.test.ts > pending Send persistence failure prevents provider dispatch and retains its identity
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "admissionEpoch": "epoch",
+        "commandId": "dc08e4d1-f4f5-4e34-a6de-66c32ac55108",
+        "expected": "context",
+        "id": "chat",
+        "project": null,
+        "text": "original",
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ host/client-chat.test.ts:197:32
+    195|   adapter.flush.mockResolvedValueOnce().mockRejectedValueOnce(Error("h…
+    196|   await expect(client.send(null, "chat", "original")).rejects.toThrow(…
+    197|   expect(host.sendMessage).not.toHaveBeenCalled();
+       |                                ^
+    198|   expect(values.has(key)).toBe(true);
+    199| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed | 41 passed | 2 skipped (44)
+      Tests  3 failed | 361 passed | 6 skipped (370)
+   Start at  13:43:27
+   Duration  305.21s (tests 97%, import 3%)
+
+error: script "test" exited with code 1

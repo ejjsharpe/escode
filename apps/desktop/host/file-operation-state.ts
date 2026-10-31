@@ -22,7 +22,7 @@ export function reconcile(state: WorkspaceState, intent: Intent) {
     }
     return;
   }
-  state.drafts = state.drafts.flatMap((d) =>
+  if (!intent.preserveDrafts) state.drafts = state.drafts.flatMap((d) =>
     d.root !== root || !affected(d.path, source)
       ? [d]
       : kind === "trash"

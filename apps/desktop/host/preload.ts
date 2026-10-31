@@ -20,12 +20,22 @@ type ChatArguments =
   | [operation: "create", project: string, checkout: string]
   | [operation: "open" | "composer" | "disconnect" | "resolveSend", project: string | null, id: string]
   | [operation: "send" | "draft", project: string | null, id: string, text: string]
-  | [operation: "stop", project: string | null, id: string, target?: string]
+  | [operation: "stop" | "emergencyStop", project: string | null, id: string, target?: string]
   | [operation: "answer", project: string | null, id: string, token: string, answer: unknown];
 const hostClient = createHostClient(() => ipcRenderer.invoke("local-bootstrap"));
+const chatStorageReady = hostClient.clientChatStorage().then(state => {
+  for (const [key, value] of Object.entries(state)) localStorage.setItem(key, value);
+});
+void chatStorageReady.catch(() => {});
+async function flushChatStorage() {
+  await hostClient.clientChatStorage(Object.fromEntries(Object.keys(localStorage)
+    .filter(key => /^escode-(composer|composer-revision|send|control):/.test(key))
+    .map(key => [key, localStorage.getItem(key)!])));
+  await ipcRenderer.invoke("lifecycle", "flushClientStorage");
+}
 const chatClient = createChatClient(hostClient, {
   storage: localStorage,
-  flush: () => ipcRenderer.invoke("lifecycle", "flushClientStorage"),
+  flush: flushChatStorage,
   confirmResolve: (project, id) => ipcRenderer.invoke("chat", "resolveSend", project, id),
 });
 async function createEntry(root: string, parent: string, name: string, kind: "file" | "folder") {
@@ -38,23 +48,45 @@ async function createEntry(root: string, parent: string, name: string, kind: "fi
   if (receipt.status !== "accepted") throw Error(receipt.message);
   return receipt.path;
 }
-async function control(operation: "stop" | "answer", project: string | null, id: string, target: string | undefined, token = "", answer: unknown = null) {
+async function control(operation: "stop" | "answer" | "emergencyStop", project: string | null, id: string, target: string | undefined, token = "", answer: unknown = null) {
+  if (operation === "emergencyStop") {
+    if (!target) throw Error("Missing captured Stop target.");
+    const state = await hostClient.sendState(project, id);
+    const receipt = await hostClient.sendMessage({ ...state, commandId: crypto.randomUUID(), project, id, text: "",
+      control: { operation: "stop", emergency: true, target, token: "", answer: null } });
+    throw Error(receipt.message);
+  }
   const key = `escode-control:${JSON.stringify([project, id, operation, target, token])}`;
   const saved = localStorage.getItem(key);
   const state = await hostClient.sendState(project, id);
   const command = saved ? JSON.parse(saved) : { ...state, commandId: crypto.randomUUID(), project, id, text: "", control: { operation, target, token, answer } };
   localStorage.setItem(key, JSON.stringify(command));
+  try { await flushChatStorage(); }
+  catch (error) { if (operation !== "stop") throw error; } // Stop still reaches host emergency admission on storage failure.
   const receipt = saved ? (await hostClient.sendStatus(command.commandId) ?? await hostClient.sendMessage(command)) : await hostClient.sendMessage(command);
   if (!receipt) throw Error("Control outcome unavailable; command identity retained. Refresh to inspect current work.");
+  if (receipt.reason === "emergency-stop-available") return { reason: receipt.reason, message: receipt.message };
   if (receipt.status !== "accepted") throw Error(`${operation} ${receipt.status}: ${receipt.message}`);
   localStorage.removeItem(key);
+  try { await flushChatStorage(); }
+  catch (error) { localStorage.setItem(key, JSON.stringify(command)); throw error; }
 }
 async function transfer(root: string, kind: "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", parent: string, paths: string[]) {
+  const key = `escode-transfer:${JSON.stringify([root, kind, parent, paths])}`;
+  const saved = localStorage.getItem(key);
+  const commandId = crypto.randomUUID(), admissionEpoch = await hostClient.createState();
+  const execute = async (action: import("@escode/contracts").TransferAction) => {
+    localStorage.setItem(key, JSON.stringify(action));
+    const result = await hostClient.transferAction(action);
+    if (typeof result !== "string" && !result.uncertain && !result.results.some(r => r.persistencePending)) localStorage.removeItem(key);
+    return result;
+  };
+  if (saved) return execute(JSON.parse(saved));
   if (kind === "paste") {
     const token = await ipcRenderer.invoke("native-clipboard-capture");
-    if (token) return hostClient.transferAction({ root, operation: "transfer", kind: "import", parent, paths: [token] });
+    if (token) return execute({ root, operation: "transfer", commandId, admissionEpoch, kind: "import", parent, paths: [token] });
   }
-  return hostClient.transferAction({ root, operation: "transfer", kind, parent, paths });
+  return execute({ root, operation: "transfer", commandId, admissionEpoch, kind, parent, paths });
 }
 window.addEventListener("unload", () => { void hostClient.close(); });
 contextBridge.exposeInMainWorld(
@@ -64,6 +96,12 @@ contextBridge.exposeInMainWorld(
     sendMessage: hostClient.sendMessage,
     sendStatus: hostClient.sendStatus,
     chatLive: chatClient.live,
+    checkpointRetention: hostClient.checkpointRetention,
+    checkpointPoints: hostClient.checkpointPoints,
+    rewind: hostClient.rewind,
+    branchHistory: hostClient.branchHistory,
+    inspectFiles: hostClient.inspectFiles,
+    inspectBoundary: hostClient.inspectBoundary,
     chatHistory: hostClient.chatHistory,
     chatSummaries: hostClient.chatSummaries,
     observeFiles: hostClient.observeFiles,
@@ -86,7 +124,8 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("close-request", listener);
       return () => ipcRenderer.removeListener("close-request", listener);
     },
-    chat: (...call: ChatArguments) => {
+    chat: async (...call: ChatArguments) => {
+      await chatStorageReady;
       const [operation, ...args] = call;
       return ["createDraft", "context", "execution"].includes(operation)
       ? (async () => {
@@ -107,7 +146,7 @@ contextBridge.exposeInMainWorld(
       ? chatClient.open(call[1], call[2])
       : call[0] === "composer" ? Promise.resolve().then(() => chatClient.composer(call[1], call[2]))
       : call[0] === "resolveSend" ? chatClient.resolveSend(call[1], call[2])
-      : call[0] === "stop" ? control("stop", call[1], call[2], call[3])
+      : (call[0] === "stop" || call[0] === "emergencyStop") ? control(call[0], call[1], call[2], call[3])
       : call[0] === "answer" ? control("answer", call[1], call[2], "", call[3], call[4])
       : call[0] === "send" ? chatClient.send(call[1], call[2], call[3])
       : ipcRenderer.invoke("chat", operation, ...args);

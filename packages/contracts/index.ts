@@ -53,6 +53,22 @@ export const HistoryPage = Schema.Struct({
   nextCursor: Schema.NullOr(Schema.String),
 });
 export type HistoryPage = typeof HistoryPage.Type;
+export const CheckpointPoint = Schema.Struct({
+  id: Schema.String, kind: Schema.Literals(["before-message", "after-turn"]), createdAt: Schema.Number,
+  threadId: Schema.NullOr(Schema.String), turnId: Schema.NullOr(Schema.String),
+  availability: Schema.Literals(["available", "unavailable"]), reason: Schema.NullOr(Schema.String),
+});
+export const CheckpointPage = Schema.Struct({ points: Schema.Array(CheckpointPoint).check(Schema.isMaxLength(20)), nextCursor: Schema.NullOr(Schema.String) });
+export type CheckpointPage = typeof CheckpointPage.Type;
+export const FileInspection = Schema.Struct({
+  availability: Schema.Literals(["available", "unavailable"]), message: Schema.String,
+  paths: Schema.Array(Schema.String).check(Schema.isMaxLength(20)), nextCursor: Schema.NullOr(Schema.String),
+  before: Schema.NullOr(Schema.String.check(Schema.isMaxLength(131072))), after: Schema.NullOr(Schema.String.check(Schema.isMaxLength(131072))),
+  beforeMode: Schema.NullOr(Schema.Number), afterMode: Schema.NullOr(Schema.Number),
+});
+export type FileInspection = typeof FileInspection.Type;
+export const BoundaryInspection = Schema.Struct({ page: HistoryPage, availability: Schema.Literals(["available", "unavailable"]), message: Schema.String });
+export type BoundaryInspection = typeof BoundaryInspection.Type;
 export const ChatDetail = Schema.Struct({
   project: Schema.NullOr(Schema.String), chatId: Schema.String, threadId: Schema.NullOr(Schema.String),
   controlTarget: Schema.optional(Schema.String), preparing: Schema.optional(Schema.Boolean), connected: Schema.Boolean, busy: Schema.Boolean, turnId: Schema.NullOr(Schema.String),
@@ -74,11 +90,11 @@ export const HistoryQuery = { project: Schema.NullOr(Schema.String), id: Schema.
 export const SendCommand = Schema.Struct({
   commandId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
   admissionEpoch: Schema.String, project: Schema.NullOr(Schema.String), id: Schema.String,
-  control: Schema.optional(Schema.Struct({ operation: Schema.Literals(["stop", "answer"]), target: Schema.String, token: Schema.String, answer: Schema.Unknown })),
+  control: Schema.optional(Schema.Struct({ operation: Schema.Literals(["stop", "answer"]), emergency: Schema.optional(Schema.Boolean), target: Schema.String, token: Schema.String, answer: Schema.Unknown })),
   expected: Schema.String, text: Schema.String.check(Schema.isMaxLength(100000)),
 });
 export type SendCommand = typeof SendCommand.Type;
-export const SendReceipt = Schema.Struct({ hostId: Schema.String, clientId: Schema.String, command: SendCommand,
+export const SendReceipt = Schema.Struct({ reason: Schema.optionalKey(Schema.Literal("emergency-stop-available")), hostId: Schema.String, clientId: Schema.String, command: SendCommand,
   status: Schema.Literals(["admitted", "dispatching", "accepted", "uncertain", "rejected"]),
   message: Schema.String,
 });
@@ -128,7 +144,7 @@ export const WorkspaceState = Schema.Struct({
   })),
   drafts: Schema.Array(Schema.Struct({ root: Schema.String, path: Schema.String, text: Schema.String, disk: FileDocument })),
 });
-export const WorkspaceLoad = Schema.Struct({ state: WorkspaceState, errors: Schema.Array(Schema.String),
+export const WorkspaceLoad = Schema.Struct({ acknowledgementRoots: Schema.optionalKey(Schema.Array(Schema.String)), state: WorkspaceState, errors: Schema.Array(Schema.String),
   restored: Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String, branch: Schema.String,
     changes: Schema.Array(Schema.Struct({ path: Schema.String, area: Schema.Literals(["staged", "unstaged", "untracked"]) })),
     gitError: Schema.optionalKey(Schema.String), approvalRequired: Schema.optionalKey(Schema.Boolean) })) });
@@ -152,12 +168,12 @@ const TransferPaths = Schema.Array(Schema.String).check(Schema.isMinLength(1), S
 export const TransferAction = Schema.Union([
   Schema.Struct({ root: Schema.String, operation: Schema.Literal("drag-capture"), paths: TransferPaths }),
   Schema.Struct({ root: Schema.String, operation: Schema.Literal("clipboard-capture"), kind: Schema.Literals(["copy", "cut"]), paths: TransferPaths }),
-  Schema.Struct({ root: Schema.String, operation: Schema.Literal("transfer"), kind: Schema.Literals(["paste", "duplicate", "drag-move", "drag-copy", "import"]), parent: Schema.String, paths: Schema.Array(Schema.String).check(Schema.isMaxLength(10000)) }),
+  Schema.Struct({ root: Schema.String, operation: Schema.Literal("transfer"), commandId: Schema.String, admissionEpoch: Schema.String, kind: Schema.Literals(["paste", "duplicate", "drag-move", "drag-copy", "import"]), parent: Schema.String, paths: Schema.Array(Schema.String).check(Schema.isMaxLength(10000)) }),
 ]);
 export type TransferAction = typeof TransferAction.Type;
 export const TransferResult = Schema.Union([Schema.String, Schema.Struct({
   results: TrashBatch.fields.results, open: Schema.Array(Schema.String),
-  requiresAck: Schema.Boolean, message: Schema.String,
+  requiresAck: Schema.Boolean, message: Schema.String, uncertain: Schema.optionalKey(Schema.Boolean),
 })]);
 export const DiffComparison = Schema.Struct({ original: Schema.String, modified: Schema.String });
 export const DiffArea = Schema.Literals(["staged", "unstaged", "untracked"]);
@@ -177,6 +193,7 @@ export const Files = RpcGroup.make(
   Rpc.make("lookupFile", { payload: { root: Schema.String.check(Schema.isMaxLength(4096)), query: Schema.String.check(Schema.isMaxLength(4096)) }, success: Schema.String, error: Schema.String }),
   Rpc.make("readFile", { payload: { root: Schema.String, path: Schema.String }, success: FileDocument, error: Schema.String }),
   Rpc.make("saveFile", { payload: { root: Schema.String, path: Schema.String, text: Schema.String, version: Schema.String }, success: FileSaveResult, error: Schema.String }),
+  Rpc.make("clientChatStorage", { payload: { state: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)) }, success: Schema.Record(Schema.String, Schema.String), error: Schema.String }),
   Rpc.make("loadWorkspace", { success: WorkspaceLoad, error: Schema.String }),
   Rpc.make("persistWorkspace", { payload: { state: WorkspaceState }, success: Schema.Void, error: Schema.String }),
 );
@@ -207,9 +224,17 @@ export const GitQueries = RpcGroup.make(
   Rpc.make("worktreeOptions", { payload: { root: Schema.String }, success: WorktreeOptions, error: Schema.String }),
 );
 
-export const HostQueries = Directories.merge(Files).merge(GitQueries).merge(RpcGroup.make(Rpc.make("moveEntry", { payload: { command: MoveEntry }, success: MoveResult, error: Schema.String }), Rpc.make("ackFileOperation", { payload: { root: Schema.String }, success: Schema.Void, error: Schema.String }), Rpc.make("draftAction", { payload: { action: DraftAction }, success: DraftRecord, error: Schema.String }), Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
+export const RewindResult = Schema.Struct({ status: Schema.Literals(["ready", "applied", "unavailable", "uncertain"]), token: Schema.NullOr(Schema.String.check(Schema.isMaxLength(100))), message: Schema.String });
+export type RewindResult = typeof RewindResult.Type;
+export type HistoricalAction = "rewind" | "restore" | "branch" | "summarized";
+export const HostQueries = Directories.merge(Files).merge(GitQueries).merge(RpcGroup.make(Rpc.make("checkpointRetention", { payload: { days: Schema.optionalKey(Schema.NullOr(Schema.Number)) }, success: Schema.NullOr(Schema.Number), error: Schema.String }), Rpc.make("moveEntry", { payload: { command: MoveEntry }, success: MoveResult, error: Schema.String }), Rpc.make("ackFileOperation", { payload: { root: Schema.String }, success: Schema.Void, error: Schema.String }), Rpc.make("draftAction", { payload: { action: DraftAction }, success: DraftRecord, error: Schema.String }), Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
   success: ChatSummaries, error: Schema.String, stream: true,
-}), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));
+}), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("checkpointPoints", { payload: HistoryQuery, success: CheckpointPage, error: Schema.String }),
+  Rpc.make("rewind", { payload: { restoreFiles: Schema.optional(Schema.Boolean), project: Schema.NullOr(Schema.String), id: Schema.String, boundary: Schema.String.check(Schema.isMaxLength(100)), token: Schema.NullOr(Schema.String.check(Schema.isMaxLength(100))), commandId: Schema.NullOr(Schema.String.check(Schema.isMaxLength(100))) }, success: RewindResult, error: Schema.String }),
+  Rpc.make("branchHistory", { payload: { summarized: Schema.optional(Schema.Boolean), project: Schema.NullOr(Schema.String), id: Schema.String, boundary: Schema.String.check(Schema.isMaxLength(100)), token: Schema.NullOr(Schema.String.check(Schema.isMaxLength(100))), commandId: Schema.NullOr(Schema.String.check(Schema.isMaxLength(100))) }, success: RewindResult, error: Schema.String }),
+  Rpc.make("inspectFiles", { payload: { ...HistoryQuery, boundary: Schema.String.check(Schema.isMaxLength(100)), path: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096))) }, success: FileInspection, error: Schema.String }),
+  Rpc.make("inspectBoundary", { payload: { ...HistoryQuery, boundary: Schema.String.check(Schema.isMaxLength(100)) }, success: BoundaryInspection, error: Schema.String }),
+  Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));
 
 // Host and renderer memory may mutate validated contract values.
 export type Mutable<T> = T extends object ? { -readonly [K in keyof T]: Mutable<T[K]> } : T;

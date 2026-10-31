@@ -1,0 +1,12 @@
+$ playwright test tests/agents-files-recovery.spec.ts --output "/tmp/escode-141-move-results"
+
+Running 2 tests using 1 worker
+
+(node:519) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 tests/agents-files-recovery.spec.ts:13:1 › saved-project registration and interrupted move recovery survive together across restart (4.5s)
+Preparing worktree (new branch 'linked')
+  ✓  2 tests/agents-files-recovery.spec.ts:155:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening (4.1s)
+
+  2 passed (9.0s)

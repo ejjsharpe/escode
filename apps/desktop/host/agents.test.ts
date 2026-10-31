@@ -1,5 +1,5 @@
 import { test, expect } from "vite-plus/test";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Chats } from "./chat";
@@ -16,8 +16,9 @@ test("legacy append order survives persistence without invented creation dates",
       threadId: `thread-${id}`,
       draft: id,
     }));
-    await writeFile(file, JSON.stringify({ version: 1, chats: legacy }));
     const store = new Chats(file);
+    await store.database.ready;
+    await store.database.write(legacy.map((chat, legacyOrder) => ({ ...chat, legacyOrder })), 0);
     await store.draft(dir, "old", "retained text");
     const fresh = await store.create(dir);
     const restored = await new Chats(file).all();

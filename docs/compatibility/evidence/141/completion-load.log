@@ -1,0 +1,20 @@
+$ playwright test tests/emergency-stop.spec.ts tests/sqlite-qualification.spec.ts --grep "baseline|editing"
+
+Running 2 tests using 1 worker
+
+(node:8324) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+#139 packaged checkpoint load {"cycle":0,"count":47,"reclaimed":47,"ms":2339.8967079999998,"databaseBytes":46268416,"walBytes":0}
+#139 fault setup ms 0.7733339999995223
+#127 visible Send/emergency control ms {"phase":"baseline","sendMs":419.4871250000001,"stopMs":133.01199999999972,"controlMs":86.2208329999994}
+#139 packaged checkpoint load {"cycle":1,"count":20,"reclaimed":20,"ms":871.9334170000002,"databaseBytes":49418240,"walBytes":0}
+  ✓  1 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) (5.2s)
+#139 packaged checkpoint load {"cycle":0,"count":47,"reclaimed":47,"ms":2248.068124999999,"databaseBytes":46268416,"walBytes":0}
+#127 packaged editing/Save ms {"phase":"baseline","editMs":150.69074999999975,"saveMs":439.8509159999994,"rendererSaveMs":326.60000002384186}
+#127 packaged editing/Save ms {"phase":"followup","editMs":91.63120799999888,"saveMs":492.416792,"rendererSaveMs":345.7999999821186}
+#139 packaged checkpoint load {"cycle":1,"count":28,"reclaimed":28,"ms":1364.6773329999996,"databaseBytes":49418240,"walBytes":0}
+#139 native helper timings [{"operation":"git","ms":44.12483400000019},{"operation":"git","ms":43.45033299999977},{"operation":"git","ms":41.600374999999985},{"operation":"git","ms":39.87366599999996},{"operation":"git","ms":38.901582999999846},{"operation":"git","ms":23.792249999999967},{"operation":"git","ms":23.304583000000093},{"operation":"stage","ms":23.163833000000068},{"operation":"git","ms":20.960707999999954},{"operation":"git","ms":20.88708399999996}]
+#139 app worker slowest requests [{"operation":"expireCheckpoints","ms":138.88366599999972},{"operation":"expireCheckpoints","ms":75.68733300000076},{"operation":"read","ms":46.43962499999998},{"operation":"read","ms":44.22466700000041},{"operation":"checkpoint","ms":40.32795900000019},{"operation":"read","ms":39.51883299999997},{"operation":"checkpoint","ms":31.704333000000133},{"operation":"checkpoint","ms":29.906582999999955},{"operation":"checkpoint","ms":28.84112499999992},{"operation":"checkpoint","ms":28.796749999999975}]
+  ✓  2 tests/sqlite-qualification.spec.ts:42:2 › packaged editing and Save baseline and loaded-store followup (5.5s)
+
+  2 passed (11.0s)

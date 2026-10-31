@@ -1,3 +1,6 @@
+import { writeApprovalFixture } from "./desktop";
+import { writeRecoveryFixture } from "./desktop";
+import { readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { symlink, mkdtemp, mkdir, realpath, writeFile, readFile, rm } from "node:fs/promises";
@@ -28,8 +31,8 @@ test("saved project drafts move with text, survive restart and bind exactly once
   await mkdir(user);
   await symlink(process.execPath, join(dir, "node"));
   const saved = [alpha, beta].map((root) => ({ project: root, root }));
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
-  await writeFile(
+  await writeApprovalFixture(user, saved);
+  await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
@@ -67,7 +70,7 @@ send({id:m.id,result});});`,
     await expect(page.getByText("Effective Codex settings · fixture", { exact: true })).toBeVisible();
     await message().fill("Retain this draft");
     const records = async () => {
-      const chats = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+      const chats = JSON.parse(await readChatFixture(join(user, "host-chats-v1.json"), "utf8")).chats;
       return page.evaluate(chats => chats.map((chat: { id: string }) => ({ ...chat, draft: localStorage.getItem(`escode-composer:${chat.id}`) ?? "" })), chats);
     };
     await expect.poll(async () => (await records())[0]?.draft).toBe("Retain this draft");

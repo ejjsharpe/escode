@@ -382,3 +382,40 @@ The selected labels are available in the existing temporary-profile dev window v
 the restored local dev server. No installation or live provider turn was used.
 Manual VoiceOver/Finder validation and the exact cause of the intermittent inline
 failure remain outstanding; integrated acceptance is not claimed.
+
+## Main merge conflict resolution (2026-10-31)
+
+Merged `origin/main` at `37bb837` into the PR branch from `76adbf1`, without rewriting
+branch history. The checkout was clean before merging. Four textual conflicts were
+resolved: workspace tests, the renderer file opener, transfer fixtures and tree fixtures.
+Both scroll-anchor validation and fresh SQLite approval tests are retained. Main's
+`transferNavigation` ref keeps transfer-time opening available while closing the gate
+during reconciliation; Files inline creation retains its focus-preserving activation.
+The single-line viewport, host output guard and optional scroll-anchor contract remain.
+
+Main's JSON-to-SQLite cutover required adapting PR-added recovery readers and restart
+fixtures. They now use the existing `readRecoveryFixture` helper and tolerate absence
+of the superseded receipt-lock file after confirmed fixture process exit. The linked
+worktree fixture selects the tab by its exact checkout path and pressed-state attribute,
+then scopes Files navigation to the visible checkout. The forged-drop assertion is
+scoped to the Files alert so Monaco's two alert nodes cannot cause a strict-selector
+failure. Original byte, no-mutation, recovery, selection and focus assertions remain.
+
+The first development pass was 44/50 while these fixture adaptations were incomplete;
+the first packaged pass was 49/50 before the exact tab selector was corrected. The
+corrected linked-worktree scenario passed its dedicated development run (1/1).
+Host/module/workspace/file-operation/editor tests passed 117/117 across nine files;
+typecheck and build passed. Lint passed with four pre-existing warnings from unchanged
+main files. Whitespace checks against `origin/main` passed; imported evidence logs
+retain main's original whitespace rather than altering unrelated evidence bytes.
+
+Final merged-tree validation: **50/50 development** and **50/50 packaged** Electron
+checks passed (2.7 min each), unfiltered and serial with temporary repositories/profiles.
+All 117 focused host tests passed. Typecheck, lint (the four existing main warnings),
+build and unsigned packaging passed. The PR diff against main passes whitespace checks.
+Logs are `/tmp/escode-143-merge-{host,typecheck,lint,build,package,linked}.log` and
+`/tmp/escode-143-merge-final-{development,packaged}.log`; initial failed runs remain in
+`/tmp/escode-143-merge-{development,packaged}.log`. No assertions were skipped or
+removed. No installation, live provider turn, manual VoiceOver or native Finder
+validation was performed. The user had already marked the PR ready; its status is
+preserved, and merging the PR itself is not part of this action.

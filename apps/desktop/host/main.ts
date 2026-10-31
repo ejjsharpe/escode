@@ -1,4 +1,4 @@
-import { executeSend } from "./send";
+import { DurableSend } from "./durable-send";
 import { Schema } from "effect";
 import { SendCommand } from "@escode/contracts";
 import {
@@ -14,7 +14,7 @@ import {
 import { join, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
 import { startHost } from "@escode/host";
-import { FoundationState } from "./foundation-state";
+import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { draftSettings, toolStatus } from "./tools";
 import { Chats } from "./chat";
@@ -26,10 +26,17 @@ const developmentOrigin = /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.ESCODE_
   ? process.env.ESCODE_DEV_URL!
   : "http://127.0.0.1:5173";
 app.whenReady().then(async () => {
+  if (!app.requestSingleInstanceLock()) { app.quit(); return; }
   mkdirSync(app.getPath("userData"), { recursive: true, mode: 0o700 });
-  let foundation: FoundationState;
+  let owner: { hostId: string; clientId: string };
+  const admissionEpoch = randomUUID();
+  const store = new Chats(join(app.getPath("userData"), "durable-chats-v1"));
+  let sends: DurableSend;
   try {
-    foundation = FoundationState.open(join(app.getPath("userData"), "foundation"));
+    const identity = await store.database.ready;
+    console.info("SQLite durability settings", identity.settings);
+    owner = identity;
+    sends = new DurableSend(store.database, admissionEpoch);
   } catch (error) {
     dialog.showErrorBox(
       "Foundation state unavailable",
@@ -38,7 +45,7 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
-  app.once("will-quit", () => foundation.close());
+  app.once("will-quit", () => { void store.database.close(); });
   const page = pathToFileURL(join(__dirname, "../renderer/index.html")).href;
   const dev = !app.isPackaged && process.env.ESCODE_DEV_URL === developmentOrigin;
   const documentURL = dev ? developmentOrigin + "/" : page;
@@ -85,7 +92,6 @@ app.whenReady().then(async () => {
       throw new Error("Invalid tools request");
     return toolStatus();
   });
-  const store = new Chats(join(app.getPath("userData"), "host-chats-v1.json"));
   const chats = new ChatService(store, undefined, undefined, draftSettings, {
     guard: root => {
       const owner = root === null ? undefined : projectSessions.get(root);
@@ -107,9 +113,9 @@ app.whenReady().then(async () => {
   const unapprovedProjects = new Set<string>();
   const removing = new Set<string>();
   let quitting = false;
-  const workspace = new Workspace(join(app.getPath("userData"), "client-workspace-v1.json"), foundation.read());
+  const workspace = new Workspace(join(app.getPath("userData"), "client-workspace-v1.json"), owner, store.database);
   const files = createFileWorkflow({
-    userData: app.getPath("userData"), workspace, foundation, projects, projectSessions, removing,
+    userData: app.getPath("userData"), workspace, admissionEpoch, projects, projectSessions, removing,
     checkout: root => checkout(root), isQuitting: () => quitting,
     showMessageBox: options => dialog.showMessageBox(window, options), clipboard,
     writeClipboard: data => clipboard.write([new ClipboardItem(data)]),
@@ -219,6 +225,7 @@ app.whenReady().then(async () => {
         state: { ...(await workspace.read()), savedProjects: state.savedProjects },
         restored,
         errors,
+        acknowledgementRoots: files.acknowledgementRoots(),
       };
     }
     if (operation === "persist" && args.length === 1) {
@@ -336,6 +343,9 @@ app.whenReady().then(async () => {
     chats.close();
     for (const p of projects.values()) p.close();
   });
+  // Retain validated chat authority only for cancellation of an existing live session after worker loss.
+  const liveAuthorities = new Set<string>();
+  const authorityKey = (root: string | null, id: string) => JSON.stringify([root, id]);
   const authorizeHistory = async (root: string | null, id: string) => {
     if (quitting || (root !== null && removing.has(root))) throw Error("Chat unavailable during shutdown or removal");
     const chat = await store.get(root, id);
@@ -343,7 +353,13 @@ app.whenReady().then(async () => {
       if (!(await workspace.approved()).some(p => p.project === root))
         throw Error("Open this project first. Use Open project… to approve its saved directory.");
     }
+    liveAuthorities.add(authorityKey(root, id));
     return chat;
+  };
+  const authorizeRetainedStop = (root: string | null, id: string) => {
+    if (quitting || (root !== null && removing.has(root)) || !liveAuthorities.has(authorityKey(root, id)))
+      throw Error("No retained live Stop authority.");
+    return chats.liveStopTarget(root, id);
   };
   const currentTarget = async (identity: string) => {
     const state = await workspace.read();
@@ -356,29 +372,60 @@ app.whenReady().then(async () => {
     if (!p) throw Error("Unknown saved project.");
     return state.projectUse?.find(p => p.project === identity)?.checkout ?? p.root;
   };
+  let chatStorageWrites: Promise<unknown> = Promise.resolve();
   const host = await startHost({
+    clientChatStorage: state => {
+      const run = chatStorageWrites.then(async () => {
+        const { clientId } = await store.database.ready;
+        const saved = await store.database.recoveryRead(clientId, "chatClient");
+        const value = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(state ?? saved.body ?? {});
+        if (Buffer.byteLength(JSON.stringify(value)) > 4 * 1024 * 1024 || Object.keys(value).some(key => !/^escode-(composer|composer-revision|send|control):/.test(key))) throw Error("Invalid client chat recovery data");
+        if (state) await store.database.recoveryWrite(clientId, "chatClient", value, saved.revision);
+        return value;
+      });
+      chatStorageWrites = run.catch(() => {});
+      return run;
+    },
     gitStatus: async root => (await checkout(root)).status(),
     worktreeOptions: async root => (await checkout(root)).repositoryGit.worktreeOptions(),
     draftAction: action => chats.draftAction(action),
-    sendState: async (root, id) => ({ admissionEpoch: foundation.admissionEpoch, expected: await chats.expectation(root, id) }),
+    sendState: async (root, id) => {
+      try {
+        await authorizeHistory(root, id);
+        return { admissionEpoch: sends.admissionEpoch, expected: await chats.expectation(root, id) };
+      } catch (error) {
+        if (!store.database.unavailable) throw error;
+        authorizeRetainedStop(root, id);
+        return { admissionEpoch: sends.admissionEpoch, expected: "" };
+      }
+    },
     sendStatus: async commandId => {
-      const receipt = foundation.receipt(commandId);
+      const receipt = await sends.receipt(commandId);
       if (receipt) await authorizeHistory(receipt.command.project, receipt.command.id);
       return receipt;
     },
     sendMessage: async input => {
       const command = Schema.decodeUnknownSync(SendCommand)(input);
-      await authorizeHistory(command.project, command.id);
-      return executeSend(foundation, command, async () => {
+      if (store.database.unavailable && command.control?.operation === "stop")
+        authorizeRetainedStop(command.project, command.id);
+      else await authorizeHistory(command.project, command.id);
+      const dispatch = async () => {
         if (command.control) {
           const { operation, target, token, answer } = command.control;
           if (operation === "stop") await chats.stop(command.project, command.id, target);
           else await chats.answer(command.project, command.id, token, answer);
-        } else await chats.send(command.project, command.id, command.text, command.expected);
-      });
+        } else await chats.send(command.project, command.id, command.text, command.expected, command.commandId);
+      };
+      return sends.execute(command, dispatch);
     },
     chatSnapshot: async (root, id) => { await authorizeHistory(root, id); return chats.inspect(root, id); },
+    checkpointRetention: days => chats.checkpointRetention(days),
     openChat: async (root, id) => { await authorizeHistory(root, id); return chats.open(root, id); },
+    checkpointPoints: async (root, id, cursor) => { await authorizeHistory(root, id); return chats.checkpointPoints(root, id, cursor); },
+    rewind: async (root, id, boundary, token, commandId, restoreFiles) => { await authorizeHistory(root, id); return chats.rewind(root, id, boundary, token, commandId, restoreFiles); },
+    branchHistory: async (root, id, boundary, token, commandId, summarized) => { await authorizeHistory(root, id); return chats.branchHistory(root, id, boundary, token, commandId, summarized); },
+    inspectFiles: async (root, id, boundary, path, cursor) => { await authorizeHistory(root, id); return chats.inspectFiles(root, id, boundary, path, cursor); },
+    inspectBoundary: async (root, id, boundary, cursor) => { await authorizeHistory(root, id); return chats.inspectBoundary(root, id, boundary, cursor); },
     history: async (root, id, cursor) => { await authorizeHistory(root, id); return chats.history(root, id, cursor); },
     summaries: async () => {
       const state = await workspace.read();
@@ -394,9 +441,9 @@ app.whenReady().then(async () => {
     },
     loadWorkspace: () => workspaceAction("load") as Promise<typeof import("@escode/contracts").WorkspaceLoad.Type>,
     persistWorkspace: async (state) => { await workspaceAction("persist", state); },
-    createState: () => foundation.admissionEpoch,
+    createState: () => admissionEpoch,
     ...files.hostActions,
-    ...foundation.read(), origin: dev ? developmentOrigin : "file://",
+    ...owner, origin: dev ? developmentOrigin : "file://",
   });
   hostOrigin = host.origin;
   ipcMain.handle("local-bootstrap", (event, ...args) => {

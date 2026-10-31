@@ -90,22 +90,22 @@ The host's metadata and activity projection for one saved chat or chat draft, sh
 **History page**:
 A bounded portion of a saved chat's provider history, loaded explicitly through the execution host. Message bodies and pages carry content revisions; choosing another page replaces the displayed portion. Unloaded or unavailable portions are disclosed. See [saved history evidence](docs/compatibility/saved-history.md).
 
-The following historical-work terms describe the [accepted turn-level time-travel specification](docs/specifications/durable-state-and-time-travel.md), not implemented behavior.
+The following historical-work terms describe the [accepted turn-level time-travel specification](docs/specifications/durable-state-and-time-travel.md). Implemented slices and remaining qualification gates are recorded in [combined historical qualification](docs/compatibility/historical-acceptance.md).
 
 **Turn checkpoint**:
-A recorded boundary before or after an agent turn, identifying its historical conversation context and the availability of captured saved working files. It is distinct from a user's Git commit and from a client's unsaved recovery draft.
+A recorded boundary before or after an agent turn, identifying its historical conversation context and the availability of captured saved working files. It is distinct from a user's Git commit and from a client's unsaved recovery draft. A before-message boundary captures saved disk contents afresh before Send dispatch, with its provider thread, exact checkout identity and Git base retained independently of file coverage; missing coverage does not authorize historical file operations. An after-turn boundary reserves a stable identity before dispatch and records the corresponding observed provider turn and completion status. Completed-turn files are captured before another Send is allowed; interruption, unobserved completion and failed capture retain unavailable coverage without replay or later-file substitution.
 
 **Conversation rewind**:
-An explicit return of an existing chat to an earlier conversation boundary, with a separate choice about restoring files. Looking through history does not rewind the conversation.
+An explicit return of an existing chat to an earlier conversation boundary, with a separate choice about restoring files. Looking through history does not rewind the conversation. Conversation-only rewind retains the escode chat identity and current files, index, unsaved edits and unsent text; native provider historical context may have a distinct provider thread identity. Confirmation does not start a turn. Unsupported boundaries remain unavailable.
 
 **File restoration**:
-An explicit replacement of an eligible worktree's saved working files with the contents of a selected turn checkpoint. Available unsaved client edits remain separately protected.
+An explicit replacement of an eligible worktree's saved working files with the contents of a selected turn checkpoint. Available unsaved client edits and loaded conflict baselines are retained separately; a later Save may conflict with restored disk contents. In-place restoration requires an exact, isolated worktree and refuses original or shared checkouts. It replaces saved edits and may remove newer eligible untracked files, while retaining the current staging index. Provider and filesystem effects can partially succeed; uncertain commands never replay.
 
 **Historical branch**:
-A separate chat and worktree continuing from a selected turn checkpoint while preserving the original work. Its historical files and conversation context are distinct from a conversation fork that shares today's files.
+A separate chat and managed worktree continuing from a selected before-message or after-turn checkpoint while preserving the original work. It uses the recorded Git base with captured saved files as uncommitted changes and native provider context through the preceding turn (before-message) or selected completed turn (after-turn), without starting a turn. A retained branch receipt names the child chat and preserves its required checkpoint contents independently of source-chat expiry. Incomplete historical preparation retains its exact resources and blocks connection/Send until externally reconciled; Retry never allocates substitutes. Its historical files and conversation context are distinct from a conversation fork that shares today's files.
 
 **Checkpoint retention**:
-The period for which inactive chats retain available file checkpoints, subject to protection of data still needed by retained branches. Retaining conversation history does not imply that every historical file state remains available.
+The period for which inactive chats retain available file checkpoints, subject to protection of data still needed by retained branches. The host-owned inactivity setting defaults to 30 days and accepts 1–36500 whole days or Never. Changes settle elapsed coverage under the previous policy before applying the new policy to remaining eligible checkpoints; extending retention or choosing Never cannot recover expired contents. Shorter periods apply at the next cleanup. Never disables inactivity expiry, not capacity limits. Deliberate opening, messages and observed agent work extend remaining coverage; polling does not. Expiry retains boundary/provider metadata with an unavailable reason and cannot be reversed by opening the chat. Branch receipts keep independent required contents; active work, client recovery and uncertain evidence prevent cleanup. Logical expiry does not promise immediate disk reclamation or remove conversations/worktrees. Retaining conversation history does not imply that every historical file state remains available.
 
 **Project-backed chat**:
 A chat associated with one project and attached to one of its checkout directories. Multiple chats may share a checkout.
@@ -122,6 +122,9 @@ chat/context expectation and message. It records admission, dispatch intent and 
 or uncertain acceptance. Repeating that identity returns status without another
 provider turn. Explicit local resolution releases a pending composer identity without
 deleting the receipt or resending work. See [durable Send evidence](docs/compatibility/durable-send.md).
+
+**File command receipt**:
+A host-owned SQLite record binding a creation or transfer command identity to its client, exact checkout and requested targets. Admission precedes effects; repeating an identity returns its retained outcome or uncertainty without repeating effects. Per-item file-operation intent and batch facts preserve exact resolved destinations and copied recovery text until client acknowledgement.
 
 **Unsent message text**:
 A client’s unfinished message for a chat or chat draft, shared across that client’s views and retained independently of other clients’ composers. Sending from another client does not clear it.
@@ -153,7 +156,7 @@ A difference detected before saving between a file's loaded disk version and its
 **Recovery draft**:
 A persisted unsaved file buffer belonging to one client, with its checkout/file identity and loaded disk
 baseline. Another client’s Save or Discard does not remove it. Available drafts reopen as unsaved edits and use the ordinary save-conflict
-check. Recovery uses a versioned host/client-owned store and authenticated host actions. Ordinary saves retain journalled disk outcomes and protect the completed baseline against late recovery snapshots until matching reconciliation. Explicit discard removes the draft; recovery is best effort, not a guarantee
+check. Recovery uses host-owned SQLite records keyed by client identity and authenticated host actions; [SQLite recovery evidence](docs/compatibility/sqlite-file-recovery.md) records the bounded checks. Ordinary saves retain journalled disk outcomes and protect the completed baseline against late recovery snapshots until matching reconciliation. Explicit discard removes the draft; recovery is best effort, not a guarantee
 that the latest keystroke survives a crash.
 
 **Files view**:
@@ -190,8 +193,11 @@ The dedicated file-operation journal stores and validates these records; workspa
 client recovery drafts and view memory separately. Copy intents additionally retain staging paths and available destination draft text.
 Completed saves carry their disk baseline independently of deletion outcomes, preserving
 available draft text. Authenticated direct rename/move requests and acknowledgements share the host socket;
-uncertain intents reject client acknowledgement. Completed move and batch facts protect workspace snapshots until the renderer
-reconciles and durably acknowledges them. Restart reconciles available drafts with actual
+uncertain intents reject client acknowledgement. Completed move and Trash facts protect each saved client’s workspace snapshots until its renderer
+reconciles, persists and acknowledges its own obligation. Moves retain each client’s independent
+text and loaded baseline; another client’s Trash retains its drafts at the missing original path.
+Workspace load delivers outstanding acknowledgement roots so recovered editors can release their
+handoff before another mutation. Restart reconciles available drafts with actual
 paths and saved baselines; uncertain outcomes retain work and block mutations.
 
 **Files clipboard reference**:
@@ -220,3 +226,46 @@ Files terminology above does not certify those unverified native and VoiceOver c
 Internal host naming: `Checkout` owns one opened checkout and its filesystem descriptor. Its `CheckoutRepository` owns Git repository identity and worktree policy through that checkout; a repository identity can span multiple checkouts. These implementation names do not change the product terms above.
 
 Internal transport naming: `startHost` starts the shared local host transport; `createHostClient` connects to it across chat, workspace, Files and Source Control. These names describe the execution host and client connection above; the `/directories` wire endpoint remains unchanged.
+
+**Emergency Stop**:
+An explicit cancellation request for the exact live turn or preparation captured by an
+ordinary Stop whose intent could not be persisted. The host rechecks authority and
+rejects a superseded target. Its result may be non-durable or uncertain; external
+effects may remain. Reservations and prior command evidence are retained. This
+exception never admits Send, approval or reply without a durable intent. After
+complete storage-worker loss, the running host may retain previously validated
+chat authority for cancellation of its existing live session only; authentication
+and exact captured-target checks still apply. Cancellation results and rejection
+reasons remain visible alongside context/storage errors. Host restart discards this authority.
+
+Desktop chat composers, composer revisions and retained Send/control identities are
+client-owned records in host SQLite, hydrated before chat actions and included in
+recovery copies. The local client cache does not replace that authoritative copy.
+The chat-client record has a 4 MiB bound; persistence failure blocks Send/replies,
+while Stop retains its explicit emergency path. This does not add a transcript archive.
+
+### Recovery copy
+
+An explicit escode-owned consistent SQLite export with a checksummed inventory and
+declared external spool/content coverage. Missing required content makes coverage
+incomplete. Recovery validates a separate copy and quarantines it until exact
+roots, file baselines, provider identities and uncertain operations are reconciled;
+it does not undo external effects, replay commands or resume live requests.
+
+Recovery copies retain checkpoint contents, historical branch snapshots and command receipts within the consistent SQLite cut. Their inventory distinguishes expired coverage from retained snapshots. Exact checkout identities and Git bases remain required external dependencies, checked without substitution. Recovery compares retained availability with the preserved original SQLite authority so an older copy cannot revive subsequently expired points; unavailable original authority retains quarantine. Unresolved receipts and missing required content retain quarantine; admission epoch rotation is not reconciliation. The administrative provider inspector reads exact saved thread and checkout identities without resuming work.
+
+- **Boundary inspection**: Read-only, bounded browsing of provider-owned conversation history through a recorded before-message or after-turn boundary. It leaves the live conversation, composer and files unchanged. Provider history availability is independent of saved-file coverage; retained files cannot establish complete conversation history.
+
+Historical branches can select an available completion boundary: native provider context
+includes the completed turn, paired with that boundary's Git base and saved files.
+The next message's fresh before-state is a separate target.
+
+**Summarized continuation**:
+An explicit historical-workflow choice that creates a separate chat draft and managed worktree from an eligible checkpoint. Available provider text through the selected boundary is copied with item labels into an unsent draft for review (64 KiB maximum); it is not native historical provider context and does not reconstruct tool state. Missing, unsupported, empty or oversized required history remains unavailable. Preparation starts no provider thread or turn; first Send explicitly creates a fresh conversation. Source work and client drafts remain intact.
+
+Checkpoint storage capacity is independent of inactivity retention: active chats and
+Never retain protected history until optional capture reaches its byte or work bound,
+then disclose missing file coverage. Logical expiry drops eligible file payloads;
+SQLite reuses free pages and may truncate an unblocked WAL without shrinking the
+main database. These checkpoints store file bytes in SQLite, create no Git snapshot
+objects, and grant no authority to prune project Git objects or retained worktrees.

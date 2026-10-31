@@ -1,0 +1,32 @@
+$ node scripts/filesystem.mjs && vp test run host/boundaries.test.ts -t "^historical branch none\$"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-86f143e0/apps/desktop
+
+ ❯ host/boundaries.test.ts (20 tests | 1 failed | 19 skipped) 2871ms
+   × historical branch none 2870ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/boundaries.test.ts > historical branch none
+AssertionError: expected 'uncertain' to be 'applied' // Object.is equality
+
+Expected: "applied"
+Received: "uncertain"
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:251:27
+    249|       return;
+    250|     }
+    251|     expect(result.status).toBe("applied");
+       |                           ^
+    252|     expect((await client.loadWorkspace()).state.drafts).toEqual(recove…
+    253|     if (summarized) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 skipped (20)
+   Start at  14:18:30
+   Duration  3.35s (tests 88%, import 11%, transform 1%)
+
+error: script "test" exited with code 1

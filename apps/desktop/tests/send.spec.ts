@@ -1,3 +1,4 @@
+import { readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -35,7 +36,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await message().fill("first");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect.poll(() => readFile(join(dir, "effects"), "utf8").catch(() => "")).toBe("turn\n");
-    const chat = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats[0];
+    const chat = JSON.parse(await readChatFixture(join(user, "host-chats-v1.json"), "utf8")).chats[0];
     await page.evaluate(id => window.escode.chat("draft", null, id, "newer unsent text"), chat.id);
     await writeFile(join(dir, "release"), "accept");
     await expect(message()).toBeEnabled();

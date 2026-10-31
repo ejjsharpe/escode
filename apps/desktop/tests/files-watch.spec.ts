@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, rename, rm, realpath, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -90,9 +91,9 @@ test("external restoration, loaded/collapsed updates, focus recovery and dirty m
     await writeFile(join(root, "manual.txt"), "manual");
     await refresh.click();
     await expect(row("manual.txt")).toBeVisible();
-    await expect.poll(async () => (await readFile(join(user, "client-workspace-v1.json"), "utf8"))).toContain("retained external deletion edits");
+    await expect.poll(async () => (await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"))).toContain("retained external deletion edits");
     await app.evaluate(({ app }) => app.exit(0));
-    await rm(join(user, "foundation/owner.lock"), { force: true });
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(page.locator(".monaco-editor")).toContainText("retained external deletion edits");

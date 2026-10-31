@@ -1,0 +1,10 @@
+$ node scripts/filesystem.mjs && vp test run host/shutdown.test.ts host/boundaries.test.ts "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop
+
+
+ Test Files  2 passed (2)
+      Tests  24 passed (24)
+   Start at  13:23:08
+   Duration  121.54s (tests 99%, import 1%)
+

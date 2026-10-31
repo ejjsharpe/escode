@@ -1,0 +1,16 @@
+$ playwright test tests/historical-live.spec.ts
+
+Running 1 test using 1 worker
+
+(node:9401) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:10060) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `escode --trace-warnings ...` to show where the warning was created)
+(node:10853) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `escode --trace-warnings ...` to show where the warning was created)
+(node:10981) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `escode --trace-warnings ...` to show where the warning was created)
+#141 installed provider: UI before/after inspection, restart, consistent copy/recover/provider reconciliation; exact source thread and unsent draft retained
+  ✓  1 tests/historical-live.spec.ts:10:1 › installed provider historical UI survives restart and recovery without replay (45.9s)
+
+  1 passed (46.2s)

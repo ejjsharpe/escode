@@ -1,0 +1,84 @@
+$ playwright test tests/history.spec.ts tests/checkpoints.spec.ts tests/retention.spec.ts tests/durable-state.spec.ts tests/navigation.spec.ts tests/agents-files-recovery.spec.ts tests/sqlite-qualification.spec.ts tests/emergency-stop.spec.ts
+
+Running 21 tests using 1 worker
+
+(node:67842) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   1 tests/agents-files-recovery.spec.ts:13:1 › saved-project registration and interrupted move recovery survive together across restart (6.3s)
+Preparing worktree (new branch 'linked')
+  ✓   2 tests/agents-files-recovery.spec.ts:155:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening (3.7s)
+{"threeSendsMs":1118.0570000000007,"checkpoints":["available","available","unavailable"]}
+  ✓   3 tests/checkpoints.spec.ts:10:1 › packaged Send captures fresh saved bytes and permits unavailable coverage (2.5s)
+  ✓   4 tests/durable-state.spec.ts:8:1 › packaged SQLite worker retains authenticated drafts and identities on restart (2.6s)
+#139 fault setup ms 0.9361659999995027
+#127 visible Send/emergency control ms {"phase":"baseline","sendMs":384.3958329999987,"stopMs":113.49929200000042,"controlMs":36.87024999999994}
+  ✓   5 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) (2.3s)
+#139 fault setup ms 1.0608329999995476
+#127 visible Send/emergency control ms {"phase":"followup","sendMs":386.6235000000015,"stopMs":117.98354200000176,"controlMs":51.244416000001365}
+  ✓   6 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (followup) (2.7s)
+#127 visible Send/emergency control ms {"phase":"worker-loss","sendMs":390.4778329999972,"stopMs":114.02537500000108,"controlMs":46.56383299999652}
+  ✓   7 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss) (1.7s)
+  ✓   8 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) (2.1s)
+
+  ✓   9 tests/history.spec.ts:11:129 › saved new-format history: navigation (10.5s)
+
+  ✓  10 tests/history.spec.ts:11:129 › saved new-format history: streaming (5.3s)
+
+  ✓  11 tests/history.spec.ts:11:129 › saved new-format history: files (3.4s)
+
+  ✓  12 tests/history.spec.ts:11:129 › saved new-format history: branch (6.5s)
+
+  ✓  13 tests/history.spec.ts:11:129 › saved new-format history: branch-after (6.5s)
+
+  ✓  14 tests/history.spec.ts:11:129 › saved new-format history: summary (7.9s)
+
+  ✓  15 tests/history.spec.ts:11:129 › saved new-format history: restoration (9.6s)
+
+  ✘  16 tests/history.spec.ts:11:129 › saved new-format history: expiry (8.2s)
+(node:70355) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'other')
+Switched to a new branch 'changed-branch'
+  ✓  17 tests/navigation.spec.ts:8:1 › projects and checkout selections retain buffers, drafts and mode without duplicate tabs (11.5s)
+
+  ✓  18 tests/navigation.spec.ts:235:1 › cancelled and edited lookup invocations reject delayed validation and file activation (6.0s)
+  ✓  19 tests/retention.spec.ts:7:1 › packaged retention settings support keyboard editing and persisted Never (2.9s)
+#127 packaged evidence {"settings":{"journalMode":"wal","synchronous":1,"checkpointFullfsync":1},"before":114936,"after":551656,"samples":100,"medianMs":0.14716699999996763,"p95Ms":0.26887499999998,"maxMs":1.999040999999977}
+  ✓  20 tests/sqlite-qualification.spec.ts:7:1 › packaged worker durability readback and recovery write measurement (795ms)
+#127 packaged editing/Save ms {"phase":"baseline","editMs":139.98266700000022,"saveMs":285.6653750000005,"rendererSaveMs":241.5}
+#127 packaged editing/Save ms {"phase":"followup","editMs":73.18966699999874,"saveMs":358.73658400000204,"rendererSaveMs":234.39999997615814}
+#139 native helper timings [{"operation":"git","ms":25.337583999999993},{"operation":"git","ms":22.77433300000007},{"operation":"git","ms":22.70708300000001},{"operation":"git","ms":21.132041999999956},{"operation":"git","ms":21.10541699999999},{"operation":"git","ms":20.56058299999995},{"operation":"git","ms":20.466709000000037},{"operation":"git","ms":20.454791999999998},{"operation":"git","ms":20.283000000000015},{"operation":"git","ms":20.268042000000037}]
+#139 app worker slowest requests [{"operation":"recoveryRead","ms":26.546500000000037},{"operation":"recoveryRead","ms":24.849249999999984},{"operation":"recoveryWrite","ms":8.552625000000035},{"operation":"recoveryRead","ms":3.041499999999985},{"operation":"recoveryRead","ms":2.1614170000000286},{"operation":"recoveryRead","ms":2.031166999999982},{"operation":"recoveryRead","ms":2.013458999999898},{"operation":"recoveryRead","ms":1.4758330000000797},{"operation":"recoveryRead","ms":1.4708329999998568},{"operation":"recoveryWrite","ms":1.339542000000165}]
+  ✓  21 tests/sqlite-qualification.spec.ts:42:2 › packaged editing and Save baseline and loaded-store followup (2.8s)
+
+
+  1) tests/history.spec.ts:11:129 › saved new-format history: expiry ───────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/) with timeout 5000ms
+      - waiting for getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/)
+
+
+      92 |       await page.getByRole("button", { name: /^After turn/ }).first().click();
+      93 |       const inspection = page.getByRole("region", { name: "Boundary inspection", exact: true });
+    > 94 |       await expect(inspection.getByText(/Saved files: unavailable.*expired/)).toBeVisible();
+         |                                                                               ^
+      95 |       await expect(inspection.getByText("first saved page", { exact: true })).toBeVisible();
+      96 |       await page.getByRole("button", { name: "Inspect saved files", exact: true }).click();
+      97 |       await expect(page.getByRole("region", { name: "Saved-file inspection", exact: true })).toContainText("expired after 30 days");
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop/tests/history.spec.ts:94:79
+
+    Error Context: test-results/history-saved-new-format-history-expiry/error-context.md
+
+  1 failed
+    tests/history.spec.ts:11:129 › saved new-format history: expiry ────────────────────────────────
+  20 passed (1.8m)
+error: script "smoke" exited with code 1

@@ -1,0 +1,31 @@
+$ playwright test tests/historical-live.spec.ts
+
+Running 1 test using 1 worker
+
+(node:13756) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  1 tests/historical-live.spec.ts:10:1 › installed provider historical UI survives restart and recovery without replay (35.6s)
+
+
+  1) tests/historical-live.spec.ts:10:1 › installed provider historical UI survives restart and recovery without replay
+
+    TimeoutError: locator.fill: Timeout 30000ms exceeded.
+    Call log:
+      - waiting for getByLabel('Message Codex')
+
+
+      33 |     page = await show();
+      34 |     await page.getByRole("button", { name: "New chat on current checkout" }).click();
+    > 35 |     await page.getByLabel("Message Codex").fill("Reply exactly ESCODE_HISTORICAL_LIVE_OK. Do not use tools or change files.");
+         |                                            ^
+      36 |     await page.getByRole("button", { name: "Send message", exact: true }).click();
+      37 |     await expect(page.getByRole("status").filter({ hasText: /^Ready$/ })).toBeVisible({ timeout: 90000 });
+      38 |     await expect(page.getByLabel("Conversation history")).toContainText("ESCODE_HISTORICAL_LIVE_OK");
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop/tests/historical-live.spec.ts:35:44
+
+    Error Context: test-results/historical-live-installed--01c68-and-recovery-without-replay/error-context.md
+
+  1 failed
+    tests/historical-live.spec.ts:10:1 › installed provider historical UI survives restart and recovery without replay
+error: script "smoke" exited with code 1

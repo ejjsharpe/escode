@@ -1,0 +1,11 @@
+$ nx package desktop
+
+ NX   2 tasks: 2 succeeded, 1 cached
+
+
+Re-run with --output-style=static to inline logs.
+
+  Run duration:      13.7s
+  Cache:             1/2 hit (50%)
+  Critical path:     13.7s (2 tasks)
+  Recoverable time:  <1ms

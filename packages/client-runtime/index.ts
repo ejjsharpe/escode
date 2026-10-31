@@ -95,6 +95,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     lookupFile: (root: string, query: string) => chatQuery(client => client.lookupFile({ root, query })),
     readFile: (root: string, path: string) => chatQuery(client => client.readFile({ root, path })),
     saveFile: (root: string, path: string, text: string, version: string) => chatQuery(client => client.saveFile({ root, path, text, version })),
+    clientChatStorage: (state?: Record<string, string>) => chatQuery(client => client.clientChatStorage(state === undefined ? {} : { state })),
     loadWorkspace: () => chatQuery(client => client.loadWorkspace()),
     persistWorkspace: (state: typeof import("@escode/contracts").WorkspaceState.Type) => chatQuery(client => client.persistWorkspace({ state })),
     moveEntry: (command: import("@escode/contracts").MoveEntry) => chatQuery(client => client.moveEntry({ command })),
@@ -103,6 +104,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     sendState: (project: string | null, id: string) => chatQuery(client => client.sendState({ project, id })),
     sendMessage: (command: SendCommand) => chatQuery(client => client.sendMessage({ command })),
     sendStatus: (commandId: string) => chatQuery(client => client.sendStatus({ commandId })),
+    checkpointRetention: (days?: number | null) => chatQuery(client => client.checkpointRetention(days === undefined ? {} : { days })),
     openChat: (project: string | null, id: string) => chatQuery(client => client.openChat({ project, id })),
     chatLive(project: string | null, id: string, apply: (detail: typeof ChatDetail.Type) => void, error: (message: string) => void, reconcile?: () => Promise<string | undefined>) {
       let active = true;
@@ -113,7 +115,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
         epoch = undefined; revision = 0; items = [];
         const client = yield* Effect.tryPromise(connect);
         const warning = reconcile ? yield* Effect.tryPromise(reconcile) : undefined;
-        yield* client.chatLive({ project, id }).pipe(Stream.timeout("3 seconds"), Stream.runForEach(batch => Effect.sync(() => {
+        yield* client.chatLive({ project, id }).pipe(Stream.timeoutOrElse({ duration: "3 seconds", orElse: () => Stream.fail(new Cause.TimeoutError()) }), Stream.runForEach(batch => Effect.sync(() => {
           if (!active) return;
           if (batch.epoch === epoch && batch.revision <= revision) return;
           if (batch.revision !== revision + 1 || (epoch && epoch !== batch.epoch)) throw Error("Live coverage reset required. Reopen the view.");
@@ -138,7 +140,10 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
           if (!active) return;
           const domainError = Exit.isFailure(result) && domainFailure(result.cause) !== undefined;
           // A moved chat invalidates its old subscription, not the shared connection.
-          if (!domainError && session?.client === current) yield* Effect.tryPromise(close);
+          // An idle subscription is local; keep admitted commands on the shared socket.
+          const failure = Exit.isFailure(result) ? Cause.findError(result.cause) : undefined;
+          const idle = failure !== undefined && Result.isSuccess(failure) && Cause.isTimeoutError(failure.success);
+          if (!domainError && !idle && session?.client === current) yield* Effect.tryPromise(close);
           if (retry >= 3) {
             error(`Live output unavailable; Retry to reload status/history. ${Exit.isFailure(result) ? String(result.cause) : "Stream ended"}`);
             return;
@@ -149,6 +154,11 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
       void Effect.runPromise(recover, { signal: controller.signal }).catch(value => { if (active) error(String(value)); });
       return () => { active = false; items = []; controller.abort(); };
     },
+    checkpointPoints: (project: string | null, id: string, cursor: string | null) => chatQuery(client => client.checkpointPoints({ project, id, cursor })),
+    rewind: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles?: boolean) => chatQuery(client => client.rewind({ project, id, boundary, token, commandId, restoreFiles: restoreFiles ?? false })),
+    branchHistory: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, summarized?: boolean) => chatQuery(client => client.branchHistory({ project, id, boundary, token, commandId, summarized: summarized ?? false })),
+    inspectFiles: (project: string | null, id: string, boundary: string, path: string | null, cursor: string | null) => chatQuery(client => client.inspectFiles({ project, id, boundary, path, cursor })),
+    inspectBoundary: (project: string | null, id: string, boundary: string, cursor: string | null) => chatQuery(client => client.inspectBoundary({ project, id, boundary, cursor })),
     chatHistory: (project: string | null, id: string, cursor: string | null): Promise<HistoryPage> =>
       chatQuery(client => client.chatHistory({ project, id, cursor })),
     async listDirectory(root: string, path: string): Promise<DirectoryResult> {

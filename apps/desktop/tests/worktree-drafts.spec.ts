@@ -1,3 +1,6 @@
+import { writeApprovalFixture } from "./desktop";
+import { readRecoveryFixture, writeRecoveryFixture } from "./desktop";
+import { readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -50,8 +53,8 @@ test("worktree draft prepares only on Send from closed-project Agents, retains e
   await mkdir(user);
   await symlink(process.execPath, join(dir, "node"));
   const saved = [alpha, beta].map((root) => ({ project: root, root }));
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
-  await writeFile(
+  await writeApprovalFixture(user, saved);
+  await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
@@ -91,7 +94,7 @@ send({id:m.id,result});});`,
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
     await message().fill("Retain this draft");
     const records = async () => {
-      const saved = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+      const saved = JSON.parse(await readChatFixture(join(user, "host-chats-v1.json"), "utf8")).chats;
       return Promise.all(saved.map(async (chat: any) => ({ ...chat, draft: await page.evaluate(({ project, id }) => window.escode.chat("composer", project, id), chat) })));
     };
     await expect.poll(async () => (await records())[0]?.draft).toBe("Retain this draft");
@@ -165,7 +168,7 @@ send({id:m.id,result});});`,
     expect(
       execFileSync("git", ["-C", worktree, "status", "--porcelain", "--ignored"]).toString(),
     ).toBe(originalStatus.replace("!! ignored", "?? original-untracked\n!! ignored"));
-    expect(JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts).toContainEqual(
+    expect(JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts).toContainEqual(
       recovery,
     );
     expect(prepared.worktree.reservation.root).toBe(prepared.checkout);

@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createFileWorkflow } from "./file-workflow";
-import { FoundationState } from "./foundation-state";
-import { Workspace } from "./workspace";
+import { randomUUID } from "node:crypto";
+import { Workspace, recoveryDatabase } from "./recovery-fixture";
 import { Checkout } from "./project";
 
 test("collision consent shares the mutation gate and Keep Both preserves existing files", async () => {
@@ -16,13 +16,14 @@ test("collision consent shares the mutation gate and Keep Both preserves existin
   writeFileSync(join(root, "a.txt"), "source");
   writeFileSync(join(root, "target/a.txt"), "destination");
   const project = await Checkout.open(root);
-  const foundation = FoundationState.open(join(base, "foundation"));
-  const workspace = new Workspace(join(base, "workspace.json"), foundation.read());
+  const admissionEpoch = randomUUID();
+  await recoveryDatabase(join(base, "workspace.json")).ready;
+  const workspace = new Workspace(join(base, "workspace.json"), { hostId: "fixture-host", clientId: "fixture-client" });
   let dialogs = 0;
   const files = createFileWorkflow({
     userData: base,
     workspace,
-    foundation,
+    admissionEpoch,
     projects: new Map([[root, project]]),
     projectSessions: new Map([[project.repositoryGit.repository(), {}]]),
     removing: new Set(),
@@ -50,7 +51,7 @@ test("collision consent shares the mutation gate and Keep Both preserves existin
     });
     const result = await files.hostActions.transferAction({
       root,
-      operation: "transfer",
+      operation: "transfer", commandId: "transfer", admissionEpoch,
       kind: "drag-copy",
       paths: [token as string],
       parent: "target",
@@ -66,8 +67,7 @@ test("collision consent shares the mutation gate and Keep Both preserves existin
   } finally {
     files.clearImports();
     project.close();
-    foundation.close();
-    rmSync(base, { recursive: true, force: true });
+    await recoveryDatabase(join(base, "workspace.json")).close(); rmSync(base, { recursive: true, force: true });
   }
 });
 
@@ -78,10 +78,11 @@ test("exact lookup accepts deliberate excluded paths only in its approved checko
   mkdirSync(join(root, "node_modules"));
   writeFileSync(join(root, "node_modules/known.txt"), "deliberate");
   const project = await Checkout.open(root);
-  const foundation = FoundationState.open(join(base, "foundation"));
+  const admissionEpoch = randomUUID();
+  await recoveryDatabase(join(base, "workspace.json")).ready;
   const files = createFileWorkflow({
-    userData: join(base, "user"), workspace: new Workspace(join(base, "workspace.json"), foundation.read()),
-    foundation, projects: new Map([[root, project]]),
+    userData: join(base, "user"), workspace: new Workspace(join(base, "workspace.json"), { hostId: "fixture-host", clientId: "fixture-client" }),
+    admissionEpoch, projects: new Map([[root, project]]),
     projectSessions: new Map([[project.repositoryGit.repository(), {}]]), removing: new Set(),
     checkout: async () => project, isQuitting: () => false,
     clipboard: { read: async () => [] }, writeClipboard: async () => {},
@@ -101,6 +102,6 @@ test("exact lookup accepts deliberate excluded paths only in its approved checko
     await expect(files.hostActions.lookupFile!(root, "node_modules/known.txt")).rejects.toThrow();
 
   } finally {
-    files.clearImports(); project.close(); foundation.close(); rmSync(base, { recursive: true, force: true });
+    files.clearImports(); project.close(); await recoveryDatabase(join(base, "workspace.json")).close(); rmSync(base, { recursive: true, force: true });
   }
 });

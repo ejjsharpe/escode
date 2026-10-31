@@ -1,3 +1,6 @@
+import { writeApprovalFixture } from "./desktop";
+import { readRecoveryFixture, writeRecoveryFixture } from "./desktop";
+import { writeChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -33,7 +36,7 @@ test("Agents restores closed saved projects and shares conversations without mov
     { project: a, root: a },
     { project: b, root: b },
   ];
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
+  await writeApprovalFixture(user, saved);
   const records = [
     {
       id: "alpha-chat",
@@ -45,8 +48,8 @@ test("Agents restores closed saved projects and shares conversations without mov
     { id: "beta-chat", project: b, checkout: b, threadId: "saved-beta", draft: "beta text" },
     { id: "forged-chat", project: "/unapproved", checkout: b, threadId: null, draft: "keep me" },
   ];
-  await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
-  await writeFile(
+  await writeChatFixture(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
+  await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [saved[0]],
@@ -263,7 +266,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     });
     await expect
       .poll(async () => {
-        const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+        const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
         return [state.selected, state.agentsChat];
       })
       .toEqual(["agents", "beta-chat"]);
@@ -278,7 +281,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     app.process().kill("SIGKILL");
     await exited;
     // Explicit recovery after this test has confirmed the crashed writer exited.
-    await rm(join(user, "foundation/owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
     app = await launchDesktop(user, dir);
     page = await app.firstWindow();
     await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
@@ -288,7 +291,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("beta retained");
     await expect(page.getByRole("status")).toHaveText("Ready");
     expect(await readFile(join(dir, "events"), "utf8")).not.toContain("turn/start");
-    const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+    const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
     expect(state.projects).toEqual([{ project: a, root: a }, { project: a, root: worktree }]);
     expect(state.drafts[0].text).toBe("dirty alpha");
   } finally {
@@ -304,7 +307,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
 
 test("Agents keeps an unavailable remembered selection and validates catalogue arguments", async () => {
   const user = await mkdtemp(join(tmpdir(), "escode-agents-empty-"));
-  await writeFile(
+  await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
@@ -350,7 +353,7 @@ test("Agents keeps an unavailable remembered selection and validates catalogue a
         }
       }),
     ).toBe(true);
-    expect(JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).agentsChat).toBe(
+    expect(JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).agentsChat).toBe(
       "missing-chat",
     );
   } finally {
@@ -366,8 +369,8 @@ test("Agents and local Chats keep newest-first order and original labels through
   execFileSync("git", ["init", root]);
   await mkdir(user);
   const saved = [{ project: root, root }];
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
-  await writeFile(
+  await writeApprovalFixture(user, saved);
+  await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: saved,
@@ -401,7 +404,7 @@ test("Agents and local Chats keep newest-first order and original labels through
       createdAt: 200,
     },
   ];
-  await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
+  await writeChatFixture(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
   await writeFile(
     join(dir, "codex"),
     `#!/usr/bin/env node
@@ -528,8 +531,8 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
   execFileSync("git", ["-C", roots[3], "worktree", "add", "-b", "alternate", linked]);
   await mkdir(user);
   const saved = roots.map((root) => ({ project: root, root }));
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
-  await writeFile(
+  await writeApprovalFixture(user, saved);
+  await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
@@ -539,7 +542,7 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
       drafts: [],
     }),
   );
-  await writeFile(
+  await writeChatFixture(
     join(user, "host-chats-v1.json"),
     JSON.stringify({ version: 1, chats:
       roots

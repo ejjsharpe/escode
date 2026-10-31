@@ -1,3 +1,6 @@
+import { writeApprovalFixture, readApprovalFixture } from "./desktop";
+import { readRecoveryFixture, writeRecoveryFixture } from "./desktop";
+import { writeChatFixture, readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, realpath, rename, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -25,7 +28,7 @@ test("saved-project registration and interrupted move recovery survive together 
     { project: root, root },
     { project: closed, root: closed },
   ];
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(approved));
+  await writeApprovalFixture(user, approved);
   const records = [
     {
       id: "closed-chat",
@@ -42,7 +45,7 @@ test("saved-project registration and interrupted move recovery survive together 
       draft: "unapproved retained text",
     },
   ];
-  await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
+  await writeChatFixture(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
   // The fresh client workspace deliberately has no savedProjects registration yet.
   const legacy: WorkspaceState = {
     projects: [approved[0]],
@@ -50,10 +53,10 @@ test("saved-project registration and interrupted move recovery survive together 
     views: { [root]: { path: "folder/a.ts", directory: "folder" } },
     drafts: [{ root, path: "folder/a.ts", text: "unsaved recovered text", disk }],
   };
-  await writeFile(join(user, "client-workspace-v1.json"), JSON.stringify(legacy));
+  await writeRecoveryFixture(join(user, "client-workspace-v1.json"), JSON.stringify(legacy));
   const checkout = await stat(root),
     source = await stat(join(root, "folder"));
-  await writeFile(
+  await writeRecoveryFixture(
     join(user, "client-file-operation-v1.json"),
     JSON.stringify({
       root,
@@ -77,11 +80,11 @@ test("saved-project registration and interrupted move recovery survive together 
       await expect
         .poll(
           async () =>
-            JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).savedProjects,
+            JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).savedProjects,
         )
         .toEqual(expectedSaved);
       const durable: WorkspaceState = JSON.parse(
-        await readFile(join(user, "client-workspace-v1.json"), "utf8"),
+        await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"),
       );
       expect(durable.views[root]).toMatchObject({
         path: "moved/a.ts",
@@ -91,7 +94,7 @@ test("saved-project registration and interrupted move recovery survive together 
       expect(durable.drafts).toEqual([
         { root, path: "moved/a.ts", text: "unsaved recovered text", disk },
       ]);
-      expect(JSON.parse(await readFile(join(user, "client-file-operation-v1.json"), "utf8"))).toMatchObject({ storageVersion: 1, intent: null, records: [] });
+      expect(JSON.parse(await readRecoveryFixture(join(user, "client-file-operation-v1.json"), "utf8"))).toBeNull();
       await expect(readFile(join(root, "folder/a.ts"))).rejects.toThrow();
       expect(await readFile(join(root, "moved/a.ts"), "utf8")).toBe(disk.text);
       await page.getByRole("button", { name: "Agents", exact: true }).click();
@@ -110,11 +113,11 @@ test("saved-project registration and interrupted move recovery survive together 
         }
       }, historical);
       expect(denial).toContain("Open this project first");
-      expect(JSON.parse(await readFile(join(user, "approved-projects.json"), "utf8")).map(({ project, root }: { project: string; root: string }) => ({ project, root }))).toEqual(
+      expect((await readApprovalFixture(user)).map(({ project, root }: { project: string; root: string }) => ({ project, root }))).toEqual(
         approved,
       );
       expect(
-        JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats.map((c: any) => c.draft),
+        JSON.parse(await readChatFixture(join(user, "host-chats-v1.json"), "utf8")).chats.map((c: any) => c.draft),
       ).toEqual(records.map((c) => c.draft));
       await page
         .getByRole("navigation", { name: "Projects" })
@@ -123,16 +126,26 @@ test("saved-project registration and interrupted move recovery survive together 
       if (restart === 0) {
         await expect
           .poll(
-            async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected,
+            async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).selected,
           )
           .toBe(root);
         const exit = new Promise((resolve) => app.process().once("exit", resolve));
         app.process().kill("SIGKILL");
         await exit;
-        await rm(join(user, "foundation/owner.lock"));
+        await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
         app = await launchDesktop(user);
       }
     }
+    // A recovered renderer must release its handoff before the next user mutation.
+    const page = await app.firstWindow();
+    await page.getByRole("treeitem", { name: "moved", exact: true }).locator(":scope > .tree-row").click({ button: "right" });
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Rename moved", exact: true }).click();
+    await page.getByRole("textbox", { name: "Rename moved" }).fill("again");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".toolbar:visible")).toContainText("again/a.ts");
+    await expect(page.locator(".monaco-editor:visible")).toContainText("unsaved recovered text");
+    expect(await readFile(join(root, "again/a.ts"), "utf8")).toBe(disk.text);
   } finally {
     app.process().kill("SIGKILL");
     await rm(base, { recursive: true, force: true });
@@ -162,8 +175,8 @@ test("closed editor retains recovered move mappings and drafts through restart a
     "initial",
   ]);
   execFileSync("git", ["-C", root, "worktree", "add", "-b", "linked", linked]);
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify([{ project: root, root }]));
-  await writeFile(
+  await writeApprovalFixture(user, [{ project: root, root }]);
+  await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
@@ -183,7 +196,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
   );
   const checkout = await stat(root),
     source = await stat(join(root, "folder"));
-  await writeFile(
+  await writeRecoveryFixture(
     join(user, "client-file-operation-v1.json"),
     JSON.stringify({
       root,
@@ -209,10 +222,10 @@ test("closed editor retains recovered move mappings and drafts through restart a
       await expect
         .poll(
           async () =>
-            JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).savedProjects,
+            JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).savedProjects,
         )
         .toEqual([{ project: root, root }]);
-      const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+      const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
       expect(state.projects).toEqual([]);
       expect(state.agentsChat).toBe("retained-unavailable-selection");
       expect(state.views[root]).toMatchObject({
@@ -224,12 +237,12 @@ test("closed editor retains recovered move mappings and drafts through restart a
       expect(state.drafts).toEqual([
         { root, path: "moved/a.ts", text: "retained closed edits", disk },
       ]);
-      expect(JSON.parse(await readFile(join(user, "client-file-operation-v1.json"), "utf8"))).toMatchObject({ storageVersion: 1, intent: null, records: [] });
+      expect(JSON.parse(await readRecoveryFixture(join(user, "client-file-operation-v1.json"), "utf8"))).toBeNull();
       if (restart === 0) {
         const exited = new Promise((resolve) => app.process().once("exit", resolve));
         app.process().kill("SIGKILL");
         await exited;
-        await rm(join(user, "foundation/owner.lock"));
+        await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
         app = await launchDesktop(user);
       }
     }

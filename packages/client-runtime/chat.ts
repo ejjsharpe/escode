@@ -26,9 +26,13 @@ export function createChatClient(host: Host, {
   function composer(project: string | null, id: string) {
     return storage.getItem(composerKey(id)) ?? pending(project, id)?.text ?? "";
   }
+  const revisionKey = (id: string) => `escode-composer-revision:${id}`;
   async function draft(id: string, text: string) {
+    const revision = crypto.randomUUID();
+    storage.setItem(revisionKey(id), revision);
     storage.setItem(composerKey(id), text);
     await flush();
+    return revision;
   }
   async function reconcile(project: string | null, id: string) {
     const command = pending(project, id);
@@ -55,23 +59,26 @@ export function createChatClient(host: Host, {
       busy.add(id);
       try {
         let command = pending(project, id);
-        await draft(id, text);
+        const revision = await draft(id, text);
         let receipt;
         if (command) receipt = await host.sendStatus(command.commandId);
         else {
           const state = await host.sendState(project, id);
           command = { ...state, commandId: crypto.randomUUID(), project, id, text };
           storage.setItem(sendKey(project, id), JSON.stringify(command));
+          await flush();
           receipt = await host.sendMessage(command);
         }
         if (receipt === null)
           throw Error("Send status unavailable; identity and text retained. Inspect history, then Resolve previous Send…");
         if (receipt.status !== "accepted")
           throw Error(`Send ${receipt.status}. ${receipt.message} Inspect history; work was not resent.`);
-        if (storage.getItem(composerKey(id)) === command.text) storage.setItem(composerKey(id), "");
+        if (storage.getItem(revisionKey(id)) === revision && storage.getItem(composerKey(id)) === command.text) storage.setItem(composerKey(id), "");
         await flush();
         // Failed composer persistence must retain the identity for a status-only retry.
         storage.removeItem(sendKey(project, id));
+        try { await flush(); }
+        catch (error) { storage.setItem(sendKey(project, id), JSON.stringify(command)); throw error; }
         if (text !== command.text)
           throw Error("Previous Send accepted. Current text retained; Send again explicitly.");
         return composer(project, id);

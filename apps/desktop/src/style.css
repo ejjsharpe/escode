@@ -740,3 +740,11 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 }
 .recent-tabs [role="option"] { padding: 8px 12px; overflow-wrap: anywhere; }
 .recent-tabs [aria-selected="true"] { background: #48405f; }
+
+.retention-settings { position: relative; margin-left: auto; font-size: 13px; }
+.retention-settings summary { cursor: pointer; }
+.retention-settings form { position: absolute; right: 0; top: 24px; z-index: 100; width: min(440px, calc(100vw - 40px)); max-height: 75vh; overflow: auto; padding: 20px; background: #24252b; border: 1px solid #484351; color: #dedee5; line-height: 1.5; }
+.retention-settings h2 { margin: 0; font-size: 16px; }
+.retention-settings label { display: block; margin: 12px 0; }
+.retention-settings input[type=number] { width: 90px; }
+.retention-settings :focus-visible { outline: 2px solid #b7aaf5; outline-offset: 3px; }

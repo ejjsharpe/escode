@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -41,7 +42,7 @@ test("tree clipboard copy, dirty duplicate, collision and cut partial results us
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
             (d: any) => d.path === "target/a copy.ts",
           )?.text,
       )
@@ -55,7 +56,7 @@ test("tree clipboard copy, dirty duplicate, collision and cut partial results us
     await page.getByRole("treeitem", { name: /^a.ts, unsaved/ }).click();
     await page.getByRole("treeitem", { name: "b.ts", exact: true }).click({ modifiers: ["Meta"] });
     await page.keyboard.press("Meta+x");
-    await expect(page.locator(".content:visible > [role=status]")).toContainText("Cut ");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Cut 2");
     await rm(join(root, "b.ts"));
     await page.getByRole("treeitem", { name: "target", exact: true }).click();
     await page.keyboard.press("Meta+v");
@@ -129,7 +130,7 @@ test("dirty destination blocks Replace; duplicate text survives a fresh Electron
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
             (d: any) => d.path === "a copy.ts",
           )?.text,
       )
@@ -137,7 +138,7 @@ test("dirty destination blocks Replace; duplicate text survives a fresh Electron
     const exit = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exit;
-    await rm(join(user, "foundation/owner.lock"), { force: true });
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await page.locator('[data-path="a copy.ts"] > .tree-row').click();
@@ -226,7 +227,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await page.getByRole("treeitem", { name: "bulk", exact: true }).locator(":scope > .tree-row").click();
     await page.getByRole("treeitem", { name: "vanishing.txt", exact: true }).click();
     await page.keyboard.press("Meta+x");
-    await expect(page.locator(".content:visible > [role=status]")).toContainText("Cut ");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Cut 1");
     await rm(join(root, "vanishing.txt"));
     await page.getByRole("treeitem", { name: "target", exact: true }).click();
     await page.keyboard.press("Meta+v");
@@ -235,6 +236,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     expect(await page.evaluate(({ root, chat }) =>
       ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( root, chat).then((s) => s.busy), { root, chat })).toBe(true);
     await expect(page.getByText("Transferring captured files… Navigation and chat Stop remain available.", { exact: true })).toHaveCount(0);
+    await page.getByRole("treeitem", { name: "target", exact: true }).click();
     await page.getByRole("treeitem", { name: "bulk", exact: true }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
     await expect.poll(() => app.evaluate(() => (globalThis as any).copyRunning)).toBe(true);
@@ -441,7 +443,7 @@ test("copy delivery updates an early-open clean destination after a second-item 
     await expect(page.locator(".content:visible > [role=status]")).toContainText("Cancelled");
     await expect(page.locator(".monaco-editor:visible")).toContainText("SOURCE UNSAVED");
     const draft = async () =>
-      JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+      JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
         (d: any) => d.path === "target/a.ts",
       );
     await expect.poll(async () => (await draft())?.text).toBe("SOURCE UNSAVED");
@@ -463,7 +465,7 @@ test("copy delivery updates an early-open clean destination after a second-item 
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
-    await rm(join(user, "foundation/owner.lock"), { force: true });
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await page.locator('[data-path="target/a.ts"] > .tree-row').click();
@@ -527,7 +529,7 @@ for (const change of [
         await expect
           .poll(
             async () =>
-              JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
+              JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
           )
           .toBe("retained source edits");
       }
@@ -557,6 +559,7 @@ for (const change of [
       }
       await open(other);
       await page.getByRole("button", { name: "Agents", exact: true }).click();
+      await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).selected).toBe("agents");
       if (change === "root replacement") {
         await rename(root, root + "-original");
         await mkdir(root);
@@ -609,9 +612,9 @@ for (const change of [
       expect(await readFile(join(other, "target/a.ts"), "utf8")).toBe("occupied disk");
       await expect(readFile(join(other, "target/a copy.ts"))).rejects.toThrow();
       await expect
-        .poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected)
+        .poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).selected)
         .toBe("agents");
-      const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+      const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
       if (change === "retained dirty editor") {
         expect(state.drafts.find((d: any) => d.root === root && d.path === "a.ts")).toMatchObject({
           text: "retained source edits",

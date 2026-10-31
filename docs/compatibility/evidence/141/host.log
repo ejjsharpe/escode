@@ -1,0 +1,23 @@
+$ node scripts/fil
+ NX   1 task: 0 succeeded, 1 failed
+
+
+✖ nx run desktop:test
+  full log: /Users/elliotsharpe/.nx/47c07d4a09270f1f/cache/terminalOutputs/2245070254790901848
+
+Re-run with --output-style=static to inline logs.
+
+  Run duration:      1m 25s
+  Critical path:     1m 25s (1 task)
+  Recoverable time:  <1ms
+
+  Recommendations:
+    - Speed up or split the longest tasks on the critical path:
+        desktop:test    1m 25s
+error: script "test" exited with code 1
+y of polling 5282ms
+ ❯ host/project-drafts.test.ts (14 tests | 1 failed) 27557ms
+   × checkout-local draft creation validates the captured checkout before publishing, independently of defaults 22838ms
+ ❯ host/preparation.test.ts (5 tests | 1 failed) 17655ms
+   × SIGKILL after worktree first Send recovers uncertainty without another effect 15007ms
+error: script "test" exited with code 143

@@ -1,0 +1,18 @@
+$ electron-builder --mac dir
+  • electron-builder  version=26.18.0 os=25.3.0
+  • loaded configuration  file=package.json ("build" field)
+  • description is missed in the package.json  appPackageFile=/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/package.json
+  • author is missed in the package.json  appPackageFile=/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/package.json
+  • packageManager not detected by file, falling back to environment detection  resolvedPackageManager=bun detected=/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop
+  • detected workspace root for project using packageManager field  pm=bun config=bun@1.4.4 resolved=/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b projectDir=/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop
+  • executing @electron/rebuild  electronVersion=45.1.0 arch=arm64 buildFromSource=false workspaceRoot=/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b projectDir=./ appDir=./
+  • installing native dependencies  arch=arm64
+  • completed installing native dependencies
+  • packaging       platform=darwin arch=arm64 electron=45.1.0 appOutDir=release/mac-arm64
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64
+  • searching for node modules  pm=bun searchDir=/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop
+  • note: bun does not support any CLI for dependency tree extraction, utilizing file traversal collector instead
+  • using manual traversal of node_modules to build dependency tree
+  • default Electron icon is used  reason=application icon is not set
+  • skipped macOS code signing  reason=identity explicitly is set to null
