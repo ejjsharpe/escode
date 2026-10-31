@@ -55,6 +55,10 @@ export function createFileWorkflow({
   );
   mkdirSync(userData, { recursive: true, mode: 0o700 });
   const stateFiles = [
+    "durable-chats-v1.sqlite-state-v1/state.sqlite",
+    "durable-chats-v1.sqlite-state-v1/state.sqlite-wal",
+    "durable-chats-v1.sqlite-state-v1/state.sqlite-shm",
+    "durable-chats-v1.sqlite-state-v1.established",
     "workspace.json",
     "client-workspace-v1.json",
     "client-file-operation-v1.json",

@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -126,16 +127,14 @@ test("pending inline rename stays with its original checkout", async () => {
     const input = page.getByRole("textbox", { name: "Rename a.txt", exact: true });
     await input.fill("renamed.txt");
     await app.evaluate(() => {
-      const fs = process.getBuiltinModule("fs/promises") as any;
-      const rename = fs.rename;
-      fs.rename = async (...args: any[]) => {
-        if (String(args[1]).endsWith("/client-file-operation-v1.json")) {
-          fs.rename = rename;
-          await new Promise<void>((resolve) => {
-            (globalThis as any).resumeRename = resolve;
-          });
+      const { Worker } = process.getBuiltinModule("worker_threads") as any;
+      const post = Worker.prototype.postMessage;
+      Worker.prototype.postMessage = async function(message: any) {
+        if (message.operation === "recoveryWrite" && message.kind === "intent") {
+          Worker.prototype.postMessage = post;
+          await new Promise<void>(resolve => { (globalThis as any).resumeRename = resolve; });
         }
-        return rename(...args);
+        return post.call(this, message);
       };
     });
     await input.press("Enter");
@@ -202,7 +201,7 @@ test("uncertain rename retains inline input and dirty work, then restart reconci
     await expect(page.locator(".monaco-editor:visible")).toContainText("retained dirty text");
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
-    await rm(join(user, "foundation/owner.lock")); // Explicit fixture recovery after confirmed process exit.
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock")); // Explicit fixture recovery after confirmed process exit.
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect(page.locator(".toolbar")).toContainText("actual.txt");
@@ -390,13 +389,13 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.files,
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.files,
       )
       .toMatchObject({ expanded: [], selected: ["folder/deep"] });
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
-    await rm(join(user, "foundation/owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
     app = await launchDesktop(user);
     childProcess = app.process();
     page = await app.firstWindow();

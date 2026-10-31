@@ -1,3 +1,4 @@
+import type { DurableState } from "./durable-state";
 import { maximumRecentFiles, maximumRecentUnits } from "@escode/contracts";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
@@ -147,14 +148,9 @@ function validate(value: unknown): asserts value is WorkspaceState {
 }
 export class Workspace {
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(private file: string, private owner?: { hostId: string; clientId: string }) {}
-  private decode(value: unknown) {
-    if (!this.owner) return value;
-    const stored = value as { storageVersion?: number; hostId?: string; clientId?: string };
-    if (stored?.storageVersion !== 1 || stored.hostId !== this.owner.hostId || stored.clientId !== this.owner.clientId)
-      throw Error("Unsupported or wrongly owned client recovery store; retained for inspection.");
-    return value;
-  }
+  private revision?: number;
+  constructor(private file: string, readonly owner: { hostId: string; clientId: string }, readonly database: DurableState) {}
+
   private async readApprovals(): Promise<{ project: string; root: string; directoryIdentity?: string }[]> {
     try {
       const value = JSON.parse(
@@ -209,7 +205,9 @@ export class Workspace {
   async read(): Promise<WorkspaceState> {
     await this.queue;
     try {
-      const state: unknown = this.decode(JSON.parse(await readFile(this.file, "utf8")));
+      const stored = await this.database.recoveryRead(this.owner.clientId, "workspace");
+      this.revision = stored.revision;
+      const state: unknown = stored.body ?? emptyWorkspace();
       validate(state);
       for (const view of Object.values(state.views)) {
         if (!view.files) {
@@ -248,9 +246,13 @@ export class Workspace {
     this.queue = task.catch(() => {});
     return task;
   }
-  private replace(file: string, value: unknown) {
-    return atomicWriteJson(file, () => this.owner && file === this.file
-      ? { ...(value === null ? { intent: null } : value as object), storageVersion: 1, ...this.owner }
-      : value);
+  private async replace(file: string, value: unknown) {
+    if (file === this.file) {
+      if (this.revision === undefined) this.revision = (await this.database.recoveryRead(this.owner.clientId, "workspace")).revision;
+      await this.database.recoveryWrite(this.owner.clientId, "workspace", value, this.revision);
+      this.revision++;
+      return;
+    }
+    return atomicWriteJson(file, () => value);
   }
 }

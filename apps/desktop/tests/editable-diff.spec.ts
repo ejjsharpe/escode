@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -68,7 +69,7 @@ test("diff edits share the working buffer, save explicitly and preserve the inde
     await page.getByRole("button", { name: "Compare", exact: true }).click();
     await expect(page.getByRole("textbox", { name: "Disk versus your edits original", exact: true })).not.toBeEditable();
     await expect(modified).toContainText("unsaved diff work");
-    await expect.poll(async () => JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.fileViews?.["a.txt"]).toBe("conflict");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.fileViews?.["a.txt"]).toBe("conflict");
     await rm(join(root, "a.txt"));
     await page.reload();
     await expect(page.getByRole("button", { name: "Retry comparison", exact: true })).toBeVisible();

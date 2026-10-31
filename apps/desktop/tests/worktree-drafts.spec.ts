@@ -1,3 +1,4 @@
+import { readRecoveryFixture, writeRecoveryFixture } from "./desktop";
 import { readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { createHash } from "node:crypto";
@@ -52,7 +53,7 @@ test("worktree draft prepares only on Send from closed-project Agents, retains e
   await symlink(process.execPath, join(dir, "node"));
   const saved = [alpha, beta].map((root) => ({ project: root, root }));
   await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
-  await writeFile(
+  await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
       projects: [],
@@ -166,7 +167,7 @@ send({id:m.id,result});});`,
     expect(
       execFileSync("git", ["-C", worktree, "status", "--porcelain", "--ignored"]).toString(),
     ).toBe(originalStatus.replace("!! ignored", "?? original-untracked\n!! ignored"));
-    expect(JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts).toContainEqual(
+    expect(JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts).toContainEqual(
       recovery,
     );
     expect(prepared.worktree.reservation.root).toBe(prepared.checkout);

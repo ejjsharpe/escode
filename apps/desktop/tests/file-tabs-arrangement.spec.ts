@@ -1,5 +1,6 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
-import { mkdtemp, writeFile, readFile, mkdir, rm, realpath } from "node:fs/promises";
+import { mkdtemp, writeFile, mkdir, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -34,7 +35,7 @@ test("drag changes visual order and promotes only a preview moved to another pos
     await tab("c.txt").dragTo(tab("b.txt"));
     await expect(tabs.getByRole("tab")).toHaveText(["d.txt", "a.txt", "b.txt", "c.txt"]);
     await expect(tab("d.txt")).toHaveAccessibleDescription("Preview");
-    await expect.poll(async () => JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.openFiles).toEqual(["d.txt", "a.txt", "b.txt", "c.txt"]);
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.openFiles).toEqual(["d.txt", "a.txt", "b.txt", "c.txt"]);
     await page.reload();
     await expect(tabs.getByRole("tab")).toHaveText(["d.txt", "a.txt", "b.txt", "c.txt"]);
   } finally {

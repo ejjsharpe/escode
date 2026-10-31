@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -40,7 +41,7 @@ test("tree clipboard copy, dirty duplicate, collision and cut partial results us
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
             (d: any) => d.path === "target/a copy.ts",
           )?.text,
       )
@@ -123,7 +124,7 @@ test("dirty destination blocks Replace; duplicate text survives a fresh Electron
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
             (d: any) => d.path === "a copy.ts",
           )?.text,
       )
@@ -131,7 +132,7 @@ test("dirty destination blocks Replace; duplicate text survives a fresh Electron
     const exit = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exit;
-    await rm(join(user, "foundation/owner.lock"), { force: true });
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await page.locator('[data-path="a copy.ts"] > .tree-row').click();
@@ -430,7 +431,7 @@ test("copy delivery updates an early-open clean destination after a second-item 
     await expect(page.locator(".content:visible > [role=status]")).toContainText("Cancelled");
     await expect(page.locator(".monaco-editor:visible")).toContainText("SOURCE UNSAVED");
     const draft = async () =>
-      JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
+      JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.find(
         (d: any) => d.path === "target/a.ts",
       );
     await expect.poll(async () => (await draft())?.text).toBe("SOURCE UNSAVED");
@@ -452,7 +453,7 @@ test("copy delivery updates an early-open clean destination after a second-item 
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
-    await rm(join(user, "foundation/owner.lock"), { force: true });
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await page.locator('[data-path="target/a.ts"] > .tree-row').click();
@@ -516,7 +517,7 @@ for (const change of [
         await expect
           .poll(
             async () =>
-              JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
+              JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
           )
           .toBe("retained source edits");
       }
@@ -598,9 +599,9 @@ for (const change of [
       expect(await readFile(join(other, "target/a.ts"), "utf8")).toBe("occupied disk");
       await expect(readFile(join(other, "target/a copy.ts"))).rejects.toThrow();
       await expect
-        .poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected)
+        .poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).selected)
         .toBe("agents");
-      const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+      const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
       if (change === "retained dirty editor") {
         expect(state.drafts.find((d: any) => d.root === root && d.path === "a.ts")).toMatchObject({
           text: "retained source edits",
