@@ -82,3 +82,65 @@ at these bounded automated seams; no human/live-provider or production-capacity
 acceptance is claimed. Reclamation deliberately retains reusable main-file pages
 and all protected evidence rather than promising disk shrink or deduplicating
 protected live history. No issue closure, PR or merge into integration was done.
+
+## Load qualification follow-up: acceptance remains open
+
+Fresh isolated checkout at `7a37f9f`, preserving `0a9c981`; merged current
+integration `0ba393e` before reporting. This supersedes the earlier statement
+that no known criterion remains unmet. No production change, admission bypass,
+protected-data deletion, issue closure, PR or integration merge was made.
+
+The original loaded packaged control fixture failed **2/3** repetitions with
+`database is locked` while installing its fault triggers, before Emergency Stop.
+Its external SQLite connection had no busy timeout while the load connection
+continuously wrote. Fixture setup now acquires a writer transaction with a bounded
+3-second SQLite busy timeout and installs both denial triggers atomically. It
+never retries Stop or a failed effect. Three subsequent loaded control repetitions
+passed; setup lock acquisition took 1610.3 / 10.5 / 0.8 ms. This is setup time,
+not emergency cancellation latency. Failure beyond the bound still fails the test.
+
+Save now records click-to-enabled completion in the renderer separately from the
+outer Playwright disk/assertion timer. The test still verifies exact disk bytes.
+Test-only main-process worker instrumentation records request round trips without
+changing request payloads or routing. Three final loaded editing repetitions and
+three control repetitions passed (**6/6**, 1.1 minutes):
+
+- Editing: 53.6–142.2 ms (six samples).
+- Renderer Save: 2288.9 / 2796.2 / 1946.0 / 7071.3 / 1227.3 / 2022.5 ms.
+- Outer Save including automation/polling: 1779.2–7670.9 ms.
+- Send: 905.7 / 1891.0 / 2905.8 ms.
+- Ordinary Stop: 116.7 / 1875.0 / 130.8 ms.
+- Emergency Stop: 52.3 / 29.0 / 86.8 ms.
+
+App-worker requests reached 3831.3 ms (recoveryRead) and 2864.7 ms
+(recoveryWrite). Thus polling overhead alone does not explain the Save stalls.
+The load fixture uses a second database worker/connection, continuously fills
+47–48 one-MiB payloads and repeatedly tries expiry even when recovery protection
+prevents progress. This differs from production's one host worker and 60-second
+cleanup timer. No-progress fixture cycles can spin dozens of times. Measured
+contention under this harness cannot establish production responsiveness or its
+root cause. No blind retry or reduced load was used to turn the timing result
+into an acceptance claim.
+
+Two additional packaged editing tests without checkpoint load passed (17.1 s).
+Their four renderer Save samples were 1705.2 / 1219.6 / 881.5 / 497.3 ms;
+outer timers were 2799.2 / 1495.8 / 1796.8 / 628.5 ms. Other agents were running
+checks on this installation; these are observations under shared-machine load,
+not isolated benchmarks. The packaged binary was built at `7a37f9f`; final source
+includes integration `0ba393e` (client reconnect changes), so these are not a
+packaged qualification of that merged tip.
+
+Build, unsigned packaging, typecheck and lint completed (lint retains existing
+warnings). Final merged-source focused host run with one worker: **33/34 passed**
+(58.52 s), including capacity, expiry, SQLite recovery and controls. The durable
+Send dropped-response/reconnect case timed out at 15 seconds. An earlier concurrent
+run passed 32/34 with that timeout and an inactivity assertion failure; the
+one-worker run passed the inactivity case. These failures are retained, not
+represented as clean qualification.
+
+Exact unmet work: explain and fix actual multi-second Save latency at the
+production authenticated seam; qualify capture/cleanup through the production
+single-worker scheduling path; resolve the dropped-response host regression;
+rebuild/requalify the merged tip. Human accessibility/native checks, live-provider
+work, physical ENOSPC/power loss and production capacity remain unperformed.
+Issue #139 is not complete on this evidence.

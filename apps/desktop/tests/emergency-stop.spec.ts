@@ -70,8 +70,14 @@ createInterface({input:process.stdin}).on('line',line=>{
       await page.evaluate(id => window.escode.chat("composer", null, id).catch(() => {}), liveChat!.id);
     } else {
       fault = new DatabaseSync(join(user, "durable-chats-v1.sqlite-state-v1/state.sqlite"));
+      // Fixture DDL competes with the load writer; wait at SQLite lock acquisition, never retry Stop.
+      fault.exec("PRAGMA busy_timeout=3000");
+      const setupStart = performance.now();
+      fault.exec("BEGIN IMMEDIATE");
       fault.exec("CREATE TRIGGER deny_stop BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
       fault.exec("CREATE TRIGGER deny_results BEFORE UPDATE ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+      fault.exec("COMMIT");
+      console.log("#139 fault setup ms", performance.now() - setupStart);
     }
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.getByRole("button", { name: "Emergency Stop", exact: true })).toBeVisible();
