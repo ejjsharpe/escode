@@ -1,12 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { launchDesktop } from "./desktop";
 
-for (const mode of ["navigation", "streaming"] as const) test(`saved new-format history: ${mode}`, async () => {
-  const dir = await mkdtemp(join(tmpdir(), "escode-history-ui-"));
+for (const mode of ["navigation", "streaming", "files"] as const) test(`saved new-format history: ${mode}`, async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-history-ui-")));
   const user = join(dir, "user"), root = join(dir, "project"), tools = join(dir, "tools");
   await mkdir(user); await mkdir(tools); execFileSync("git", ["init", root]);
   await writeFile(join(tools, "codex"), `#!/usr/bin/env node
@@ -27,21 +27,48 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(reply,1000);else reply();
  if(m.method==='turn/start')for(const method of ['turn/started','turn/completed'])process.stdout.write(JSON.stringify({method,params:{threadId:'saved-provider',turn:{id:'sent',status:'completed'}}})+'\\n');
 });`, { mode: 0o700 });
+  if (mode === "files") {
+    await writeFile(join(root, "saved.txt"), "base saved text");
+    execFileSync("git", ["-C", root, "add", "saved.txt"]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "base"]);
+    await writeFile(join(root, "saved.txt"), "captured saved text");
+  }
   const app = await launchDesktop(user, tools, true);
   try {
     const page = await app.firstWindow();
     await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "project", exact: true })).toHaveAttribute("aria-pressed", "true");
-    const chatId = await page.evaluate(async () => {
-      const draft = await window.escode.chat("createDraft", null);
-      await window.escode.chat("send", null, draft.id, "fixture first send");
-      await window.escode.chat("disconnect", null, draft.id);
+    const context = mode === "files" ? root : null;
+    const chatId = await page.evaluate(async context => {
+      const draft = await window.escode.chat("createDraft", context);
+      await window.escode.chat("send", context, draft.id, "fixture first send");
+      await window.escode.chat("disconnect", context, draft.id);
       return draft.id;
-    });
+    }, context);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await page.locator(".agent-row").click();
     await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
+    if (mode === "files") {
+      await writeFile(join(root, "saved.txt"), "today saved text");
+      await page.getByRole("textbox", { name: "Message Codex" }).fill("retained draft");
+      await page.getByText("Historical boundaries", { exact: true }).click();
+      await page.getByRole("button", { name: "Load boundaries", exact: true }).click();
+      await page.getByRole("button", { name: /^After turn/ }).first().click();
+      await page.getByRole("button", { name: "Inspect saved files", exact: true }).click();
+      const files = page.getByRole("region", { name: "Saved-file inspection", exact: true });
+      await expect(files).toBeFocused();
+      await files.getByRole("button", { name: "saved.txt", exact: true }).focus(); await page.keyboard.press("Enter");
+      await expect(page.getByRole("region", { name: "Historical file comparison", exact: true })).toBeFocused();
+      await expect(files.getByText("base saved text", { exact: true })).toBeVisible();
+      await expect(files.getByText("captured saved text", { exact: true })).toBeVisible();
+      await expect(files.getByText("today saved text", { exact: true })).toHaveCount(0);
+      await page.screenshot({ path: "test-results/saved-file-comparison.png" });
+      await page.keyboard.press("Escape");
+      await expect(page.getByText("Historical boundaries", { exact: true })).toBeFocused();
+      await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("retained draft");
+      return;
+    }
     expect(await page.evaluate(id => window.escode.chat("send", null, id, "fixture follow-up"), chatId)).toBe("");
     if (mode === "navigation") {
       const composer = page.getByRole("textbox", { name: "Message Codex" });
@@ -56,6 +83,12 @@ createInterface({input:process.stdin}).on('line',line=>{
       await expect(inspection).toBeFocused();
       await expect(inspection.getByText("first saved page", { exact: true })).toBeVisible();
       await expect(inspection.getByText(/Saved files: unavailable.*No project/)).toBeVisible();
+      await page.getByRole("button", { name: "Inspect saved files", exact: true }).focus();
+      await page.keyboard.press("Enter");
+      const files = page.getByRole("region", { name: "Saved-file inspection", exact: true });
+      await expect(files).toBeFocused();
+      await expect(files.getByText(/No project file coverage/)).toBeVisible();
+      await expect(composer).toHaveValue("retained unsent text");
       await page.screenshot({ path: "test-results/boundary-inspection.png" });
       await page.getByRole("button", { name: /^Before message/ }).first().click();
       await expect(inspection).toBeFocused();

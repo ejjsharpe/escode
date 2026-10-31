@@ -6,7 +6,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { RewindResult, CheckpointPage, BoundaryInspection, maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult, DirectoryChange } from "@escode/contracts";
+import { RewindResult, FileInspection, CheckpointPage, BoundaryInspection, maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult, DirectoryChange } from "@escode/contracts";
 
 const fileMethods = ["readDiff", "transferAction", "trashEntries", "readFile", "saveFile", "loadWorkspace", "persistWorkspace"];
 
@@ -64,6 +64,7 @@ export async function startHost(options: {
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
   checkpointPoints?: (project: string | null, id: string, cursor: string | null) => Promise<typeof CheckpointPage.Type>;
   rewind?: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null) => Promise<RewindResult>;
+  inspectFiles?: (project: string | null, id: string, boundary: string, path: string | null, cursor: string | null) => Promise<import("@escode/contracts").FileInspection>;
   inspectBoundary?: (project: string | null, id: string, boundary: string, cursor: string | null) => Promise<typeof BoundaryInspection.Type>;
   history?: (project: string | null, id: string, cursor: string | null) => Promise<HistoryPage>;
   moveEntry?: (command: import("@escode/contracts").MoveEntry) => Promise<unknown>;
@@ -140,7 +141,7 @@ export async function startHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "inspectFiles", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -290,6 +291,12 @@ export async function startHost(options: {
         rewind: ({ project, id, boundary, token, commandId }) => Effect.tryPromise({ try: async () => {
           if (!options.rewind) throw Error("Rewind unavailable");
           return Schema.decodeUnknownSync(RewindResult)(await options.rewind(project, id, boundary, token, commandId));
+        }, catch: String }),
+        inspectFiles: ({ project, id, boundary, path, cursor }) => Effect.tryPromise({ try: async () => {
+          if (!options.inspectFiles) throw Error("File inspection unavailable");
+          const result = await options.inspectFiles(project, id, boundary, path, cursor);
+          if (Buffer.byteLength(JSON.stringify(result)) > maximumFrameBytes / 2) throw Error("Inspection capacity exhausted");
+          return Schema.decodeUnknownSync(FileInspection)(result);
         }, catch: String }),
         inspectBoundary: ({ project, id, boundary, cursor }) => Effect.tryPromise({ try: async () => {
           if (!options.inspectBoundary) throw Error("Inspection unavailable");

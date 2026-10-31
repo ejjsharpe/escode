@@ -35,10 +35,12 @@ test("authenticated No project inspection and explicit native rewind preserve cu
     for (let n = 0; n < 23; n++) await store.database.command("checkpoint", { body: { id: `point-${n}`, chatId: chat.id, kind: "after-turn", createdAt: n, threadId: "provider", turnId: "turn", availability: "unavailable", reason: "No project file coverage" } });
     const workspace = new Workspace(join(dir, "workspace"), await store.database.ready, store.database);
     host = await startHost({ ...await store.database.ready, origin: "null", list: async () => ({ kind: "denied", message: "unused" }),
+      inspectFiles: (...args) => service.inspectFiles(...args),
       loadWorkspace: async () => ({ state: await workspace.read(), restored: [], errors: [] }),
       persistWorkspace: state => workspace.write(state),
       checkpointPoints: (...args) => service.checkpointPoints(...args), inspectBoundary: (...args) => service.inspectBoundary(...args), rewind: (...args) => service.rewind(...args) });
     client = createHostClient(async () => host!.bootstrap());
+    expect((await client.inspectFiles(null, chat.id, "point-0", null, null)).message).toContain("No project file coverage");
     const first = await client.checkpointPoints(null, chat.id, null);
     expect(first.points).toHaveLength(20);
     expect(calls).toEqual([]);

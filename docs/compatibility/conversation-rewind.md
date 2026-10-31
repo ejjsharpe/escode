@@ -53,3 +53,9 @@ kill during the provider effect, and exhaustive capacity/multi-client checks wer
 not run. Database reopen and injected persistence failure do not establish hard
 crash or physical power-loss survival. Provider-side historical-context fidelity is
 fixture-tested, not certified against a paid live conversation. Client recovery text/baselines were checked through the authenticated boundary; no new packaged dirty-file scenario was executed in this slice.
+
+Integration advanced during final qualification to `5700f08` (#131). Merged that
+tip into this implementation branch, preserving both the read-only file inspection
+and rewind routes/UI. Resolved overlapping additive contracts, fixture wiring,
+README and boundary controls; post-merge typecheck and all 10 focused host tests
+passed. The integration branch itself was not modified by this task.

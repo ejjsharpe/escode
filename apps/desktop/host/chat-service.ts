@@ -559,6 +559,53 @@ export class ChatService {
     await this.store.get(project, id);
     return this.store.database.command("checkpointPoints", { commandId: id, body: { cursor } }) as Promise<import("@escode/contracts").CheckpointPage>;
   }
+  async inspectFiles(project: string | null, id: string, boundary: string, path: string | null, cursor: string | null): Promise<import("@escode/contracts").FileInspection> {
+    const chat = await this.store.get(project, id);
+    const offset = Number(cursor ?? 0);
+    if (!Number.isSafeInteger(offset) || offset < 0 || (path !== null && (!path || path.startsWith("/") || path.split("/").some(p => p === ".." || p === ".git")))) throw Error("Invalid file inspection target");
+    const result: import("@escode/contracts").Mutable<import("@escode/contracts").FileInspection> = { availability: "unavailable", message: "", paths: [], nextCursor: null, before: null, after: null, beforeMode: null, afterMode: null };
+    const point = await this.store.database.command("inspectCheckpoint", { commandId: id, body: { boundary } });
+    if (!point) throw Error("Checkpoint boundary unavailable");
+    try {
+      if (project === null) throw Error("No project file coverage");
+      if (point.availability !== "available" || !point.files) throw Error(point.reason ?? "Snapshot unavailable");
+      if (point.checkout !== chat.checkout || !point.directoryIdentity || !chat.directoryIdentity || point.directoryIdentity.path !== chat.directoryIdentity.path || point.directoryIdentity.dev !== chat.directoryIdentity.dev || point.directoryIdentity.ino !== chat.directoryIdentity.ino) throw Error("Checkpoint checkout identity changed");
+      const invalid = await this.store.validateDirectory(chat); if (invalid) throw Error(invalid);
+      if (!/^[a-f0-9]{40,64}$/.test(point.gitBase ?? "")) throw Error("Recorded Git base unavailable");
+      const { execFile } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const git = async (...args: string[]) => (await promisify(execFile)("git", ["--no-optional-locks", "-C", chat.checkout, ...args], { maxBuffer: 4 * 1024 * 1024, timeout: 10000 })).stdout;
+      const tree = await git("ls-tree", "-r", "-z", point.gitBase);
+      const bases = new Map<string, { mode: number; hash: string }>();
+      for (const entry of tree.split("\0").filter(Boolean)) {
+        const match = /^(\d+) blob ([a-f0-9]+)\t([\s\S]+)$/.exec(entry);
+        if (match) bases.set(match[3], { mode: parseInt(match[1], 8), hash: match[2] });
+      }
+      // Captured paths only: nested repositories and excluded contents are never inferred from today's disk.
+      const paths = Object.keys(point.files).sort();
+      if (paths.length > 10000) throw Error("Inspection file capacity exhausted");
+      result.paths = paths.slice(offset, offset + 20);
+      result.nextCursor = offset + 20 < paths.length ? String(offset + 20) : null;
+      result.message = "Saved files compared with the recorded Git base. Unsaved text, ignored untracked files, empty directories, nested repositories and environment are excluded. Recorded tool details remain in conversation history; only turn boundaries are restore points.";
+      if (path !== null) {
+        if (!Object.hasOwn(point.files, path)) throw Error("File absent from captured coverage");
+        const saved = point.files[path];
+        const base = bases.get(path);
+        let before: Buffer | null = null;
+        if (base) {
+          const size = Number((await git("cat-file", "-s", base.hash)).trim());
+          if (size > 131072) throw Error("Historical file exceeds 128 KiB inspection limit");
+          before = (await promisify(execFile)("git", ["-C", chat.checkout, "cat-file", "blob", base.hash], { encoding: "buffer", maxBuffer: 131073, timeout: 10000 })).stdout;
+        }
+        const after = saved ? Buffer.from(saved.content, "base64") : null;
+        for (const bytes of [before, after]) if (bytes && (bytes.length > 131072 || bytes.includes(0) || !Buffer.from(bytes.toString("utf8")).equals(bytes))) throw Error("Binary, non-UTF-8 or oversized historical file; text comparison unavailable");
+        result.before = before?.toString("utf8") ?? null; result.after = after?.toString("utf8") ?? null;
+        result.beforeMode = base?.mode ?? null; result.afterMode = saved?.mode ?? null;
+      }
+      result.availability = "available";
+    } catch (error) { result.message = `Saved-file comparison unavailable: ${String(error)}. Current files were not substituted.`; }
+    return result;
+  }
   async inspectBoundary(project: string | null, id: string, boundary: string, cursor: string | null): Promise<import("@escode/contracts").BoundaryInspection> {
     const empty = { items: [], nextCursor: null, revision: "unavailable" };
     const unavailable = (message: string) => ({ page: empty, availability: "unavailable" as const, message });
