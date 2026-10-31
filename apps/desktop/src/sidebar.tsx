@@ -1,17 +1,14 @@
+import { memory, persist } from "./workspace";
 import React, { createContext, useContext, useState } from "react";
 
 const Sidebar = createContext({ width: 270, resize: (_width: number) => {} });
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  const [width, setWidth] = useState(() => {
-    try {
-      const value = Number(sessionStorage.getItem("escode-sidebar-width"));
-      return value >= 190 && value <= 380 ? value : 270;
-    } catch { return 270; }
-  });
+  const [width, setWidth] = useState(() => memory.sidebarWidth ?? 270);
   const resize = (value: number) => {
     const next = Math.max(190, Math.min(380, Math.round(value)));
     setWidth(next);
-    try { sessionStorage.setItem("escode-sidebar-width", String(next)); } catch { /* Keep resizing available without browser storage. */ }
+    memory.sidebarWidth = next;
+    void persist();
   };
   return <Sidebar.Provider value={{ width, resize }}><div className="sidebar-layout" style={{ "--sidebar-width": `${width}px` } as React.CSSProperties}>{children}</div></Sidebar.Provider>;
 }

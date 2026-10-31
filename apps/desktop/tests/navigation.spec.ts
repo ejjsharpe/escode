@@ -401,3 +401,28 @@ test("cancelled and edited lookup invocations reject delayed validation and file
 
   } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+
+test("sidebar width survives Quit and remains independent of another client", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-sidebar-restart-")));
+  let app = await launchDesktop(join(dir, "client-a"));
+  try {
+    let page = await app.firstWindow();
+    let resize = page.getByRole("separator", { name: "Resize sidebar", exact: true });
+    await resize.focus();
+    await page.keyboard.press("End");
+    await expect(resize).toHaveAttribute("aria-valuenow", "380");
+    await app.close();
+    app = await launchDesktop(join(dir, "client-a"));
+    page = await app.firstWindow();
+    resize = page.getByRole("separator", { name: "Resize sidebar", exact: true });
+    await expect(resize).toHaveAttribute("aria-valuenow", "380");
+    await app.close();
+    app = await launchDesktop(join(dir, "client-b"));
+    page = await app.firstWindow();
+    await expect(page.getByRole("separator", { name: "Resize sidebar", exact: true })).toHaveAttribute("aria-valuenow", "270");
+  } finally {
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
