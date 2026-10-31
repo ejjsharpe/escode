@@ -1,4 +1,3 @@
-import { executeSend } from "./send";
 import { DurableSend } from "./durable-send";
 import { Schema } from "effect";
 import { SendCommand } from "@escode/contracts";
@@ -367,8 +366,7 @@ app.whenReady().then(async () => {
     draftAction: action => chats.draftAction(action),
     sendState: async (root, id) => ({ admissionEpoch: sends.admissionEpoch, expected: await chats.expectation(root, id) }),
     sendStatus: async commandId => {
-      const control = foundation.receipt(commandId);
-      const receipt = await sends.receipt(commandId) ?? (control?.command.control ? control : null);
+      const receipt = await sends.receipt(commandId);
       if (receipt) await authorizeHistory(receipt.command.project, receipt.command.id);
       return receipt;
     },
@@ -382,7 +380,7 @@ app.whenReady().then(async () => {
           else await chats.answer(command.project, command.id, token, answer);
         } else await chats.send(command.project, command.id, command.text, command.expected);
       };
-      return command.control ? executeSend(foundation, command, dispatch) : sends.execute(command, dispatch);
+      return sends.execute(command, dispatch);
     },
     chatSnapshot: async (root, id) => { await authorizeHistory(root, id); return chats.inspect(root, id); },
     openChat: async (root, id) => { await authorizeHistory(root, id); return chats.open(root, id); },
