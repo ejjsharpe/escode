@@ -703,3 +703,7 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .file-lookup { overflow-wrap: anywhere; }
 .file-lookup input { box-sizing: border-box; }
 .file-lookup button + button { margin-left: 8px; }
+
+.lookup-results { max-height: 300px; overflow: auto; }
+.lookup-results [role="option"] { padding: 6px 8px; overflow-wrap: anywhere; cursor: pointer; }
+.lookup-results mark { background: transparent; color: inherit; font-weight: 700; text-decoration: underline; }

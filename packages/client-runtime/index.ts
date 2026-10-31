@@ -44,6 +44,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
   async function runQuery<A>(current: Promise<Client>, query: Effect.Effect<A, unknown>, signal?: AbortSignal): Promise<A> {
     const result = await Effect.runPromise(Effect.exit(query), { signal });
     if (Exit.isSuccess(result)) return result.value;
+    if (signal?.aborted) throw Error("Query cancelled");
     const domain = domainFailure(result.cause);
     if (domain !== undefined) throw Error(domain);
     if (session?.client === current) await close();
@@ -70,6 +71,12 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     transferAction: (action: import("@escode/contracts").TransferAction) => chatQuery(client => client.transferAction({ action }), true),
     trashEntries: (root: string, paths: readonly string[]) => chatQuery(client => client.trashEntries({ root, paths }), true),
     readDiff: (root: string, path: string, area: typeof import("@escode/contracts").DiffArea.Type) => chatQuery(client => client.readDiff({ root, path, area })),
+    searchFiles(root: string, query: string, apply: (result: import("@escode/contracts").LookupResult) => void, error: (message: string) => void) {
+      const controller = new AbortController();
+      const current = connect();
+      void current.then(client => runQuery(current, client.searchFiles({ root, query }), controller.signal)).then(result => { if (!controller.signal.aborted) apply(result); }, failure => { if (!controller.signal.aborted) error(String(failure)); });
+      return () => controller.abort();
+    },
     lookupFile: (root: string, query: string) => chatQuery(client => client.lookupFile({ root, query })),
     readFile: (root: string, path: string) => chatQuery(client => client.readFile({ root, path })),
     saveFile: (root: string, path: string, text: string, version: string) => chatQuery(client => client.saveFile({ root, path, text, version })),

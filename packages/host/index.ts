@@ -57,6 +57,7 @@ export async function startHost(options: {
   transferAction?: (action: import("@escode/contracts").TransferAction) => Promise<typeof import("@escode/contracts").TransferResult.Type>;
   trashEntries?: (root: string, paths: readonly string[]) => Promise<typeof import("@escode/contracts").TrashBatch.Type>;
   readDiff?: (root: string, path: string, area: typeof import("@escode/contracts").DiffArea.Type) => Promise<typeof import("@escode/contracts").DiffComparison.Type>;
+  searchFiles?: (root: string, query: string, signal: AbortSignal) => Promise<import("@escode/contracts").LookupResult>;
   lookupFile?: (root: string, query: string) => Promise<string>;
   readFile?: (root: string, path: string) => Promise<typeof import("@escode/contracts").FileDocument.Type>;
   saveFile?: (root: string, path: string, text: string, version: string) => Promise<typeof import("@escode/contracts").FileSaveResult.Type>;
@@ -118,7 +119,7 @@ export async function startHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -132,6 +133,7 @@ export async function startHost(options: {
           const requests = pending.get(id) ?? new Set<string | number>();
           if (!Schema.is(requestEnvelope)(data) || data.isNotification || data.discard ||
               requests.size >= 16 || requests.has(data.id)) return reject(id);
+          if (data.tag === "searchFiles" && Buffer.byteLength(JSON.stringify(data)) > 8192) return reject(id);
           const file = fileMethods.includes(data.tag);
           if (Buffer.byteLength(JSON.stringify(data)) > (file ? maximumFileFrameBytes : maximumFrameBytes)) return reject(id);
           if (file) { const files = fileRequests.get(id) ?? new Set(); files.add(data.id); fileRequests.set(id, files); }
@@ -185,6 +187,7 @@ export async function startHost(options: {
         readDiff: ({ root, path, area }) => Effect.tryPromise({ try: async () => {
           if (!options.readDiff) throw Error("Diffs unavailable"); return options.readDiff(root, path, area);
         }, catch: String }),
+        searchFiles: ({ root, query }) => Effect.tryPromise({ try: signal => { if (!options.searchFiles) throw Error("Lookup unavailable"); return options.searchFiles(root, query, signal); }, catch: String }),
         lookupFile: ({ root, query }) => Effect.tryPromise({ try: async () => {
           if (!options.lookupFile) throw Error("Files unavailable"); return options.lookupFile(root, query);
         }, catch: String }),

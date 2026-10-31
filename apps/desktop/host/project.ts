@@ -1,3 +1,4 @@
+import { scorePath, comparePathScores, type RankedPath } from "./lookup-score";
 import { CheckoutRepository } from "./checkout-repository";
 import { spawn, execFileSync } from "node:child_process";
 import {
@@ -20,6 +21,7 @@ export const limit = 2 * 1024 * 1024;
 export type Document = { text: string; version: string };
 export type Change = { path: string; area: "staged" | "unstaged" | "untracked" };
 export type SaveResult = ({ kind: "saved"; disk: Document } | { kind: "conflict"; disk: Document }) & { persistencePending?: boolean; message?: string };
+let activeLookups = 0;
 export class Checkout {
   readonly repositoryGit: CheckoutRepository;
   private directory: number | undefined;
@@ -182,6 +184,67 @@ export class Checkout {
       closeSync(fd);
       throw error;
     }
+  }
+  async discover(query: string, signal: AbortSignal): Promise<import("@escode/contracts").LookupResult> {
+    if (!query.trim() || query.length > 256 || query.includes("\0")) throw Error("Invalid lookup query (maximum 256 characters).");
+    if (activeLookups >= 2) throw Error("Lookup busy. Refresh to retry.");
+    const fd = this.checkedDirectory();
+    activeLookups++;
+    try {
+      const result = await new Promise<import("@escode/contracts").LookupResult>((resolve, reject) => {
+        const args = ["--files", "--hidden", "--null", "--no-config", "--no-ignore-parent", "--no-ignore-global", "--threads", "1"];
+        for (const name of [".git", ".svn", ".hg", ".jj", ".DS_Store", "Thumbs.db", "node_modules", "bower_components", "*.code-search"]) args.push("--glob", `!**/${name}`);
+        const child = spawn(this.helper, ["git", join(dirname(this.helper), "ripgrep"), ...args, "."], { stdio: ["ignore", "pipe", "pipe", fd], env: { ...process.env, RIPGREP_CONFIG_PATH: "" } });
+        let bytes = 0, count = 0, pending = Buffer.alloc(0), partial = false, failure = "", resultBytes = 0;
+        const paths: string[] = [];
+        const results: RankedPath[] = [];
+        const cap = () => { partial = true; child.kill(); };
+        const timer = setTimeout(cap, 5000);
+        const abort = () => child.kill();
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+        child.stdout!.on("data", (chunk: Buffer) => {
+          if (partial || signal.aborted) return;
+          bytes += chunk.length;
+          if (bytes > 4 * 1024 * 1024) { cap(); return; }
+          pending = Buffer.concat([pending, chunk]);
+          let end: number;
+          while ((end = pending.indexOf(0)) >= 0) {
+            const path = pending.subarray(0, end).toString("utf8").replace(/^\.\//, "");
+            pending = pending.subarray(end + 1);
+            if (++count > 20000) { cap(); break; }
+            if (path.length <= 4096) paths.push(path); else cap();
+          }
+          if (pending.length > 16384) cap();
+        });
+        child.stderr!.on("data", (chunk: Buffer) => { failure = (failure + chunk.toString()).slice(0, 2048); });
+        child.on("error", reject);
+        child.on("close", async code => {
+          clearTimeout(timer); signal.removeEventListener("abort", abort);
+          if (signal.aborted) { reject(Error("Lookup cancelled")); return; }
+          let cells = 0, matches = 0;
+          for (let i = 0; i < paths.length; i++) {
+            if (i % 32 === 0) await new Promise<void>(done => setImmediate(done));
+            if (signal.aborted) { reject(Error("Lookup cancelled")); return; }
+            cells += paths[i].length * query.length;
+            if (cells > 16 * 1024 * 1024) { partial = true; break; }
+            const match = scorePath(paths[i], query);
+            if (match) {
+              matches++;
+              const row = { path: paths[i], ...match };
+              const size = (r: typeof row) => Buffer.byteLength(r.path) + r.positions.length * 8 + 64;
+              results.push(row); resultBytes += size(row);
+              results.sort((a,b) => comparePathScores(a,b,query));
+              while (results.length > 100 || resultBytes > 512 * 1024) { resultBytes -= size(results.pop()!); partial = true; }
+            }
+          }
+          if (matches > 100) partial = true;
+          resolve({ results: results.map(({ path, score, positions }) => ({ path, score, positions })), partial: partial || count > 20000 || results.length === 100 || code !== 0 || !!failure, message: failure ? "Enumeration or ignore rules unavailable. Refresh to retry." : partial || results.length === 100 ? "Search capped; refine your query or Refresh." : "" });
+        });
+      });
+      this.checkoutIdentity();
+      return result;
+    } finally { activeLookups--; closeSync(fd); }
   }
   private io(args: string[], input?: string) {
     const fd = this.checkedDirectory();

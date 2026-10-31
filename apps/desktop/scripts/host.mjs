@@ -34,7 +34,7 @@ for (const input of [...new Set(Object.values(bundle.metafile.outputs).flatMap((
   }
 }
 const attribution = await Promise.all([
-  "../../packages/host/T3-LICENSE", "host/vendor/T3-LICENSE", "host/vendor/CODEX-LICENSE", "host/vendor/CODEX-NOTICE",
+  "../../packages/host/T3-LICENSE", "host/vendor/T3-LICENSE", "host/vendor/CODEX-LICENSE", "host/vendor/CODEX-NOTICE", "host/vendor/VSCODE-LICENSE", "host/vendor/RIPGREP-LICENSE",
 ].map(path => readFile(path, "utf8")));
 await writeFile("dist/host/codex-extraction.json", await readFile("host/vendor/extraction.json"));
 await writeFile("dist/host/foundation-NOTICES.txt", [...attribution, ...[...packages.values()].map((p) => `${p.name}@${p.version} (${p.license})\n${p.text}`)].join("\n\n"));

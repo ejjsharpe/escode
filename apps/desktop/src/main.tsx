@@ -46,6 +46,7 @@ declare global {
       chatSummaries: (apply: (value: import("@escode/contracts").ChatSummaries) => void, error: (message: string) => void) => () => void;
       toolStatus(): Promise<unknown>;
       project: ProjectBridge;
+      searchFiles(root: string, query: string, apply: (result: import("@escode/contracts").LookupResult) => void, error: (message: string) => void): () => void;
       lookupFile(root: string, query: string): Promise<string>;
       listDirectory(root: string, path: string): Promise<import("@escode/contracts").DirectoryResult>;
       watchFiles(root: string, paths: string[], callback: (error?: string, ready?: boolean) => void): () => void;

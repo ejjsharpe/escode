@@ -46,10 +46,10 @@
     },
     "files": [
       "dist/**/*",
-      "!dist/host/filesystem",
+      "!dist/host/filesystem", "!dist/host/ripgrep",
       "package.json"
     ],
-    "extraResources": [
+    "extraResources": [{ "from": "dist/host/ripgrep", "to": "ripgrep" },
       {
         "from": "dist/host/filesystem",
         "to": "filesystem"

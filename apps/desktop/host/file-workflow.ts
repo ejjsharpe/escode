@@ -19,7 +19,7 @@ import type { FoundationState } from "./foundation-state";
 type HostOptions = Parameters<typeof startHost>[0];
 type FileActions = Pick<
   HostOptions,
-  "lookupFile" | "createEntry" | "readDiff" | "readFile" | "saveFile" | "watch" | "list"
+  "searchFiles" | "lookupFile" | "createEntry" | "readDiff" | "readFile" | "saveFile" | "watch" | "list"
 >;
 
 export function createFileWorkflow({
@@ -750,6 +750,12 @@ export function createFileWorkflow({
     readDiff: async (root, path, area) => {
       const { project, check } = await fileContext(root, path);
       const result = await project.diff({ path, area });
+      check();
+      return result;
+    },
+    searchFiles: async (root, query, signal) => {
+      const { project, check } = await fileContext(root, "");
+      const result = await project.discover(query, signal);
       check();
       return result;
     },

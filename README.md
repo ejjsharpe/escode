@@ -32,7 +32,7 @@ See [GLOSSARY.md](GLOSSARY.md) for product terminology and [the tracker conventi
 
 ## Run the desktop slice
 
-Install Apple's Command Line Tools (`xcode-select --install`) for the bundled
+Install ripgrep (`rg`, tested with 15.2.0; `ESCODE_RIPGREP` can select its build-time path) and Apple's Command Line Tools (`xcode-select --install`) for the bundled
 filesystem helper, then `bun install --frozen-lockfile` and `bun run dev`.
 
 The desktop app opens one local Git checkout, browses UTF-8 text files in Monaco,

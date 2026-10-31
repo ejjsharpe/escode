@@ -193,3 +193,6 @@ Files terminology above does not certify those unverified native and VoiceOver c
 Internal host naming: `Checkout` owns one opened checkout and its filesystem descriptor. Its `CheckoutRepository` owns Git repository identity and worktree policy through that checkout; a repository identity can span multiple checkouts. These implementation names do not change the product terms above.
 
 Internal transport naming: `startHost` starts the shared local host transport; `createHostClient` connects to it across chat, workspace, Files and Source Control. These names describe the execution host and client connection above; the `/directories` wire endpoint remains unchanged.
+
+**File lookup**:
+The keyboard-operated Find file popup searches eligible names and paths in its checkout through the authenticated execution host. Recursive discovery is independent of loaded Files rows and their visibility toggle. Matching uses the pinned VS Code scorer with highlights and explicit partial coverage; exact-path opening retains its separate deliberate exception. Refresh or reopening rescans files and ignore rules. See [recursive lookup evidence](docs/compatibility/recursive-file-lookup.md) for budgets and qualification limits.

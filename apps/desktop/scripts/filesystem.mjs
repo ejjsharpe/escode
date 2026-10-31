@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { copyFileSync, chmodSync, mkdirSync } from "node:fs";
 
 mkdirSync("dist/host", { recursive: true });
 execFileSync(
@@ -18,3 +18,8 @@ execFileSync(
   ],
   { stdio: "inherit" },
 );
+
+// Ship the installed native enumerator; runtime never depends on PATH or user rg config.
+const rg = process.env.ESCODE_RIPGREP || execFileSync("which", ["rg"], { encoding: "utf8" }).trim();
+copyFileSync(rg, "dist/host/ripgrep");
+chmodSync("dist/host/ripgrep", 0o755);
