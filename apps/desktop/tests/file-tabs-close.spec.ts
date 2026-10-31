@@ -51,7 +51,7 @@ test("captured context closes preserve inactive selection, use MRU and leave an 
     await f.tab("a.txt").click();
     await f.tab("b.txt").focus();
     await f.page.keyboard.press("Shift+F10");
-    await expect(f.page.getByRole("menuitem", { name: "Close", exact: true })).toBeFocused();
+    await expect(f.page.getByRole("menuitem", { name: "Keep Open", exact: true })).toBeFocused();
     await f.page.keyboard.press("Escape");
     await expect(f.tab("b.txt")).toBeFocused();
     await f.tab("b.txt").click({ button: "right" });
@@ -203,5 +203,36 @@ test("read-only comparisons without a working buffer close through the tab contr
     await f.page.getByRole("button", { name: "Close a.txt", exact: true }).click();
     await expect(f.tabs.getByRole("tab")).toHaveCount(0);
     await expect(f.page.getByRole("region", { name: "Main editor" })).toBeFocused();
+  } finally { await f.cleanup(); }
+});
+
+
+test("preview close clears persisted identity and batch Cancel retains promoted edits and clean preview", async () => {
+  const f = await fixture();
+  try {
+    await f.open("a.txt"); await f.edit("retained A");
+    await f.page.getByRole("treeitem", { name: "b.txt", exact: true }).click();
+    await expect(f.tab("b.txt")).toHaveAccessibleDescription("Preview");
+    await f.choices([2]);
+    await f.tab("b.txt").click({ button: "right" });
+    await f.page.getByRole("menuitem", { name: "Close All", exact: true }).click();
+    await expect(f.tabs.getByRole("tab")).toHaveText(["a.txt", "b.txt"]);
+    await expect(f.tab("b.txt")).toHaveAccessibleDescription("Preview");
+    await f.page.getByRole("button", { name: "Close b.txt", exact: true }).click();
+    await expect(f.tab("a.txt")).toHaveAttribute("aria-selected", "true");
+    const state = () => readFile(join(f.dir, "user/client-workspace-v1.json"), "utf8").then(JSON.parse);
+    await expect.poll(async () => (await state()).views[f.root]?.preview).toBe("");
+    await f.page.getByRole("treeitem", { name: "c.txt", exact: true }).click();
+    await expect(f.tab("c.txt")).toHaveAccessibleDescription("Preview");
+    await f.page.getByRole("treeitem", { name: "d.txt", exact: true }).click();
+    await expect(f.tabs.getByRole("tab")).toHaveText(["a.txt", "d.txt"]);
+    await f.choices([1]);
+    await f.tab("d.txt").click({ button: "right" });
+    await f.page.getByRole("menuitem", { name: "Close All", exact: true }).click();
+    await expect(f.tabs.getByRole("tab")).toHaveCount(0);
+    await expect.poll(async () => (await state()).views[f.root]?.preview).toBe("");
+    await f.page.reload();
+    await expect(f.tabs.getByRole("tab")).toHaveCount(0);
+    expect(await readFile(join(f.root, "a.txt"), "utf8")).toBe("a.txt");
   } finally { await f.cleanup(); }
 });

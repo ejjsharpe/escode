@@ -66,6 +66,9 @@ export type FileOpenRequest = {
   view: "file" | "staged" | "unstaged" | "untracked";
   intent: "preview" | "keep";
 };
+// Ordering can promote without changing the selected file/view or issuing a host read.
+export const fileKeepers = new Map<string, (path: string) => void>();
+export function keepFileOpen(root: string, path: string) { fileKeepers.get(root)?.(path); }
 export const fileOpeners = new Map<string, (request: FileOpenRequest) => Promise<boolean>>();
 export async function openFile(request: FileOpenRequest) {
   const open = fileOpeners.get(request.root);

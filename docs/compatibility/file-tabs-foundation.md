@@ -27,3 +27,5 @@ Final results on 2026-10-31:
 - Packaged Electron (`ESCODE_PACKAGED=1`): four passed across `file-tabs`, `navigation` and `editable-diff`, using the harness's restricted packaged PATH.
 
 No live provider turns, manual VoiceOver session, full desktop suite or complete parent-spec qualification were run for this slice. The package is a local development artifact, not a release.
+
+Subsequent [preview and Keep Open evidence](file-tabs-previews.md) records preview replacement and promotion; the results and limitations above remain historical evidence for this slice.

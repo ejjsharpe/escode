@@ -29,3 +29,5 @@ Final results on 2026-10-31:
 - Final packaged Electron with restricted PATH (`ESCODE_PACKAGED=1`): all five close journeys passed.
 
 No live provider turns, exhaustive desktop suite, manual VoiceOver session or complete parent-spec qualification were run. The prior mock-provider Send uncertainty remains unresolved; the local package is not a release. No PR was created and no issue was closed.
+
+Combined preview/safe-close merge checks and repairs are recorded in [integration evidence](file-tabs-integration.md); the original startup and mock-provider uncertainties above remain qualification limits.

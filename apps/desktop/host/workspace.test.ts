@@ -243,3 +243,19 @@ test("file views and positions reject malformed metadata without replacing recov
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("preview metadata retains an exact open identity and rejects orphan previews", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-preview-state-"));
+  try {
+    const store = new Workspace(join(dir, "workspace.json"));
+    const state = { projects: [], selected: "", drafts: [], views: {
+      [dir]: { openFiles: ["a.txt"], path: "a.txt", preview: "a.txt" },
+    } };
+    await store.write(state);
+    expect((await store.read()).views[dir].preview).toBe("a.txt");
+    for (const preview of ["../escape", "missing.txt", "/absolute", 3]) {
+      await expect(store.write({ ...state, views: { [dir]: { ...state.views[dir], preview } } })).rejects.toThrow("Invalid preview");
+    }
+    expect((await store.read()).views[dir].preview).toBe("a.txt");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
