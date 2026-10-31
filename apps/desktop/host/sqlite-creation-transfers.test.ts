@@ -18,6 +18,11 @@ test("authenticated creation and duplicate retain outcomes, failures and copied 
   const root = join(base, "repo");
   execFileSync("git", ["init", root]);
   writeFileSync(join(root, "a.txt"), "source");
+  execFileSync("git", ["-C", root, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "add", "a.txt"]);
+  execFileSync("git", ["-C", root, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-m", "baseline"]);
+  writeFileSync(join(root, "staged.txt"), "preexisting staged bytes");
+  execFileSync("git", ["-C", root, "add", "staged.txt"]);
+  const staged = execFileSync("git", ["-C", root, "diff", "--cached", "--binary"], { encoding: "utf8" });
   const project = await Checkout.open(root);
   let db = new DurableState(join(base, "db"));
   const owner = await db.ready;
@@ -35,9 +40,20 @@ test("authenticated creation and duplicate retain outcomes, failures and copied 
     return { files, workspace };
   };
   let current = build();
+  let releaseResponse: (() => void) | undefined;
+  let reportCreation!: () => void;
+  const creationReported = new Promise<void>(resolve => { reportCreation = resolve; });
+  let responseLost = false;
   const host = await startHost({ ...owner, origin: "null", list: async () => ({ kind: "denied", message: "unused" }),
     createState: () => foundation.admissionEpoch,
-    createEntry: c => current.files.hostActions.createEntry!(c),
+    createEntry: async c => {
+      const result = await current.files.hostActions.createEntry!(c);
+      if (c.commandId === "response-loss" && !responseLost) {
+        responseLost = true;
+        await new Promise<void>(resolve => { releaseResponse = resolve; reportCreation(); });
+      }
+      return result;
+    },
     transferAction: a => current.files.hostActions.transferAction(a),
     ackFileOperation: r => current.files.hostActions.ackFileOperation(r),
     persistWorkspace: s => current.files.persist(s),
@@ -59,6 +75,15 @@ test("authenticated creation and duplicate retain outcomes, failures and copied 
     writeFileSync(join(root, "new.txt"), "external");
     expect(await client.createEntry(command)).toMatchObject({ status: "accepted" });
     await expect(client.createEntry({ ...command, name: "changed" })).rejects.toThrow("identity conflict");
+    const disconnected = { ...command, commandId: "response-loss", name: "response.txt" };
+    const request = client.createEntry(disconnected).catch(error => error);
+    await creationReported;
+    await client.close();
+    releaseResponse!();
+    await request;
+    writeFileSync(join(root, "response.txt"), "external after response loss");
+    expect(await client.createEntry(disconnected)).toMatchObject({ status: "accepted", path: "response.txt" });
+    expect(readFileSync(join(root, "response.txt"), "utf8")).toBe("external after response loss");
     const transfer = { root, operation: "transfer" as const, commandId: "copy", admissionEpoch: command.admissionEpoch, kind: "duplicate" as const, parent: "", paths: ["a.txt"] };
     const result = await client.transferAction(transfer);
     expect(result).toMatchObject({ results: [{ applied: true, intent: { destination: "a copy.txt" } }], requiresAck: true });
@@ -95,7 +120,8 @@ test("authenticated creation and duplicate retain outcomes, failures and copied 
     expect(readFileSync(join(root, "lost.txt"), "utf8")).toBe("");
     fault.exec("DROP TRIGGER deny_result");
     expect(await client.createEntry(lost)).toMatchObject({ status: "uncertain" });
-    expect(execFileSync("git", ["-C", root, "diff", "--cached"], { encoding: "utf8" })).toBe("");
+    expect(execFileSync("git", ["-C", root, "diff", "--cached"], { encoding: "utf8" })).toBe(staged);
+    expect(execFileSync("git", ["-C", root, "show", ":staged.txt"], { encoding: "utf8" })).toBe("preexisting staged bytes");
   } finally {
     fault.close(); await client.close(); await host.close(); globalThis.WebSocket = socket;
     foundation.close(); project.close(); await db.close(); rmSync(base, { recursive: true, force: true });

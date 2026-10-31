@@ -551,6 +551,7 @@ for (const change of [
       }
       await open(other);
       await page.getByRole("button", { name: "Agents", exact: true }).click();
+      await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).selected).toBe("agents");
       if (change === "root replacement") {
         await rename(root, root + "-original");
         await mkdir(root);
