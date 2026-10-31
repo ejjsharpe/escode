@@ -229,3 +229,50 @@ It preserves workspace-policy coverage before restart and checks persisted model
 conflict alert, disabled Send, retained draft, no replay and explicit supervised resolution
 after restart. The separate stale Stop/recovery issue observed when attempting another
 post-resolution turn remains unqualified; rearrangement is not evidence it is fixed.
+
+## Review-fix merger and stale-control recovery
+
+Fresh isolated branch `t3/agents-sidebar-review-fixes` fast-forwarded from `edae592` to
+`b7cc25f76a824e8b2b51e006f8380072978ec79a`. No integration ref, original checkout,
+PR or tracker changes; no further agents. Read live #144/#155 and the supplied
+specification/reviews; no open wayfinder map exists.
+
+P1 retains the saved provider identity/history and client draft while rejecting
+incompatible Send until explicit matching-policy resolution. P2 catalog reads and
+Send validation omit the deliberate-selection argument and cannot write current
+selection; the delayed-catalog public-host regression passes. P3 thread start and
+resume share `threadPermission`, derived from `permissionPolicy`; exact identity,
+reviewer and sandbox checks remain.
+
+Investigated the separately reported stale Stop/recovery failure. A snapshot target
+can become obsolete across preparation/turn transitions; rejection protects the exact
+origin and must remain. The recovery defects were that preload retained a definitively
+rejected control as pending, and a subsequent successful Stop did not clear the old
+renderer error (scratch Send disables on that error). Terminal accepted/rejected
+controls now release their client recovery key through the existing persistence gate;
+uncertain controls and host receipts remain. A new Stop clears its previous client
+error and reports any new failure. No target replacement, automatic retry or Send replay
+was added. These paths predate the review-fix candidate and affect its requested
+preservation flow.
+
+The focused Electron test first failed because a rejected obsolete Stop left its
+recovery key. It now verifies rejection and key release, then fresh Stop, subsequent
+workspace-policy Send, restart conflict/draft preservation, explicit resolution,
+one further Send and Stop. An initial unchanged single run passed; a repeated
+baseline run also encountered a timeout, so these results do not establish elimination
+of every timing race. The original timing-specific stale-target delivery was not
+reproduced deterministically; its safe rejection remains intentional.
+
+Fresh evidence: [144-review-merger](evidence/144-review-merger). Host combined
+checks: 21 passed, one opt-in live test skipped, across permissions, models, chat,
+SQLite controls, emergency preparation and durable Send. Development Electron combined
+permissions/models/conversation-layout: 3 passed. Build, package, typecheck and lint
+passed (existing warnings). The test's initial mutable-array type error was corrected
+before the passing typecheck. Packaged combined results are recorded below.
+
+All existing installed-provider effort/model-turn, workload/visual and user-owned
+native/VoiceOver limits remain. No full #144/#155 acceptance is claimed.
+
+Packaged combined permissions/models/conversation-layout run: **3 passed in 27.7s**.
+The permission check includes the post-resolution explicit third Send and Stop;
+it is no longer limited to resolution without subsequent execution.

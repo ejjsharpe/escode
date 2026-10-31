@@ -45,6 +45,15 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     expect((await readFile(log, "utf8")).trim().split("\n").map(x => JSON.parse(x))).toEqual([expect.objectContaining({ model: "a", effort: "high", approvalPolicy: "on-request", approvalsReviewer: "user", sandboxPolicy: { type: "readOnly", networkAccess: false } })]);
     await expect(page.getByLabel("Next message effort")).toHaveValue("medium");
     await expect(page.getByLabel("Message Codex")).toHaveValue("");
+    expect(await page.evaluate(async () => {
+      const chats = await new Promise<readonly { id: string }[]>(resolve => {
+        const off = window.escode.chatSummaries(({ chats }) => { off(); resolve(chats); }, () => {});
+      });
+      try { await window.escode.chat("stop", null, chats[0].id, "obsolete-target"); }
+      catch (error) { return String(error); }
+      return "unexpected acceptance";
+    })).toContain("Stale Stop target");
+    expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("escode-control:")))).toEqual([]);
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.locator("span[role=status]")).toHaveText("Ready");
     await page.getByLabel("Next message permissions").selectOption("edits");

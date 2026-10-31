@@ -1,0 +1,35 @@
+$ playwright test tests/permissions.spec.ts "--timeout=60000"
+
+Running 1 test using 1 worker
+
+(node:15810) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work (5.5s)
+
+
+  1) tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "escode-control:[null,\"0001a061-3c29-4e4a-988a-da64d194655a\",\"stop\",\"obsolete-target\",\"\"]",
+    + ]
+
+      54 |       return "unexpected acceptance";
+      55 |     })).toContain("Stale Stop target");
+    > 56 |     expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("escode-control:")))).toEqual([]);
+         |                                                                                                                   ^
+      57 |     await page.getByRole("button", { name: "Stop", exact: true }).click();
+      58 |     await expect(page.locator("span[role=status]")).toHaveText("Ready");
+      59 |     await page.getByLabel("Next message permissions").selectOption("edits");
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-5535ab2e/apps/desktop/tests/permissions.spec.ts:56:115
+
+    Error Context: test-results/permissions-next-message-p-b3cf5-ning-turn-never-queues-work/error-context.md
+
+  1 failed
+    tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work 
+error: script "smoke" exited with code 1

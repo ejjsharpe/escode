@@ -72,10 +72,11 @@ async function control(operation: "stop" | "answer" | "emergencyStop", project: 
   const receipt = saved ? (await hostClient.sendStatus(command.commandId) ?? await hostClient.sendMessage(command)) : await hostClient.sendMessage(command);
   if (!receipt) throw Error("Control outcome unavailable; command identity retained. Refresh to inspect current work.");
   if (receipt.reason === "emergency-stop-available") return { reason: receipt.reason, message: receipt.message };
-  if (receipt.status !== "accepted") throw Error(`${operation} ${receipt.status}: ${receipt.message}`);
+  if (receipt.status !== "accepted" && receipt.status !== "rejected") throw Error(`${operation} ${receipt.status}: ${receipt.message}`);
   localStorage.removeItem(key);
   try { await flushChatStorage(); }
   catch (error) { localStorage.setItem(key, JSON.stringify(command)); throw error; }
+  if (receipt.status === "rejected") throw Error(`${operation} rejected: ${receipt.message}`);
 }
 async function transfer(root: string, kind: "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", parent: string, paths: string[]) {
   const key = `escode-transfer:${JSON.stringify([root, kind, parent, paths])}`;

@@ -1,0 +1,10 @@
+$ node scripts/filesystem.mjs && vp test run host/permissions.test.ts host/models.test.ts host/chat.test.ts host/sqlite-controls.test.ts host/emergency-preparation.test.ts host/durable-send.test.ts
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-5535ab2e/apps/desktop
+
+
+ Test Files  6 passed (6)
+      Tests  21 passed | 1 skipped (22)
+   Start at  20:09:56
+   Duration  10.00s (tests 82%, import 14%, transform 4%)
+

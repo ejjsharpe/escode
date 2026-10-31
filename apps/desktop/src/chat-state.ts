@@ -195,6 +195,7 @@ class ProjectChats {
     finally { void this.refresh(); }
   }
   async stop(id: string) {
+    this.update({ errors: { ...this.state.errors, [id]: "" } });
     const target = this.state.snapshots[id]?.controlTarget;
     try {
       const result = await window.escode.chat("stop", this.project, id, target);

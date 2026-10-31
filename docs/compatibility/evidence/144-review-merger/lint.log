@@ -1,0 +1,11 @@
+$ nx lint desktop
+
+ NX   1 task: 1 succeeded
+
+
+Re-run with --output-style=static to inline logs.
+
+  Run duration:      1.2s
+  Cache:             0/1 hit (0%)
+  Critical path:     1.1s (1 task)
+  Recoverable time:  <1ms
