@@ -102,7 +102,7 @@ An explicit return of an existing chat to an earlier conversation boundary, with
 An explicit replacement of an eligible worktree's saved working files with the contents of a selected turn checkpoint. Available unsaved client edits remain separately protected.
 
 **Historical branch**:
-A separate chat and worktree continuing from a selected turn checkpoint while preserving the original work. Its historical files and conversation context are distinct from a conversation fork that shares today's files.
+A separate chat and managed worktree continuing from a selected before-message checkpoint while preserving the original work. It uses the recorded Git base with captured saved files as uncommitted changes and native provider context through the preceding turn, without starting a turn. A retained branch receipt names the child chat and preserves its required checkpoint contents independently of source-chat expiry. Incomplete historical preparation retains its exact resources and blocks connection/Send until externally reconciled; Retry never allocates substitutes. Its historical files and conversation context are distinct from a conversation fork that shares today's files.
 
 **Checkpoint retention**:
 The period for which inactive chats retain available file checkpoints, subject to protection of data still needed by retained branches. Retaining conversation history does not imply that every historical file state remains available.

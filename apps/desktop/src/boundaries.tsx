@@ -6,8 +6,10 @@ export function Boundaries({ project, id }: { project: string | null; id: string
   const [points, setPoints] = useState<CheckpointPage>();
   const [point, setPoint] = useState<CheckpointPage["points"][number]>();
   const [inspection, setInspection] = useState<BoundaryInspection>();
+  const [branching, setBranching] = useState(false);
   const [rewind, setRewind] = useState<import("@escode/contracts").RewindResult>();
   const confirm = useRef<HTMLDivElement>(null);
+  const branchButton = useRef<HTMLButtonElement>(null);
   const rewindButton = useRef<HTMLButtonElement>(null);
   const [files, setFiles] = useState<FileInspection>();
   const [file, setFile] = useState<FileInspection>();
@@ -55,16 +57,19 @@ export function Boundaries({ project, id }: { project: string | null; id: string
       <p>Provider thread: {point.threadId ?? "unavailable"} · turn: {point.turnId ?? "unavailable"}</p>
       <p>Saved files: {point.availability}{point.reason ? ` · ${point.reason}` : ""}. This does not include unsaved editor text.</p>
       <Button ref={rewindButton} disabled={busy} onClick={() => load(async () => {
-        setRewind(await window.escode.rewind(project, id, point.id, null, null));
+        setBranching(false); setRewind(await window.escode.rewind(project, id, point.id, null, null));
       })}>Rewind conversation only…</Button>
-      {rewind && <div ref={confirm} tabIndex={-1} role="region" aria-label="Conversation rewind">
+      <Button ref={branchButton} disabled={busy} onClick={() => load(async () => {
+        setBranching(true); setRewind(await window.escode.branchHistory(project, id, point.id, null, null));
+      })}>Branch historical chat…</Button>
+      {rewind && <div ref={confirm} tabIndex={-1} role="region" aria-label={branching ? "Historical branch" : "Conversation rewind"}>
         <p role="status">{rewind.message}</p>
         {rewind.status === "ready" && <>
-          <Button disabled={busy} onClick={() => { setRewind(undefined); rewindButton.current?.focus(); }}>Cancel rewind</Button>
+          <Button disabled={busy} onClick={() => { setRewind(undefined); (branching ? branchButton : rewindButton).current?.focus(); }}>{branching ? "Cancel branch" : "Cancel rewind"}</Button>
           <Button disabled={busy} onClick={() => load(async () => {
-            setRewind(await window.escode.rewind(project, id, point.id, rewind.token, crypto.randomUUID()));
+            setRewind(await (branching ? window.escode.branchHistory : window.escode.rewind)(project, id, point.id, rewind.token, crypto.randomUUID()));
             setInspection(undefined);
-          })}>Confirm rewind and keep current files</Button>
+          })}>{branching ? "Create historical chat and worktree" : "Confirm rewind and keep current files"}</Button>
         </>}
       </div>}
       <Button disabled={busy} onClick={() => load(async () => {
