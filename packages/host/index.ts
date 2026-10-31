@@ -267,7 +267,7 @@ export async function startHost(options: {
         Effect.tryPromise(() => options.list(root, path)).pipe(Effect.catch(() =>
           Effect.succeed({ kind: "unavailable" as const, message: "Directory unavailable. Refresh to retry." }))),
         watchDirectories: ({ root, paths }) => Stream.callback((queue) => Effect.acquireRelease(
-          Effect.sync(() => {
+          Effect.try({ try: () => {
             if (!options.watch) throw Error("Directory watches unavailable");
             let failure: string | undefined;
             const release = options.watch(root, paths, (error) => {
@@ -276,7 +276,10 @@ export async function startHost(options: {
             });
             Queue.offerUnsafe(queue, { ready: true }); // Revalidate after the watch is installed.
             return release;
-          }),
+          }, catch: String }).pipe(Effect.catch(error => Effect.sync(() => {
+            Queue.offerUnsafe(queue, { error });
+            return () => {};
+          }))),
           (release) => Effect.sync(release),
         ), { bufferSize: 1, strategy: "sliding" }),
       })), Effect.forkScoped,

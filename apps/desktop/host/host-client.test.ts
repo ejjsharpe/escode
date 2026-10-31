@@ -129,3 +129,30 @@ test("a lost directory watch retires the failed session before the next explicit
     expect(bootstraps).toBe(2);
   } finally { off(); await client.close(); await host.close(); fixture.restore(); }
 });
+
+test("watch setup rejection preserves concurrent workspace persistence and the shared session", async () => {
+  const fixture = socketFixture();
+  const held = gate();
+  let entered = false, bootstraps = 0;
+  const errors: string[] = [];
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "unused" }),
+    persistWorkspace: async () => { entered = true; await held.promise; },
+    watch: () => { throw Error("App state is unavailable in Files."); },
+  });
+  const client = createHostClient(async () => { bootstraps++; return host.bootstrap(); });
+  const query = client.persistWorkspace({ projects: [], selected: "agents", views: {}, drafts: [] });
+  const settled = Promise.allSettled([query]);
+  let off = () => {};
+  try {
+    await expect.poll(() => entered).toBe(true);
+    off = client.watchFiles("/approved", [""], error => { if (error) errors.push(error); });
+    await expect.poll(() => errors.length).toBe(1);
+    expect(errors[0]).toContain("App state is unavailable in Files.");
+    held.release();
+    await expect(query).resolves.toBeUndefined();
+    await expect(client.persistWorkspace({ projects: [], selected: "agents", views: {}, drafts: [] })).resolves.toBeUndefined();
+    expect(bootstraps).toBe(1);
+    expect(fixture.sockets).toHaveLength(1);
+  } finally { held.release(); await settled; off(); await client.close(); await host.close(); fixture.restore(); }
+});
