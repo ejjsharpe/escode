@@ -64,3 +64,10 @@ power-loss durability. No renderer UI changed.
 The broader recovery/SQLite-recovery/capacity rerun passed all 29 tests. An earlier
 run hit the 15-second fixture timeout; the real-Git fixture now isolates repositories
 from SQLite/copy output and permits 60 seconds for subprocess-heavy verification.
+
+Integration `0ba393e` (including #138, #139 and the concurrent reconnect/branch fix)
+was merged into the task branch. On that combined tip recovery/reconnect passed
+12 tests; the final recovery rerun passed seven. Typecheck, lint, build, package
+and the checked-in packaged procedure passed. Git dependency inspection disables
+lazy fetching and optional locks to keep reconciliation observational. `0a9c981`
+remains an ancestor. No issue closure, PR or integration-branch merge was performed.

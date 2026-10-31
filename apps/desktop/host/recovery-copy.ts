@@ -60,9 +60,9 @@ async function checkpointExternals(points: ReturnType<typeof checkpointCoverage>
     try {
       const root = await realpath(point.checkout), info = await stat(root), identity = point.directoryIdentity;
       if (!identity || root !== identity.path || info.dev !== identity.dev || info.ino !== identity.ino) throw Error("changed root");
-      const result = await promisify(execFile)("git", ["-C", root, "rev-parse", "--verify", point.gitBase + "^{commit}"], { timeout: 15000 });
+      const result = await promisify(execFile)("git", ["-C", root, "rev-parse", "--verify", point.gitBase + "^{commit}"], { timeout: 15000, env: { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0" } });
       if (result.stdout.trim() !== point.gitBase) throw Error("changed base");
-      const objects = await promisify(execFile)("git", ["-C", root, "rev-list", "--objects", "--missing=print", point.gitBase], { timeout: 15000, maxBuffer: 16 * 1024 * 1024 });
+      const objects = await promisify(execFile)("git", ["-C", root, "rev-list", "--objects", "--missing=print", point.gitBase], { timeout: 15000, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0" } });
       if (objects.stdout.split("\n").some(line => line.startsWith("?"))) throw Error("missing base objects");
     } catch { issues.push(reference + "/external-root-or-git-base"); }
   }
