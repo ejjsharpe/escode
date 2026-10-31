@@ -9,6 +9,7 @@ import type {
 } from "electron";
 import type { startHost } from "@escode/host";
 import { maximumFrameBytes, type DirectoryResult } from "@escode/contracts";
+import { DurableFiles } from "./durable-files";
 import { NativeImport } from "./native-import";
 import { FileOperations } from "./file-operations";
 import { affected } from "./file-operation-state";
@@ -47,6 +48,7 @@ export function createFileWorkflow({
   clipboard: Pick<typeof electronClipboard, "read">;
   writeClipboard: (data: Record<string, string>) => Promise<void>;
 }) {
+  const commands = new DurableFiles(workspace.database, workspace.owner.clientId, foundation.admissionEpoch);
   let mutationOrigin: string | undefined;
   const operations = new FileOperations(
     workspace,
@@ -703,36 +705,35 @@ export function createFileWorkflow({
     createEntry: async (command) => {
       const { root, parent, name, kind } = command;
       const { project, check } = await fileContext(root, parent);
-      if (mutationOrigin || isQuitting()) throw Error("File operation unavailable.");
-      operations.assertIdle();
-      project.validateName(name);
-      const absolute = resolve(project.root, parent, name);
-      if (
-        isAppState(absolute) ||
-        stateFiles.some((file) =>
-          [absolute, ...(parent ? [resolve(project.root, parent)] : [])].some((path) =>
-            affected(file.normalize("NFC").toLowerCase(), path.normalize("NFC").toLowerCase()),
-          ),
-        )
-      )
-        throw Error("Protected app state is inside this operation.");
-      const state = await workspace.read();
-      if (
-        state.drafts.some(
-          (d) =>
-            d.root === project.root &&
-            affected(
-              d.path.normalize("NFC").toLowerCase(),
-              (parent ? parent + "/" + name : name).normalize("NFC").toLowerCase(),
+      return commands.run({ ...command, checkoutIdentity: project.checkoutIdentity() }, { command, status: "uncertain" as const, path: parent ? parent + "/" + name : name, message: "Creation outcome uncertain; inspect exact path. Creation was not repeated." }, async (): Promise<typeof import("@escode/contracts").CreateReceipt.Type> => {
+        if (mutationOrigin || isQuitting()) throw Error("File operation unavailable.");
+        operations.assertIdle();
+        project.validateName(name);
+        const absolute = resolve(project.root, parent, name);
+        if (
+          isAppState(absolute) ||
+          stateFiles.some((file) =>
+            [absolute, ...(parent ? [resolve(project.root, parent)] : [])].some((path) =>
+              affected(file.normalize("NFC").toLowerCase(), path.normalize("NFC").toLowerCase()),
             ),
+          )
         )
-      )
-        throw Error("Destination recovery drafts need preserving. Choose a free name.");
-      check();
-      if (mutationOrigin) throw Error("File operation awaiting confirmation.");
-      operations.assertIdle();
-      return foundation.create(command, () => {
+          throw Error("Protected app state is inside this operation.");
+        const state = await workspace.read();
+        if (
+          state.drafts.some(
+            (d) =>
+              d.root === project.root &&
+              affected(
+                d.path.normalize("NFC").toLowerCase(),
+                (parent ? parent + "/" + name : name).normalize("NFC").toLowerCase(),
+              ),
+          )
+        )
+          throw Error("Destination recovery drafts need preserving. Choose a free name.");
         check();
+        if (mutationOrigin) throw Error("File operation awaiting confirmation.");
+        operations.assertIdle();
         const destination = parent ? parent + "/" + name : name;
         const identity = () => {
           try {
@@ -743,11 +744,9 @@ export function createFileWorkflow({
         };
         const before = identity();
         try {
-          return project.create(parent, name, kind);
+          return { command, status: "accepted", path: project.create(parent, name, kind), message: "" };
         } catch (error) {
-          throw Object.assign(Error(String(error)), {
-            rejected: !!before && identity() === before,
-          });
+          return { command, status: before && identity() === before ? "rejected" : "uncertain", path: destination, message: String(error) };
         }
       });
     },
@@ -894,7 +893,9 @@ export function createFileWorkflow({
       }
   };
   return {
-    hostActions: { ...actions, transferAction, trashEntries, moveEntry, ackFileOperation },
+    hostActions: { ...actions, transferAction: async (action: import("@escode/contracts").TransferAction) => action.operation === "transfer"
+      ? commands.run({ ...action, checkoutIdentity: (await approvedFiles(action.root)).checkoutIdentity() }, { results: [], open: [], requiresAck: false, message: "Transfer outcome uncertain; inspect exact targets. Transfer was not repeated." }, () => transferAction(action))
+      : transferAction(action), trashEntries, moveEntry, ackFileOperation },
     captureNativeImport,
     captureNativeClipboard,
     clearImports,

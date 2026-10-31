@@ -19,6 +19,8 @@ import { affected, reconcile } from "./file-operation-state";
 export class FileOperations {
   private journal: FileOperationJournal;
   private pending?: Intent;
+  private factsRevision?: number;
+  private recoveredFacts: Intent[] = [];
   private savedBaselines = new Map<string, { root: string; path: string; before: Set<string>; disk: import("./project").Document }>();
   private handoff?: { root: string; facts: Intent[] };
   busy = false;
@@ -30,6 +32,18 @@ export class FileOperations {
     this.journal = new FileOperationJournal(file, owner ?? workspace.owner, workspace.database);
   }
   async recover(project: (root: string) => Promise<Checkout>) {
+    const facts = await this.workspace.database.recoveryRead(this.workspace.owner.clientId, "fileFacts");
+    this.factsRevision = facts.revision;
+    if (facts.body) {
+      const state = await this.workspace.read();
+      for (const fact of facts.body as Intent[]) {
+        const p = await project(fact.root);
+        if (p.checkoutIdentity() !== fact.checkoutIdentity) throw Error("Checkout replaced; batch evidence retained");
+        reconcile(state, fact);
+      }
+      await this.workspace.write(state);
+      this.recoveredFacts = facts.body as Intent[];
+    }
     const record = await this.journal.readIntent();
     if (!record) return "";
     this.pending = record;
@@ -102,6 +116,7 @@ export class FileOperations {
         if (!draft || draft.disk.version === saved.disk.version) acknowledged.set(key, saved);
         else if (saved.before.has(draft.disk.version)) draft.disk = saved.disk;
       }
+      for (const fact of this.recoveredFacts) reconcile(snapshot, fact);
       for (const fact of this.handoff?.facts ?? []) reconcile(snapshot, fact);
       if (this.pending?.completed) reconcile(snapshot, this.pending);
     }).then(() => { for (const [key, saved] of acknowledged) if (this.savedBaselines.get(key) === saved) this.savedBaselines.delete(key); });
@@ -286,6 +301,12 @@ export class FileOperations {
       this.busy = false;
     }
   }
+  private async writeFacts(facts: Intent[] | null) {
+    if (this.factsRevision === undefined)
+      this.factsRevision = (await this.workspace.database.recoveryRead(this.workspace.owner.clientId, "fileFacts")).revision;
+    await this.workspace.database.recoveryWrite(this.workspace.owner.clientId, "fileFacts", facts, this.factsRevision);
+    this.factsRevision++;
+  }
   async ack(root?: string) {
     if (root && this.busy) throw Error("File operation still running.");
     if (root && this.handoff?.root === root) {
@@ -296,11 +317,19 @@ export class FileOperations {
         await this.journal.writeIntent(null);
         this.pending = undefined;
       }
+      await this.writeFacts(null);
+      this.recoveredFacts = [];
       this.handoff = undefined;
       return;
     }
     if (root && this.pending && !this.pending.completed) throw Error("Uncertain operation retains its intent; restart to reconcile actual paths.");
+    if (root && !this.pending && this.recoveredFacts.some(f => f.root === root)) {
+      await this.writeFacts(null);
+      this.recoveredFacts = [];
+      return;
+    }
     if (root && this.pending?.root !== root) throw Error("Operation belongs to another checkout.");
+    if (this.handoff?.facts.length) await this.writeFacts([...this.recoveredFacts, ...this.handoff.facts]);
     await this.journal.writeIntent(null);
     this.pending = undefined;
   }
