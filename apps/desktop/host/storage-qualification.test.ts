@@ -24,7 +24,7 @@ test.skipIf(!process.env.ESCODE_FULL_VOLUME)("real exhausted disposable filesyst
     const sends = new DurableSend(db);
     let effects = 0;
     const command = { commandId: "stop", admissionEpoch: sends.admissionEpoch, project: null, id: "chat", expected: "state", text: "x".repeat(90000), control: { operation: "stop" as const, target: "captured", token: "token", answer: null } };
-    await expect(sends.execute(command, async () => { effects++; })).rejects.toThrow("Emergency Stop");
+    expect((await sends.execute(command, async () => { effects++; })).reason).toBe("emergency-stop-available");
     expect(effects).toBe(0);
     expect((await sends.execute({ ...command, control: { ...command.control, emergency: true } }, async () => { effects++; })).status).toBe("uncertain");
     expect(effects).toBe(1);

@@ -1,0 +1,26 @@
+$ playwright test tests/checkpoints.spec.ts tests/history.spec.ts
+
+Running 9 tests using 1 worker
+
+(node:82233) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"threeSendsMs":1494.638583,"checkpoints":["available","available","unavailable"]}
+  ✓  1 tests/checkpoints.spec.ts:10:1 › packaged Send captures fresh saved bytes and permits unavailable coverage (5.5s)
+
+  ✓  2 tests/history.spec.ts:11:129 › saved new-format history: navigation (11.2s)
+
+  ✓  3 tests/history.spec.ts:11:129 › saved new-format history: streaming (5.2s)
+
+  ✓  4 tests/history.spec.ts:11:129 › saved new-format history: files (3.5s)
+
+  ✓  5 tests/history.spec.ts:11:129 › saved new-format history: branch (6.6s)
+
+  ✓  6 tests/history.spec.ts:11:129 › saved new-format history: branch-after (6.7s)
+
+  ✓  7 tests/history.spec.ts:11:129 › saved new-format history: summary (9.7s)
+
+  ✓  8 tests/history.spec.ts:11:129 › saved new-format history: restoration (10.8s)
+
+  ✓  9 tests/history.spec.ts:11:129 › saved new-format history: expiry (3.5s)
+
+  9 passed (1.1m)

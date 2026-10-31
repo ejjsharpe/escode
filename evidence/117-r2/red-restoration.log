@@ -1,0 +1,47 @@
+$ node scripts/filesystem.mjs && vp test run host/boundaries.test.ts "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-26c8d57f/apps/desktop
+
+ ❯ host/boundaries.test.ts (20 tests | 4 failed) 74585ms
+   × historical branch none 3039ms
+   × completion historical branch none 5926ms
+   × explicit summarized branch preserves files without native fork or automatic turn 4375ms
+   × authenticated restoration replaces saved files only in an exact isolated worktree 4448ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/boundaries.test.ts > historical branch none
+Error: ENOENT: no such file or directory, open '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-bLZZJN/repo/to-directory/leaf'
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  host/boundaries.test.ts > completion historical branch none
+Error: ENOENT: no such file or directory, open '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-ScTlbL/repo/to-directory/leaf'
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  host/boundaries.test.ts > explicit summarized branch preserves files without native fork or automatic turn
+Error: ENOENT: no such file or directory, open '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-WvRrvX/repo/to-directory/leaf'
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  host/boundaries.test.ts > authenticated restoration replaces saved files only in an exact isolated worktree
+AssertionError: expected 'unavailable' to be 'ready' // Object.is equality
+
+Expected: "ready"
+Received: "unavailable"
+
+ ❯ host/boundaries.test.ts:403:94
+    401|     const savedChat = await store.get(source, chat.id);
+    402|     await store.update(source, chat.id, { worktree: undefined });
+    403|     expect((await client.rewind(source, chat.id, "restore-point", null…
+       |                                                                                              ^
+    404|     await store.update(source, chat.id, { worktree: savedChat.worktree…
+    405|     const stale = await client.rewind(source, chat.id, "restore-point"…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 16 passed (20)
+   Start at  14:32:50
+   Duration  75.38s (tests 99%, import 1%)
+
+error: script "test" exited with code 1

@@ -1,0 +1,10 @@
+$ node scripts/filesystem.mjs && vp test run host/sqlite-controls.test.ts "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-26c8d57f/apps/desktop
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  14:42:56
+   Duration  957ms (import 57%, tests 38%, transform 5%)
+

@@ -1,0 +1,32 @@
+$ node scripts/filesystem.mjs && vp test run host/boundaries.test.ts -t "authenticated restoration" "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-26c8d57f/apps/desktop
+
+ ❯ host/boundaries.test.ts (20 tests | 1 failed | 19 skipped) 24838ms
+   × authenticated restoration replaces saved files only in an exact isolated worktree 24837ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/boundaries.test.ts > authenticated restoration replaces saved files only in an exact isolated worktree
+AssertionError: expected 'applied' to be 'uncertain' // Object.is equality
+
+Expected: "uncertain"
+Received: "applied"
+
+ ❯ host/boundaries.test.ts:425:116
+    423|     const partial = await client.rewind(source, chat.id, "restore-poin…
+    424|     await rm(join(root, "a.txt")); failFiles = true;
+    425|     expect((await client.rewind(source, chat.id, "restore-point", part…
+       |                                                                                                                    ^
+    426|     const reopenedStore = new Chats(join(dir, "state"));
+    427|     const reopened = new ChatService(reopenedStore, async () => { thro…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 skipped (20)
+   Start at  14:34:14
+   Duration  25.47s (tests 98%, import 2%)
+
+error: script "test" exited with code 1

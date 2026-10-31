@@ -83,7 +83,7 @@ test("authenticated SQLite controls fail closed, retain outcomes and reject stal
     expect((await client.sendMessage({ ...stop, commandId: "old-stop", control: { ...stop.control, target: "expired" } })).status).toBe("rejected");
     expect(stops).toBe(0);
     fault.exec("CREATE TRIGGER fail_stop BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'stop failure'); END");
-    await expect(client.sendMessage(stop)).rejects.toThrow();
+    expect((await client.sendMessage(stop)).reason).toBe("emergency-stop-available");
     expect(stops).toBe(0);
     const emergency = { ...stop, commandId: "emergency", control: { ...stop.control, emergency: true } };
     await expect(client.sendMessage({ ...emergency, project: "/unauthorized" })).rejects.toThrow();
@@ -97,7 +97,7 @@ test("authenticated SQLite controls fail closed, retain outcomes and reject stal
     await expect(client.sendMessage(emergency)).rejects.toThrow();
     expect(replies).toHaveLength(2);
     const staleStop = { ...stop, commandId: "stale-emergency", control: { ...stop.control, target: "superseded" } };
-    await expect(client.sendMessage(staleStop)).rejects.toThrow();
+    expect((await client.sendMessage(staleStop)).reason).toBe("emergency-stop-available");
     expect((await client.sendMessage({ ...staleStop, control: { ...staleStop.control, emergency: true } })).status).toBe("rejected");
     expect(stops).toBe(1);
     fault.exec("DROP TRIGGER fail_all_outcomes");
@@ -108,9 +108,10 @@ test("authenticated SQLite controls fail closed, retain outcomes and reject stal
     expect((await client.sendStatus("stop"))?.status).toBe("uncertain");
     await client.sendMessage(stop);
     expect(stops).toBe(1);
-    await expect(client.sendMessage({ ...stop, control: { ...stop.control, target: "different" } })).rejects.toThrow();
+    expect((await client.sendMessage({ ...stop, control: { ...stop.control, target: "different" } })).reason).toBe("emergency-stop-available");
+    expect(stops).toBe(1);
     fault.exec("CREATE TRIGGER fail_again BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
-    await expect(client.sendMessage({ ...stop, commandId: "captured-old-turn" })).rejects.toThrow();
+    expect((await client.sendMessage({ ...stop, commandId: "captured-old-turn" })).reason).toBe("emergency-stop-available");
     emit({ method: "turn/completed", params: { threadId: "provider", turn: { id: "turn" } } });
     emit({ method: "turn/started", params: { threadId: "provider", turn: { id: "new-turn" } } });
     expect((await client.sendMessage({ ...emergency, commandId: "superseded-live-turn" })).status).toBe("rejected");

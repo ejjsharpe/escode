@@ -33,7 +33,7 @@ export class DurableSend {
     } catch (error) {
       if (command.control?.operation === "stop" && command.control.target && command.admissionEpoch === this.admissionEpoch) {
         this.emergencyTargets.add(target);
-        throw Error("Stop receipt persistence failed. Emergency Stop is available for the captured target. " + String(error));
+        return { hostId, clientId, command, status: "uncertain", reason: "emergency-stop-available", message: "Stop receipt persistence failed. Emergency Stop is available for the captured target. " + String(error) };
       }
       throw error;
     }
@@ -43,7 +43,7 @@ export class DurableSend {
     catch (error) {
       if (command.control?.operation === "stop") {
         this.emergencyTargets.add(target);
-        throw Error("Stop receipt persistence failed. Emergency Stop is available for the captured target. " + String(error));
+        return { hostId, clientId, command, status: "uncertain", reason: "emergency-stop-available", message: "Stop receipt persistence failed. Emergency Stop is available for the captured target. " + String(error) };
       }
       throw error;
     }
