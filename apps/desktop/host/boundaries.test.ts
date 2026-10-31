@@ -17,12 +17,12 @@ test("authenticated No project inspection and explicit native rewind preserve cu
   const store = new Chats(join(dir, "state"));
   const calls: string[] = [];
   let lost = false, unsupported = false, changed = false;
-  let forkUnsupported = false;
+  let forkUnsupported = false, lostResponse = false;
   const forks: unknown[] = [];
   const service = new ChatService(store, async () => ({ async request(method, params) {
     calls.push(method);
     if (unsupported) throw Error("Method not found");
-    if (method === "thread/fork") { if (forkUnsupported) throw Object.assign(Error("Method not found"), { rejected: true }); forks.push(params); return { thread: { id: "historical-provider" } }; }
+    if (method === "thread/fork") { if (forkUnsupported) throw Object.assign(Error("Method not found"), { rejected: true }); forks.push(params); if (lostResponse) throw Error("Provider response lost after fork"); return { thread: { id: "historical-provider" } }; }
     if (method !== "thread/turns/list") throw Error("Unexpected mutation");
     return { data: lost ? [] : [...(changed ? [{ id: "earlier", items: [] }] : []), { id: "turn", items: [{ id: "a", type: "agentMessage", text: "saved answer" }] }], nextCursor: null };
   }, respond() { throw Error("Unexpected response"); }, close() {} }));
@@ -114,6 +114,13 @@ test("authenticated No project inspection and explicit native rewind preserve cu
     expect((await reopened.rewind(null, chat.id, "point-0", pending.token, "uncertain-command")).status).toBe("uncertain");
     expect(forks).toHaveLength(2);
     await expect(client.rewind(null, chat.id, "point-1", pending.token, "uncertain-command")).rejects.toThrow();
+    await store.update(null, chat.id, { threadId: "provider" });
+    const responseChoice = await client.rewind(null, chat.id, "point-0", null, null);
+    lostResponse = true;
+    expect((await client.rewind(null, chat.id, "point-0", responseChoice.token, "lost-response-command")).status).toBe("uncertain");
+    expect((await client.rewind(null, chat.id, "point-0", responseChoice.token, "lost-response-command")).status).toBe("uncertain");
+    expect(forks).toHaveLength(3);
+    expect((await store.get(null, chat.id)).threadId).toBe("provider");
     reopened.close();
     await recoveredStore.database.close();
   } finally { await client?.close(); await host?.close(); service.close(); await store.database.close(); globalThis.WebSocket = original; await rm(dir, { recursive: true, force: true }); }

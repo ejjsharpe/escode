@@ -59,3 +59,16 @@ tip into this implementation branch, preserving both the read-only file inspecti
 and rewind routes/UI. Resolved overlapping additive contracts, fixture wiring,
 README and boundary controls; post-merge typecheck and all 10 focused host tests
 passed. The integration branch itself was not modified by this task.
+
+Post-merge packaged navigation/rewind and streaming passed. The added #131 file
+inspection scenario failed twice at result focus. Shared boundary-result focus
+now follows React's committed layout rather than a scheduled animation frame,
+including rewind confirmation/results and file/history inspection. Lost provider
+response injection additionally retains uncertainty without a second fork.
+
+Final merged verification: typecheck, lint, build and unsigned arm64 package passed;
+all three packaged history scenarios (navigation/rewind, streaming, files) passed
+in 23.3 seconds after the focus fix. The final authenticated rewind fixture passed
+with lost-response and failed-outcome assertions. No known functional acceptance
+gap remains at the confirmed automated seams; the live/human/process-kill limits
+above remain unqualified.
