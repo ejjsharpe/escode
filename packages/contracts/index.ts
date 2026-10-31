@@ -74,7 +74,7 @@ export const HistoryQuery = { project: Schema.NullOr(Schema.String), id: Schema.
 export const SendCommand = Schema.Struct({
   commandId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
   admissionEpoch: Schema.String, project: Schema.NullOr(Schema.String), id: Schema.String,
-  control: Schema.optional(Schema.Struct({ operation: Schema.Literals(["stop", "answer"]), target: Schema.String, token: Schema.String, answer: Schema.Unknown })),
+  control: Schema.optional(Schema.Struct({ operation: Schema.Literals(["stop", "answer"]), emergency: Schema.optional(Schema.Boolean), target: Schema.String, token: Schema.String, answer: Schema.Unknown })),
   expected: Schema.String, text: Schema.String.check(Schema.isMaxLength(100000)),
 });
 export type SendCommand = typeof SendCommand.Type;

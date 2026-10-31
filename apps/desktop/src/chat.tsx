@@ -30,7 +30,7 @@ export interface ChatBridge {
   (operation: "open", project: string | null, id: string): Promise<ChatSnapshot>;
   (operation: "send", project: string | null, id: string, text: string): Promise<string>;
   (operation: "draft", project: string | null, id: string, text: string): Promise<void>;
-  (operation: "stop", project: string | null, id: string, target?: string): Promise<void>;
+  (operation: "stop" | "emergencyStop", project: string | null, id: string, target?: string): Promise<void>;
   (operation: "disconnect" | "resolveSend", project: string | null, id: string): Promise<void>;
   (
     operation: "answer",
@@ -169,7 +169,7 @@ export function ChatView({
   createChat?: (root: string) => Promise<void>;
   global?: boolean;
 }) {
-  const [store, { chats, snapshots, history, drafts, pending, responding, errors }] =
+  const [store, { chats, snapshots, history, drafts, pending, responding, errors, emergencyTargets }] =
     useProjectChats(project);
   const [targets, setTargets] = useState<{ project: string | null; checkout: string }[]>([]);
   useEffect(() => {
@@ -289,6 +289,7 @@ export function ChatView({
               >
                 Stop
               </Button>
+              {emergencyTargets[selected] && <><Button onClick={() => void store.emergencyStop(selected)}>Emergency Stop</Button><span>Emergency Stop may not be recorded. External effects may remain; reserved resources are retained.</span></>}
               <span role="status">
                 {working && (!snapshot || (unsent && !snapshot.busy && !snapshot.requests.length))
                   ? unsent
