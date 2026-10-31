@@ -115,7 +115,7 @@ send({id:m.id,result});});`,
     expect((await records())[0]).toMatchObject({ id: original.id, createdAt: original.createdAt });
     await page.locator('.project-tab > button').first().click();
     await expect(page.getByRole("button", { name: "Chat 1", exact: true })).toHaveCount(0);
-    await expect(page.locator('.view-nav .directory')).toContainText(beta);
+    await expect(page.locator('.view-nav:visible .directory')).toContainText(beta);
     await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
     await expect(message()).toHaveValue("Retain this draft");
     await writeFile(join(worktree, "original-untracked"), "retain original");

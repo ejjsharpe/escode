@@ -353,6 +353,7 @@ test("Agents keeps an unavailable remembered selection and validates catalogue a
     await expect(
       page.getByText("No saved chats. Start without a project or open a project."),
     ).toBeVisible();
+    expect(JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).agentsChat).toBe("missing-chat");
     const newChat = page.getByRole("button", { name: "New chat", exact: true });
     await newChat.click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeFocused();

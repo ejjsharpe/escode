@@ -145,7 +145,7 @@ send({id:m.id,result});});`,
     }, beta);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header span")).toHaveText(beta);
-    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: /^Chats(?: ·.*)?$/ }).click();
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
     await expect(
       page.getByRole("combobox", { name: "Project context", exact: true }),
@@ -158,7 +158,7 @@ send({id:m.id,result});});`,
     }, worktree);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header span")).toHaveText(worktree);
-    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: /^Chats(?: ·.*)?$/ }).click();
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
     await message().fill("Independent linked draft");
     expect((await records()).at(-1).checkout).toBe(worktree);
