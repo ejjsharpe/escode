@@ -92,7 +92,17 @@ export class ChatService {
     const check = env.guard(project);
     check();
     if (operation === "createDraft") {
-      const target = project === null ? "" : await env.currentTarget(project);
+      let target = action.checkout ?? (project === null ? "" : await env.currentTarget(project));
+      if (action.checkout !== undefined) {
+        if (project === null) throw Error("A captured checkout requires a project.");
+        const checkout = await env.checkout(action.checkout);
+        check();
+        checkout.checkoutIdentity();
+        if (checkout.repositoryGit.repository() !== project) throw Error("Wrong project checkout.");
+        if (!checkout.repositoryGit.worktreeOptions().checkouts.includes(checkout.root))
+          throw Error("Choose an available Git checkout.");
+        target = checkout.root;
+      }
       check();
       return this.store.createDraft(project, target, true);
     }

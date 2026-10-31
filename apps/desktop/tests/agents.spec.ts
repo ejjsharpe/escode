@@ -327,6 +327,19 @@ test("Agents keeps an unavailable remembered selection and validates catalogue a
     await expect(
       page.getByText("No saved chats. Start without a project or open a project."),
     ).toBeVisible();
+    const newChat = page.getByRole("button", { name: "New chat", exact: true });
+    await newChat.click();
+    const picker = page.getByRole("dialog", { name: "Choose project" });
+    await expect(picker).toBeVisible();
+    await expect(picker.getByRole("combobox", { name: "New chat project" })).toBeFocused();
+    await expect(picker.getByRole("option")).toHaveText(["No project"]);
+    await page.keyboard.press("Tab");
+    await expect(picker.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(picker.getByRole("combobox", { name: "New chat project" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(newChat).toBeFocused();
+    await expect(page.locator(".agent-row")).toHaveCount(0);
     expect(
       await page.evaluate(async () => {
         try {
@@ -417,6 +430,17 @@ send({id:m.id,result});});`,
       for (const record of records) await window.escode.chat("draft", record.project, record.id, record.draft);
     }, records);
     const page = await app.firstWindow();
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+    const newChat = page.getByRole("button", { name: "New chat", exact: true });
+    await newChat.click();
+    const picker = page.getByRole("dialog", { name: "Choose project" });
+    await expect(picker.getByRole("option")).toHaveCount(2);
+    await expect(picker.getByRole("option").first()).toContainText(root);
+    await page.mouse.click(5, 590);
+    await expect(picker).not.toBeVisible();
+    await expect(newChat).toBeFocused();
+    await expect(page.locator(".agent-row")).toHaveCount(3);
+    await page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "repo", exact: true }).click();
     const localRows = page.locator(".chat-list:visible li button");
     const globalRows = page.locator(".agent-row strong");
     const labels = ["Chat 3", "Chat 2", "Chat 1"];
@@ -497,7 +521,7 @@ send({id:m.id,result});});`,
 test("global creation keeps newest-first rows through live summaries", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-create-order-")));
   const user = join(dir, "user");
-  const roots = ["Alpha", "Beta", "Gamma", "Delta"].map((name) => join(dir, name));
+  const roots = ["Alpha", "Beta", "Gamma", "nested/Alpha"].map((name) => join(dir, name));
   for (const root of roots) execFileSync("git", ["init", root]);
   await mkdir(user);
   const saved = roots.map((root) => ({ project: root, root }));
@@ -534,10 +558,43 @@ test("global creation keeps newest-first rows through live summaries", async () 
     const rows = page.locator(".agent-row span");
     await expect(rows).toHaveText(["Gamma", "Beta", "Alpha"]);
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page
-      .getByRole("combobox", { name: "New chat project", exact: true })
-      .selectOption(roots[3]);
-    await expect(rows).toHaveText(["Delta", "Gamma", "Beta", "Alpha"]);
+    const picker = page.getByRole("dialog", { name: "Choose project" });
+    const search = picker.getByRole("combobox", { name: "New chat project" });
+    const options = picker.getByRole("option");
+    await expect(options).toHaveCount(5);
+    await expect(options.filter({ hasText: roots[0] })).toHaveCount(1);
+    await expect(options.filter({ hasText: roots[3] })).toHaveCount(1);
+    const order = await options.allTextContents();
+    await expect.poll(() => options.allTextContents()).toEqual(order);
+    await search.fill("GM");
+    await expect(options).toContainText(["Gamma"]);
+    await search.fill("ammaG");
+    await expect(options).toHaveCount(0);
+    await expect(picker.getByRole("status")).toHaveText("No matching projects");
+    await page.keyboard.press("Enter");
+    await expect(rows).toHaveText(["Gamma", "Beta", "Alpha"]);
+    await picker.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("button", { name: "New chat", exact: true })).toBeFocused();
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await expect(search).toHaveValue("");
+    await search.fill("Alpha");
+    await expect(options).toHaveCount(2);
+    await expect(options.nth(0)).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("ArrowDown");
+    await expect(options.nth(1)).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("ArrowUp");
+    await expect(options.nth(0)).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("ArrowDown");
+    await page.setViewportSize({ width: 728, height: 600 });
+    await expect(options.nth(1)).toBeInViewport();
+    await page.screenshot({ path: "test-results/agents-project-picker.png" });
+    await page.keyboard.press("Enter");
+    await expect(picker).not.toBeVisible();
+    await expect(rows).toHaveText(["Alpha", "Gamma", "Beta", "Alpha"]);
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeVisible();
+    await expect(page.locator(".chat-conversation")).toContainText(roots[3]);
+    await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Projects" }).locator(".project-tab")).toHaveCount(0);
     await page.screenshot({ path: "test-results/agents-creation-order.png" });
   } finally {
     await app.evaluate(({ dialog }) => {

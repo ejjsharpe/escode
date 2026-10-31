@@ -61,7 +61,7 @@ send({id:m.id,result});});`,
   try {
     let page = await app.firstWindow();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("combobox", { name: "New chat project", exact: true }).selectOption(alpha);
+    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: alpha }).click();
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
     await expect(page.getByText("Effective Codex settings · fixture", { exact: true })).toBeVisible();
     await message().fill("Retain this draft");
@@ -89,7 +89,7 @@ send({id:m.id,result});});`,
     await page.screenshot({ path: "test-results/escode-33-draft.png" });
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("combobox", { name: "New chat project", exact: true }).selectOption(beta);
+    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: beta }).click();
     await expect(page.locator(".agent-row").filter({ hasText: "Chat 2" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -146,13 +146,35 @@ send({id:m.id,result});});`,
       page.getByRole("combobox", { name: "Project context", exact: true }),
     ).toBeVisible();
     await message().fill("Move from local Chats");
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(alpha);
+    const local = (await records()).at(-1);
+    expect(local.checkout).toBe(beta);
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, worktree);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: "New chat on current checkout" }).click();
+    await message().fill("Independent linked draft");
+    expect((await records()).at(-1).checkout).toBe(worktree);
+    await page.locator('.project-tab button').filter({ hasText: "Beta" }).first().click();
+    await expect(message()).toHaveValue("Move from local Chats");
+    await page.getByText("Execution checkout choices", { exact: true }).click();
+    await page.getByRole("combobox", { name: "Draft existing worktree" }).selectOption(worktree);
+    await page.getByRole("button", { name: "Use discovered worktree" }).click();
     await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
     await expect(message()).toHaveValue("Move from local Chats");
-    await expect(page.locator(".agents .directory")).toContainText(alpha);
+    await expect(page.locator(".agents .directory")).toContainText(worktree);
+    expect((await records()).find((chat: { id: string }) => chat.id === local.id)).toMatchObject({
+      id: local.id, createdAt: local.createdAt, checkout: worktree, draft: "Move from local Chats",
+    });
+    await app.close();
+    app = await launchDesktop(user, dir);
+    page = await app.firstWindow();
+    await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(message()).toHaveValue("Move from local Chats");
     expect((await records())[1].draft).toBe("Another nonempty draft");
   } finally {
     await app.evaluate(({ dialog }) => {

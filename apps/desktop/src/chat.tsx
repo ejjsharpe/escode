@@ -10,7 +10,7 @@ import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
   (operation: "composer", project: string | null, id: string): Promise<string>;
   (operation: "targets"): Promise<{ project: string | null; checkout: string }[]>;
-  (operation: "createDraft", project: string | null): Promise<SavedChat>;
+  (operation: "createDraft", project: string | null, checkout?: string): Promise<SavedChat>;
   (
     operation: "context",
     project: string | null,

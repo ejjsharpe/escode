@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { launchDesktop, readChats } from "./desktop";
 
 test("worktree draft prepares only on Send from closed-project Agents, retains edits and protects active removal", async () => {
+  test.setTimeout(120000);
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-draft-ui-")));
   const alpha = join(dir, "Alpha"),
     beta = join(dir, "Beta"),
@@ -80,8 +81,12 @@ send({id:m.id,result});});`,
   let app = await launchDesktop(user, dir);
   try {
     let page = await app.firstWindow();
-    await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("combobox", { name: "New chat project", exact: true }).selectOption(alpha);
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, beta);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: "New chat on current checkout" }).click();
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
     await message().fill("Retain this draft");
     const records = async () => {
@@ -90,19 +95,25 @@ send({id:m.id,result});});`,
     };
     await expect.poll(async () => (await records())[0]?.draft).toBe("Retain this draft");
     const original = (await records())[0];
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(beta);
+    expect(original.checkout).toBe(beta);
     await expect(message()).toHaveValue("Retain this draft");
-    await expect(page.locator(".agents .directory")).toContainText(worktree);
-    await expect.poll(async () => (await records())[0]?.project).toBe(beta);
     await page.getByText("Execution checkout choices", { exact: true }).click();
-    await page.getByRole("combobox", { name: "Draft existing worktree" }).selectOption(worktree);
+    await page.getByRole("combobox", { name: "Draft existing worktree" }).selectOption(beta);
     await page.getByRole("button", { name: "Use discovered worktree" }).click();
-    await expect.poll(async () => (await records())[0]?.checkout).toBe(worktree);
+    await expect.poll(async () => (await records())[0]?.checkout).toBe(beta);
     await page.getByRole("button", { name: "Use new managed worktree on first Send" }).click();
     await expect
       .poll(async () => (await records())[0]?.worktree?.commit)
       .toBe(execFileSync("git", ["-C", beta, "rev-parse", "HEAD"]).toString().trim());
     expect((await records())[0].worktree.reservation).toBeUndefined();
+    await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(message()).toHaveValue("Retain this draft");
+    expect((await records())[0]).toMatchObject({ id: original.id, createdAt: original.createdAt });
+    await page.locator('.project-tab > button').first().click();
+    await expect(page.getByRole("button", { name: "Chat 1", exact: true })).toHaveCount(0);
+    await expect(page.locator('.view-nav .directory')).toContainText(beta);
+    await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
+    await expect(message()).toHaveValue("Retain this draft");
     await writeFile(join(worktree, "original-untracked"), "retain original");
     expect((await readFile(join(dir, "calls"), "utf8").catch(() => "")).split("\n").filter(method => method === "thread/start" || method === "turn/start")).toEqual([]);
     await page.setViewportSize({ width: 728, height: 600 });
@@ -111,7 +122,7 @@ send({id:m.id,result});});`,
     await page.screenshot({ path: "test-results/escode-35-draft.png" });
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("combobox", { name: "New chat project", exact: true }).selectOption(beta);
+    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: beta }).click();
     await expect(page.locator(".agent-row").filter({ hasText: "Chat 2" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -129,13 +140,23 @@ send({id:m.id,result});});`,
       state.views[beta].checkout = beta;
       await window.escode.lifecycle("persist", state);
     }, beta);
-    await expect(page.locator(".agents .directory")).toContainText(worktree);
+    await expect(page.locator(".agents .directory")).toContainText(beta);
     await page.getByRole("button", { name: "Send message", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeEnabled({ timeout: 15000 });
     await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toHaveCount(
       0,
     );
+    await expect.poll(async () => (await records())[0]?.initialSend, { timeout: 15000 }).toBe("accepted");
     const prepared = (await records())[0];
+    await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".project-tab")).toHaveCount(0);
+    await page.getByRole("button", { name: "Open checkout", exact: true }).click();
+    await expect(page.locator("header")).toContainText(prepared.checkout);
+    await page.getByRole("button", { name: "Chats · Running", exact: true }).click();
+    await page.getByRole("button", { name: "Chat 1 · Running", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeEnabled({ timeout: 15000 });
+    await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
     expect(prepared.checkout).not.toBe(worktree);
     expect(await readFile(join(prepared.checkout, "tracked"), "utf8")).toBe("committed");
     expect(await readFile(join(worktree, "tracked"), "utf8")).toBe("unstaged");
@@ -160,7 +181,7 @@ send({id:m.id,result});});`,
       "aria-pressed",
       "true",
     );
-    await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeEnabled({ timeout: 15000 });
     const blocked = await page.evaluate(
       async ({ beta, root }) =>
         window.escode.project("worktree-remove", beta, root).then(
