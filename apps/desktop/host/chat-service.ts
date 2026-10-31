@@ -136,7 +136,7 @@ export class ChatService {
         await this.store.update(project, id, { nextPermission: choice as SavedChat["nextPermission"] });
         if (session?.permissionConflict && !conflict) { session.permissionConflict = false; session.error = null; }
       }
-      return { choice: choice ?? chat.nextPermission ?? null, blocked, message };
+      return { choice: choice ?? chat.nextPermission ?? null, blocked, message, restrictedExecutionUnsupported: rpc.installation?.version === "codex-cli 0.166.0" };
     } finally { rpc.close(); }
   }
   private currentChat?: string;
@@ -1174,6 +1174,7 @@ export class ChatService {
         const policy = await this.permissions(project, id);
         if (policy.blocked) throw Error(policy.message);
         permissionPolicy(capturedPermission);
+        if (capturedPermission !== "full" && policy.restrictedExecutionUnsupported) throw Error(networkUnsupported);
       }
       capturedModel = chat.nextModel;
       if (capturedModel) {

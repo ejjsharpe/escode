@@ -1,5 +1,8 @@
+import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { Checkout } from "./project";
 import { test, expect } from "vite-plus/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, realpath, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Chats } from "./chat";
@@ -85,12 +88,12 @@ test("Codex 0.166 restricted execution is refused without replacing saved policy
 test("unqualified read-only title execution retains the fallback without a provider turn", async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-title-isolation-"));
   const store = new Chats(join(dir, "chats"));
-  let turns = 0;
+  let turns = 0, starts = 0;
   let closed!: () => void;
   const finished = new Promise<void>(resolve => { closed = resolve; });
   const titleConnect = async () => ({ installation: { path: "codex", version: "codex-cli 0.166.0" }, request: async (method: string) => {
     if (method === "model/list") return { data: [{ model: "gpt-6-luna" }] };
-    if (method === "thread/start") return { thread: { id: "title" } };
+    if (method === "thread/start") { starts++; return { thread: { id: "title" } }; }
     if (method === "turn/start") turns++;
     return {};
   }, close: closed });
@@ -102,6 +105,72 @@ test("unqualified read-only title execution retains the fallback without a provi
     await service.titleAction({ project: dir, id: chat.id });
     await finished;
     expect(turns).toBe(0);
+    expect(starts).toBe(0);
     expect((await store.get(dir, chat.id)).title).toBe(before);
   } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+for (const kind of ["scratch", "worktree"] as const) {
+  test(`unsupported restricted ${kind} Send preserves editable draft without resource effects`, async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-admission-")));
+    const root = join(dir, "repo"), managed = join(dir, "managed");
+    await mkdir(root);
+    const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args]).toString();
+    git("init", "-b", "main");
+    git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial");
+    const checkout = await Checkout.open(root);
+    const store = new Chats(join(dir, "chats.json"));
+    const project = kind === "scratch" ? null : root;
+    const chat = await store.createDraft(project, project ?? "");
+    if (kind === "worktree") {
+      const base = checkout.repositoryGit.worktreeOptions().bases.find(b => b.ref === "HEAD")!;
+      await store.context(root, chat.id, root, root, { ...base, source: root });
+    }
+    await store.update(project, chat.id, { nextPermission: kind === "scratch" ? "supervised" : "edits" });
+    await store.draft(project, chat.id, "retained prompt");
+    const before = await store.get(project, chat.id);
+    const branches = git("branch", "--list");
+    const worktrees = git("worktree", "list", "--porcelain");
+    let starts = 0, turns = 0;
+    const opened: Checkout[] = [];
+    const service = new ChatService(store, (async (cwd: string) => ({
+      installation: { path: "codex", version: "codex-cli 0.166.0" },
+      request: async (method: string, params: any) => {
+        if (method === "config/read") return { config: {} };
+        if (method === "configRequirements/read") return { requirements: null };
+        if (method === "account/read") return { account: {} };
+        if (method === "thread/start") { starts++; return { thread: { id: "task" }, cwd, model: "fixture", approvalPolicy: params.approvalPolicy, approvalsReviewer: "user", sandbox: params.sandbox === "danger-full-access" ? { type: "dangerFullAccess" } : { type: "readOnly", networkAccess: false } }; }
+        if (method === "thread/turns/list") return { data: [], nextCursor: null };
+        if (method === "turn/start") { turns++; return { turn: { id: "turn" } }; }
+        return {};
+      }, close() {},
+    })) as never, undefined, undefined, {
+      guard: () => () => {}, authorize: async () => {}, currentTarget: async () => root, managedRoot: managed,
+      checkout: async path => { if (path === root) return checkout; const target = await Checkout.open(path); opened.push(target); return target; },
+    });
+    try {
+      await expect(service.send(project, chat.id, "retained prompt")).rejects.toThrow("network isolation");
+      expect(await store.get(project, chat.id)).toEqual({ ...before, initialSend: "unaccepted" });
+      expect(starts).toBe(0); expect(turns).toBe(0);
+      expect(existsSync(join(dir, "scratch"))).toBe(false);
+      expect(existsSync(managed)).toBe(false);
+      expect(git("branch", "--list")).toBe(branches);
+      expect(git("worktree", "list", "--porcelain")).toBe(worktrees);
+      await service.context(project, chat.id, root, root);
+      await service.context(root, chat.id, project, project ?? "", before.worktree);
+      await service.permissions(project, chat.id, "full");
+      await service.send(project, chat.id, "retained prompt");
+      expect(starts).toBe(1); expect(turns).toBe(1);
+      const sent = await store.get(project, chat.id);
+      expect(sent.phase).toBe("bound");
+      expect(kind === "scratch" ? sent.scratch?.ino : sent.worktree?.reservation?.ino).toBeGreaterThan(0);
+      expect(existsSync(sent.checkout)).toBe(true);
+    } finally {
+      await service.shutdown();
+      for (const target of opened) target.close();
+      checkout.close();
+      await store.database.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+}
