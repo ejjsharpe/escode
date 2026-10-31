@@ -1,3 +1,4 @@
+import type { DurableState } from "./durable-state";
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { atomicWriteJson } from "./atomic-write";
@@ -18,7 +19,8 @@ export type Intent = {
 
 export class FileOperationJournal {
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(private file: string, private owner?: { hostId: string; clientId: string }) {}
+  private revision?: number;
+  constructor(private file: string, private owner?: { hostId: string; clientId: string }, readonly database?: DurableState) {}
   private decode(value: unknown) {
     if (!this.owner) return value;
     const stored = value as { storageVersion?: number; hostId?: string; clientId?: string };
@@ -29,7 +31,9 @@ export class FileOperationJournal {
   async readIntent(): Promise<Intent | null> {
     await this.queue;
     try {
-      const v = this.decode(JSON.parse(await readFile(this.file, "utf8"))) as any;
+      const stored = this.database ? await this.database.recoveryRead(this.owner!.clientId, "intent") : undefined;
+      if (stored) this.revision = stored.revision;
+      const v = (stored ? stored.body : this.decode(JSON.parse(await readFile(this.file, "utf8")))) as any;
       if (v === null || (this.owner && v.intent === null)) return null;
       if (
         !v ||
@@ -86,7 +90,13 @@ export class FileOperationJournal {
     this.queue = task.catch(() => {});
     return task;
   }
-  private replace(file: string, value: unknown) {
+  private async replace(file: string, value: unknown) {
+    if (this.database && file === this.file) {
+      if (this.revision === undefined) this.revision = (await this.database.recoveryRead(this.owner!.clientId, "intent")).revision;
+      await this.database.recoveryWrite(this.owner!.clientId, "intent", value, this.revision);
+      this.revision++;
+      return;
+    }
     return atomicWriteJson(file, () => this.owner && file === this.file
       ? { ...(value === null ? { intent: null } : value as object), storageVersion: 1, ...this.owner }
       : value);

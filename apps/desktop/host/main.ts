@@ -109,7 +109,7 @@ app.whenReady().then(async () => {
   const unapprovedProjects = new Set<string>();
   const removing = new Set<string>();
   let quitting = false;
-  const workspace = new Workspace(join(app.getPath("userData"), "client-workspace-v1.json"), foundation.read());
+  const workspace = new Workspace(join(app.getPath("userData"), "client-workspace-v1.json"), foundation.read(), store.database);
   const files = createFileWorkflow({
     userData: app.getPath("userData"), workspace, foundation, projects, projectSessions, removing,
     checkout: root => checkout(root), isQuitting: () => quitting,
