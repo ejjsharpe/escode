@@ -2,6 +2,8 @@
 
 Status: accepted by the user, 2026-10-31, including the complete synthesis and final defaults. This specifies a subsequent implementation; it does not describe shipped behavior. Decision owner: [How should file tabs behave inside a checkout tab?](https://github.com/ejjsharpe/escode/issues/91). Destination: [Specify checkout tabs and fuzzy file lookup](https://github.com/ejjsharpe/escode/issues/87).
 
+Implementation specification: [Specification: file tabs inside checkout tabs](https://github.com/ejjsharpe/escode/issues/92).
+
 Each checkout-specific project tab has one editor pane and a row of file tabs. A file has one tab and one editable working buffer in that checkout. Its ordinary editor, Git comparisons and save-conflict comparison are views of that same file. Opening another view reuses the tab and the user's edits.
 
 ## Reference and scope
@@ -98,7 +100,7 @@ Reuse existing checkout-scoped buffers, Monaco models, file operations and recov
 | `apps/desktop/host/file-operation-state.ts` and renderer operation reconciliation | Tab and closed-history references follow recorded move/Trash outcomes, including restart and unavailable descendants |
 | Existing desktop navigation, editable-diff, lifecycle, Files and recovery tests | Extend relevant fixtures and focused acceptance coverage; preserve existing save, journal, authority and chat-lifecycle gates |
 
-This is a behavior and preservation handoff, not a selected tab library or a prescribed new abstraction. Qualification targets the actual desktop and packaged application. Changed tab, keyboard and focus behavior needs new manual VoiceOver evidence; earlier Files/Agents evidence cannot certify it.
+This is a behavior and preservation handoff, not a selected tab library or a prescribed new abstraction. Qualification targets the actual desktop and packaged application through the existing automated tests. On 2026-10-31, the user removed VoiceOver testing and manual accessibility sign-off from acceptance for this personal application; they will report future problems during use. Retain the accessible controls and automated keyboard, focus and semantic checks.
 
 ## Acceptance examples
 
@@ -113,6 +115,6 @@ This is a behavior and preservation handoff, not a selected tab library or a pre
 9. **Reopen:** reopen a single close and each bulk-close operation with Cmd+Shift+T. Restore views/order without duplicates, skip preview replacements in history, retain exact unavailable targets, and never recover explicitly discarded text. Restart restores open tabs but starts a fresh recently-closed session history.
 10. **Restoration and comparison refresh:** restore clean and dirty tabs and a clean preview; recover dirty text/baselines as kept open. Reload current comparison data. An equal comparison displays No changes; a failed comparison displays unavailable without changing the selected view or losing edits.
 11. **Filesystem outcomes:** move/rename a dirty file and a directory containing several tabs; preserve available state at the successful destinations. Exercise failed and partial Trash, uncertain operation/restart, external deletion, and replaced checkout identity. Only recorded successful outcomes change references; edits remain recoverable under existing guarantees.
-12. **Keyboard and accessibility:** exercise the MRU picker commit/cancel, visual-order navigation, contextual Cmd+W, tree keys, tab-strip keys and menus in development and packaged builds. Verify focus, path/state announcements and unsaved markers with actual VoiceOver, including an empty row and narrow overflow. Chats/Agents and active dialogs retain their own keyboard scope.
+12. **Keyboard and accessibility:** exercise the MRU picker commit/cancel, visual-order navigation, contextual Cmd+W, tree keys, tab-strip keys and menus in development and packaged builds. Verify focus, accessible path/state labels and unsaved markers through automated assertions, including an empty row and narrow overflow. Chats/Agents and active dialogs retain their own keyboard scope.
 
 The parent map's remaining checkout/chat/search decisions retain their own confirmation and completion gates. Application implementation begins in a subsequent effort after that decision map is complete.
