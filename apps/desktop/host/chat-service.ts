@@ -1,3 +1,4 @@
+import { applyHistoricalFiles } from "./historical-files";
 import { captureTurnCheckpoint } from "./checkpoints";
 import type { Checkout } from "./project";
 import type { DraftAction } from "@escode/contracts";
@@ -325,6 +326,7 @@ export class ChatService {
     id: string,
     authorizedDraft?: Readonly<SavedChat>,
   ) {
+    if ((await this.store.get(project, id)).historicalPending) throw Error("Historical preparation incomplete; retained resources require inspection.");
     const s = this.session(project, id);
     if (s.connection.opening) {
       await s.connection.opening;
@@ -481,12 +483,15 @@ export class ChatService {
     return this.snapshot(project, id);
   }
   private rewindChoices = new Map<string, string>();
-  async rewind(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null): Promise<import("@escode/contracts").RewindResult> {
+  async branchHistory(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null) {
+    return this.rewind(project, id, boundary, token, commandId, true);
+  }
+  async rewind(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, branching = false): Promise<import("@escode/contracts").RewindResult> {
     const check = this.environment?.guard(project) ?? (() => {});
     await this.environment?.authorize(project);
     check();
     await this.store.get(project, id);
-    const identity = JSON.stringify([project, id, boundary, token]);
+    const identity = JSON.stringify([project, id, boundary, token, branching]);
     if (commandId) {
       const prior = await this.store.database.command("rewindRead", { commandId });
       if (prior) { if (prior.identity !== identity) throw Error("Rewind identity conflict"); return prior.result; }
@@ -500,6 +505,13 @@ export class ChatService {
       const batch = await this.store.database.command("checkpointPoints", { commandId: id, body: { boundary } }) as import("@escode/contracts").CheckpointPage;
       const point = batch.points[0];
       if (!point?.turnId || !point.threadId || point.threadId !== chat.threadId) return unavailable("Provider boundary reference unavailable.");
+      let snapshot: any;
+      if (branching) {
+        if (!project || !this.environment || point.kind !== "before-message") return unavailable("Historical branching requires a project before-message checkpoint.");
+        const coverage = await this.inspectFiles(project, id, boundary, null, null);
+        if (coverage.availability !== "available") return unavailable(coverage.message);
+        snapshot = await this.store.database.command("inspectCheckpoint", { commandId: id, body: { boundary } });
+      }
       let rpc: CodexConnection | undefined;
       try {
         rpc = await this.connect(chat.checkout, () => {}, () => {});
@@ -517,36 +529,51 @@ export class ChatService {
         if (cursor !== null || new Set(turns).size !== turns.length) return unavailable("Provider history exceeds rewind limits or repeats turns.");
         const index = turns.indexOf(point.turnId) - (point.kind === "before-message" ? 1 : 0);
         if (!turns.includes(point.turnId) || index < 0) return unavailable("Provider history lost or no supported predecessor for this boundary.");
-        const captured = JSON.stringify([project, id, point, chat.directoryIdentity, turns]);
+        const captured = JSON.stringify([project, id, point, chat.directoryIdentity, turns, branching, branching ? createHash("sha256").update(JSON.stringify(snapshot)).digest("hex") : null]);
         if (!token && !commandId) {
           if (this.rewindChoices.size >= 100) this.rewindChoices.clear();
           const choice = randomUUID(); this.rewindChoices.set(choice, captured);
-          return { status: "ready", token: choice, message: "Rewind conversation only. Current saved files, staging index, unsaved edits and unsent text stay in place. Later restore points may be abandoned. No turn will start." };
+          return { status: "ready", token: choice, message: branching ? "Create a separate historical chat and managed worktree. Captured files become uncommitted changes at the recorded base. Source files and drafts stay in place. No turn starts." : "Rewind conversation only. Current saved files, staging index, unsaved edits and unsent text stay in place. Later restore points may be abandoned. No turn will start." };
         }
         if (!token || !commandId || this.rewindChoices.get(token) !== captured) return unavailable("Selected boundary or provider history changed. Choose again.");
         check();
         const changedDirectory = await this.store.validateDirectory(chat);
         if (changedDirectory) return unavailable(changedDirectory);
         check();
-        const result = { status: "uncertain" as const, token: null, message: "Rewind outcome uncertain. Inspect provider history; this command will never be replayed." };
+        const result = { status: "uncertain" as const, token: null, message: branching ? "Historical preparation uncertain. Reserved resources are retained; inspect them externally. This command will never be replayed." : "Rewind outcome uncertain. Inspect provider history; this command will never be replayed." };
         await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result } });
         this.rewindChoices.delete(token);
         const session = this.sessions.get(id);
-        if (session) this.closeConnection(session);
+        if (session && !branching) this.closeConnection(session);
+        let child: Readonly<SavedChat> | undefined;
         try {
           check();
-          const response = await rpc.request("thread/fork", { threadId: point.threadId, lastTurnId: turns[index] }) as { thread?: { id?: string } };
+          if (branching) {
+            const source = await this.environment!.checkout(chat.checkout);
+            check();
+            if (source.repositoryGit.repository() !== project) throw Error("Project identity changed");
+            child = await this.store.createDraft(project, chat.checkout, true, true);
+            await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result, childId: child.id, checkpoint: snapshot } });
+            child = await this.store.context(project, child.id, project, chat.checkout, { source: chat.checkout, ref: snapshot.gitBase, commit: snapshot.gitBase });
+            child = await this.store.prepareWorktree(child, source, this.environment!.managedRoot);
+            check();
+            await applyHistoricalFiles(child.checkout, snapshot.files);
+            await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result, childId: child.id, checkpoint: snapshot } });
+          }
+          check();
+          if (child) this.store.validateWorktree(child);
+          const response = await rpc.request("thread/fork", { threadId: point.threadId, lastTurnId: turns[index], ...(child ? { cwd: child.checkout } : {}) }) as { thread?: { id?: string } };
           const threadId = response?.thread?.id;
           if (typeof threadId !== "string" || !threadId || threadId.length > 100 || threadId === point.threadId) throw Error("Provider historical context unavailable");
-          await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result, providerThreadId: threadId } });
-          await this.store.update(project, id, { threadId });
-          const applied = { status: "applied" as const, token: null, message: "Conversation rewound. Current files and drafts retained. Send explicitly to continue." };
-          await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, providerThreadId: threadId, result: applied } });
+          await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result, providerThreadId: threadId, ...(branching ? { checkpoint: snapshot, childId: child!.id } : {}) } });
+          await this.store.update(project, child?.id ?? id, { threadId, ...(branching ? { phase: "bound" as const, historicalPending: false } : {}) });
+          const applied = { status: "applied" as const, token: null, message: branching ? `Historical chat ${child!.id} created at ${child!.checkout}. Open it in Chats; Send explicitly to continue.` : "Conversation rewound. Current files and drafts retained. Send explicitly to continue." };
+          await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, providerThreadId: threadId, result: applied, ...(branching ? { checkpoint: snapshot, childId: child!.id } : {}) } });
           return applied;
         } catch (failure) {
           if ((failure as { rejected?: boolean }).rejected) {
             const rejected = unavailable("Provider historical context unavailable: " + String(failure));
-            await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result: rejected } });
+            await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result: rejected, ...(branching ? { checkpoint: snapshot, childId: child?.id } : {}) } });
             return rejected;
           }
           return { ...result, message: result.message + " " + String(failure) };
@@ -826,6 +853,7 @@ export class ChatService {
     expected?: string,
     commandId?: string,
   ) {
+    if ((await this.store.get(project, id)).historicalPending) throw Error("Historical preparation incomplete; retained resources require inspection.");
     const s = this.session(project, id);
     if (s.sending || s.completing || s.turn.phase !== "idle") throw Error("This chat already has an active turn.");
     if (!text.trim() || text.length > 100000)
