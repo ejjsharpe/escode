@@ -1,3 +1,4 @@
+import { validateCheckpointFiles } from "./checkpoint-files";
 import { DatabaseSync, backup } from "node:sqlite";
 import { mkdir, lstat, readFile, readdir, writeFile, copyFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -42,12 +43,7 @@ function checkpointCoverage(db: DatabaseSync) {
   const missing: string[] = [];
   for (const { reference, point } of points) {
     if (point.availability !== "available") continue;
-    if (!point.files || typeof point.files !== "object" || Array.isArray(point.files)) missing.push(reference + "/files");
-    else for (const [path, file] of Object.entries(point.files)) {
-      const entry = file as { mode: number; content: string } | null;
-      if (!path || path.startsWith("/") || path.split("/").some(part => ["..", ".git", ""].includes(part)) ||
-        (entry !== null && (![0o100644, 0o100755, 0o120000].includes(entry.mode) || typeof entry.content !== "string" || Buffer.from(entry.content, "base64").toString("base64") !== entry.content))) missing.push(reference + "/files/" + path);
-    }
+    try { validateCheckpointFiles(point.files); } catch { missing.push(reference + "/files"); }
     if (typeof point.gitBase !== "string" || !/^[a-f0-9]{40,64}$/.test(point.gitBase)) missing.push(reference + "/gitBase");
   }
   return { points, missing };

@@ -521,9 +521,13 @@ export class ChatService {
   }
   private rewindChoices = new Map<string, string>();
   async branchHistory(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, summarized = false) {
-    return this.rewind(project, id, boundary, token, commandId, false, true, summarized);
+    return this.applyHistoricalAction(project, id, boundary, token, commandId, summarized ? "summarized" : "branch");
   }
-  async rewind(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles = false, branching = false, summarized = false): Promise<import("@escode/contracts").RewindResult> {
+  async rewind(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles = false): Promise<import("@escode/contracts").RewindResult> {
+    return this.applyHistoricalAction(project, id, boundary, token, commandId, restoreFiles ? "restore" : "rewind");
+  }
+  private async applyHistoricalAction(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, action: import("@escode/contracts").HistoricalAction): Promise<import("@escode/contracts").RewindResult> {
+    const restoreFiles = action === "restore", summarized = action === "summarized", branching = action === "branch" || summarized;
     const check = this.environment?.guard(project) ?? (() => {});
     await this.environment?.authorize(project);
     check();

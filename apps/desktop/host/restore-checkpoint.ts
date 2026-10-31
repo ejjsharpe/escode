@@ -1,3 +1,4 @@
+import { validateCheckpointFiles } from "./checkpoint-files";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { lstat, realpath, mkdir, writeFile, rename, unlink, symlink } from "node:fs/promises";
@@ -28,13 +29,7 @@ export async function prepareRestoration(store: Chats, chat: Readonly<SavedChat>
     if ((await git("rev-parse", "--path-format=absolute", "--git-common-dir")).trim() !== sourceCommon) throw Error("Worktree repository authority changed");
   };
   await authority();
-  let bytes = 0;
-  for (const saved of Object.values(point.files) as ({ content: string; mode: number } | null)[]) {
-    if (saved === null) continue;
-    if (!saved || typeof saved.content !== "string" || ![0o100644, 0o100755, 0o120000].includes(saved.mode)) throw Error("Invalid captured file");
-    const content = Buffer.from(saved.content, "base64"); bytes += content.length;
-    if (content.toString("base64") !== saved.content || bytes > 8 * 1024 * 1024) throw Error("Invalid captured contents or capacity");
-  }
+  validateCheckpointFiles(point.files);
   const current = (await git("ls-files", "--cached", "--others", "--exclude-standard", "-z")).split("\0").filter(Boolean);
   const paths = [...new Set([...current, ...Object.keys(point.files)])].sort();
   if (paths.length > 10000) throw Error("Restoration file capacity exhausted");

@@ -144,7 +144,7 @@ async function runHistoricalBranch(failure: string, completion = false, summariz
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-branch-")));
   const root = join(dir, "repo"); await mkdir(root);
   const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args]).toString().trim();
-  git("init", "-b", "main"); await writeFile(join(root, "saved"), "base"); await writeFile(join(root, "deleted\tfile"), "removed historically"); git("add", ".");
+  git("init", "-b", "main"); await writeFile(join(root, "saved"), "base"); await writeFile(join(root, "deleted\tfile"), "removed historically"); await writeFile(join(root, "foo"), "base file"); await mkdir(join(root, "bar")); await writeFile(join(root, "bar/child"), "base child"); git("add", ".");
   git("-c", "user.name=Test", "-c", "user.email=t@t.test", "commit", "-m", "base");
   const base = git("rev-parse", "HEAD");
   const store = new Chats(join(dir, "state"));
@@ -153,6 +153,8 @@ async function runHistoricalBranch(failure: string, completion = false, summariz
   await store.update(root, chat.id, { threadId: "source-provider", phase: "bound", directoryIdentity: { path: root, dev: info.dev, ino: info.ino } });
   await writeFile(join(root, "saved"), "staged"); git("add", ".");
   git("rm", "--", "deleted\tfile");
+  await rm(join(root, "foo")); await mkdir(join(root, "foo")); await writeFile(join(root, "foo/child"), "historical child");
+  await rm(join(root, "bar"), { recursive: true }); await writeFile(join(root, "bar"), "historical file");
   await writeFile(join(root, "untracked"), "captured untracked");
   await writeFile(join(root, "saved"), "captured");
   await captureTurnCheckpoint(store.database, await store.get(root, chat.id), "source-provider", "capture");
@@ -261,6 +263,8 @@ async function runHistoricalBranch(failure: string, completion = false, summariz
     const fork = calls.find(c => c[0] === "thread/fork")[1];
     expect(fork.lastTurnId).toBe(completion ? "second" : "first"); expect(fork.threadId).toBe("source-provider");
     expect(await readFile(join(fork.cwd, "saved"), "utf8")).toBe(completion ? "completion captured" : "captured");
+    expect(await readFile(join(fork.cwd, "foo/child"), "utf8")).toBe("historical child");
+    expect(await readFile(join(fork.cwd, "bar"), "utf8")).toBe("historical file");
     expect(await readFile(join(fork.cwd, "untracked"), "utf8")).toBe("captured untracked");
     await expect(readFile(join(fork.cwd, "deleted\tfile"))).rejects.toThrow();
     expect(execFileSync("git", ["-C", fork.cwd, "rev-parse", "HEAD"]).toString().trim()).toBe(selectedBase);
