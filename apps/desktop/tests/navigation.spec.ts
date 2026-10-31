@@ -154,8 +154,8 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(resize).toHaveAttribute("aria-valuenow", "200");
     await open(a);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Chat 2 ·/ })).toHaveCount(0);
+    await page.getByRole("button", { name: /^Chat 1 ·/ }).click();
     await expect(page.getByLabel("Message Codex")).toHaveValue("original message draft");
     await expect(page.getByLabel("Message Codex")).toBeEnabled();
     await page.getByLabel("Message Codex").focus();
@@ -175,8 +175,8 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await open(worktree);
     await expect(page.locator(".view-nav:visible")).toContainText(worktree);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Chat 1", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "Chat 2", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Chat 1 ·/ })).toHaveCount(0);
+    await page.getByRole("button", { name: /^Chat 2 ·/ }).click();
     await expect(page.getByLabel("Message Codex")).toHaveValue("worktree message draft");
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(page.getByRole("button", { name: "Hide Git-ignored files", exact: true })).toHaveAttribute("aria-pressed", "false");
@@ -189,7 +189,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     );
     await open(a);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await page.getByRole("button", { name: /^Chat 1 ·/ }).click();
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Hide Git-ignored files", exact: true }),

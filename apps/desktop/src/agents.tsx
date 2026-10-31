@@ -1,39 +1,12 @@
 import { SidebarResize } from "./sidebar";
 import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@base-ui/react/button";
-import type { ChatSummary } from "@escode/contracts";
+import { ChatRow } from "./chat-row";
 import { compareChats } from "./chat-order";
 import { ChatView } from "./chat";
 import { useChatSummaries } from "./chat-state";
 import { memory, persist, flush, rememberProjectUse } from "./workspace";
 
-function ChatRow({
-  chat,
-  selected,
-  select,
-}: {
-  chat: ChatSummary;
-  selected: boolean;
-  select: () => void;
-}) {
-  const { chats } = useChatSummaries();
-  const status = chat.needsInput ? "Needs input" : chat.busy ? "Running" : chat.unavailable ? "Unavailable" : chat.phase === "draft" ? "Draft" : chat.initialSend === "uncertain" || chat.initialSend === "creating" ? "Uncertain" : "Stopped";
-  return (
-    <li>
-      <Button className="agent-row" aria-pressed={selected} onClick={select}>
-        <strong>
-          Chat{" "}
-          {Math.max(
-            0,
-            chats.filter(c => c.project === chat.project).findIndex((c) => c.id === chat.id),
-          ) + 1}
-        </strong>
-        <span>{chat.project?.split("/").at(-1) ?? "No project"}</span>
-        <small>{status}</small>
-      </Button>
-    </li>
-  );
-}
 function ProjectPicker({ targets, create, dismiss, error }: {
   targets: { project: string | null; checkout: string }[];
   create: (project: string | null) => Promise<void>;
@@ -178,7 +151,6 @@ export function AgentsView() {
             <Button onClick={() => void create(null)}>Start without a project</Button>
           )}
           {picking && <ProjectPicker targets={targets} create={create} dismiss={dismissPicker} error={error || targetError} />}
-          <h2>Saved chats</h2>
           {chats === null && <p role="status">Loading chats…</p>}
           {chats?.length === 0 && <p>No saved chats. Start without a project or open a project.</p>}
           <ul>
@@ -186,6 +158,7 @@ export function AgentsView() {
               <ChatRow
                 key={c.id}
                 chat={c}
+                fallbackTitle={`Chat ${catalogue.filter(chat => chat.project === c.project).findIndex(chat => chat.id === c.id) + 1}`}
                 selected={selected === c.id}
                 select={() => {
                   if (c.project) rememberProjectUse(c.project);

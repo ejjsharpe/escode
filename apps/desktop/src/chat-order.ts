@@ -1,8 +1,8 @@
 import type { ChatSummary } from "@escode/contracts";
-export function compareChats(a: Pick<ChatSummary, "id" | "createdAt" | "legacyOrder">, b: Pick<ChatSummary, "id" | "createdAt" | "legacyOrder">) {
-  return (
-    (b.createdAt ?? -1) - (a.createdAt ?? -1) ||
-    (b.legacyOrder ?? -1) - (a.legacyOrder ?? -1) ||
-    a.id.localeCompare(b.id)
-  );
+type Recency = Pick<ChatSummary, "createdAt" | "updatedAt" | "latestUserMessageAt" | "latestUserMessageCreatedAt">;
+export function chatRecency(chat: Recency) {
+  return chat.latestUserMessageAt ?? chat.latestUserMessageCreatedAt ?? chat.updatedAt ?? chat.createdAt ?? 0;
+}
+export function compareChats(a: Recency & { id: string }, b: Recency & { id: string }) {
+  return chatRecency(b) - chatRecency(a) || b.id.localeCompare(a.id);
 }
