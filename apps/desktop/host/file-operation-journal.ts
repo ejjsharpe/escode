@@ -9,6 +9,7 @@ export type Intent = {
   kind: "move" | "trash" | "save" | "copy";
   identity: string;
   completed?: boolean;
+  preserveDrafts?: boolean;
   temporary?: string;
   copies?: import("./workspace").WorkspaceState["drafts"];
   saveText?: string;
@@ -35,6 +36,10 @@ export class FileOperationJournal {
     }
   }
 
+  async publishFact(fact: Intent) {
+    await this.database.command("publishFileFact", { clientId: this.owner.clientId, body: fact });
+    return this.readFacts();
+  }
   private factsRevision?: number;
   async readFacts(): Promise<Intent[]> {
     const stored = await this.database.recoveryRead(this.owner.clientId, "fileFacts");
@@ -99,6 +104,7 @@ function validateIntent(v: any): asserts v is Intent {
                 typeof d.disk?.text !== "string" ||
                 typeof d.disk?.version !== "string",
             ))) ||
+        (v.preserveDrafts !== undefined && typeof v.preserveDrafts !== "boolean") ||
         (v.completed !== undefined && typeof v.completed !== "boolean") ||
         (v.kind === "save" &&
           (typeof v.saveText !== "string" ||

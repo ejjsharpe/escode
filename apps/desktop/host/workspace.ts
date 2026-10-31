@@ -18,7 +18,7 @@ export type RestoredStatus = {
 export interface LifecycleBridge {
   (
     operation: "load",
-  ): Promise<{ state: WorkspaceState; restored: RestoredStatus[]; errors: string[] }>;
+  ): Promise<{ state: WorkspaceState; restored: RestoredStatus[]; errors: string[]; acknowledgementRoots?: string[] }>;
   (operation: "persist", state: WorkspaceState): Promise<void>;
   (operation: "dirty", path: string): Promise<0 | 1 | 2>;
   (operation: "prepare", project?: string): Promise<boolean>;

@@ -33,7 +33,14 @@ export class FileOperations {
     const facts = await this.journal.readFacts();
     if (facts.length) this.handoff = { root: facts[0].root, facts };
     const record = await this.journal.readIntent();
-    if (!record) return "";
+    if (!record) {
+      if (facts.length) {
+        const state = await this.workspace.read();
+        for (const fact of facts) reconcile(state, fact);
+        await this.workspace.write(state);
+      }
+      return "";
+    }
     this.pending = record;
     try {
       const p = await project(record.root);
@@ -86,6 +93,9 @@ export class FileOperations {
     }
     return `Uncertain file operation: inspect ${record.root}/${record.source} and ${record.kind === "save" ? "its last saved disk contents" : record.destination || "Finder Trash"}${record.temporary ? ` (staging: ${record.temporary})` : ""}. Available drafts retained; file mutations are blocked until the original paths can be reconciled on restart.`;
   }
+  acknowledgementRoots() {
+    return [...new Set((this.handoff?.facts ?? []).map(fact => fact.root))];
+  }
   beginBatch(root: string) {
     this.assertIdle();
     this.handoff = { root, facts: [] };
@@ -96,7 +106,9 @@ export class FileOperations {
   releaseEmptyBatch() {
     if (!this.handoff?.facts.length) this.handoff = undefined;
   }
-  persist(state: unknown) {
+  async persist(state: unknown) {
+    const facts = await this.journal.readFacts();
+    if (facts.length) this.handoff = { root: facts[0].root, facts };
     if (this.busy && this.pending?.kind !== "copy")
       throw Error("File operation is persisting recovery intent. Retry after completion.");
     // Apply facts inside the storage queue, including writes queued before a fact completed.
@@ -117,7 +129,9 @@ export class FileOperations {
     if (!this.handoff.facts.some(f => f.source === intent.source && f.destination === intent.destination && f.identity === intent.identity && f.kind === intent.kind)) {
       this.handoff.facts.push(structuredClone(intent));
     }
-    await this.journal.writeFacts(this.handoff.facts);
+    if (intent.kind === "move" || intent.kind === "trash")
+      this.handoff.facts = await this.journal.publishFact(intent);
+    else await this.journal.writeFacts(this.handoff.facts);
   }
   assertIdle(batchRoot?: string) {
     if (this.busy || this.pending || (this.handoff && this.handoff.root !== batchRoot))
@@ -306,8 +320,9 @@ export class FileOperations {
         await this.journal.writeIntent(null);
         this.pending = undefined;
       }
-      await this.journal.writeFacts([]);
-      this.handoff = undefined;
+      const remaining = (await this.journal.readFacts()).filter(fact => fact.root !== root);
+      await this.journal.writeFacts(remaining);
+      this.handoff = remaining.length ? { root: remaining[0].root, facts: remaining } : undefined;
       return;
     }
     if (root && this.pending && !this.pending.completed) throw Error("Uncertain operation retains its intent; restart to reconcile actual paths.");

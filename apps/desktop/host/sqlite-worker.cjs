@@ -74,7 +74,23 @@ try {
 if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body }) => {
   try {
     let value;
-    if (operation === 'observePreparation') {
+    if (operation === 'publishFileFact') {
+      if (!body || !body.completed || !['move', 'trash'].includes(body.kind)) throw Error('Invalid shared file fact');
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const clients = db.prepare("SELECT DISTINCT clientId FROM client_recovery WHERE kind='workspace'").all();
+        for (const owner of clients) {
+          const row = db.prepare("SELECT body, revision FROM client_recovery WHERE clientId=? AND kind='fileFacts'").get(owner.clientId);
+          const facts = row ? JSON.parse(row.body) : [];
+          const fact = { ...body, ...(owner.clientId !== clientId && body.kind === 'trash' ? { preserveDrafts: true } : {}) };
+          if (!facts.some(f => f.identity === fact.identity && f.source === fact.source && f.destination === fact.destination && f.kind === fact.kind)) facts.push(fact);
+          const encoded = JSON.stringify(facts);
+          if (Buffer.byteLength(encoded) > 16 * 1024 * 1024) throw Error('Recovery storage capacity exhausted');
+          db.prepare("INSERT INTO client_recovery VALUES (?, 'fileFacts', ?, ?) ON CONFLICT(clientId,kind) DO UPDATE SET revision=excluded.revision, body=excluded.body").run(owner.clientId, (row?.revision ?? 0) + 1, encoded);
+        }
+        db.exec('COMMIT');
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+    } else if (operation === 'observePreparation') {
       validate([previous]); validate([result]);
       if (previous.id !== result.id || previous.project !== result.project || previous.checkout !== result.checkout) throw Error('Preparation identity changed');
       const row = db.prepare('SELECT body FROM chats WHERE id=?').get(previous.id);
