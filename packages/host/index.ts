@@ -61,6 +61,7 @@ export async function startHost(options: {
   worktreeOptions?: (root: string) => Promise<typeof import("@escode/contracts").WorktreeOptions.Type>;
   summaries?: () => Promise<ChatSummaries["chats"]>;
   chatSnapshot?: (project: string | null, id: string) => Promise<ChatDetail>;
+  checkpointRetention?: (days?: number | null) => Promise<number | null>;
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
   checkpointPoints?: (project: string | null, id: string, cursor: string | null) => Promise<typeof CheckpointPage.Type>;
   rewind?: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles?: boolean) => Promise<RewindResult>;
@@ -142,7 +143,7 @@ export async function startHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "branchHistory", "inspectFiles", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["checkpointRetention", "observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "branchHistory", "inspectFiles", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -277,6 +278,11 @@ export async function startHost(options: {
             return batch;
           }, catch: String }), Schedule.spaced("100 millis"));
         }),
+        checkpointRetention: ({ days }) => Effect.tryPromise({ try: async () => {
+          if (days !== undefined && days !== null && (!Number.isSafeInteger(days) || days < 1 || days > 36500)) throw Error("Retention must be 1–36500 whole days or Never");
+          if (!options.checkpointRetention) throw Error("Retention settings unavailable");
+          return options.checkpointRetention(days);
+        }, catch: String }),
         openChat: ({ project, id }) => Effect.tryPromise({ try: async () => {
           if (!options.openChat) throw Error("Chat unavailable");
           const detail = await options.openChat(project, id);
