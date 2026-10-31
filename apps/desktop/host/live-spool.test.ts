@@ -25,3 +25,14 @@ test("durable chunks retain exact binding through partial writes, corruption and
     await expect(spool.read("chat", "provider")).rejects.toThrow("Incomplete");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("queued spool work is bounded without dropping admitted output", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-spool-queue-"));
+  const spool = new LiveSpool(dir);
+  try {
+    const writes = Array.from({ length: 64 }, () => spool.write("chat", "thread", [], false));
+    await expect(spool.write("overflow", "thread", [], false)).rejects.toThrow("queue capacity");
+    await Promise.all(writes);
+    expect(await spool.read("chat", "thread")).toEqual({ items: [], partial: false });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

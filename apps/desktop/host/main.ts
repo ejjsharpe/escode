@@ -14,7 +14,7 @@ import {
 import { join, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
 import { startHost } from "@escode/host";
-import { FoundationState } from "./foundation-state";
+import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { draftSettings, toolStatus } from "./tools";
 import { Chats } from "./chat";
@@ -26,15 +26,17 @@ const developmentOrigin = /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.ESCODE_
   ? process.env.ESCODE_DEV_URL!
   : "http://127.0.0.1:5173";
 app.whenReady().then(async () => {
+  if (!app.requestSingleInstanceLock()) { app.quit(); return; }
   mkdirSync(app.getPath("userData"), { recursive: true, mode: 0o700 });
-  let foundation: FoundationState;
+  let owner: { hostId: string; clientId: string };
+  const admissionEpoch = randomUUID();
   const store = new Chats(join(app.getPath("userData"), "durable-chats-v1"));
   let sends: DurableSend;
   try {
     const identity = await store.database.ready;
     console.info("SQLite durability settings", identity.settings);
-    foundation = FoundationState.open(join(app.getPath("userData"), "durable-chats-v1.sqlite-state-v1", "receipts"), identity);
-    sends = new DurableSend(store.database, foundation.admissionEpoch);
+    owner = identity;
+    sends = new DurableSend(store.database, admissionEpoch);
   } catch (error) {
     dialog.showErrorBox(
       "Foundation state unavailable",
@@ -43,7 +45,7 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
-  app.once("will-quit", () => foundation.close());
+  app.once("will-quit", () => { void store.database.close(); });
   const page = pathToFileURL(join(__dirname, "../renderer/index.html")).href;
   const dev = !app.isPackaged && process.env.ESCODE_DEV_URL === developmentOrigin;
   const documentURL = dev ? developmentOrigin + "/" : page;
@@ -111,9 +113,9 @@ app.whenReady().then(async () => {
   const unapprovedProjects = new Set<string>();
   const removing = new Set<string>();
   let quitting = false;
-  const workspace = new Workspace(join(app.getPath("userData"), "client-workspace-v1.json"), foundation.read(), store.database);
+  const workspace = new Workspace(join(app.getPath("userData"), "client-workspace-v1.json"), owner, store.database);
   const files = createFileWorkflow({
-    userData: app.getPath("userData"), workspace, foundation, projects, projectSessions, removing,
+    userData: app.getPath("userData"), workspace, admissionEpoch, projects, projectSessions, removing,
     checkout: root => checkout(root), isQuitting: () => quitting,
     showMessageBox: options => dialog.showMessageBox(window, options), clipboard,
     writeClipboard: data => clipboard.write([new ClipboardItem(data)]),
@@ -400,9 +402,9 @@ app.whenReady().then(async () => {
     },
     loadWorkspace: () => workspaceAction("load") as Promise<typeof import("@escode/contracts").WorkspaceLoad.Type>,
     persistWorkspace: async (state) => { await workspaceAction("persist", state); },
-    createState: () => foundation.admissionEpoch,
+    createState: () => admissionEpoch,
     ...files.hostActions,
-    ...foundation.read(), origin: dev ? developmentOrigin : "file://",
+    ...owner, origin: dev ? developmentOrigin : "file://",
   });
   hostOrigin = host.origin;
   ipcMain.handle("local-bootstrap", (event, ...args) => {

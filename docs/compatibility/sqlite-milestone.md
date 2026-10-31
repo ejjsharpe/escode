@@ -1,4 +1,4 @@
-# Storage milestone qualification (#127, spec #117) — incomplete
+# Storage milestone qualification (#127, spec #117)
 
 2026-10-31, isolated worktree `/Users/elliotsharpe/.t3/worktrees/escode/t3-fbad77c9`,
 branch `t3/sqlite-metadata-cutover`, based on integration `7ed42e0` with `0a9c981`
@@ -73,3 +73,93 @@ fixture input mutation: adding directory identities changed expected workspace
 records. The seed helper now copies inputs before adding identities.
 The corrected saved-project/interrupted-move and closed-editor/linked-worktree
 packaged rerun passed 2/2 in 7.2 seconds. Final typecheck/lint and diff checks pass.
+
+## Completion follow-up (2026-10-31)
+
+Worktree `/Users/elliotsharpe/.t3/worktrees/escode/t3-f79b964f`, branch
+`t3/sqlite-metadata-cutover-1`: verified clean integration base `7ed42e0`, merged
+exact partial `11ff1b3e7b2874991931ce2701d02449e655f014`, preserved `0a9c981`.
+Final integration merge returned already up to date. No issue closure, PR or merge
+into integration was performed; #128 still requires #127 acceptance.
+
+The remaining active FoundationState JSON store and standalone Send implementation
+are deleted with their obsolete tests. Startup identities come from SQLite; the
+host generates a new admission epoch and uses Electron's process-owned single
+instance lock. File commands share that epoch and SQLite workspace ownership.
+Recovery export, validation and reconciliation now use command receipts in the
+consistent SQLite cut; no separate JSON writer/fence exists. Packaged identity
+fixtures read SQLite. Existing old bytes are neither imported nor removed.
+
+TDD evidence: removing JSON setup from recovery fixtures first produced five
+ENOENT failures at the external journal lock; the SQLite-only copy tests then
+passed, including unresolved command quarantine. The 257th recovery owner initially
+succeeded; it now fails while existing rows remain readable. Aggregate byte-limit,
+queue, complete-worker-loss and existing recovery tests pass at their existing
+boundaries. The removed tests exercised the superseded store, rather than the
+active SQLite implementation.
+
+Admission limits are explicit: 64 MiB aggregate serialized bodies across chats,
+submission bodies/association snapshots, preparation results and recovery rows;
+256 distinct recovery owners, 1,280 recovery rows, 16 MiB per recovery row, 1 MiB
+chat collection, 1,000 submission identities; client/chat/command identity keys
+are limited to 256 characters where admitted. SQLite transaction triggers enforce
+aggregate limits, including shared file-fact fanout, and roll back the mutation.
+Worker queue: 64 requests and 32 MiB serialized fields. Live spool: existing
+64 MiB disk quota, plus 64 queued writes and 8 MiB serialized queued snapshots.
+No protected evidence is evicted. These are logical admission limits, not an
+upper bound on SQLite page overhead, WAL retained by readers, temporary backup
+space or provider-owned storage. Exhaustion requires explicit operator action.
+
+Executed follow-up:
+
+- Combined host suite: 329 passed, six skipped (including two explicit opt-in
+  qualification cases), 41 files, 52.76 s. A subsequent focused run including the
+  aggregate 64 MiB rejection test passed 24/24 in 2.32 s.
+- Typecheck, lint, build and unsigned arm64 package passed. Dependencies were
+  installed with the frozen lockfile; no dependency or lockfile change.
+- Complete worker termination: ordinary admission rejects with no dispatch;
+  captured emergency Stop returns uncertain and dispatches exactly once;
+  ordinary Send remains rejected. Existing authenticated target/authority and
+  packaged emergency tests remain the complementary checks.
+- Real ENOSPC: created a disposable 20 MiB HFS+ disk image with `hdiutil`, filled
+  it with real 1 MiB then 4 KiB files, and ran the storage qualification test.
+  SQLite rejects recovery persistence and Stop admission, keeps the original
+  saved draft, and permits explicit emergency cancellation exactly once. This
+  exposed SQLite's automatic rollback on full disk; worker error handling now
+  preserves the original failure instead of masking it with a second rollback.
+  Both opt-in qualification cases passed together in 1.96 s. No project or user
+  volume was filled. Reproduce with a disposable mounted filesystem:
+  `ESCODE_FULL_VOLUME=<mount> ESCODE_READ_ONLY_PROVIDER=1 bun run --cwd apps/desktop test -- host/storage-qualification.test.ts`.
+- Installed provider: Codex 0.166.0, `codex login status` reports ChatGPT login.
+  Executed account/read, thread/list and the existing recovery inspector's
+  thread/read against an existing exact saved thread/cwd; identity, cwd and turns
+  were confirmed. No thread/start, resume, turn or resource mutation was requested.
+  This qualifies read-only saved-provider inspection on this installation; it
+  does not qualify historical continuation or every saved thread.
+- Packaged actual UI measurements: baseline editing 138.407 ms and Save 269.735 ms;
+  after 32 additional valid 64 KiB recovery records, editing 55.511 ms and Save
+  258.445 ms. Editing includes automation click/select/type/render; Save includes
+  button admission, disk observation and re-enabled UI. Initial timing attempts
+  issued Cmd+S during the preceding in-flight Save and did not measure a second
+  save; the fixture now waits for the enabled Save button. This is a bounded
+  baseline/follow-up workload on the current build, not an old-version comparison.
+- Two packaged Send/ordinary Stop/emergency Stop runs: 386.430/120.156/54.670 ms
+  and 383.734/111.189/50.913 ms. Provider protocol/effects are deterministic local
+  fixtures; these measure real packaged UI and host paths, not network/model time.
+- Packaged worker readback remains WAL/NORMAL/checkpoint_fullfsync=1. A follow-up
+  100 x 4 KiB sample measured median 0.129584 ms, p95 0.250375 ms, max 4.027792 ms;
+  SQLite/WAL/SHM grew from 77,928 to 514,648 bytes. No speedup is claimed.
+
+Qualification limits remain: no physical power-loss test, stronger project-file
+flush guarantee, exhaustive capacity/multi-client matrix, new manual accessibility
+check or historical implementation. Checkpoint capture/cleanup does not yet exist
+in this slice and has no latency claim. There is no unmet authentication gate for
+the executed read-only provider inspection. These bounded checks require parent
+acceptance before #128 is unblocked.
+
+Final packaged rerun after rebuilding the final spool bound: 6/6 passed. This
+includes explicit fresh-store baseline and follow-up Send/control runs with 32
+additional valid 64 KiB recovery records: Send 384.800/383.385 ms, ordinary Stop
+120.332/114.862 ms, emergency Stop 45.779/31.071 ms. An overlapping earlier test
+launch during package replacement failed ENOENT; it is excluded from pass evidence.
+The final serialized build/package/test run succeeded.

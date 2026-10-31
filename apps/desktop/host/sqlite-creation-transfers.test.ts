@@ -8,7 +8,7 @@ import WebSocket from "ws";
 import { startHost } from "@escode/host";
 import { createHostClient } from "@escode/client-runtime";
 import { createFileWorkflow } from "./file-workflow";
-import { FoundationState } from "./foundation-state";
+import { randomUUID } from "node:crypto";
 import { DurableState } from "./durable-state";
 import { Workspace, emptyWorkspace } from "./workspace";
 import { Checkout } from "./project";
@@ -26,12 +26,12 @@ test("authenticated creation and duplicate retain outcomes, failures and copied 
   const project = await Checkout.open(root);
   let db = new DurableState(join(base, "db"));
   const owner = await db.ready;
-  const foundation = FoundationState.open(join(base, "foundation"), owner);
+  const admissionEpoch = randomUUID();
   const socket = globalThis.WebSocket;
   globalThis.WebSocket = class extends WebSocket { constructor(url: string) { super(url, { origin: "null" }); } } as unknown as typeof globalThis.WebSocket;
   const build = () => {
     const workspace = new Workspace(join(base, "legacy.json"), owner, db);
-    const files = createFileWorkflow({ userData: base, workspace, foundation,
+    const files = createFileWorkflow({ userData: base, workspace, admissionEpoch,
       projects: new Map([[root, project]]), projectSessions: new Map([[project.repositoryGit.repository(), {}]]),
       removing: new Set(), checkout: async () => project, isQuitting: () => false,
       clipboard: { read: async () => [] }, writeClipboard: async () => {},
@@ -45,7 +45,7 @@ test("authenticated creation and duplicate retain outcomes, failures and copied 
   const creationReported = new Promise<void>(resolve => { reportCreation = resolve; });
   let responseLost = false;
   const host = await startHost({ ...owner, origin: "null", list: async () => ({ kind: "denied", message: "unused" }),
-    createState: () => foundation.admissionEpoch,
+    createState: () => admissionEpoch,
     createEntry: async c => {
       const result = await current.files.hostActions.createEntry!(c);
       if (c.commandId === "response-loss" && !responseLost) {
@@ -124,6 +124,6 @@ test("authenticated creation and duplicate retain outcomes, failures and copied 
     expect(execFileSync("git", ["-C", root, "show", ":staged.txt"], { encoding: "utf8" })).toBe("preexisting staged bytes");
   } finally {
     fault.close(); await client.close(); await host.close(); globalThis.WebSocket = socket;
-    foundation.close(); project.close(); await db.close(); rmSync(base, { recursive: true, force: true });
+     project.close(); await db.close(); rmSync(base, { recursive: true, force: true });
   }
 });

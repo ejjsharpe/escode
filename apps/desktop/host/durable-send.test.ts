@@ -241,3 +241,21 @@ test("independent authenticated clients preserve newer composer revisions while 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("complete worker loss fails admission closed but permits captured emergency Stop", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-worker-stop-"));
+  const db = new DurableState(join(dir, "db"));
+  try {
+    await db.ready;
+    const sends = new DurableSend(db);
+    await db.close();
+    let effects = 0;
+    const command = { commandId: "stop", admissionEpoch: sends.admissionEpoch, project: null, id: "chat", expected: "state", text: "", control: { operation: "stop" as const, target: "captured-turn", token: "token", answer: "" } };
+    await expect(sends.execute(command, async () => { effects++; })).rejects.toThrow("Emergency Stop");
+    expect(effects).toBe(0);
+    expect((await sends.execute({ ...command, control: { ...command.control, emergency: true } }, async () => { effects++; })).status).toBe("uncertain");
+    expect(effects).toBe(1);
+    await expect(sends.execute({ ...command, commandId: "send", control: undefined }, async () => { effects++; })).rejects.toThrow("worker");
+    expect(effects).toBe(1);
+  } finally { await db.close(); await rm(dir, { recursive: true, force: true }); }
+});

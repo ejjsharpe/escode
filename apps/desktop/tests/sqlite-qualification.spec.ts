@@ -37,3 +37,38 @@ test("packaged worker durability readback and recovery write measurement", async
     console.log("#127 packaged evidence", JSON.stringify(evidence));
   } finally { await runtime.evaluate(({ app }) => app.exit(0)).catch(() => {}); await rm(user, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
+
+ test("packaged editing and Save baseline and loaded-store followup", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const { writeFile, readFile, realpath } = await import("node:fs/promises");
+  const { Chats } = await import("../host/chat");
+  const { emptyWorkspace } = await import("../host/workspace");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-latency-")));
+  const root = join(dir, "repo"), user = join(dir, "user");
+  execFileSync("git", ["init", root]);
+  await writeFile(join(root, "a.txt"), "initial");
+  const app = await launchDesktop(user, undefined, true);
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
+    for (const phase of ["baseline", "followup"]) {
+      if (phase === "followup") {
+        const db = new Chats(join(user, "durable-chats-v1"));
+        try { for (let i = 0; i < 32; i++) await db.database.recoveryWrite("measurement-" + i, "workspace", { ...emptyWorkspace(), measurement: "x".repeat(65536) }, 0); }
+        finally { await db.database.close(); }
+      }
+      const start = performance.now();
+      await page.locator(".monaco-editor:visible").click();
+      await page.keyboard.press("Meta+a");
+      await page.keyboard.type(phase);
+      await expect(page.locator(".monaco-editor:visible")).toContainText(phase);
+      const editMs = performance.now() - start, saveStart = performance.now();
+      await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
+      await expect.poll(() => readFile(join(root, "a.txt"), "utf8")).toBe(phase);
+      await expect(page.getByRole("button", { name: "Save ⌘S", exact: true })).toBeEnabled();
+      console.log("#127 packaged editing/Save ms", JSON.stringify({ phase, editMs, saveMs: performance.now() - saveStart }));
+    }
+  } finally { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await rm(dir, { recursive: true, force: true, maxRetries: 5 }); }
+});
