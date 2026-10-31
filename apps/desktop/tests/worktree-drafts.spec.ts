@@ -1,3 +1,4 @@
+import { readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -91,7 +92,7 @@ send({id:m.id,result});});`,
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
     await message().fill("Retain this draft");
     const records = async () => {
-      const saved = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+      const saved = JSON.parse(await readChatFixture(join(user, "host-chats-v1.json"), "utf8")).chats;
       return Promise.all(saved.map(async (chat: any) => ({ ...chat, draft: await page.evaluate(({ project, id }) => window.escode.chat("composer", project, id), chat) })));
     };
     await expect.poll(async () => (await records())[0]?.draft).toBe("Retain this draft");

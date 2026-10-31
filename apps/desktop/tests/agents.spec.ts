@@ -1,3 +1,4 @@
+import { writeChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -45,7 +46,7 @@ test("Agents restores closed saved projects and shares conversations without mov
     { id: "beta-chat", project: b, checkout: b, threadId: "saved-beta", draft: "beta text" },
     { id: "forged-chat", project: "/unapproved", checkout: b, threadId: null, draft: "keep me" },
   ];
-  await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
+  await writeChatFixture(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
   await writeFile(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
@@ -401,7 +402,7 @@ test("Agents and local Chats keep newest-first order and original labels through
       createdAt: 200,
     },
   ];
-  await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
+  await writeChatFixture(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
   await writeFile(
     join(dir, "codex"),
     `#!/usr/bin/env node
@@ -539,7 +540,7 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
       drafts: [],
     }),
   );
-  await writeFile(
+  await writeChatFixture(
     join(user, "host-chats-v1.json"),
     JSON.stringify({ version: 1, chats:
       roots

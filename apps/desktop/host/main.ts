@@ -28,8 +28,11 @@ const developmentOrigin = /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.ESCODE_
 app.whenReady().then(async () => {
   mkdirSync(app.getPath("userData"), { recursive: true, mode: 0o700 });
   let foundation: FoundationState;
+  const store = new Chats(join(app.getPath("userData"), "durable-chats-v1"));
   try {
-    foundation = FoundationState.open(join(app.getPath("userData"), "foundation"));
+    const identity = await store.database.ready;
+    console.info("SQLite durability settings", identity.settings);
+    foundation = FoundationState.open(join(app.getPath("userData"), "durable-chats-v1.sqlite-state-v1", "receipts"), identity);
   } catch (error) {
     dialog.showErrorBox(
       "Foundation state unavailable",
@@ -85,7 +88,6 @@ app.whenReady().then(async () => {
       throw new Error("Invalid tools request");
     return toolStatus();
   });
-  const store = new Chats(join(app.getPath("userData"), "host-chats-v1.json"));
   const chats = new ChatService(store, undefined, undefined, draftSettings, {
     guard: root => {
       const owner = root === null ? undefined : projectSessions.get(root);

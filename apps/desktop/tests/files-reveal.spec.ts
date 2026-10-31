@@ -258,21 +258,20 @@ for (const change of ["editor close", "retained dirty editor", "root replacement
       await app.evaluate(({ shell, ipcMain }) => {
         (globalThis as any).finderTargets = [];
         shell.showItemInFolder = (path: string) => { (globalThis as any).finderTargets.push(path); };
-        const fs = process.getBuiltinModule("fs/promises") as any;
-        const read = fs.readFile;
+        const fs = (process.getBuiltinModule("worker_threads") as any).Worker.prototype;
+        const read = fs.postMessage;
         const { AsyncLocalStorage } = process.getBuiltinModule("async_hooks") as any;
         const context = new AsyncLocalStorage();
         const handlers = (ipcMain as any)._invokeHandlers;
         const handler = handlers.get("project");
         handlers.set("project", (event: unknown, operation: string, ...args: unknown[]) =>
           context.run(operation === "entry-action", () => handler(event, operation, ...args)));
-        fs.readFile = (...args: any[]) => {
-          const result = read(...args);
-          if (!context.getStore() || !String(args[0]).endsWith("/host-chats-v1.json")) return result;
-          fs.readFile = read;
+        fs.postMessage = function(this: any, ...args: any[]) {
+          if (!context.getStore() || args[0]?.operation !== "read") return read.apply(this, args);
+          fs.postMessage = read;
           handlers.set("project", handler);
           return new Promise((resolve, reject) => {
-            (globalThis as any).releaseContext = () => result.then(resolve, reject);
+            (globalThis as any).releaseContext = () => { try { resolve(read.apply(this, args)); } catch (error) { reject(error); } };
           });
         };
       });

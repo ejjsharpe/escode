@@ -1,0 +1,73 @@
+const { parentPort, workerData } = require('node:worker_threads');
+const { DatabaseSync } = require('node:sqlite');
+const { mkdirSync, lstatSync, readdirSync, existsSync, openSync, fsyncSync, closeSync } = require('node:fs');
+const { join } = require('node:path');
+const { randomUUID } = require('node:crypto');
+let db;
+const validate = chats => {
+  if (!Array.isArray(chats) || Buffer.byteLength(JSON.stringify(chats)) > 1024 * 1024) throw Error('Invalid draft storage or capacity exhausted');
+  const ids = new Set();
+  for (const chat of chats) {
+    if (!chat || typeof chat.id !== 'string' || !chat.id || ids.has(chat.id) ||
+        !(chat.project === null || typeof chat.project === 'string') || typeof chat.checkout !== 'string' ||
+        typeof chat.draft !== 'string' || !(chat.threadId === null || typeof chat.threadId === 'string') ||
+        (chat.phase !== undefined && !['draft', 'bound'].includes(chat.phase)) ||
+        (chat.directoryIdentity && (typeof chat.directoryIdentity.path !== 'string' || !Number.isSafeInteger(chat.directoryIdentity.dev) || !Number.isSafeInteger(chat.directoryIdentity.ino)))) throw Error('Malformed draft storage');
+    ids.add(chat.id);
+  }
+};
+try {
+  const marker = workerData + '.established';
+  const established = existsSync(marker);
+  if (established && !existsSync(workerData)) throw Error('Missing established SQLite directory; explicit recovery required');
+  if (!established && existsSync(workerData)) throw Error('Missing SQLite establishment evidence; explicit recovery required');
+  if (!established) {
+    const fd = openSync(marker, 'wx', 0o600);
+    try { fsyncSync(fd); } finally { closeSync(fd); }
+  }
+  let fresh = false;
+  try { mkdirSync(workerData, { mode: 0o700 }); fresh = true; }
+  catch (e) { if (e.code !== 'EEXIST') throw e; }
+  if (!lstatSync(workerData).isDirectory() || lstatSync(workerData).isSymbolicLink()) throw Error('Invalid SQLite directory');
+  const file = join(workerData, 'state.sqlite');
+  if (!fresh && (!readdirSync(workerData).includes('state.sqlite') || !lstatSync(file).isFile() || lstatSync(file).isSymbolicLink())) throw Error('Missing established SQLite storage; explicit recovery required');
+  if (readdirSync(workerData).some(name => !['state.sqlite', 'state.sqlite-wal', 'state.sqlite-shm', 'receipts'].includes(name))) throw Error('Ambiguous SQLite storage');
+  for (const name of readdirSync(workerData)) if (lstatSync(join(workerData, name)).isSymbolicLink()) throw Error('Linked SQLite storage refused');
+  db = new DatabaseSync(file);
+  db.exec('PRAGMA busy_timeout=3000');
+  if (fresh) {
+    db.exec(`BEGIN IMMEDIATE; PRAGMA user_version=1;
+      CREATE TABLE identity (singleton INTEGER PRIMARY KEY CHECK(singleton=1), hostId TEXT NOT NULL, clientId TEXT NOT NULL, revision INTEGER NOT NULL);
+      CREATE TABLE chats (id TEXT PRIMARY KEY, body TEXT NOT NULL);
+    `);
+    db.prepare('INSERT INTO identity VALUES (1, ?, ?, 0)').run(randomUUID(), randomUUID());
+    db.exec('COMMIT');
+  }
+  if (db.prepare('PRAGMA user_version').get().user_version !== 1 || db.prepare('PRAGMA quick_check').get().quick_check !== 'ok') throw Error('Unsupported or corrupt SQLite storage');
+  const identity = db.prepare('SELECT * FROM identity').all();
+  if (identity.length !== 1 || !/^[0-9a-f-]{36}$/.test(identity[0].hostId) || !/^[0-9a-f-]{36}$/.test(identity[0].clientId) || !Number.isSafeInteger(identity[0].revision)) throw Error('Invalid established SQLite identities');
+  validate(db.prepare('SELECT body FROM chats').all().map(row => JSON.parse(row.body)));
+  db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA checkpoint_fullfsync=ON');
+  const settings = { journalMode: db.prepare('PRAGMA journal_mode').get().journal_mode, synchronous: db.prepare('PRAGMA synchronous').get().synchronous, checkpointFullfsync: db.prepare('PRAGMA checkpoint_fullfsync').get().checkpoint_fullfsync };
+  if (settings.journalMode !== 'wal' || settings.synchronous !== 1 || settings.checkpointFullfsync !== 1) throw Error('SQLite durability settings unavailable');
+  parentPort.postMessage({ id: 0, value: { ...identity[0], settings } });
+} catch (e) { parentPort.postMessage({ id: 0, error: String(e) }); db?.close(); process.exitCode = 1; }
+if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision }) => {
+  try {
+    let value;
+    if (operation === 'read') value = { chats: db.prepare('SELECT body FROM chats ORDER BY rowid').all().map(row => JSON.parse(row.body)), revision: db.prepare('SELECT revision FROM identity').get().revision };
+    else if (operation === 'write') {
+      validate(chats);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        if (db.prepare('SELECT revision FROM identity').get().revision !== revision) throw Error('Draft storage changed; retry after reopening');
+        db.exec('DELETE FROM chats');
+        const insert = db.prepare('INSERT INTO chats VALUES (?, ?)');
+        for (const chat of chats) insert.run(chat.id, JSON.stringify(chat));
+        db.exec('UPDATE identity SET revision=revision+1');
+        db.exec('COMMIT');
+      } catch (e) { db.exec('ROLLBACK'); throw e; }
+    } else throw Error('Unknown SQLite operation');
+    parentPort.postMessage({ id, value });
+  } catch (e) { parentPort.postMessage({ id, error: String(e) }); }
+});

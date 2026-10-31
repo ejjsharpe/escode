@@ -113,23 +113,23 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect(page.locator("header")).toContainText(root);
     const chat = await page.evaluate((root) => window.escode.chat("create", root, root), root);
     await app.evaluate(() => {
-      const fs = process.getBuiltinModule("fs/promises") as any;
-      const read = fs.readFile;
+      const fs = (process.getBuiltinModule("worker_threads") as any).Worker.prototype;
+      const read = fs.postMessage;
       let release!: () => void;
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
       (globalThis as any).releaseMetadata = () => {
-        fs.readFile = read;
+        fs.postMessage = read;
         release();
       };
       (globalThis as any).metadataReads = 0;
-      fs.readFile = async (...args: unknown[]) => {
-        if (String(args[0]).endsWith("/host-chats-v1.json")) {
+      fs.postMessage = async function(this: any, ...args: unknown[]) {
+        if ((args[0] as any)?.operation === "read") {
           (globalThis as any).metadataReads++;
           await gate;
         }
-        return read(...args);
+        return read.apply(this, args);
       };
     });
     await page.evaluate(

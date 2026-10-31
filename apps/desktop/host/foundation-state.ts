@@ -90,7 +90,7 @@ export class FoundationState {
     private state: State,
   ) {}
 
-  static open(directory: string): FoundationState {
+  static open(directory: string, identity?: { hostId: string; clientId: string }): FoundationState {
     let fresh = false;
     try {
       mkdirSync(directory, { mode: 0o700 });
@@ -113,7 +113,7 @@ export class FoundationState {
         throw Error("Ambiguous foundation storage; explicit recovery required");
       let state: State;
       if (fresh) {
-        state = { version: 1, hostId: randomUUID(), clientId: randomUUID(), records: [] };
+        state = { version: 1, hostId: identity?.hostId ?? randomUUID(), clientId: identity?.clientId ?? randomUUID(), records: [] };
         const store = new FoundationState(directory, state);
         store.persist(state);
         return store;
@@ -128,6 +128,7 @@ export class FoundationState {
           throw Error("Invalid foundation state file or size");
         state = JSON.parse(readFileSync(input, "utf8"));
         validate(state);
+        if (identity && (state.hostId !== identity.hostId || state.clientId !== identity.clientId)) throw Error("Established identity mismatch");
       } finally {
         closeSync(input);
       }

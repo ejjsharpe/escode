@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 await import("./filesystem.mjs");
+await writeFile("dist/host/sqlite-worker.cjs", await readFile("host/sqlite-worker.cjs"));
 const bundle = await build({
   entryPoints: ["host/main.ts", "host/preload.ts"],
   outdir: "dist/host",

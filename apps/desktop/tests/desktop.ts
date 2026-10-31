@@ -1,6 +1,6 @@
 import { _electron } from "@playwright/test";
 import electron from "electron";
-import { FoundationState } from "../host/foundation-state";
+import { Chats } from "../host/chat";
 import { mkdir, readFile, writeFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { resolve } from "node:path";
@@ -12,9 +12,9 @@ export async function launchDesktop(
 ) {
   // Explicitly seeded test recovery belongs to this installation's sole client.
   await mkdir(userData, { recursive: true });
-  const foundation = FoundationState.open(join(userData, "foundation"));
-  const { hostId, clientId } = foundation.read();
-  foundation.close();
+  const store = new Chats(join(userData, "durable-chats-v1"));
+  const { hostId, clientId } = await store.database.ready;
+  await store.database.close();
   let seededWorkspace = false;
   for (const name of ["client-workspace-v1.json", "client-file-operation-v1.json"]) {
     const file = join(userData, name);
@@ -67,4 +67,20 @@ export function readChats(project: string | null): Promise<import("../host/chat"
       } catch (error) { reject(error); }
     }, error => { off(); reject(Error(error)); });
   });
+}
+
+export async function writeChatFixture(file: string, bytes: string) {
+  const { dirname } = await import("node:path");
+  const store = new Chats(join(dirname(file), "durable-chats-v1"));
+  try {
+    await store.database.ready;
+    const state = await store.database.read();
+    await store.database.write(JSON.parse(bytes).chats, state.revision);
+  } finally { await store.database.close(); }
+}
+export async function readChatFixture(file: string, _encoding: string) {
+  const { dirname } = await import("node:path");
+  const store = new Chats(join(dirname(file), "durable-chats-v1"));
+  try { return JSON.stringify({ chats: (await store.database.read()).chats }); }
+  finally { await store.database.close(); }
 }
