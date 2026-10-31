@@ -7,6 +7,8 @@ export function Boundaries({ project, id }: { project: string | null; id: string
   const [point, setPoint] = useState<CheckpointPage["points"][number]>();
   const [inspection, setInspection] = useState<BoundaryInspection>();
   const [rewind, setRewind] = useState<import("@escode/contracts").RewindResult>();
+  const [restoreFiles, setRestoreFiles] = useState(false);
+  const restoreButton = useRef<HTMLButtonElement>(null);
   const confirm = useRef<HTMLDivElement>(null);
   const rewindButton = useRef<HTMLButtonElement>(null);
   const [files, setFiles] = useState<FileInspection>();
@@ -55,16 +57,20 @@ export function Boundaries({ project, id }: { project: string | null; id: string
       <p>Provider thread: {point.threadId ?? "unavailable"} · turn: {point.turnId ?? "unavailable"}</p>
       <p>Saved files: {point.availability}{point.reason ? ` · ${point.reason}` : ""}. This does not include unsaved editor text.</p>
       <Button ref={rewindButton} disabled={busy} onClick={() => load(async () => {
-        setRewind(await window.escode.rewind(project, id, point.id, null, null));
+        setRestoreFiles(false); setRewind(await window.escode.rewind(project, id, point.id, null, null));
       })}>Rewind conversation only…</Button>
+      <Button ref={restoreButton} disabled={busy} onClick={() => load(async () => {
+        setRestoreFiles(true); setRewind(await window.escode.rewind(project, id, point.id, null, null, true));
+      })}>Rewind and restore saved files…</Button>
       {rewind && <div ref={confirm} tabIndex={-1} role="region" aria-label="Conversation rewind">
         <p role="status">{rewind.message}</p>
+        {restoreFiles && rewind.status === "unavailable" && <p>Choose conversation-only rewind to keep current files. A separate historical chat and worktree is an alternative when available.</p>}
         {rewind.status === "ready" && <>
-          <Button disabled={busy} onClick={() => { setRewind(undefined); rewindButton.current?.focus(); }}>Cancel rewind</Button>
+          <Button disabled={busy} onClick={() => { setRewind(undefined); (restoreFiles ? restoreButton : rewindButton).current?.focus(); }}>Cancel rewind</Button>
           <Button disabled={busy} onClick={() => load(async () => {
-            setRewind(await window.escode.rewind(project, id, point.id, rewind.token, crypto.randomUUID()));
+            setRewind(await window.escode.rewind(project, id, point.id, rewind.token, crypto.randomUUID(), restoreFiles));
             setInspection(undefined);
-          })}>Confirm rewind and keep current files</Button>
+          })}>{restoreFiles ? "Confirm restoration and retain unsaved edits" : "Confirm rewind and keep current files"}</Button>
         </>}
       </div>}
       <Button disabled={busy} onClick={() => load(async () => {
