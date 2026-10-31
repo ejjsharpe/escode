@@ -110,7 +110,7 @@ test("saved-project registration and interrupted move recovery survive together 
         }
       }, historical);
       expect(denial).toContain("Open this project first");
-      expect(JSON.parse(await readFile(join(user, "approved-projects.json"), "utf8"))).toEqual(
+      expect(JSON.parse(await readFile(join(user, "approved-projects.json"), "utf8")).map(({ project, root }: { project: string; root: string }) => ({ project, root }))).toEqual(
         approved,
       );
       expect(

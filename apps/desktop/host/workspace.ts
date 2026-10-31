@@ -134,7 +134,7 @@ export class Workspace {
       throw Error("Unsupported or wrongly owned client recovery store; retained for inspection.");
     return value;
   }
-  private async readApprovals(): Promise<{ project: string; root: string }[]> {
+  private async readApprovals(): Promise<{ project: string; root: string; directoryIdentity?: string }[]> {
     try {
       const value = JSON.parse(
         await readFile(join(dirname(this.file), "approved-projects.json"), "utf8"),
@@ -147,7 +147,8 @@ export class Workspace {
             typeof p.project !== "string" ||
             !isAbsolute(p.project) ||
             typeof p.root !== "string" ||
-            !isAbsolute(p.root),
+            !isAbsolute(p.root) ||
+            (p.directoryIdentity !== undefined && typeof p.directoryIdentity !== "string"),
         )
       )
         throw Error("Invalid project approvals. Existing data is retained.");
@@ -161,12 +162,22 @@ export class Workspace {
     await this.queue;
     return this.readApprovals();
   }
-  approve(project: string, root: string) {
+  async validateCheckout(root: string, identity: string) {
+    const approved = (await this.approved()).find(p => p.root === root);
+    if (approved && !approved.directoryIdentity)
+      throw Error("Checkout identity was not recorded. Use Open project to approve the original directory.");
+    if (approved?.directoryIdentity && approved.directoryIdentity !== identity)
+      throw Error("Checkout directory was replaced. Restore the original directory or explicitly Open project.");
+  }
+  approve(project: string, root: string, directoryIdentity?: string) {
     return this.change(async () => {
       if (!isAbsolute(project) || !isAbsolute(root)) throw Error("Invalid project approval");
       const approved = await this.readApprovals();
-      if (!approved.some((p) => p.project === project && p.root === root)) {
-        approved.push({ project, root });
+      const previous = approved.findIndex(p => p.project === project && p.root === root);
+      if (previous < 0 || directoryIdentity !== undefined) {
+        const entry = { project, root, ...(directoryIdentity ? { directoryIdentity } : {}) };
+        if (previous < 0) approved.push(entry);
+        else approved[previous] = entry;
         await this.replace(join(dirname(this.file), "approved-projects.json"), approved);
       }
     });

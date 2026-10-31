@@ -1,7 +1,7 @@
 import { _electron } from "@playwright/test";
 import electron from "electron";
 import { FoundationState } from "../host/foundation-state";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { resolve } from "node:path";
 
@@ -12,6 +12,17 @@ export async function launchDesktop(
 ) {
   // Explicitly seeded test recovery belongs to this installation's sole client.
   await mkdir(userData, { recursive: true });
+  // Seeded approvals stand for a native selection of these real fixture directories.
+  const approvalsFile = join(userData, "approved-projects.json");
+  try {
+    const approvals = JSON.parse(await readFile(approvalsFile, "utf8"));
+    for (const approval of approvals) {
+      if (approval.directoryIdentity !== undefined) continue;
+      const identity = await stat(approval.root);
+      approval.directoryIdentity = `${identity.dev}:${identity.ino}`;
+    }
+    await writeFile(approvalsFile, JSON.stringify(approvals));
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   const foundation = FoundationState.open(join(userData, "foundation"));
   const { hostId, clientId } = foundation.read();
   foundation.close();
