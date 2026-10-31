@@ -12,6 +12,7 @@ import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
   (operation: "archive", project: string | null, id: string, archived: boolean): Promise<unknown>;
+  (operation: "models", project: string | null, id: string, model?: string, effort?: string): Promise<import("@escode/contracts").ModelChoices>;
   (operation: "renameTitle", project: string | null, id: string, title: string): Promise<void>;
   (operation: "regenerateTitle", project: string | null, id: string): Promise<void>;
   (operation: "composer", project: string | null, id: string): Promise<string>;
@@ -45,6 +46,36 @@ export interface ChatBridge {
     token: string,
     answer: unknown,
   ): Promise<void>;
+}
+function ModelControls({ project, id, onSaving, existingError }: { project: string | null; id: string; onSaving: (saving: boolean) => void; existingError?: string | null }) {
+  const [catalog, setCatalog] = useState<import("@escode/contracts").ModelChoices | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void window.escode.chat("models", project, id).then(value => { if (current) setCatalog(value); }).catch(e => { if (current) setError(String(e)); });
+    return () => { current = false; };
+  }, [project, id]);
+  const choose = async (model: string, effort?: string) => {
+    setSaving(true); onSaving(true);
+    try { setCatalog(await window.escode.chat("models", project, id, model, effort)); setError(""); }
+    catch (e) { setError(String(e)); }
+    finally { setSaving(false); onSaving(false); }
+  };
+  const model = catalog?.models.find(m => m.model === catalog.choice?.model);
+  return <div className="chat-model-controls" aria-label="Next message settings" title="Applies only to your next explicit Send">
+    <span>Next message</span>
+    <label>Model <select aria-label="Next message model" disabled={saving || !catalog} value={catalog?.choice?.model ?? ""} onChange={e => void choose(e.target.value)}>
+      <option value="" disabled>Codex configured default</option>
+      {catalog?.choice && !model && <option value={catalog.choice.model}>{catalog.choice.model} (unavailable)</option>}
+      {catalog?.models.map(m => <option key={m.model} value={m.model}>{m.name}</option>)}
+    </select></label>
+    {catalog?.choice && <label>Effort <select aria-label="Next message effort" disabled={saving || !model} value={catalog.choice.effort} onChange={e => void choose(catalog.choice!.model, e.target.value)}>
+      {!model?.efforts.includes(catalog.choice.effort) && <option value={catalog.choice.effort}>{catalog.choice.effort} (unavailable)</option>}
+      {model?.efforts.map(e => <option key={e} value={e}>{e}</option>)}
+    </select></label>}
+    {error && !existingError && <span role="alert">{error}</span>}
+  </div>;
 }
 function Request({
   request: wireRequest,
@@ -177,6 +208,7 @@ export function ChatView({
 }) {
   const [store, { chats, snapshots, history, drafts, pending, responding, errors, emergencyTargets }] =
     useProjectChats(project);
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const [targets, setTargets] = useState<{ project: string | null; checkout: string }[]>([]);
   useEffect(() => {
     void window.escode.chat("targets").then(setTargets);
@@ -378,7 +410,7 @@ export function ChatView({
               className="chat-compose"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!record.archived) void store.send(selected);
+                if (!record.archived && !settingsSaving) void store.send(selected);
               }}
             >
               {unsent && !record?.scratch && !record?.worktree?.reservation && (
@@ -479,10 +511,11 @@ export function ChatView({
                   store.edit(selected, e.target.value);
                 }}
               />
+              <ModelControls key={selected} project={project} id={selected} onSaving={setSettingsSaving} existingError={error || snapshot?.contextError} />
               <Button
                 type="submit"
                 disabled={
-                  record.archived || working ||
+                  record.archived || working || settingsSaving ||
                   !!snapshot?.contextError ||
                   (!!record?.scratch && !!(error || snapshot?.error)) ||
                   (!unsent && !snapshot?.connected) ||

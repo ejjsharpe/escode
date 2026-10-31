@@ -32,6 +32,7 @@ export type SavedChat = {
   phase?: "draft" | "bound";
   initialSend?: "preparing" | "creating" | "unaccepted" | "uncertain" | "accepted";
   removed?: boolean;
+  nextModel?: { model: string; effort: string; remembered: Record<string, string> };
   draft: string;
   title?: string;
   archived?: boolean;
@@ -354,6 +355,7 @@ export class Chats {
     fields: Partial<
       Pick<
         SavedChat,
+        | "nextModel"
         | "historicalPending"
         | "directoryIdentity"
         | "availabilityError"

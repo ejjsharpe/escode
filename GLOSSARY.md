@@ -274,6 +274,12 @@ main database. These checkpoints store file bytes in SQLite, create no Git snaps
 objects, and grant no authority to prune project Git objects or retained worktrees.
 
 - **Archived chat**: A shared conversation hidden from recent lists by host-owned metadata. Archive requires idle work without unresolved requests or uncertain operations; Restore retains its identity, draft, resources and recency.
+
+**Next-message model and effort**:
+A chat's explicit Codex model and supported reasoning effort, stored in host SQLite.
+Each model remembers its selected effort within the chat. Send captures these choices
+before preparation; editing them during preparation or execution affects only a later
+explicit Send. Catalog changes require an explicit supported selection, never substitution.
 **Chat title**:
 Shared host-owned conversation metadata displayed in Agents and checkout-local Chats.
 First Send starts one independent ephemeral title request, with bounded first-message

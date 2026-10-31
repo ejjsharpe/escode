@@ -144,7 +144,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await page.getByRole("button", { name: "Restore chat", exact: true }).click();
     await page.getByRole("button", { name: "Show recent chats", exact: true }).click();
 
-    expect((await readFile(join(dir, "events"), "utf8")).match(/initialize/g)).toHaveLength(1);
+    expect((await readFile(join(dir, "events"), "utf8")).match(/thread\/resume/g)).toHaveLength(1);
     const dragComposerHandle = async (distance: number) => {
       const textarea = page.getByRole("textbox", { name: "Message Codex" });
       await textarea.scrollIntoViewIfNeeded();
