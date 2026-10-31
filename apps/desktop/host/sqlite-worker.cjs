@@ -60,7 +60,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
   try {
     let value;
     if (operation === 'recoveryRead' || operation === 'recoveryWrite') {
-      if (typeof clientId !== 'string' || !clientId || !['workspace', 'intent'].includes(kind)) throw Error('Invalid recovery owner');
+      if (typeof clientId !== 'string' || !clientId || !['workspace', 'intent', 'fileCommands', 'fileFacts'].includes(kind)) throw Error('Invalid recovery owner');
       if (operation === 'recoveryRead') {
         const row = db.prepare('SELECT body, revision FROM client_recovery WHERE clientId=? AND kind=?').get(clientId, kind);
         value = row ? { body: JSON.parse(row.body), revision: row.revision } : { body: null, revision: 0 };

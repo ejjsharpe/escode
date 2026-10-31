@@ -1,0 +1,13 @@
+# SQLite creation and transfers (#124)
+
+Creation receipts now use the same host-owned SQLite worker as workspace recovery. The foundation JSON creation path and its tests are removed; legacy bytes are not imported, rewritten or deleted. Transfer mutation commands require a command ID and admission epoch. The renderer retains that identity across lost responses; host receipts bind the request and checkout identity, reject changed payloads, and return retained results or uncertainty without dispatching again. Unknown stale epochs cannot admit effects. Command evidence is capped at 1,000 retained records and the existing 16 MiB recovery-record/64-request worker limits; exhaustion fails closed without pruning.
+
+The existing native copy/move/Trash pipeline still owns name validation, exact resolved destinations, collisions, native import preservation and dirty-buffer baselines. SQLite journal intent precedes each native effect. Completed batch facts are persisted before releasing the single-item journal for another item. Recovery merges them into available client state; late snapshots reapply retained facts, including after host restart, until separate acknowledgement. An uncertain item retains its own journal even when earlier completed items are acknowledged. No startup path replays mutations.
+
+## Executed evidence
+
+Authenticated real-SQLite/real-Git/files coverage in `sqlite-creation-transfers.test.ts` exercises creation intent rejection, successful creation, lost-result retry, changed payload rejection, copied unsaved text and disk baseline, late snapshots, a partial batch whose second intent cannot persist, reopening the on-disk database, retained partial results, unchanged external bytes, creation result-write failure and stale epoch refusal. SQLite abort triggers exercise actual failed writes. Git's staging index remains unchanged.
+
+`sqlite-transfer-crash.test.ts` SIGKILLs Node subprocesses after actual native copy publication and after committed copy outcome before workspace handoff. Separate creation cases kill after actual exclusive creation and after committed command result. Reopening retains stable host/client identity, available text and operation evidence; external bytes written after the crash remain unchanged, and command retry does not repeat creation. These are bounded process-crash checks, not power-loss qualification.
+
+Integration and final check results are recorded below after the concurrent integration merge. No manual accessibility/native acceptance or physical full-disk/power-loss qualification is claimed. WAL NORMAL retains the accepted OS-crash/power-loss trade-off. Tests were developed incrementally, but a strict red-before-green sequence was not recorded for every change.

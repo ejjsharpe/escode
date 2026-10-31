@@ -50,11 +50,21 @@ async function control(operation: "stop" | "answer", project: string | null, id:
   localStorage.removeItem(key);
 }
 async function transfer(root: string, kind: "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", parent: string, paths: string[]) {
+  const key = `escode-transfer:${JSON.stringify([root, kind, parent, paths])}`;
+  const saved = localStorage.getItem(key);
+  const commandId = crypto.randomUUID(), admissionEpoch = await hostClient.createState();
+  const execute = async (action: import("@escode/contracts").TransferAction) => {
+    localStorage.setItem(key, JSON.stringify(action));
+    const result = await hostClient.transferAction(action);
+    if (typeof result !== "string" && !result.message.toLowerCase().includes("uncertain") && !result.results.some(r => r.persistencePending)) localStorage.removeItem(key);
+    return result;
+  };
+  if (saved) return execute(JSON.parse(saved));
   if (kind === "paste") {
     const token = await ipcRenderer.invoke("native-clipboard-capture");
-    if (token) return hostClient.transferAction({ root, operation: "transfer", kind: "import", parent, paths: [token] });
+    if (token) return execute({ root, operation: "transfer", commandId, admissionEpoch, kind: "import", parent, paths: [token] });
   }
-  return hostClient.transferAction({ root, operation: "transfer", kind, parent, paths });
+  return execute({ root, operation: "transfer", commandId, admissionEpoch, kind, parent, paths });
 }
 window.addEventListener("unload", () => { void hostClient.close(); });
 contextBridge.exposeInMainWorld(

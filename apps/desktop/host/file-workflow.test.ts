@@ -50,7 +50,7 @@ test("collision consent shares the mutation gate and Keep Both preserves existin
     });
     const result = await files.hostActions.transferAction({
       root,
-      operation: "transfer",
+      operation: "transfer", commandId: "transfer", admissionEpoch: foundation.admissionEpoch,
       kind: "drag-copy",
       paths: [token as string],
       parent: "target",

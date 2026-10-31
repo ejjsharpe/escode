@@ -123,6 +123,9 @@ or uncertain acceptance. Repeating that identity returns status without another
 provider turn. Explicit local resolution releases a pending composer identity without
 deleting the receipt or resending work. See [durable Send evidence](docs/compatibility/durable-send.md).
 
+**File command receipt**:
+A host-owned SQLite record binding a creation or transfer command identity to its client, exact checkout and requested targets. Admission precedes effects; repeating an identity returns its retained outcome or uncertainty without repeating effects. Per-item file-operation intent and batch facts preserve exact resolved destinations and copied recovery text until client acknowledgement.
+
 **Unsent message text**:
 A client’s unfinished message for a chat or chat draft, shared across that client’s views and retained independently of other clients’ composers. Sending from another client does not clear it.
 
