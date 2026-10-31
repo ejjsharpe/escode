@@ -69,6 +69,7 @@ try {
   db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA checkpoint_fullfsync=ON');
   const settings = { journalMode: db.prepare('PRAGMA journal_mode').get().journal_mode, synchronous: db.prepare('PRAGMA synchronous').get().synchronous, checkpointFullfsync: db.prepare('PRAGMA checkpoint_fullfsync').get().checkpoint_fullfsync };
   if (settings.journalMode !== 'wal' || settings.synchronous !== 1 || settings.checkpointFullfsync !== 1) throw Error('SQLite durability settings unavailable');
+  db.exec('CREATE TABLE IF NOT EXISTS rewinds (id TEXT PRIMARY KEY, body TEXT NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS client_recovery (clientId TEXT NOT NULL, kind TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(clientId, kind))');
   db.prepare('SELECT id, chatId, body FROM checkpoints LIMIT 1').all();
   // Admission counts protected metadata across every table; exceeding it rolls back the whole mutation.
@@ -89,7 +90,13 @@ try {
 if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body }) => {
   try {
     let value;
-    if (operation === 'checkpointPoints') {
+    if (operation === 'rewindRead') {
+      const row = db.prepare('SELECT body FROM rewinds WHERE id=?').get(commandId);
+      value = row ? JSON.parse(row.body) : null;
+    } else if (operation === 'rewindWrite') {
+      if (db.prepare('SELECT count(*) AS n FROM rewinds').get().n >= 1000 && !db.prepare('SELECT id FROM rewinds WHERE id=?').get(commandId)) throw Error('Rewind capacity exhausted');
+      db.prepare('INSERT INTO rewinds VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET body=excluded.body').run(commandId, JSON.stringify(body));
+    } else if (operation === 'checkpointPoints') {
       const offset = Number(body.cursor ?? 0);
       if (!Number.isSafeInteger(offset) || offset < 0) throw Error('Invalid checkpoint cursor');
       const rows = db.prepare(`SELECT json_extract(body,'$.id') id, json_extract(body,'$.kind') kind,
