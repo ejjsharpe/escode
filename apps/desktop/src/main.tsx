@@ -1,4 +1,6 @@
-import { rememberFileUse } from "./workspace";
+import { preserveClose } from "./close-preservation";
+import { createFileActivation } from "./file-activation";
+import type { BufferState } from "./file-activation";
 import React, { useEffect, useId, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as stylex from "@stylexjs/stylex";
@@ -27,11 +29,6 @@ type Status = {
   changes: Change[];
   gitError?: string;
   approvalRequired?: boolean;
-};
-type BufferState = {
-  model: monaco.editor.ITextModel;
-  disk: Document;
-  view?: monaco.editor.ICodeEditorViewState | null;
 };
 declare global {
   interface Window {
@@ -189,16 +186,10 @@ function CheckoutView({
     setFileViews(old => ({ ...old, [file]: selected }));
     setComparisonError("");
     setFileError("");
-    selectedChange.current = selected === "file" || selected === "conflict" ? null : { path: file, area: selected };
   }
   const [message, setMessage] = useState("Open a local Git checkout to begin.");
   const [conflict, setConflict] = useState<{ path: string; disk: Document } | null>(null);
-  const selectedChange = useRef<Change | null>(
-    path && view !== "file" && view !== "conflict" ? { path, area: view } : null,
-  );
-  const presentation = useRef(0);
-  const opening = useRef(0);
-  const [focusRequest, setFocusRequest] = useState<{ file: string; generation: number } | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{ file: string; current: () => boolean } | null>(null);
   const [diff, setDiff] = useState<{ original: string; modified: string; title: string; file?: string } | null>(
     null,
   );
@@ -238,9 +229,7 @@ function CheckoutView({
       }
       setStatus(value);
       onStatus(value);
-      if (selectedChange.current && !opening.current && !closeInFlight.current) {
-        await showDiff(selectedChange.current);
-      }
+      if (!closeInFlight.current) await activation.refresh();
     } finally { statusRefreshing.current = false; }
   };
   useEffect(() => {
@@ -282,7 +271,7 @@ function CheckoutView({
     setOpenFiles(old => [...new Set([...old, ...memory.drafts.filter(d => d.root === root).map(d => d.path)])]);
     if (path) void restoreView(path);
     return () => {
-      presentation.current++;
+      activation.invalidate();
       fileOpeners.delete(root);
       fileKeepers.delete(root);
       closers.delete(root);
@@ -402,7 +391,7 @@ function CheckoutView({
     }
   }, [openFiles]);
   useEffect(() => {
-    if (focusRequest && focusRequest.generation === presentation.current &&
+    if (focusRequest && focusRequest.current() &&
       memory.views[root]?.path === focusRequest.file && container.current?.getClientRects().length)
       (editor.current ?? content.current)?.focus();
   }, [focusRequest, editorVisible, active]);
@@ -426,84 +415,22 @@ function CheckoutView({
     const scroll = instance.onDidScrollChange(recordPosition);
     return () => { recordPosition(); cursor.dispose(); scroll.dispose(); };
   }
-  async function restoreView(file: string, reuseBuffer = false) {
-    const selected = memory.views[root]?.fileViews?.[file] ?? "file";
-    if (selected === "conflict") {
-      opening.current++;
-      const generation = ++presentation.current;
-      try {
-        const disk = await projectCall("read", root, file);
-        if (generation !== presentation.current) return false;
-        const buffer = buffers.current.get(file);
-        if (!buffer) addBuffer(file, disk);
-        else if (buffer.model.getValue() === buffer.disk.text) {
-          buffer.disk = disk;
-          if (buffer.model.getValue() !== disk.text) buffer.model.setValue(disk.text);
-        }
-        rememberFileUse(root, file);
-        activateFile(file);
-        setConflict(buffers.current.get(file)!.disk.version === disk.version ? null : { path: file, disk });
-        compareConflict(file, disk);
-        return true;
-      } catch (error) {
-        if (generation !== presentation.current) return false;
-        activateFile(file);
-        rememberView(file, "conflict");
-        setDiff(null);
-        setComparisonError("Comparison unavailable. " + String(error));
-        report(error);
-        return false;
-      } finally { opening.current--; }
-    }
-    return selected === "file" ? select(file, true, undefined, true, reuseBuffer) : showDiff({ path: file, area: selected }, true, undefined, reuseBuffer);
-  }
-  function compareConflict(file: string, disk: Document) {
-    presentation.current++;
-    activateFile(file);
-    rememberView(file, "conflict");
-    setDiff({ original: disk.text, modified: buffers.current.get(file)!.model.getValue(),
-      title: "Disk versus your edits", file });
-  }
-  async function select(file: string, present = true, intent?: "preview" | "keep", retain = false, reuseBuffer = false, current = () => true) {
-    opening.current++;
-    const generation = present ? ++presentation.current : presentation.current;
-    try {
-      if ((retain && !reuseBuffer) || !buffers.current.has(file)) {
-        const disk: Document = await projectCall("read", root, file);
-        if (generation !== presentation.current || !current()) return false;
-        const buffer = buffers.current.get(file);
-        if (!buffer) addBuffer(file, disk);
-        else if (buffer.model.getValue() === buffer.disk.text) {
-          buffer.disk = disk;
-          if (buffer.model.getValue() !== disk.text) buffer.model.setValue(disk.text);
-        }
-      }
-      if (!present) {
-        setBufferRevision((old) => old + 1);
-        return true;
-      }
-      if (generation !== presentation.current || !current()) return false;
-      rememberFileUse(root, file);
-      activateFile(file, intent);
-      rememberView(file, "file");
-      setDiff(null);
-      setBufferRevision((old) => old + 1);
-      setMessage("Cmd+S to save.");
-      return true;
-    } catch (e) {
-      if (generation === presentation.current) {
-        if (retain) {
-          activateFile(file);
-          rememberView(file, "file");
-          setDiff(null);
-          setFileError("File unavailable. Available edits are retained. " + String(e));
-          setBufferRevision(old => old + 1);
-        }
-        report(e);
-      }
-      return false;
-    } finally { opening.current--; }
-  }
+  const [activation] = useState(() => createFileActivation({
+    root, buffers: buffers.current, addBuffer, report,
+    apply(result) {
+      activateFile(result.file, result.intent);
+      rememberView(result.file, result.view);
+      setDiff(old => old?.title === result.diff?.title && old?.original === result.diff?.original &&
+        old?.modified === result.diff?.modified && old?.file === result.diff?.file ? old : result.diff);
+      if (result.conflict !== undefined) setConflict(result.conflict);
+      setFileError(result.fileError ?? "");
+      setComparisonError(result.comparisonError ?? "");
+      setBufferRevision(old => old + 1);
+      if (result.message !== undefined) setMessage(result.message);
+    },
+  }));
+  const restoreView = activation.restore;
+  const compareConflict = activation.compare;
   async function save(version?: string, target = path) {
     if (!target || saveInFlight.current) return false;
     const b = buffers.current.get(target)!;
@@ -566,107 +493,40 @@ function CheckoutView({
       report(e);
     }
   }
-  async function showDiff(change: Change, retain = false, intent?: "preview" | "keep", reuseBuffer = false) {
-    opening.current++;
-    const generation = ++presentation.current;
-    try {
-      const value = await projectCall("diff", root, change.path, change.area);
-      if (generation !== presentation.current) return;
-      let file: string | undefined;
-      let unavailable = "";
-      try {
-        const buffer = buffers.current.get(change.path);
-        if (!buffer || (!reuseBuffer && buffer.model.getValue() === buffer.disk.text)) {
-          const disk = await projectCall("read", root, change.path);
-          if (generation !== presentation.current) return;
-          if (!buffers.current.has(change.path)) addBuffer(change.path, disk);
-          else if (buffer && buffer.model.getValue() === buffer.disk.text) {
-            buffer.disk = disk;
-            if (buffer.model.getValue() !== disk.text) buffer.model.setValue(disk.text);
-          }
-        }
-        file = change.path;
-      } catch (error) {
-        unavailable = "Working file unavailable; comparison is read-only. " + String(error);
-      }
-      if (generation !== presentation.current) return;
-      rememberView(change.path, change.area);
-      memory.views[root] = { ...memory.views[root], change };
-      if (file) rememberFileUse(root, file);
-      activateFile(change.path, intent);
-      const title =
-        change.area + " · " + change.path +
-        (file && change.area === "staged" ? " · working copy" : "");
-      setDiff((old) =>
-        old?.title === title &&
-        old.original === value.original &&
-        old.modified === value.modified &&
-        old.file === file
-          ? old
-          : { ...value, title, file },
-      );
-      setMessage(unavailable || "Edit the new side · Cmd+S to save the working file.");
-      return true;
-    } catch (e) {
-      if (generation !== presentation.current) return;
-      if (retain || (viewRef.current.path === change.path && viewRef.current.view === change.area)) {
-        activateFile(change.path);
-        rememberView(change.path, change.area);
-        setDiff(null);
-        setComparisonError("Comparison unavailable. " + String(e));
-      }
-      report(e);
-      return false;
-    } finally { opening.current--; }
-  }
-  async function prepareFileClose(file: string, discards: (() => () => void)[]) {
-    const b = buffers.current.get(file);
-    if (!b || b.model.getValue() === b.disk.text) return true;
-    const choice = await window.escode.lifecycle("dirty", root + "/" + file);
-    if (choice === 2) return false;
-    if (choice === 1) {
-      discards.push(() => {
-        memory.drafts = memory.drafts.filter(d => d.root !== root || d.path !== file);
-        return () => b.model.setValue(b.disk.text);
-      });
-      return true;
-    }
-    if (await save(undefined, file)) return true;
-    window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
-    return false;
+  function captureFiles(files: Iterable<string>) {
+    return Array.from(files, file => ({ root, path: file, buffer: buffers.current.get(file),
+      save: async () => {
+        const saved = await save(undefined, file);
+        if (!saved) window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
+        return saved;
+      },
+    }));
   }
   async function closeFiles(files: string[]) {
     if (saveInFlight.current || closeInFlight.current || conflict) return false;
     const targets = new Set(files.filter(file => memory.views[root]?.openFiles?.includes(file)));
     if (!targets.size) return true;
     closeInFlight.current = true;
-    presentation.current++;
+    activation.invalidate();
     setFileClosing(true);
     editor.current?.updateOptions({ readOnly: true });
     const activeFile = memory.views[root]?.path ?? "";
     try {
-      const discards: (() => () => void)[] = [];
-      for (const file of targets) if (!(await prepareFileClose(file, discards))) return false;
-      await persist();
-      const previous = memory.views[root];
-      const drafts = memory.drafts;
-      const remaining = (previous?.openFiles ?? []).filter(file => !targets.has(file));
-      const survivor = targets.has(activeFile)
-        ? recentFiles.current.find(file => remaining.includes(file)) ?? remaining[0] ?? ""
-        : activeFile;
-      for (const discard of discards) discard();
-      memory.drafts = memory.drafts.filter(d => d.root !== root || !targets.has(d.path));
-      memory.views[root] = { ...previous, openFiles: remaining, path: survivor,
-        preview: targets.has(previous?.preview ?? "") ? "" : previous?.preview ?? "" };
-      try {
-        await persist();
-      } catch (error) {
-        memory.views[root] = previous;
-        memory.drafts = [...memory.drafts.filter(d => d.root !== root || !targets.has(d.path)),
-          ...drafts.filter(d => d.root === root && targets.has(d.path))];
-        void persist();
-        throw error;
-      }
+      let previous = memory.views[root];
+      let remaining: string[] = [], survivor = "";
+      const closed = await preserveClose(captureFiles(targets), () => {
+        previous = memory.views[root];
+        remaining = (previous?.openFiles ?? []).filter(file => !targets.has(file));
+        survivor = targets.has(activeFile)
+          ? recentFiles.current.find(file => remaining.includes(file)) ?? remaining[0] ?? ""
+          : activeFile;
+        return {
+          view: { root, value: { ...previous, openFiles: remaining, path: survivor,
+            preview: targets.has(previous?.preview ?? "") ? "" : previous?.preview ?? "" } },
+          removeDrafts: [...targets].map(path => ({ root, path })),
+        };
+      });
+      if (!closed) return false;
       const history = recentlyClosedFiles.get(root) ?? [];
       history.push({ active: targets.has(activeFile) ? activeFile : [...targets].at(-1)!,
         files: (previous?.openFiles ?? []).flatMap((file, index) => targets.has(file) ? [{
@@ -681,7 +541,6 @@ function CheckoutView({
       if (targets.has(activeFile)) {
         setPath(survivor);
         setDiff(null);
-        selectedChange.current = null;
         setConflict(null);
         setDirty(false);
         if (survivor) await restoreView(survivor);
@@ -766,7 +625,7 @@ function CheckoutView({
     const file = session.files[session.index]!;
     if (!memory.views[root]?.openFiles?.includes(file)) return;
     void restoreView(file).then(success => {
-      if (success) setFocusRequest({ file, generation: presentation.current });
+      if (success) setFocusRequest({ file, current: activation.checkpoint() });
       else content.current?.focus();
     });
   }
@@ -811,7 +670,7 @@ function CheckoutView({
           if (!success) return;
           if (stripFocus) Array.from(tabStrip.current?.querySelectorAll<HTMLButtonElement>("[role=tab]") ?? [])
             .find(tab => tab.title === root + "/" + file)?.focus();
-          else setFocusRequest({ file, generation: presentation.current });
+          else setFocusRequest({ file, current: activation.checkpoint() });
         });
       }
     };
@@ -988,7 +847,6 @@ function CheckoutView({
       setOpenFiles(memory.views[root]?.openFiles ?? []);
       setPath(nextPath);
       setDiff(null);
-      selectedChange.current = null;
       setFileViews(memory.views[root]?.fileViews ?? {});
       if (nextPath) void restoreView(nextPath);
       setBufferRevision((n) => n + 1);
@@ -1015,12 +873,12 @@ function CheckoutView({
       }
       if (batch && "open" in batch) for (const file of batch.open) {
         // Completion owns the serialization gate; external opens remain blocked.
-        if (await select(file, true, "keep"))
-          setFocusRequest({ file, generation: presentation.current });
+        if (await activation.open({ file, intent: "keep" }))
+          setFocusRequest({ file, current: activation.checkpoint() });
       }
       const failed = batch && "saves" in batch ? batch.results.find((r) => r.conflict) : undefined;
       if (failed?.conflict) {
-        await select(failed.conflict.path, true, "keep");
+        await activation.open({ file: failed.conflict.path, intent: "keep" });
         setConflict(failed.conflict);
       }
       const message =
@@ -1042,26 +900,23 @@ function CheckoutView({
   fileKeepers.set(root, keepOpen);
   fileOpeners.set(root, async request => {
     if (request.root !== root || closeInFlight.current) return false;
-    const opened = request.view === "file"
-      ? await select(request.path, true, request.intent, false, false, request.current)
-      : !!(await showDiff({ path: request.path, area: request.view }, false, request.intent));
+    const opened = await activation.open({ file: request.path, view: request.view, intent: request.intent, current: request.current });
     if (opened && request.intent === "keep")
-      setFocusRequest({ file: request.path, generation: presentation.current });
+      setFocusRequest({ file: request.path, current: activation.checkpoint() });
     return opened;
   });
   const open = (file: string, view: import("./workspace").FileOpenRequest["view"] = "file",
     intent: "preview" | "keep" = "keep") => openFile({ root, path: file, view, intent });
   closers.set(root, {
     project,
-    close: async (discards) => {
-      if (closeInFlight.current) return false;
-      if (saveInFlight.current) return false;
+    capture() {
+      if (closeInFlight.current || saveInFlight.current) return null;
       closeInFlight.current = true;
       setFileClosing(true);
-      try {
-        for (const file of buffers.current.keys()) if (!(await prepareFileClose(file, discards))) return false;
-        return true;
-      } finally { closeInFlight.current = false; setFileClosing(false); }
+      return { files: captureFiles(buffers.current.keys()), release() {
+        closeInFlight.current = false;
+        setFileClosing(false);
+      } };
     },
   });
   return (
@@ -1150,8 +1005,7 @@ function CheckoutView({
                       <li key={c.path}>
                         <Button
                           aria-pressed={
-                            selectedChange.current?.path === c.path &&
-                            selectedChange.current.area === area
+                            path === c.path && view === area
                           }
                           onClick={() => void open(c.path, c.area, "preview")}
                           onDoubleClick={() => void open(c.path, c.area, "keep")}
@@ -1213,7 +1067,7 @@ function CheckoutView({
                       } else if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         void restoreView(file).then(success => {
-                          if (success) setFocusRequest({ file, generation: presentation.current });
+                          if (success) setFocusRequest({ file, current: activation.checkpoint() });
                         });
                       }
                     }
@@ -1264,9 +1118,9 @@ function CheckoutView({
                 disabled={saving || fileClosing} onChange={event => {
                   const next = event.target.value;
                   if (next === "conflict" && conflict) compareConflict(path, conflict.disk);
-                  else if (next === "file") void select(path);
+                  else if (next === "file") void activation.open({ file: path });
                   else if (next === "staged" || next === "unstaged" || next === "untracked")
-                    void showDiff({ path, area: next }, true);
+                    void activation.open({ file: path, view: next, retain: true });
                 }}>
                 <option value="file">File</option>
                 {(["staged", "unstaged", "untracked"] as const).filter(area =>
@@ -1515,33 +1369,23 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
       const project = root ? projects.find(p => p.root === root)?.project : undefined;
       if (root && !project) return;
       if (!(await window.escode.lifecycle("prepare", project))) return;
-      const discards: (() => () => void)[] = [];
-      for (const [checkout, entry] of closers) {
-        if ((!root || checkout === root) && !(await entry.close(discards))) return;
-      }
-      await flush();
-      const previousProjects = memory.projects,
-        previousSelected = memory.selected,
-        previousDrafts = memory.drafts;
+      const captures: import("./close-preservation").CloseCapture[] = [];
       try {
-        if (project) {
-          memory.projects = memory.projects.filter((p) => p.root !== root);
-          if (memory.selected === root) {
-            const index = previousProjects.findIndex((p) => p.root === root);
-            memory.selected = memory.projects[Math.min(index, memory.projects.length - 1)]?.root ?? "agents";
-          }
+        for (const [checkout, entry] of closers) {
+          if (root && checkout !== root) continue;
+          const capture = entry.capture();
+          if (!capture) return;
+          captures.push(capture);
         }
-        const resetDiscardedBuffers = discards.map((discard) => discard());
-        await persist();
-        await window.escode.lifecycle("finish", project);
-        for (const reset of resetDiscardedBuffers) reset();
-      } catch (error) {
-        memory.drafts = previousDrafts;
-        memory.projects = previousProjects;
-        memory.selected = previousSelected;
-        void persist();
-        throw error;
-      }
+        const closed = await preserveClose(captures.flatMap(capture => capture.files), () => {
+          if (!root) return {};
+          const remaining = memory.projects.filter(p => p.root !== root);
+          const index = memory.projects.findIndex(p => p.root === root);
+          return { projects: remaining, selected: memory.selected === root
+            ? remaining[Math.min(index, remaining.length - 1)]?.root ?? "agents" : memory.selected };
+        }, () => window.escode.lifecycle("finish", project));
+        if (!closed) return;
+      } finally { for (const capture of captures) capture.release(); }
       if (project) {
         setProjects((old) => old.filter((p) => p.root !== root));
         setSelected(memory.selected);
