@@ -114,6 +114,7 @@ export const WorkspaceState = Schema.Struct({
     files: Schema.optionalKey(Schema.Struct({ expanded: Schema.Array(Schema.String), selected: Schema.Array(Schema.String),
       focus: Schema.String, scroll: Schema.Number, hideIgnored: Schema.optionalKey(Schema.Boolean) })),
     mode: Schema.optionalKey(Schema.String), checkout: Schema.optionalKey(Schema.String), roots: Schema.optionalKey(Schema.Array(Schema.String)),
+    openFiles: Schema.optionalKey(Schema.Array(Schema.String)),
     path: Schema.optionalKey(Schema.String), directory: Schema.optionalKey(Schema.String), chat: Schema.optionalKey(Schema.String),
     change: Schema.optionalKey(Schema.Struct({ path: Schema.String, area: Schema.Literals(["staged", "unstaged", "untracked"]) })),
   })),

@@ -56,10 +56,12 @@ test("real folder move preserves descendant drafts and conflict baseline through
   fixture(async (p, store, base) => {
     const before = await store.read();
     before.views[p.root].files!.hideIgnored = true;
+    before.views[p.root].openFiles = ["folder/b.ts", "folder/a.ts"];
     await store.write(before);
     const ops = new FileOperations(store, join(base, "intent.json"));
     await ops.run(p, "move", "folder", "renamed");
     const state = await new Workspace(join(base, "workspace.json")).read();
+    expect(state.views[p.root].openFiles).toEqual(["renamed/b.ts", "renamed/a.ts"]);
     expect(state.drafts.map((d) => d.path)).toEqual(["renamed/a.ts", "renamed/b.ts"]);
     expect(state.drafts[0].text).toBe("a unsaved");
     expect(state.views[p.root].files).toEqual({

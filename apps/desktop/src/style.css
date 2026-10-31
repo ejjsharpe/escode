@@ -668,3 +668,13 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
   .agents-heading { align-items: center; padding: 12px 16px; }
   .agents-heading span { font-size: 11px; }
 }
+
+.file-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 6px 12px;
+  flex-shrink: 0;
+}
+.file-tabs button { white-space: nowrap; }
+.file-tabs [aria-selected="true"] { background: #48405f; }

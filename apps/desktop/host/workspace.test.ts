@@ -202,3 +202,22 @@ test("fresh client recovery retains ownership and rejects unsupported or other-c
     expect((await readFile(file, "utf8"))).toContain("available edit");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("ordered file identities validate before replacing client recovery", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-open-files-"));
+  try {
+    const store = new Workspace(join(dir, "workspace.json"));
+    const state = { projects: [], selected: "", drafts: [], views: {
+      [dir]: { openFiles: ["a.txt", "folder/b.txt"], path: "folder/b.txt" },
+    } };
+    await store.write(state);
+    expect((await store.read()).views[dir].openFiles).toEqual(["a.txt", "folder/b.txt"]);
+    for (const openFiles of [["../escape"], ["/absolute"], [".git/config"], ["a", "a"], [""], "bad"]) {
+      await expect(store.write({ ...state, views: { [dir]: { openFiles } } })).rejects.toThrow("Invalid open files");
+    }
+    await expect(store.write({ ...state, views: { [dir]: { openFiles: ["a.txt"], path: "missing.txt" } } })).rejects.toThrow("Invalid open files");
+    expect((await store.read()).views[dir].openFiles).toEqual(["a.txt", "folder/b.txt"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -56,6 +56,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     expect(await readFile(join(a, "a.txt"), "utf8")).toBe(a);
     await open(a);
     await expect(page.locator(".monaco-editor:visible")).toContainText("alpha draft");
+    await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
     await expect(
       page
         .getByRole("navigation", { name: "Projects" })
@@ -108,6 +109,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     ).toHaveAttribute("aria-pressed", "false");
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText(a);
+    await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
     await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute(
       "aria-activedescendant",
       worktree + ":a.txt",
@@ -129,6 +131,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
       page.getByRole("treeitem", { name: "a.txt, unsaved", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".monaco-editor:visible")).toContainText("alpha draft");
+    await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await open(b);
     await page

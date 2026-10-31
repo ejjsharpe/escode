@@ -46,11 +46,14 @@ The explicit action that stops an execution host and its active work. A remote c
 **Project**:
 A saved local Git repository whose files, source changes, and project-backed chats belong together across branch switches. Linked worktrees of the same repository share one project identity.
 
+**Checkout**:
+A working directory of a project’s repository, with its own working files. Linked worktrees share Project identity while retaining separate checkout/file buffers.
+
 **Project tab**:
 An open editor view of a project, containing Files, Source Control and Chats. Closing this view leaves the saved project and its chats available in Agents.
 
 **File tab**:
-The planned editor header for one file inside a checkout-specific project tab. Its normal editor and comparisons share that tab and the client's working-file buffer. Tabs, order, active file, selected view and editor positions are remembered independently per checkout. The [file-tab specification](docs/specifications/file-editor-tabs.md) was accepted by the user on 2026-10-31. This is separate from the parent map's ongoing checkout-tab amendment and is not implemented behavior.
+The editor header for one file inside a checkout editor. Its normal editor and comparisons share that tab and the client's working-file buffer. The accepted specification requires tabs, order, active file, selected view and editor positions to be remembered independently per checkout. The [file-tab specification](docs/specifications/file-editor-tabs.md) was accepted by the user on 2026-10-31. The initial visible ordered set, exact file reuse and active identity are implemented in the file-tab foundation slice. Preview replacement, view restoration, ordering controls and close/reopen behavior remain later slices. Fixed top-level checkout tabs and lookup belong to the [accepted checkout/search handoff](docs/specifications/checkout-tabs-file-lookup.md), whose map is complete.
 
 **Preview tab**:
 A file tab eligible for replacement by another successfully opened preview in the same checkout workspace. At most one exists in that workspace. Editing, double-clicking, Keep Open, explicit keyboard opening or reordering it makes it kept open.

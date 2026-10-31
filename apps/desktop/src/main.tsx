@@ -17,7 +17,7 @@ import { useProjectChats } from "./chat-state";
 import { WorktreeChoices } from "./worktrees";
 import type { ChatBridge } from "./chat";
 import "./style.css";
-import { memory, initialize, persist, flush, useMemory, closers } from "./workspace";
+import { memory, initialize, persist, flush, useMemory, closers, fileOpeners, openFile } from "./workspace";
 type Status = {
   project: string;
   root: string;
@@ -111,6 +111,19 @@ function CheckoutView({
   const [filesRevision, setFilesRevision] = useState(0);
   const [transferProgress, setTransferProgress] = useState(false);
   const [path, setPath] = useMemory(root, "path", "");
+  const [openFiles, setOpenFiles] = useMemory(root, "openFiles", [
+    ...new Set([...(memory.views[root]?.path ? [memory.views[root].path!] : []),
+      ...memory.drafts.filter(d => d.root === root).map(d => d.path)]),
+  ]);
+  function activateFile(file: string) {
+    setOpenFiles(old => {
+      if (old.includes(file)) return old;
+      const next = [...old];
+      next.splice(next.indexOf(memory.views[root]?.path ?? "") + 1, 0, file);
+      return next;
+    });
+    setPath(file);
+  }
   const [message, setMessage] = useState("Open a local Git checkout to begin.");
   const [conflict, setConflict] = useState<{ path: string; disk: Document } | null>(null);
   const selectedChange = useRef<Change | null>(memory.views[root]?.change ?? null);
@@ -190,8 +203,11 @@ function CheckoutView({
   }
   useEffect(() => {
     for (const d of memory.drafts.filter((d) => d.root === root)) addBuffer(d.path, d.disk, d.text);
+    setOpenFiles(old => [...new Set([...old, ...memory.drafts.filter(d => d.root === root).map(d => d.path)])]);
     if (path) void select(path, false);
     return () => {
+      presentation.current++;
+      fileOpeners.delete(root);
       closers.delete(root);
     };
   }, []);
@@ -295,19 +311,22 @@ function CheckoutView({
     try {
       if (!buffers.current.has(file)) {
         const disk: Document = await projectCall("read", root, file);
+        if (generation !== presentation.current) return false;
         if (!buffers.current.has(file)) addBuffer(file, disk);
       }
       if (!present) {
         setBufferRevision((old) => old + 1);
-        return;
+        return true;
       }
-      if (generation !== presentation.current) return;
-      setPath(file);
+      if (generation !== presentation.current) return false;
+      activateFile(file);
       setDiff(null);
       setBufferRevision((old) => old + 1);
       setMessage("Cmd+S to save.");
+      return true;
     } catch (e) {
-      report(e);
+      if (generation === presentation.current) report(e);
+      return false;
     }
   }
   async function save(version?: string, target = path) {
@@ -371,9 +390,6 @@ function CheckoutView({
     if (modeRef.current !== "Source Control") return;
     const generation = ++presentation.current;
     try {
-      selectedChange.current = change;
-      memory.views[root] = { ...memory.views[root], change };
-      void persist();
       const value = await projectCall("diff", root, change.path, change.area);
       if (generation !== presentation.current || modeRef.current !== "Source Control") return;
       let file: string | undefined;
@@ -394,7 +410,9 @@ function CheckoutView({
         unavailable = "Working file unavailable; comparison is read-only. " + String(error);
       }
       if (generation !== presentation.current || modeRef.current !== "Source Control") return;
-      if (file) setPath(file);
+      selectedChange.current = change;
+      memory.views[root] = { ...memory.views[root], change };
+      activateFile(change.path);
       const title =
         change.area + " · " + change.path +
         (file && change.area === "staged" ? " · working copy" : "");
@@ -407,10 +425,11 @@ function CheckoutView({
           : { ...value, title, file },
       );
       setMessage(unavailable || "Edit the new side · Cmd+S to save the working file.");
+      return true;
     } catch (e) {
       if (generation !== presentation.current) return;
-      setDiff(null);
       report(e);
+      return false;
     }
   }
   async function closeFile(file: string, dispose = true, discards?: (() => () => void)[]) {
@@ -453,6 +472,7 @@ function CheckoutView({
         b.model.setValue(b.disk.text);
         return true;
       }
+      setOpenFiles(old => old.filter(p => p !== file));
       buffers.current.delete(file);
       b.model.dispose();
       if (path === file) {
@@ -598,6 +618,7 @@ function CheckoutView({
               ? ""
               : nextPath;
       }
+      setOpenFiles(memory.views[root]?.openFiles ?? []);
       setPath(nextPath);
       setDiff(null);
       selectedChange.current = null;
@@ -623,10 +644,10 @@ function CheckoutView({
       } catch (error) {
         refreshError = `\nRefresh failed: ${String(error)}`;
       }
-      if (batch && "open" in batch) for (const file of batch.open) await select(file);
+      if (batch && "open" in batch) for (const file of batch.open) await open(file);
       const failed = batch && "saves" in batch ? batch.results.find((r) => r.conflict) : undefined;
       if (failed?.conflict) {
-        await select(failed.conflict.path);
+        await open(failed.conflict.path);
         setConflict(failed.conflict);
       }
       const message =
@@ -645,6 +666,15 @@ function CheckoutView({
       editor.current?.updateOptions({ readOnly: false });
     }
   }
+  fileOpeners.set(root, async request => {
+    if (request.root !== root) return false;
+    // shortcut: both intents retain tabs in this foundation slice; preview replacement belongs to the preview slice.
+    return request.view === "file"
+      ? select(request.path)
+      : !!(await showDiff({ path: request.path, area: request.view }));
+  });
+  const open = (file: string, view: import("./workspace").FileOpenRequest["view"] = "file",
+    intent: "preview" | "keep" = "keep") => openFile({ root, path: file, view, intent });
   closers.set(root, {
     project,
     close: async (discards) => {
@@ -698,8 +728,8 @@ function CheckoutView({
                 return !!b && b.model.getValue() !== b.disk.text;
               }}
               open={async (file, focusEditor) => {
-                await select(file);
-                if (focusEditor)
+                const opened = await open(file, "file", focusEditor ? "keep" : "preview");
+                if (opened && focusEditor)
                   requestAnimationFrame(() => {
                     if (
                       container.current?.getClientRects().length &&
@@ -721,7 +751,7 @@ function CheckoutView({
                   throw Error("Destination has an open buffer. Close it or choose a free name.");
                 const file = await projectCall("create-entry", root, parent, name, kind);
                 setFilesRevision((n) => n + 1);
-                if (kind === "file") await select(file);
+                if (kind === "file") await open(file);
                 return file;
               }}
               transfer={async (kind, sources, parent) => {
@@ -750,7 +780,7 @@ function CheckoutView({
                             selectedChange.current?.path === c.path &&
                             selectedChange.current.area === area
                           }
-                          onClick={() => void showDiff(c)}
+                          onClick={() => void open(c.path, c.area, "preview")}
                         >
                           {c.path}
                         </Button>
@@ -765,6 +795,13 @@ function CheckoutView({
       <section className="content" aria-label="Main editor">
         {mode !== "Chats" && (
           <>
+            <div className="file-tabs" role="tablist" aria-label="Open files">
+              {openFiles.map(file => (
+                <button key={file} role="tab" aria-selected={path === file}
+                  title={root + "/" + file} disabled={saving || fileClosing || !!conflict}
+                  onClick={() => void open(file)}>{file}</button>
+              ))}
+            </div>
             <div className="toolbar">
               <span>
                 {diff?.title || path || "No file selected"}
