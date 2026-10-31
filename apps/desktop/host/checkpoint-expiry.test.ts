@@ -46,6 +46,7 @@ test("background expiry protects recovery, active and uncertain evidence and ret
   const service = new ChatService(store);
   try {
     const chat = await store.createDraft(null, dir);
+    await service.checkpointRetention(7);
     const point = { id: "protected", chatId: chat.id, kind: "before-message", createdAt: 1, availability: "available", files: { "a": { mode: 33188, content: "YQ==" } } };
     await store.database.command("checkpoint", { body: point });
     const expire = (active: string[] = []) => store.database.command("expireCheckpoints", { body: { now: 31 * 86400000, active } });

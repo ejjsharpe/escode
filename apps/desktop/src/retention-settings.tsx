@@ -15,7 +15,7 @@ export function RetentionSettings() {
   }}>
     <summary>Settings</summary>
     <form onSubmit={event => {
-      event.preventDefault(); setBusy(true); setMessage("");
+      event.preventDefault(); if (busy) return; setBusy(true); setMessage("");
       void window.escode.checkpointRetention(never ? null : Number(days)).then(() => {
         setMessage("Checkpoint retention saved.");
       }).catch(error => setMessage(String(error))).finally(() => setBusy(false));
@@ -26,7 +26,7 @@ export function RetentionSettings() {
       <label>Inactivity period (days) <input type="number" min="1" max="36500" step="1" required value={days} disabled={!ready || busy || never} aria-describedby="retention-effects retention-consequences" onChange={event => setDays(event.target.value)} /></label>
       <p id="retention-consequences">Shortening the period can expire remaining historical files on the next cleanup. Extending it or choosing Never cannot recover expired contents. Elapsed coverage is checked under the previous policy before saving. Expired files cannot be restored or used for historical branching.</p>
       <p>Branch dependencies, active operations, recovery and uncertain evidence remain protected. Conversations and worktrees are retained. Never can increase storage use; retention is not a storage-size limit and expiry does not promise immediate disk space recovery.</p>
-      <button type="submit" disabled={!ready || busy}>{busy ? "Saving…" : "Save retention"}</button>
+      <button type="submit" disabled={!ready} aria-disabled={busy}>{busy ? "Saving…" : "Save retention"}</button>
       <p role="status">{message}</p>
     </form>
   </details>;

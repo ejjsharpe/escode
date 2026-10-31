@@ -1463,8 +1463,8 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
     <main {...stylex.props(styles.page)} data-agents={selected === "agents"} inert={closing}>
       <header>
         <strong>escode</strong>
-        <RetentionSettings />
         <span>{selected}</span>
+        <RetentionSettings />
       </header>
       <nav className="project-tabs" aria-label="Projects">
         <Button aria-pressed={selected === "agents"} onClick={() => setSelected("agents")}>

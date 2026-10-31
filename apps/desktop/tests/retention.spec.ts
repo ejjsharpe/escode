@@ -17,6 +17,7 @@ test("packaged retention settings support keyboard editing and persisted Never",
     await expect(page.getByText(/not a storage-size limit/)).toBeVisible();
     await days.fill("7"); await page.getByRole("button", { name: "Save retention" }).click();
     await expect(page.getByRole("status")).toContainText("retention saved");
+    await expect(page.getByRole("button", { name: "Save retention" })).toBeFocused();
     await expect.poll(() => page.evaluate(() => window.escode.checkpointRetention())).toBe(7);
     const never = page.getByRole("checkbox", { name: "Never expire" });
     await never.focus(); await page.keyboard.press("Space");
