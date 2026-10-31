@@ -309,3 +309,21 @@ Codex model/effort and the catalog default. Explicit draft choices survive chang
 Effort memory is shared per Codex model. Permissions reset from project/app settings,
 with factory Full access; another chat's permission edit never becomes a default.
 Custom or managed Codex policy remains subject to explicit resolution.
+
+## Execution architecture vocabulary
+
+These terms describe the [proposed execution architecture amendment](docs/research/execution-architecture.md); they do not change the implemented lifecycle guarantees above.
+
+**Execution**:
+One tracked piece of host-owned work admitted for a chat or file operation, with its own identity and known outcome. A chat can retain many executions over its lifetime.
+_Avoid_: Session, connection, conversation
+
+**Restart continuation**:
+A new tracked message asking the agent to continue eligible interrupted work in the same saved conversation, linked to the prior execution. It is distinct from replaying the prior command or restoring its interrupted live requests.
+_Avoid_: Replay, reconnect, retry Send
+
+**Continuation chain**:
+The lineage linking restart continuations to the executions they follow. It distinguishes repeated automatic continuation from a new deliberate user message.
+
+**Execution uncertainty**:
+A state in which escode cannot establish whether an external action was accepted or completed. Missing evidence does not mean that the action failed or that it is safe to repeat.
