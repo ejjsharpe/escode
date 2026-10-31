@@ -1,0 +1,11 @@
+$ playwright test tests/worktree-drafts.spec.ts "--timeout=90000"
+
+Running 1 test using 1 worker
+
+(node:87853) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'linked')
+
+  ✓  1 tests/worktree-drafts.spec.ts:12:1 › worktree draft prepares only on Send from closed-project Agents, retains edits and protects active removal (16.9s)
+
+  1 passed (17.2s)

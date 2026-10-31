@@ -818,7 +818,7 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .conversation-layout article { padding-block: 12px; }
 .conversation-layout article > h2 { font-size: 13px; color: #bcbcc7; }
 .chat-model-controls > *, .chat-model-controls select { min-width: 0; }
-@media (max-height: 600px) { .conversation-layout .chat-compose { padding: 8px; gap: 4px; } .conversation-heading h2 { margin-block: 0; } }
+@media (max-height: 600px) { .conversation-layout .chat-compose { padding: 8px; gap: 4px; max-height: 30vh; } .conversation-heading h2 { margin-block: 0; } }
 .compose-actions { position: sticky; bottom: -8px; display: flex; flex-wrap: wrap; gap: 8px; background: #1b1c20; padding-block: 4px; }
 .conversation-layout .chat-compose { display: block; }
 .conversation-layout .chat-compose > * { margin-block: 4px; }

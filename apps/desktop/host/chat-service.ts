@@ -1074,10 +1074,7 @@ export class ChatService {
     if (s.output.failed && (p.item || typeof p.delta === "string")) return;
     const items = [...(s.output.pending ?? s.items)];
     if (message.method === "item/started" || message.method === "item/completed") {
-      if (p.item.type === "userMessage") {
-        void this.store.update(s.project, s.chatId, { latestUserMessageAt: this.clock() })
-          .catch(error => { s.error = `User-message recency persistence failed: ${String(error)}`; });
-      }
+      // Codex user items have no timestamps; delayed echoes must retain Send recency.
       const value = this.item(p.turnId, p.item);
       const index = items.findIndex((i) => i.id === value.id && i.turnId === value.turnId);
       if (index < 0) items.push(value);

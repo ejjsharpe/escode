@@ -1,0 +1,32 @@
+$ node scripts/filesystem.mjs && vp test run host/chat.test.ts host/chat-commands.test.ts host/permissions.test.ts host/models.test.ts host/durable-send.test.ts
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-54dcf325/apps/desktop
+
+ ❯ host/durable-send.test.ts (6 tests | 1 failed) 19488ms
+   × authenticated dropped socket response recovers status after reconnect without dispatch 15025ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/durable-send.test.ts > authenticated dropped socket response recovers status after reconnect without dispatch
+Error: Test timed out in 15000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ host/durable-send.test.ts:52:1
+     50| });
+     51|
+     52| test("authenticated dropped socket response recovers status after reco…
+       | ^
+     53|   const { startHost } = await import("@escode/host");
+     54|   const { createHostClient } = await import("@escode/client-runtime");
+ ❯ VitestModuleRunner.directRequest ../../node_modules/.bun/@voidzero-dev+vite-plus-core@1.4.0+df38b84d380caece/node_modules/@voidzero-dev/vite-plus-core/dist/vite/node/module-runner.js:1262:59
+ ❯ VitestModuleRunner.cachedRequest ../../node_modules/.bun/@voidzero-dev+vite-plus-core@1.4.0+df38b84d380caece/node_modules/@voidzero-dev/vite-plus-core/dist/vite/node/module-runner.js:1169:73
+ ❯ VitestModuleRunner.import ../../node_modules/.bun/@voidzero-dev+vite-plus-core@1.4.0+df38b84d380caece/node_modules/@voidzero-dev/vite-plus-core/dist/vite/node/module-runner.js:1124:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  1 failed | 31 passed | 1 skipped (33)
+   Start at  19:40:29
+   Duration  52.78s (tests 89%, import 8%, transform 2%)
+
+error: script "test" exited with code 1

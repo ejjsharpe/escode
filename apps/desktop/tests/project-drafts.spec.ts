@@ -68,7 +68,9 @@ send({id:m.id,result});});`,
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(alpha);
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
+    await page.getByText("Chat actions", { exact: true }).click();
     await expect(page.getByText("Effective Codex settings · fixture", { exact: true })).toBeVisible();
+    await page.getByText("Chat actions", { exact: true }).click();
     await message().fill("Retain this draft");
     const records = async () => {
       const chats = JSON.parse(await readChatFixture(join(user, "host-chats-v1.json"), "utf8")).chats;
