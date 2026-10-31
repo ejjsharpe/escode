@@ -21,10 +21,11 @@ export class FilesViewport {
     return path && !path.startsWith("\0") ? { path, offset: Math.max(0, top - this.offsets[index]) } : undefined;
   }
   measure(key: string, height: number) {
-    if (height <= 0 || this.heights.get(key) === height) return false;
+    if (height <= 0) return false;
+    if (height === 28) return this.heights.delete(key);
+    if (this.heights.get(key) === height) return false;
     this.heights.set(key, height); return true;
   }
-  hasMeasurement(key: string) { return this.heights.has(key); }
   get height() { return this.offsets.at(-1)!; }
   indexAt(offset: number) {
     let low = 0, high = this.keys.length;

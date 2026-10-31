@@ -100,7 +100,7 @@ test("watch readiness recovers, retired callbacks cannot refresh, edit pause def
   expect(model.cache[''].entries).toEqual([entry('recovered')]); releaseNext(); model.cancel();
 });
 
-test("viewport bounds 10000 logical rows, pins focus/edit/drag and measures wrapping and width changes", () => {
+test("viewport bounds 10000 logical rows, pins focus/edit/drag and measures inline fields and width changes", () => {
   const viewport = new FilesViewport();
   const keys = Array.from({ length: 10000 }, (_, index) => String(index));
   viewport.setRows(keys, 240);
@@ -112,6 +112,8 @@ test("viewport bounds 10000 logical rows, pins focus/edit/drag and measures wrap
   expect(viewport.indexAt(83)).toBe(0); expect(viewport.indexAt(84)).toBe(1);
   expect(viewport.reveal('9999', 0, 560)).toBe(279496);
   expect(viewport.measure('0', 84)).toBe(false);
+  expect(viewport.measure('0', 28)).toBe(true); viewport.setRows(keys, 240);
+  expect(viewport.offsets[1]).toBe(28);
   viewport.setRows(keys, 400); expect(viewport.offsets[1]).toBe(28);
 });
 
@@ -126,16 +128,13 @@ test("measurement and width changes preserve the visible identity and within-row
   expect(keys[viewport.indexAt(anchored)]).toBe('100');
   expect(anchored - viewport.offsets[100]).toBe(7);
   const estimated = viewport.reveal('999', anchored, 560);
-  expect(viewport.hasMeasurement('999')).toBe(false);
   viewport.measure('999', 140); viewport.setRows(keys, 240, estimated);
-  expect(viewport.hasMeasurement('999')).toBe(true);
   const corrected = viewport.reveal('999', estimated, 560);
   expect(corrected).toBe(estimated + 112);
   expect(viewport.offsets[1000]).toBe(corrected + 560);
   const resized = viewport.setRows(keys, 400, anchored);
   expect(resized).toBe(top);
   expect(keys[viewport.indexAt(resized)]).toBe('100');
-  expect(viewport.hasMeasurement('999')).toBe(false);
 });
 
 test("authoritative parent removal aborts an uncached descendant and exact special paths remain ordinary nodes", async () => {

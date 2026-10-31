@@ -74,7 +74,7 @@ test("frame observations for cold, cached, large and remembered expansion", asyn
   }
 });
 
-test("wrapped rows restore identity after remount and maintain a mounted active descendant", async () => {
+test("single-line rows retain complete names, restore identity and keep the active descendant mounted", async () => {
   const base = await realpath(await mkdtemp(join(tmpdir(), "escode-wrap-")));
   const root = join(base, "repo");
   execFileSync("git", ["init", root]);
@@ -92,7 +92,10 @@ test("wrapped rows restore identity after remount and maintain a mounted active 
     const focused = page.getByRole("treeitem", { name: names[150], exact: true });
     await expect(focused).toBeVisible();
     await expect(tree).toHaveAttribute("aria-activedescendant", root + ":" + names[150]);
-    expect(await focused.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(28);
+    expect(await focused.evaluate(el => el.getBoundingClientRect().height)).toBe(28);
+    const label = focused.locator(".tree-label");
+    await expect(label).toHaveAttribute("title", names[150]);
+    expect(await label.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
     const anchor = () => tree.evaluate(el => {
       const top = el.getBoundingClientRect().top;
       const row = [...el.querySelectorAll<HTMLElement>('[data-path]')].find(row => row.getBoundingClientRect().bottom > top + 1 && row.getBoundingClientRect().top <= top + 1);
@@ -111,6 +114,58 @@ test("wrapped rows restore identity after remount and maintain a mounted active 
   } finally {
     app.process().kill("SIGKILL");
     await new Promise(resolve => app.process().once("exit", resolve));
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("cold long-name siblings have fixed positions in their first visible frame", async () => {
+  const base = await realpath(await mkdtemp(join(tmpdir(), "escode-cold-wrapping-")));
+  const root = join(base, "repo");
+  execFileSync("git", ["init", root]);
+  await mkdir(join(root, "plugins"));
+  const names = [
+    "withAndroidManifestFCMIconPlugin.js",
+    "withAndroidSplashScreenStatusBarTranslucentPlugin.js",
+    "withAndroidStylesAccentColorPlugin.js",
+    "withAppDelegateReferrer.js",
+  ];
+  await Promise.all(names.map(name => writeFile(join(root, "plugins", name), "fixture")));
+  const app = await launchDesktop(join(base, "user"));
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, root);
+    await page.getByRole("button", { name: "Open project…", exact: true }).click();
+    const row = page.locator('[data-path="plugins"] > .tree-row');
+    await expect(row).toBeVisible();
+    await page.evaluate(() => {
+      const frames: { count: number; overlap: boolean; wrapped: boolean }[] = [];
+      (window as any).coldWrapping = { frames, running: true };
+      const sample = () => {
+        if (!(window as any).coldWrapping.running) return;
+        const rows = [...document.querySelectorAll('[data-path^="plugins/"]')]
+          .map(row => row.getBoundingClientRect());
+        frames.push({ count: rows.length, wrapped: rows.some(row => row.height > 28),
+          overlap: rows.slice(1).some((row, index) => row.top < rows[index].bottom - 0.5) });
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+    await row.click();
+    await expect(page.locator('[data-path^="plugins/"]')).toHaveCount(names.length);
+    await page.waitForTimeout(150);
+    const frames = await page.evaluate(() => {
+      (window as any).coldWrapping.running = false;
+      return (window as any).coldWrapping.frames as { count: number; overlap: boolean; wrapped: boolean }[];
+    });
+    const visible = frames.filter(frame => frame.count > 0);
+    expect(visible.length).toBeGreaterThan(0);
+    expect(visible.every(frame => !frame.wrapped)).toBe(true);
+    expect(visible.every(frame => frame.count === names.length)).toBe(true);
+    expect(visible.every(frame => !frame.overlap)).toBe(true);
+  } finally {
+    await app.close();
     await rm(base, { recursive: true, force: true });
   }
 });

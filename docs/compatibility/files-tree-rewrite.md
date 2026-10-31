@@ -28,7 +28,9 @@ automatic observation defers until the edit or target-resolution operation finis
 reveal positioning and identity-based scroll anchoring. The renderer consumes a complete
 logical row sequence and mounts only the viewport plus overscan and required focus/edit/
 reveal/drag-source rows. Keyboard ranges, select-all and typeahead use the logical sequence.
-Filename wrapping remains enabled. Navigation takes precedence over anchor correction.
+Filename rows now use fixed 28 px single-line labels with ellipsis. Full names remain
+available on hover and through accessibility; only inline fields and diagnostics need
+height measurements. The user selected this behavior after the original wrapping qualification. Navigation takes precedence over anchor correction.
 An optional validated scroll anchor persists entry identity and within-row offset; known
 move/Trash outcomes reconcile it alongside existing Files memory.
 
@@ -41,8 +43,8 @@ rename, transfer, Trash, dirty-buffer and journal authority remain in their prio
   Watch readiness, observation, focus/checkout return and Refresh recover stale data.
 - Results publish immediately. Only loading feedback waits 800 ms. There is no 150 ms
   result-batching window. Remembered descendants can appear in successive complete levels.
-- Labels wrap; no compact-folder presentation, file nesting or configurable VS Code sorting
-  was added. Existing escode shortcuts, selection and Git-ignore semantics remain.
+- Labels use one line with ellipsis following the user’s 2026-10-31 decision; no
+  compact-folder presentation, file nesting or configurable VS Code sorting was added. Existing escode shortcuts, selection and Git-ignore semantics remain.
 - Failure retains stale contents with diagnostics. External rename is removal/addition;
   the directory contract does not expose persistent filesystem object identity.
 - Cancellation is logical: obsolete results cannot publish, but already issued transport
@@ -300,7 +302,7 @@ all with the `/tmp/escode-stabilize` prefix. Earlier failed logs remain alongsid
 ### Remaining validation
 
 Integrated acceptance is not claimed. Manual VoiceOver must still verify logical
-navigation/selection, active-descendant announcements, wrapped labels, recycled rows,
+navigation/selection, active-descendant announcements, complete single-line label names, recycled rows,
 inline editing and reveal/focus restoration in this build. Native Finder import/drag,
 Finder reveal and Trash recovery still need their user-owned manual validation.
 Historical Option-drag/hidden-toolbar/transfer-navigation flakiness was not reproduced
@@ -309,3 +311,74 @@ Existing capacity limits and cache/watch limitations above still apply. The phys
 socket output bound is now 32 MiB including the next write, while smaller RPC admission,
 response and stream budgets remain in force. Passing fixtures do not establish unlimited
 checkout capacity or exhaustive timing coverage.
+
+
+## Single-line filename follow-up (2026-10-31)
+
+The user reported a fast visual ripple on the first expansion of Bluesky folders,
+including `plugins` and `src`, and then explicitly selected single-line labels instead
+of filename wrapping. This supersedes the wrapping preservation requirement above.
+
+A real-mouse cold/warm probe used the actual Bluesky checkout in a separate temporary
+profile, without editing its files. In `plugins`, all nine siblings arrived together;
+the first sampled visible frame at 65.8 ms used 28 px offsets for filenames whose
+actual wrapped height was 45 px. Rows overlapped until the 72.2 ms sample. Cached
+reopening retained measurements and did not overlap. `src` published all 18 children
+together and did not show overlap in that probe. These observations establish a cold
+wrapping defect; they do not establish serial directory-result streaming or explain
+every possible visual symptom in every folder.
+
+A regression at the actual Electron interface failed before repair on first-frame
+overlap. An interim pre-paint measurement repair passed three repetitions; the user
+then removed the need for wrapping. The final change uses fixed 28 px filename rows,
+CSS ellipsis, full-name titles and unchanged complete accessible labels. Filename rows
+are excluded from ResizeObserver measurement. Inline fields and diagnostics retain
+variable height and pre-paint measurement; leaving inline edit restores the normal
+28 px geometry. Reveal, keyboard navigation and restoration no longer wait for a
+filename measurement. No delay, batching window, preload or dependency was added.
+
+The revised real-checkout cold/warm probe reported zero overlap frames and zero
+filename height measurements in `plugins` and `src`. Visual inspection confirmed
+ellipsis and stable single-line rows. The viewport regression now asserts complete
+siblings, fixed height and no overlap from their first visible frame. The long-name
+viewport test retains full-name accessibility, title, truncation, restoration,
+selection and mounted active-descendant assertions. The prior wrapped-height
+expectation is replaced by the user-authorized exact 28 px requirement.
+
+Focused verification: 12/12 model/viewport tests, 18/18 Electron viewport/inline tests,
+typecheck, lint, build and unsigned packaging passed. The scoped Impeccable mechanical
+detector reported no findings. The interrupted wrapping-only full suite did not
+complete and is not counted as passing. Full single-line results follow below.
+
+Final single-line validation:
+
+- Complete serial development Electron run: **50/50 passed** (2.8 min).
+- Initial complete serial packaged run: **49/50 passed** (3.3 min). The existing
+  inline-create/rename scenario lost its input after reporting an occupied-name
+  collision, while the fixture took screenshots; the subsequent fill timed out.
+  Its exact cause remains unestablished. No assertion was removed or weakened.
+- That unchanged inline scenario passed **3/3 isolated packaged repetitions** with
+  tracing (13.6 s). A fresh unfiltered packaged run then passed **50/50** (2.7 min).
+  This confirms the final run; it does not erase the intermittent failure above.
+- 12/12 module tests, 18/18 focused development viewport/inline tests, typecheck,
+  lint, build, unsigned arm64 packaging, whitespace and the scoped design detector
+  passed. The package's `app.asar` SHA-256 is
+  `564ec29d8d4a76c4a31020ffe12d4df0685ddb6aa7e550b546c341e9390e9826`.
+
+The complete runs used the same eight-file command above, with the new viewport
+regression increasing the total from 49 to 50. Additional commands:
+
+```sh
+bun run --cwd apps/desktop test -- host/files-modules.test.ts
+bun run --cwd apps/desktop smoke -- tests/files-viewport.spec.ts tests/files-inline.spec.ts
+ESCODE_PACKAGED=1 bun run --cwd apps/desktop smoke -- tests/files-inline.spec.ts -g 'inline create and rename:' --repeat-each=3 --trace on
+```
+
+Logs: `/tmp/escode-single-line-{modules,focused,development,packaged,inline-repeat,final-packaged,typecheck,lint,build,package}.log`.
+The initial packaged failure is also preserved at
+`/tmp/escode-single-line-inline-failure.md`; the real-checkout probe and visual capture
+are `/tmp/escode-single-line-bluesky.log` and `/tmp/escode-single-line-plugins.png`.
+The selected labels are available in the existing temporary-profile dev window via
+the restored local dev server. No installation or live provider turn was used.
+Manual VoiceOver/Finder validation and the exact cause of the intermittent inline
+failure remain outstanding; integrated acceptance is not claimed.

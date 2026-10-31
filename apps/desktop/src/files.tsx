@@ -509,7 +509,7 @@ export function FilesTree({
       pendingScroll.current = "";
       return;
     }
-    if (scrollToPath(pendingScroll.current) && viewport.hasMeasurement(pendingScroll.current)) pendingScroll.current = "";
+    if (scrollToPath(pendingScroll.current)) pendingScroll.current = "";
   });
   async function entryAction(action: "copy-path" | "copy-relative" | "finder") {
     const target = menu ?? "";
@@ -544,6 +544,7 @@ export function FilesTree({
     display.push({ key: "\0hidden-edit", field: true });
   extras("");
   for (const row of rows) {
+    if (edit?.source !== row.path) viewport.measure(row.path, 28);
     display.push({ key: row.path, row });
     if (row.directory && state.expanded.includes(row.path)) extras(row.path);
   }
@@ -563,32 +564,41 @@ export function FilesTree({
     return true;
   }
   useLayoutEffect(() => {
-    if (active && pendingFocusScroll.current && scrollToPath(pendingFocusScroll.current) && viewport.hasMeasurement(pendingFocusScroll.current)) pendingFocusScroll.current = "";
+    if (active && pendingFocusScroll.current && scrollToPath(pendingFocusScroll.current)) pendingFocusScroll.current = "";
   });
   useLayoutEffect(() => {
     const element = tree.current;
     if (!element || !active) return;
-    const observer = new ResizeObserver(() => {
+    const resize = () => {
       const top = viewport.setRows(viewport.keys, element.clientWidth, element.scrollTop);
       element.scrollTop = top;
       setGeometry(old => old.width === element.clientWidth && old.height === element.clientHeight ? old : { ...old, top, width: element.clientWidth, height: element.clientHeight });
-    });
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
     observer.observe(element);
     return () => observer.disconnect();
   }, [active]);
   useLayoutEffect(() => {
     const element = tree.current;
     if (!element || !active) return;
+    const update = () => {
+      element.scrollTop = viewport.setRows(viewport.keys, element.clientWidth, element.scrollTop);
+      setGeometry(old => old.top === element.scrollTop ? old : { ...old, top: element.scrollTop });
+      measured(value => value + 1);
+    };
     const observer = new ResizeObserver(entries => {
       let changed = false;
       for (const entry of entries) changed = viewport.measure((entry.target as HTMLElement).dataset.measure!, entry.borderBoxSize[0]?.blockSize ?? entry.target.getBoundingClientRect().height) || changed;
-      if (changed) {
-        element.scrollTop = viewport.setRows(viewport.keys, element.clientWidth, element.scrollTop);
-        setGeometry(old => old.top === element.scrollTop ? old : { ...old, top: element.scrollTop });
-        measured(value => value + 1);
-      }
+      if (changed) update();
     });
-    element.querySelectorAll<HTMLElement>("[data-measure]").forEach(row => observer.observe(row));
+    // Inline fields and diagnostics can grow; filename rows have a fixed height.
+    let changed = false;
+    for (const row of element.querySelectorAll<HTMLElement>("[data-measure]")) {
+      changed = viewport.measure(row.dataset.measure!, row.getBoundingClientRect().height) || changed;
+      observer.observe(row);
+    }
+    if (changed) update();
     return () => observer.disconnect();
   });
   useEffect(() => {
@@ -628,7 +638,6 @@ export function FilesTree({
     setGeometry(old => old.top === tree.current!.scrollTop ? old : { ...old, top: tree.current!.scrollTop });
     if (
       cache[""] &&
-      (index < 0 || viewport.hasMeasurement(savedAnchor!.path)) &&
       !rows.some((r) => r.directory && state.expanded.includes(r.path) && !cache[r.path])
     )
       restoring.current = false;
@@ -833,6 +842,7 @@ export function FilesTree({
               <div
                 className={
                   "tree-row" +
+                  (edit?.source === entry.path ? " tree-editing" : "") +
                   (entry.path === focused?.path ? " tree-focus" : "") +
                   (dropTarget?.parent === entry.path ? " tree-drop" : "")
                 }
@@ -874,7 +884,7 @@ export function FilesTree({
                 {edit?.source === entry.path ? (
                   field()
                 ) : (
-                  <span>{entry.path.split("/").at(-1)}</span>
+                  <span className="tree-label" title={entry.path.split("/").at(-1)}>{entry.path.split("/").at(-1)}</span>
                 )}
                 {dirty(entry.path) && <span aria-hidden="true"> •</span>}
               </div>
@@ -1008,7 +1018,7 @@ export function FilesTree({
         <div data-extent="true" style={{ height: viewport.height, position: "relative" }}>
           {viewport.mounted(geometry.top, geometry.height, [pendingScroll.current, focused?.path ?? "", edit?.source ?? "", ...display.filter(item => item.field).map(item => item.key), drag.current?.source ?? ""]).map(index => {
             const item = display[index];
-            return <div key={item.key} data-measure={item.key} style={{ position: "absolute", top: viewport.offsets[index], width: "100%" }}>
+            return <div key={item.key} data-measure={!item.row || edit?.source === item.row.path ? item.key : undefined} style={{ position: "absolute", top: viewport.offsets[index], width: "100%" }}>
               {item.row ? listing(item.row) : item.field ? field() : <div className="tree-message" role="status"
                 onDragOver={event => over(event, item.parent ?? "")} onDrop={event => void drop(event, item.parent ?? "")}>{item.message}</div>}
             </div>;

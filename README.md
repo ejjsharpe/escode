@@ -114,7 +114,8 @@ earlier text undo history resets with disclosure, while new text undo works. A d
 intent journal reconciles interrupted moves on restart. See [file-operation evidence and
 remaining gates](docs/compatibility/file-operations.md) and [tree evidence](docs/compatibility/files-tree.md).
 The [asynchronous Files tree rewrite](docs/compatibility/files-tree-rewrite.md) separates complete
-directory data from measured viewport rows; its design and qualification limits are recorded separately.
+directory data from viewport rows. Filenames use single-line labels with ellipsis and full names
+on hover and through accessibility; its design and qualification limits are recorded separately.
 New File/New Folder and basename-only inline Rename are available from the toolbar,
 context menu and tree-focused keyboard controls. New files open in the editor; invalid
 or occupied names retain their input. See [create/rename evidence](docs/compatibility/files-inline.md).

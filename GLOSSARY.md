@@ -158,7 +158,9 @@ that the latest keystroke survives a crash.
 
 **Files view**:
 The project-local lazy tree of files in the current checkout. Its asynchronous model retains
-complete sorted directory listings independently of the measured viewport rows. Expansion, keyboard
+complete sorted directory listings independently of the viewport rows. Filenames use fixed-height,
+single-line labels with ellipsis; hover and accessibility retain the full name. Inline fields and
+diagnostics can use additional height. Expansion, keyboard
 focus, multiple selection and scroll are remembered independently per checkout; selection
 is separate from the active document. Coalesced host notifications reconcile loaded directories;
 window focus and explicit Refresh rescan missed events and retry unavailable watches. Expanding

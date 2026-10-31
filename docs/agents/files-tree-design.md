@@ -13,7 +13,7 @@ The open `wayfinder:map` query returned no issues on 2026-10-31.
 ## Constraints and dependencies
 
 Complete logical tree data must survive row recycling. Keyboard navigation, range
-selection, active-descendant, inline editing, wrapping, active reveal, scroll restoration,
+selection, active-descendant, inline editing, single-line labels, active reveal, scroll restoration,
 filtering, drag hover and file-operation preservation all cross this coordination point.
 The tree cannot infer deletion from a failed read or use row index as identity.
 Discovery is limited to root, reachable expanded directories and explicit action/reveal
@@ -75,7 +75,9 @@ Use the upstream separation of async data and viewport rendering, not a source t
 Cached reopening should use resolved data until invalidated, replacing unconditional
 reopening reads. Watch readiness, focus/reactivation and explicit Refresh cover recovery;
 unavailable watches remain disclosed. No guarantee can detect every missed notification
-immediately without polling. Keep filename wrapping rather than adopting truncated labels.
+immediately without polling. The user selected single-line filename labels on 2026-10-31. Use fixed-height rows
+with ellipsis and full names on hover and through accessibility; retain variable height
+only for inline fields and diagnostics. This supersedes the original wrapping requirement.
 Keep escode's existing keyboard bindings, independent selection, Git-ignore policy and file
 preservation workflows. Compact single-child folders and configurable VS Code sorting are
 outside this rewrite. Exact Checkout-relative paths identify entries; external renames are
