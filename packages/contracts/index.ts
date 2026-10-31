@@ -116,7 +116,7 @@ export const WorkspaceState = Schema.Struct({
   agentsChat: Schema.optionalKey(Schema.String), selected: Schema.String,
   views: Schema.Record(Schema.String, Schema.Struct({
     files: Schema.optionalKey(Schema.Struct({ expanded: Schema.Array(Schema.String), selected: Schema.Array(Schema.String),
-      focus: Schema.String, scroll: Schema.Number, hideIgnored: Schema.optionalKey(Schema.Boolean) })),
+      focus: Schema.String, scroll: Schema.Number, scrollAnchor: Schema.optional(Schema.Struct({ path: Schema.String, offset: Schema.Number })), hideIgnored: Schema.optionalKey(Schema.Boolean) })),
     mode: Schema.optionalKey(Schema.String), checkout: Schema.optionalKey(Schema.String), roots: Schema.optionalKey(Schema.Array(Schema.String)),
     fileViews: Schema.optionalKey(Schema.Record(Schema.String, Schema.Literals(["file", "staged", "unstaged", "untracked", "conflict"]))),
     editorPositions: Schema.optionalKey(Schema.Record(Schema.String, Schema.Record(Schema.String,

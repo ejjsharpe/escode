@@ -208,7 +208,8 @@ createInterface({input:process.stdin}).on('line',line=>{
     }, root);
     const expanded = Date.now();
     await page.getByRole("treeitem", { name: "bulk", exact: true }).locator(":scope > .tree-row").click();
-    await expect(page.getByRole("treeitem")).toHaveCount(count + 3);
+    await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute("data-row-count", String(count + 3));
+    expect(await page.getByRole("treeitem").count()).toBeLessThan(100);
     const tree = page.getByRole("tree", { name: "Files", exact: true });
     await tree.focus();
     await page.keyboard.press("ArrowDown");

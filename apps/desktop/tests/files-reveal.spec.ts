@@ -176,7 +176,13 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
     ).toBe("ignored unsaved");
     await page.screenshot({ path: "test-results/files-reveal.png" });
     await page.getByRole("button", { name: "Collapse All", exact: true }).click();
-    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    // Exercise an actually pending reveal, with no cached or retired-model folder response.
+    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.expanded).toEqual([]);
+    const exited = new Promise(resolve => app.process().once("exit", resolve));
+    app.process().kill("SIGKILL"); await exited;
+    await rm(join(user, "foundation/owner.lock"));
+    app = await launchDesktop(user); page = await app.firstWindow();
+    await expect(row("folder")).toBeVisible();
     await page.evaluate(() => {
       const then = Promise.prototype.then;
       // oxlint-disable-next-line unicorn/no-thenable -- Pause consumption of a real host listing for the origin race.
@@ -185,7 +191,7 @@ test("reveal, collapse, ignored dirty file, failure recovery, context paths and 
           return then.call(
             this,
             (value: any) => {
-              if (value?.entries?.some((e: any) => e.path === "folder/deep")) {
+              if (value?.listing?.entries?.some((e: any) => e.path === "folder/deep")) {
                 // oxlint-disable-next-line unicorn/no-thenable -- Restore before holding the single response.
                 Object.defineProperty(Promise.prototype, "then", { value: then });
                 return new Promise((resolve) => {

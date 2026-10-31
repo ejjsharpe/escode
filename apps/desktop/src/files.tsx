@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useMemo, useSyncExternalStore } from "react";
 import type { DragEvent, KeyboardEvent } from "react";
 import { memory, useMemory } from "./workspace";
 import type { FilesMemory } from "../host/workspace";
 
-type Entry = { path: string; directory: boolean };
-type Listing = { entries?: Entry[]; error?: string; ignored?: string[]; filterError?: string };
+import { FilesModel } from "./files-model";
+import { FilesViewport } from "./files-viewport";
 export function FilesTree({
   root,
   active,
@@ -47,7 +47,7 @@ export function FilesTree({
     value: string;
     error?: string;
   } | null>(null);
-  const drag = useRef<{ id: string; paths: string[]; token: Promise<string> } | null>(null);
+  const drag = useRef<{ id: string; source: string; paths: string[]; token: Promise<string> } | null>(null);
   const hover = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dragGeneration = useRef(0);
   const [dropTarget, setDropTarget] = useState<{ parent: string; copy: boolean } | null>(null);
@@ -79,7 +79,7 @@ export function FilesTree({
     const token = window.escode.project("drag-capture", root, paths);
     // Keep capture rejection handled even if the user cancels before dropping.
     void token.catch(() => {});
-    drag.current = { id, paths, token };
+    drag.current = { id, source: path, paths, token };
     event.dataTransfer.setData(dragFormat, id);
     event.dataTransfer.effectAllowed = "copyMove";
   }
@@ -148,7 +148,8 @@ export function FilesTree({
       let parent = "";
       if (target) {
         const container = target.split("/").slice(0, -1).join("/");
-        const listing = cache[container] ?? (await load(container));
+        const listing = await load(container);
+        if (listing.error) throw Error(listing.error);
         const entry = listing.entries?.find((e) => e.path === target);
         if (!entry) throw Error(listing.error || "Destination missing. Refresh and try again.");
         parent = entry.directory ? target : container;
@@ -171,6 +172,8 @@ export function FilesTree({
   async function beginEdit(kind: "rename" | "file" | "folder", target = state.selected[0] || "") {
     if (edit || disabled || startingEdit.current) return;
     startingEdit.current = true;
+    model.pause(true);
+    let began = false;
     setActionError("");
     setMenu(null);
     try {
@@ -178,7 +181,8 @@ export function FilesTree({
       let directory = false;
       if (target) {
         const container = target.split("/").slice(0, -1).join("/");
-        const listing = cache[container] ?? (await load(container));
+        const listing = await load(container);
+        if (listing.error) throw Error(listing.error);
         const entry = listing.entries?.find((entry) => entry.path === target);
         if (!entry)
           throw Error(
@@ -201,8 +205,10 @@ export function FilesTree({
         });
       }
       epoch.current++;
-      loaded.current.clear();
+      model.cancel();
+      model.pause(true);
       pendingRescan.current = true;
+      began = true;
       setEdit(
         kind === "rename"
           ? {
@@ -220,6 +226,7 @@ export function FilesTree({
       restoreFocus();
     } finally {
       startingEdit.current = false;
+      if (!began) model.pause(!!editing.current || startingEdit.current || revealing.current > 0);
     }
   }
   function restoreFocus() {
@@ -326,8 +333,17 @@ export function FilesTree({
       </div>
     );
   }
-  const [cache, setCache] = useState<Record<string, Listing>>({});
-  const loaded = useRef(new Map<string, Promise<Listing>>());
+  const model = useMemo(() => new FilesModel({
+    list: (path) => window.escode.listDirectory(root, path).then(result => {
+      if (result.kind !== "available") throw Error(result.message);
+      return { ...result.listing, entries: [...result.listing.entries], ignored: [...result.listing.ignored] };
+    }),
+    watch: (paths, changed) => window.escode.watchFiles(root, paths, changed),
+  }), [root]);
+  const cache = useSyncExternalStore(model.subscribe, () => model.cache);
+  const viewport = useMemo(() => new FilesViewport(), [root]);
+  const [geometry, setGeometry] = useState({ top: state.scroll, height: 600, width: 0 });
+  const [, measured] = useState(0);
   const epoch = useRef(0);
   const restoring = useRef(true);
   const tree = useRef<HTMLDivElement>(null);
@@ -345,56 +361,19 @@ export function FilesTree({
   editing.current = edit;
   const pendingRescan = useRef(false);
   const revealing = useRef(0);
-  function load(path: string): Promise<Listing> {
-    const pending = loaded.current.get(path);
-    if (pending) return pending;
-    const generation = epoch.current;
-    const task = window.escode.listDirectory(root, path).then((result) => {
-      if (result.kind !== "available") throw Error(result.message);
-      return { ...result.listing, entries: [...result.listing.entries], ignored: [...result.listing.ignored] };
-    }).then(
-      (listing) => {
-        if (generation === epoch.current && loaded.current.get(path) === task) {
-          setCache((c) => ({ ...c, [path]: listing }));
-        }
-        return listing;
-      },
-      (error) => {
-        if (generation === epoch.current && loaded.current.get(path) === task) {
-          setCache((c) => ({ ...c, [path]: { error: String(error) } }));
-        }
-        return { error: String(error) };
-      },
-    );
-    loaded.current.set(path, task);
-    return task;
-  }
+  const load = (path: string) => model.load(path);
   const [watchError, setWatchError] = useState("");
   const [watchRevision, setWatchRevision] = useState(0);
-  const cacheRef = useRef(cache);
-  cacheRef.current = cache;
-  function loadedDirectories() {
-    return Object.keys(cacheRef.current).filter((path) => {
-      const parts = path.split("/");
-      for (let i = 0; i < parts.length; i++) {
-        const entries = cacheRef.current[parts.slice(0, i).join("/")]?.entries;
-        if (path && entries && !entries.some((e) => e.directory && e.path === parts.slice(0, i + 1).join("/")))
-          return false;
-      }
-      return true;
-    });
-  }
+  const loadedDirectories = () => model.directories();
   function rescan() {
     // Keep the inline field mounted until its user commits or cancels.
-    if (editing.current || revealing.current) {
+    if (editing.current || startingEdit.current || revealing.current) {
       pendingRescan.current = true;
       return;
     }
     pendingRescan.current = false;
     epoch.current++;
-    const paths = [...new Set(["", ...loadedDirectories()])];
-    loaded.current.clear();
-    for (const path of paths) void load(path);
+    model.refresh();
   }
   useEffect(() => {
     if (!edit && pendingRescan.current) rescan();
@@ -402,9 +381,9 @@ export function FilesTree({
   const watchPaths = JSON.stringify(loadedDirectories().sort());
   useEffect(() => {
     if (!active) return;
-    return window.escode.watchFiles(root, JSON.parse(watchPaths), (error, ready) => {
+    return model.watch(JSON.parse(watchPaths), (error, ready) => {
       if (error) setWatchError(error);
-      rescan();
+      if (!error && ready) setWatchError("");
       if (!error && !ready) setWatchRevision((r) => r + 1);
     });
   }, [root, active, watchPaths, watchRevision]);
@@ -429,45 +408,24 @@ export function FilesTree({
     setWatchRevision((r) => r + 1);
     restoring.current = true;
     epoch.current++;
-    loaded.current.clear();
-    setCache({});
+    model.refresh(true);
   }
   useEffect(() => {
     if (memory.views[root]?.files) setState(memory.views[root].files!);
     rescan();
     setWatchRevision((r) => r + 1);
   }, [revision]);
-  useEffect(() => {
-    void load("");
-    // Only expanded ancestors reachable from the root are loaded.
-    function visit(parent: string) {
-      for (const entry of visible(parent)) {
-        if (entry.directory && state.expanded.includes(entry.path)) {
-          void load(entry.path);
-          visit(entry.path);
-        }
-      }
-    }
-    visit("");
-  }, [cache, state.expanded, state.hideIgnored]);
-  useEffect(
-    () => () => {
-      epoch.current++;
-    },
-    [],
-  );
+  useLayoutEffect(() => { model.pause(!!edit || startingEdit.current || revealing.current > 0); }, [edit, model]);
+  useEffect(() => { if (active) model.discover(state.expanded, state.hideIgnored); }, [cache, state.expanded, state.hideIgnored, active, edit]);
+  useEffect(() => () => { epoch.current++; model.cancel(); }, [model]);
   const filterError = Object.values(cache).find((v) => v.filterError)?.filterError;
-  function visible(parent: string) {
-    const value = cache[parent];
-    return (value?.entries ?? []).filter(
-      (e) => !state.hideIgnored || filterError || !value?.ignored?.includes(e.path),
-    );
-  }
+  const visible = (parent: string) => model.visible(parent, !!state.hideIgnored);
   const previousActive = useRef(activePath);
   const revealSequence = useRef(0);
   const [revealMessage, setRevealMessage] = useState("");
   const [hiddenReveal, setHiddenReveal] = useState("");
   const pendingScroll = useRef("");
+  const pendingFocusScroll = useRef("");
   const revealButton = useRef<HTMLButtonElement>(null);
   const origin = useRef({ root, active, activePath });
   origin.current = { root, active, activePath };
@@ -489,6 +447,7 @@ export function FilesTree({
       setHiddenReveal("");
     }
     revealing.current++;
+    model.pause(true);
     try {
       const parts = file.split("/");
       const ancestors: string[] = [];
@@ -533,6 +492,7 @@ export function FilesTree({
       }
     } finally {
       revealing.current--;
+      model.pause(!!editing.current || startingEdit.current || revealing.current > 0);
       if (!revealing.current && pendingRescan.current) rescan();
     }
   }
@@ -549,13 +509,7 @@ export function FilesTree({
       pendingScroll.current = "";
       return;
     }
-    const row = tree.current?.querySelector<HTMLElement>(
-      `[data-path="${CSS.escape(pendingScroll.current)}"] > .tree-row`,
-    );
-    if (row) {
-      row.scrollIntoView({ block: "nearest" });
-      pendingScroll.current = "";
-    }
+    if (scrollToPath(pendingScroll.current) && viewport.hasMeasurement(pendingScroll.current)) pendingScroll.current = "";
   });
   async function entryAction(action: "copy-path" | "copy-relative" | "finder") {
     const target = menu ?? "";
@@ -574,21 +528,76 @@ export function FilesTree({
       if (generation === dragGeneration.current) setActionError(String(error));
     }
   }
-  const rows: (Entry & { level: number })[] = [];
-  function collect(parent: string, level: number) {
-    const entries = visible(parent);
-    entries.forEach((entry) => {
-      rows.push({ ...entry, level });
-      if (entry.directory && state.expanded.includes(entry.path)) collect(entry.path, level + 1);
-    });
-  }
-  collect("", 1);
+  const rows = model.rows(state.expanded, state.hideIgnored);
   const focused = rows.find((r) => r.path === state.focus) ?? rows[0];
+  // Status and new-entry rows participate in geometry, but never keyboard selection.
+  const display: ({ key: string; row?: typeof rows[number]; parent?: string; message?: string; field?: boolean })[] = [];
+  function extras(parent: string) {
+    if (edit && !edit.source && edit.parent === parent) display.push({ key: "\0edit:" + parent, field: true });
+    const value = cache[parent];
+    const message = value?.error ? `${parent || "Checkout"}: ${value.error}. Use Refresh to retry.`
+      : value?.slow ? "Loading files…"
+      : value?.entries && !visible(parent).length ? value.entries.length ? "No visible entries · Git-ignored files are hidden" : "Empty folder" : "";
+    if (message) display.push({ key: "\0status:" + parent, parent, message });
+  }
+  if (edit && (edit.source ? !rows.some(row => row.path === edit.source) : edit.parent && !rows.some(row => row.path === edit.parent && state.expanded.includes(row.path))))
+    display.push({ key: "\0hidden-edit", field: true });
+  extras("");
+  for (const row of rows) {
+    display.push({ key: row.path, row });
+    if (row.directory && state.expanded.includes(row.path)) extras(row.path);
+  }
+  const preserveAnchor = !pendingScroll.current && !pendingFocusScroll.current;
+  const anchoredTop = viewport.setRows(display.map(item => item.key), geometry.width, geometry.top);
+  useLayoutEffect(() => {
+    if (tree.current && preserveAnchor && !restoring.current && anchoredTop !== geometry.top) {
+      tree.current.scrollTop = anchoredTop;
+      setGeometry(old => ({ ...old, top: anchoredTop }));
+    }
+  });
+  function scrollToPath(path: string) {
+    const element = tree.current;
+    if (!element || !viewport.keys.includes(path)) return false;
+    element.scrollTop = viewport.reveal(path, element.scrollTop, element.clientHeight);
+    setGeometry(old => old.top === element.scrollTop ? old : { ...old, top: element.scrollTop });
+    return true;
+  }
+  useLayoutEffect(() => {
+    if (active && pendingFocusScroll.current && scrollToPath(pendingFocusScroll.current) && viewport.hasMeasurement(pendingFocusScroll.current)) pendingFocusScroll.current = "";
+  });
+  useLayoutEffect(() => {
+    const element = tree.current;
+    if (!element || !active) return;
+    const observer = new ResizeObserver(() => {
+      const top = viewport.setRows(viewport.keys, element.clientWidth, element.scrollTop);
+      element.scrollTop = top;
+      setGeometry(old => old.width === element.clientWidth && old.height === element.clientHeight ? old : { ...old, top, width: element.clientWidth, height: element.clientHeight });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [active]);
+  useLayoutEffect(() => {
+    const element = tree.current;
+    if (!element || !active) return;
+    const observer = new ResizeObserver(entries => {
+      let changed = false;
+      for (const entry of entries) changed = viewport.measure((entry.target as HTMLElement).dataset.measure!, entry.borderBoxSize[0]?.blockSize ?? entry.target.getBoundingClientRect().height) || changed;
+      if (changed) {
+        element.scrollTop = viewport.setRows(viewport.keys, element.clientWidth, element.scrollTop);
+        setGeometry(old => old.top === element.scrollTop ? old : { ...old, top: element.scrollTop });
+        measured(value => value + 1);
+      }
+    });
+    element.querySelectorAll<HTMLElement>("[data-measure]").forEach(row => observer.observe(row));
+    return () => observer.disconnect();
+  });
   useEffect(() => {
     function missing(path: string) {
       const parts = path.split("/");
       for (let i = 0; i < parts.length; i++) {
-        const entries = cache[parts.slice(0, i).join("/")]?.entries;
+        const parent = parts.slice(0, i).join("/");
+        if (!model.resolved(parent)) return false;
+        const entries = cache[parent]?.entries;
         if (!entries) return false;
         if (!entries.some((e) => e.path === parts.slice(0, i + 1).join("/"))) return true;
       }
@@ -613,13 +622,17 @@ export function FilesTree({
       return;
     }
     if (!tree.current || !restoring.current) return;
-    tree.current.scrollTop = state.scroll;
+    const savedAnchor = state.scrollAnchor;
+    const index = savedAnchor ? viewport.keys.indexOf(savedAnchor.path) : -1;
+    tree.current.scrollTop = index >= 0 ? viewport.offsets[index] + Math.min(savedAnchor!.offset, viewport.offsets[index + 1] - viewport.offsets[index] - 1) : state.scroll;
+    setGeometry(old => old.top === tree.current!.scrollTop ? old : { ...old, top: tree.current!.scrollTop });
     if (
       cache[""] &&
+      (index < 0 || viewport.hasMeasurement(savedAnchor!.path)) &&
       !rows.some((r) => r.directory && state.expanded.includes(r.path) && !cache[r.path])
     )
       restoring.current = false;
-  }, [cache, active]);
+  });
   useEffect(() => {
     if (menu !== null)
       menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
@@ -640,15 +653,12 @@ export function FilesTree({
           : [...state.selected, path];
     }
     update({ focus: path, selected });
-    requestAnimationFrame(() =>
-      tree.current
-        ?.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"] > .tree-row`)
-        ?.scrollIntoView({ block: "nearest" }),
-    );
+    pendingFocusScroll.current = path;
+    scrollToPath(path);
   }
+
   function toggle(path: string) {
     if (!state.expanded.includes(path)) {
-      loaded.current.delete(path);
       void load(path);
     }
     revealSequence.current++;
@@ -686,7 +696,8 @@ export function FilesTree({
       let parent = "";
       if (kind === "paste" && target) {
         const container = target.split("/").slice(0, -1).join("/");
-        const listing = cache[container] ?? (await load(container));
+        const listing = await load(container);
+        if (listing.error) throw Error(listing.error);
         const entry = listing.entries?.find((e) => e.path === target);
         if (!entry) throw Error(listing.error || "Destination missing. Refresh and select again.");
         parent = entry.directory ? target : container;
@@ -803,33 +814,9 @@ export function FilesTree({
       if (match) focus(match.path, event.shiftKey);
     }
   }
-  function listing(parent: string, level: number) {
-    const value = cache[parent];
-    if (!value?.entries)
-      return (
-        <>
-          {edit && !edit.source && edit.parent === parent && field()}
-          <div className="tree-message" role="status" style={{ paddingLeft: level * 16 }}>
-            {value?.error
-              ? `${parent || "Checkout"}: ${value.error}. Use Refresh to retry.`
-              : "Loading files…"}
-          </div>
-        </>
-      );
-    const entries = visible(parent);
-    if (!entries.length && !(edit && !edit.source && edit.parent === parent))
-      return (
-        <div className="tree-message" role="status" style={{ paddingLeft: level * 16 }}>
-          {value.entries.length
-            ? "No visible entries · Git-ignored files are hidden"
-            : "Empty folder"}
-        </div>
-      );
+  function listing(entry: typeof rows[number]) {
+    const { parent, level } = entry;
     return (
-      <>
-        {edit && !edit.source && edit.parent === parent && field()}
-        {entries.map((entry, index) => {
-          return (
             <div
               key={entry.path}
               role="treeitem"
@@ -837,8 +824,8 @@ export function FilesTree({
               data-path={entry.path}
               aria-label={entry.path.split("/").at(-1) + (dirty(entry.path) ? ", unsaved" : "")}
               aria-level={level}
-              aria-posinset={index + 1}
-              aria-setsize={entries.length}
+              aria-posinset={entry.position}
+              aria-setsize={entry.size}
               aria-selected={state.selected.includes(entry.path)}
               aria-expanded={entry.directory ? state.expanded.includes(entry.path) : undefined}
               aria-current={entry.path === activePath ? "true" : undefined}
@@ -891,19 +878,7 @@ export function FilesTree({
                 )}
                 {dirty(entry.path) && <span aria-hidden="true"> •</span>}
               </div>
-              {entry.directory && state.expanded.includes(entry.path) && (
-                <div
-                  role="group"
-                  onDragOver={(event) => over(event, entry.path)}
-                  onDrop={(event) => void drop(event, entry.path)}
-                >
-                  {listing(entry.path, level + 1)}
-                </div>
-              )}
             </div>
-          );
-        })}
-      </>
     );
   }
   return (
@@ -993,10 +968,13 @@ export function FilesTree({
         ref={tree}
         role="tree"
         aria-label="Files"
+        data-row-count={rows.length}
+        aria-busy={(!cache[""]?.entries && !cache[""]?.error) || rows.some(row => row.directory && state.expanded.includes(row.path) && !cache[row.path]?.entries && !cache[row.path]?.error)}
         aria-multiselectable="true"
         aria-disabled={disabled}
         aria-activedescendant={focused ? root + ":" + focused.path : undefined}
         tabIndex={0}
+        style={{ overflowAnchor: "none" }}
         className={"files-tree" + (dropTarget?.parent === "" ? " tree-drop" : "")}
         onDragOver={(event) => over(event, "")}
         onDrop={(event) => void drop(event, "")}
@@ -1008,32 +986,34 @@ export function FilesTree({
         }}
         onKeyDown={key}
         onClick={(e) => {
-          if (e.target === e.currentTarget) {
+          if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.extent) {
             update({ selected: [], focus: "" });
             tree.current?.focus();
           }
         }}
         onContextMenu={(e) => {
-          if (e.target === e.currentTarget) {
+          if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.extent) {
             e.preventDefault();
             update({ selected: [], focus: "" });
             setMenu("");
           }
         }}
         onScroll={(event) => {
+          const top = event.currentTarget.scrollTop;
+          setGeometry(old => ({ ...old, top }));
           if (active && !restoring.current && event.currentTarget.getClientRects().length)
-            update({ scroll: event.currentTarget.scrollTop });
+            update({ scroll: top, scrollAnchor: viewport.anchor(top) });
         }}
       >
-        {edit &&
-          (edit.source
-            ? !rows.some((r) => r.path === edit.source)
-            : edit.parent &&
-              !rows.some(
-                (r) => r.path === edit.parent && r.directory && state.expanded.includes(r.path),
-              )) &&
-          field()}
-        {listing("", 1)}
+        <div data-extent="true" style={{ height: viewport.height, position: "relative" }}>
+          {viewport.mounted(geometry.top, geometry.height, [pendingScroll.current, focused?.path ?? "", edit?.source ?? "", ...display.filter(item => item.field).map(item => item.key), drag.current?.source ?? ""]).map(index => {
+            const item = display[index];
+            return <div key={item.key} data-measure={item.key} style={{ position: "absolute", top: viewport.offsets[index], width: "100%" }}>
+              {item.row ? listing(item.row) : item.field ? field() : <div className="tree-message" role="status"
+                onDragOver={event => over(event, item.parent ?? "")} onDrop={event => void drop(event, item.parent ?? "")}>{item.message}</div>}
+            </div>;
+          })}
+        </div>
       </div>
       {menu !== null && (
         <div
