@@ -1,3 +1,4 @@
+import { ArchiveFooter } from "./archive-footer";
 import { ChatRow } from "./chat-row";
 import { Boundaries } from "./boundaries";
 import { DraftWorktreeChoices, CheckoutBranch } from "./worktrees";
@@ -10,6 +11,7 @@ import { Button } from "@base-ui/react/button";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
+  (operation: "archive", project: string | null, id: string, archived: boolean): Promise<unknown>;
   (operation: "composer", project: string | null, id: string): Promise<string>;
   (operation: "targets"): Promise<{ project: string | null; checkout: string }[]>;
   (operation: "createDraft", project: string | null, checkout?: string): Promise<SavedChat>;
@@ -177,6 +179,7 @@ export function ChatView({
   useEffect(() => {
     void window.escode.chat("targets").then(setTargets);
   }, []);
+  const [archived, setArchived] = useState(false);
   const scopedChats = global ? chats : chats.filter(c => c.checkout === checkout && (c.phase !== "draft" || !c.worktree));
   const record = scopedChats.find((c) => c.id === selected);
   const unsent = record?.phase === "draft";
@@ -224,10 +227,11 @@ export function ChatView({
               New chat on current checkout
             </Button>
             <ul>
-              {[...scopedChats].sort(compareChats).map((c) => (
+              {[...scopedChats].filter(c => !!c.archived === archived).sort(compareChats).map((c) => (
                 <ChatRow key={c.id} fallbackTitle={`Chat ${chats.findIndex(chat => chat.id === c.id) + 1}`} chat={c} selected={selected === c.id} select={() => void select(c.id)} />
               ))}
             </ul>
+            <ArchiveFooter archived={archived} toggle={() => setArchived(!archived)} />
           </div>,
           document.getElementById(sidebarId)!,
         )}
@@ -236,6 +240,14 @@ export function ChatView({
           <p>Create or select a saved chat to begin. Choose the current checkout or a worktree.</p>
         ) : (
           <>
+            {!global && !!record.archived !== archived && <p role="status">This conversation belongs to the {record.archived ? "Archived" : "Recent"} list.</p>}
+            <details><summary>Conversation actions</summary>
+              <Button disabled={!record.archived && (working || snapshot?.busy || !!snapshot?.requests.length || record.initialSend === "uncertain" || record.initialSend === "creating" || record.initialSend === "preparing")}
+                onClick={() => void run(() => window.escode.chat("archive", project, selected, !record.archived))}>{record.archived ? "Restore chat" : "Archive chat"}</Button>
+              {!record.archived && (working || snapshot?.busy || !!snapshot?.requests.length) && <p>Archive requires an idle chat without unresolved work.</p>}
+            </details>
+            {!record.archived && ["uncertain", "creating", "preparing"].includes(record.initialSend ?? "") && <p role="status">Archive is blocked until the pending or uncertain operation is resolved.</p>}
+            {record.archived && <p role="status">Archived conversation. Restore to send another message.</p>}
             {chats.find((c) => c.id === selected)?.removed && (
               <p role="status">
                 Checkout removed. History and drafts are retained; this chat cannot run.
@@ -363,7 +375,7 @@ export function ChatView({
               className="chat-compose"
               onSubmit={(e) => {
                 e.preventDefault();
-                void store.send(selected);
+                if (!record.archived) void store.send(selected);
               }}
             >
               {unsent && !record?.scratch && !record?.worktree?.reservation && (
@@ -467,7 +479,7 @@ export function ChatView({
               <Button
                 type="submit"
                 disabled={
-                  working ||
+                  record.archived || working ||
                   !!snapshot?.contextError ||
                   (!!record?.scratch && !!(error || snapshot?.error)) ||
                   (!unsent && !snapshot?.connected) ||

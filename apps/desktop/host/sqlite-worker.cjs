@@ -11,6 +11,7 @@ const validate = chats => {
     if (!chat || typeof chat.id !== 'string' || !chat.id || chat.id.length > 256 || ids.has(chat.id) ||
         !(chat.project === null || typeof chat.project === 'string') || typeof chat.checkout !== 'string' ||
         typeof chat.draft !== 'string' || !(chat.threadId === null || typeof chat.threadId === 'string') ||
+        (chat.archived !== undefined && typeof chat.archived !== 'boolean') ||
         (chat.phase !== undefined && !['draft', 'bound'].includes(chat.phase)) ||
         (chat.directoryIdentity && (typeof chat.directoryIdentity.path !== 'string' || !Number.isSafeInteger(chat.directoryIdentity.dev) || !Number.isSafeInteger(chat.directoryIdentity.ino)))) throw Error('Malformed draft storage');
     ids.add(chat.id);
@@ -92,7 +93,22 @@ try {
 if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body }) => {
   try {
     let value;
-    if (operation === 'checkpointRetention') {
+    if (operation === 'archive') {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const row = db.prepare('SELECT body FROM chats WHERE id=?').get(body.id);
+        const chat = row && JSON.parse(row.body);
+        if (!chat || chat.project !== body.project) throw Error('Unknown chat in this project');
+        if (body.archived && (['preparing','creating','uncertain'].includes(chat.initialSend) ||
+          db.prepare("SELECT 1 FROM submissions WHERE json_extract(body,'$.command.id')=? AND json_extract(body,'$.status') NOT IN ('accepted','rejected') LIMIT 1").get(body.id) ||
+          db.prepare("SELECT 1 FROM rewinds WHERE json_extract(body,'$.result.status')='uncertain' AND json_extract(json_extract(body,'$.identity'),'$[1]')=? LIMIT 1").get(body.id)))
+          throw Error('Archive blocked by an unresolved or uncertain operation; inspect and resolve it first.');
+        chat.archived = body.archived;
+        db.prepare('UPDATE chats SET body=? WHERE id=?').run(JSON.stringify(chat), body.id);
+        db.prepare('UPDATE identity SET revision=revision+1').run();
+        db.exec('COMMIT');
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+    } else if (operation === 'checkpointRetention') {
       if (body !== undefined) {
         if (body.days !== null && (!Number.isSafeInteger(body.days) || body.days < 1 || body.days > 36500)) throw Error('Retention must be 1–36500 whole days or Never');
         db.prepare('UPDATE checkpoint_policy SET days=? WHERE singleton=1').run(body.days);
@@ -249,6 +265,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
           if (command.admissionEpoch !== epoch) throw Error('Expired admission epoch; work was not resent');
           const association = db.prepare('SELECT body FROM chats WHERE id=?').get(command.id);
           if (!association || JSON.parse(association.body).project !== command.project) throw Error('Chat association unavailable');
+          if (JSON.parse(association.body).archived && !command.control) throw Error('Restore this archived chat before sending.');
           if (db.prepare('SELECT count(*) AS n FROM submissions').get().n >= 1000) throw Error('Submission capacity exhausted');
           const admitted = { hostId, clientId, command, status: 'admitted', message: '' };
           db.prepare('INSERT INTO submissions VALUES (?, ?, ?)').run(command.commandId, JSON.stringify(admitted), association.body);

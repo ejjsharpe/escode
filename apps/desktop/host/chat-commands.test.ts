@@ -62,6 +62,7 @@ for (const outcome of ["stop", "shutdown", "reapprove"] as const) {
         const sending = f.service.send(f.root, f.chat.id, "retain prompt", await f.service.expectation(f.root, f.chat.id))
           .then(() => "unexpected success", (e: Error) => e.message);
         await g.reached;
+        await expect(f.service.draftAction({ operation: "archive", project: f.root, id: f.chat.id, expected: "stale", archived: true })).rejects.toThrow("in progress");
         await expect(f.service.send(f.root, f.chat.id, "competitor", "old")).rejects.toThrow("in progress");
         if (outcome === "stop") await f.service.stop(f.root, f.chat.id, f.service.snapshot(f.root, f.chat.id).controlTarget);
         else if (outcome === "shutdown") await f.service.shutdown();
@@ -149,3 +150,45 @@ for (const outcome of ["stop", "shutdown", "reapprove"] as const) {
     } finally { g.release(); service.close(); await f.close(); }
   });
 }
+
+test("archive retains identity, draft and recency across restart and restore; stale admission fails", async () => {
+  const f = await fixture();
+  try {
+    await f.store.draft(f.root, f.chat.id, "keep this draft");
+    const expected = await f.service.expectation(f.root, f.chat.id);
+    await f.service.draftAction({ operation: "archive", project: f.root, id: f.chat.id, expected, archived: true });
+    const saved = await new Chats(join(f.dir, "chats.json")).get(f.root, f.chat.id);
+    expect(saved).toMatchObject({ id: f.chat.id, archived: true, draft: "keep this draft", createdAt: f.chat.createdAt });
+    await expect(f.service.draftAction({ operation: "archive", project: f.root, id: f.chat.id, expected, archived: false })).rejects.toThrow("changed");
+    await f.service.draftAction({ operation: "archive", project: f.root, id: f.chat.id, expected: await f.service.expectation(f.root, f.chat.id), archived: false });
+    expect(await f.store.get(f.root, f.chat.id)).toMatchObject({ archived: false, draft: "keep this draft", createdAt: f.chat.createdAt });
+    expect(f.providerCalls()).toBe(0);
+  } finally { await f.close(); }
+});
+
+
+test("archive rejects uncertain work without changing saved metadata", async () => {
+  const f = await fixture();
+  try {
+    await f.store.update(f.root, f.chat.id, { initialSend: "uncertain" });
+    await expect(f.service.draftAction({ operation: "archive", project: f.root, id: f.chat.id,
+      expected: await f.service.expectation(f.root, f.chat.id), archived: true })).rejects.toThrow("uncertain");
+    expect((await f.store.get(f.root, f.chat.id)).archived).toBeUndefined();
+  } finally { await f.close(); }
+});
+
+test("archive and Send admission arbitrate through the same durable chat", async () => {
+  const f = await fixture();
+  try {
+    const identity = await f.store.database.ready;
+    const command = { commandId: "archive-race", admissionEpoch: "epoch", expected: "state", project: f.root, id: f.chat.id, text: "retained" };
+    const admitted = await f.store.database.command("admit", { command, epoch: "epoch", hostId: identity.hostId, clientId: identity.clientId });
+    await expect(f.service.draftAction({ operation: "archive", project: f.root, id: f.chat.id,
+      expected: await f.service.expectation(f.root, f.chat.id), archived: true })).rejects.toThrow("unresolved");
+    await f.store.database.command("outcome", { receipt: { ...admitted.receipt, status: "rejected" } });
+    await f.service.draftAction({ operation: "archive", project: f.root, id: f.chat.id,
+      expected: await f.service.expectation(f.root, f.chat.id), archived: true });
+    await expect(f.store.database.command("admit", { command: { ...command, commandId: "late-send" }, epoch: "epoch", hostId: identity.hostId, clientId: identity.clientId })).rejects.toThrow("Restore");
+    expect((await f.store.get(f.root, f.chat.id)).archived).toBe(true);
+  } finally { await f.close(); }
+});

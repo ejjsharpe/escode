@@ -32,6 +32,7 @@ export type SavedChat = {
   removed?: boolean;
   draft: string;
   title?: string;
+  archived?: boolean;
   latestUserMessageAt?: number;
   latestUserMessageCreatedAt?: number;
   updatedAt?: number;
@@ -66,6 +67,14 @@ export class Chats {
     this.queue = task.catch(() => {});
     return task;
   }
+  archive(project: string | null, id: string, archived: boolean) {
+    const task = this.queue.then(() => {
+      if (this.failed) throw Error("Chat storage unavailable; explicit recovery required.");
+      return this.database.command("archive", { body: { project, id, archived } });
+    });
+    this.queue = task.catch(() => {});
+    return task;
+  }
   migrate(project: string, checkouts: string[]) {
     return this.change((chats) => {
       for (const chat of chats)
@@ -95,6 +104,7 @@ export class Chats {
           c.phase === "draft" &&
           c.project === project &&
           c.checkout === checkout &&
+          !c.archived &&
           !c.draft &&
           !c.worktree &&
           !c.historicalPending &&

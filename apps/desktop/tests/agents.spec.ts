@@ -106,6 +106,18 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("alpha text");
     await expect(page.locator(".transcript:visible")).toContainText("Saved history");
     await page.getByRole("textbox", { name: "Message Codex" }).fill("shared text");
+    await page.getByText("Conversation actions", { exact: true }).click();
+    await page.getByRole("button", { name: "Archive chat", exact: true }).click();
+    await expect(rows.filter({ hasText: "alpha" })).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
+    await expect(page.getByRole("status").filter({ hasText: "belongs to the Archived" })).toBeVisible();
+    await page.getByRole("button", { name: "Show archived chats", exact: true }).click();
+    await expect(rows.filter({ hasText: "alpha" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Show recent chats", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Restore chat", exact: true }).click();
+    await page.getByRole("button", { name: "Show recent chats", exact: true }).click();
+    await expect(rows.filter({ hasText: "alpha" })).toHaveCount(1);
+
     await page
       .getByRole("navigation", { name: "Projects" })
       .getByRole("button", { name: "alpha", exact: true })
@@ -121,6 +133,15 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await page.getByRole("button", { name: /^Chat 1 ·/ }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
     await expect(page.locator(".view-nav:visible")).toContainText(worktree);
+    await page.getByText("Conversation actions", { exact: true }).click();
+    await page.getByRole("button", { name: "Archive chat", exact: true }).click();
+    await expect(page.locator(".chat-list:visible .agent-row")).toHaveCount(0);
+    await page.getByRole("button", { name: "Show archived chats", exact: true }).click();
+    await expect(page.locator(".chat-list:visible .agent-row")).toHaveCount(1);
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
+    await page.getByRole("button", { name: "Restore chat", exact: true }).click();
+    await page.getByRole("button", { name: "Show recent chats", exact: true }).click();
+
     expect((await readFile(join(dir, "events"), "utf8")).match(/initialize/g)).toHaveLength(1);
     const dragComposerHandle = async (distance: number) => {
       const textarea = page.getByRole("textbox", { name: "Message Codex" });

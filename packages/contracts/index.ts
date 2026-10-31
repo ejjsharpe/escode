@@ -33,6 +33,7 @@ export const ChatSummary = Schema.Struct({
   id: Schema.String, project: Schema.NullOr(Schema.String), checkout: Schema.String,
   threadId: Schema.NullOr(Schema.String),
   title: Schema.optional(Schema.String),
+  archived: Schema.optional(Schema.Boolean),
   latestUserMessageAt: Schema.optional(Schema.Number),
   latestUserMessageCreatedAt: Schema.optional(Schema.Number),
   updatedAt: Schema.optional(Schema.Number),
@@ -114,6 +115,7 @@ export const DraftRecord = Schema.Struct({
   draft: Schema.Literal(""),
 });
 export const DraftAction = Schema.Union([
+  Schema.Struct({ operation: Schema.Literal("archive"), project: Schema.NullOr(Schema.String), id: Schema.String, expected: Schema.String, archived: Schema.Boolean }),
   Schema.Struct({ operation: Schema.Literal("createDraft"), project: Schema.NullOr(Schema.String), checkout: Schema.optionalKey(Schema.String) }),
   Schema.Struct({ operation: Schema.Literal("context"), project: Schema.NullOr(Schema.String),
     id: Schema.String, expected: Schema.String, target: Schema.NullOr(Schema.String) }),

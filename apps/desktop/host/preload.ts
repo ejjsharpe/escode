@@ -14,6 +14,7 @@ type ProjectArguments =
   | ["diff", string, string, "staged" | "unstaged" | "untracked"];
 type ChatArguments =
   | [operation: "createDraft", project: string | null, checkout?: string]
+  | [operation: "archive", project: string | null, id: string, archived: boolean]
   | [operation: "context", project: string | null, id: string, target: string | null]
   | [operation: "execution", project: string, id: string, mode: "new" | "reuse", value: string, commit: string]
   | [operation: "targets"]
@@ -127,9 +128,14 @@ contextBridge.exposeInMainWorld(
     chat: async (...call: ChatArguments) => {
       await chatStorageReady;
       const [operation, ...args] = call;
-      return ["createDraft", "context", "execution"].includes(operation)
+      return ["archive", "createDraft", "context", "execution"].includes(operation)
       ? (async () => {
         if (call[0] === "createDraft") return hostClient.draftAction({ operation: call[0], project: call[1], ...(call[2] === undefined ? {} : { checkout: call[2] }) });
+        if (call[0] === "archive") {
+          const [, project, id, archived] = call;
+          const { expected } = await hostClient.sendState(project, id);
+          return hostClient.draftAction({ operation: "archive", project, id, expected, archived });
+        }
         if (call[0] === "context") {
           const [, project, id, target] = call;
           const { expected } = await hostClient.sendState(project, id);

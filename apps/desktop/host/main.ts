@@ -435,7 +435,7 @@ app.whenReady().then(async () => {
         const contextError = c.phase === "draft" && ((c.project === null && !c.scratch) || (c.worktree && !c.worktree.reservation))
           ? c.availabilityError : await store.validateDirectory(c);
         return { id: c.id, project: c.project, checkout: c.checkout, threadId: c.threadId,
-          title: c.title, latestUserMessageAt: c.latestUserMessageAt, latestUserMessageCreatedAt: c.latestUserMessageCreatedAt, updatedAt: c.updatedAt, createdAt: c.createdAt, legacyOrder: c.legacyOrder, phase: c.phase, initialSend: c.initialSend,
+          archived: c.archived, title: c.title, latestUserMessageAt: c.latestUserMessageAt, latestUserMessageCreatedAt: c.latestUserMessageCreatedAt, updatedAt: c.updatedAt, createdAt: c.createdAt, legacyOrder: c.legacyOrder, phase: c.phase, initialSend: c.initialSend,
           removed: c.removed, scratch: c.scratch, hasSent: c.hasSent, worktree: c.worktree, ...activity, unavailable: !!(c.removed || contextError || activity.unavailable) };
       }));
     },

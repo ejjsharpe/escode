@@ -1,5 +1,5 @@
-import { SidebarProvider, SidebarResize } from "./sidebar";
 import { RetentionSettings } from "./retention-settings";
+import { SidebarProvider, SidebarResize } from "./sidebar";
 import { preserveClose } from "./close-preservation";
 import { createFileActivation } from "./file-activation";
 import type { BufferState } from "./file-activation";
@@ -1032,6 +1032,7 @@ function CheckoutView({
             ))}
           </>
         )}
+        <footer className="chat-sidebar-footer"><RetentionSettings /></footer>
       </aside>
       <section ref={content} tabIndex={-1} className="content" aria-label="Main editor">
         {mode !== "Chats" && (
@@ -1504,7 +1505,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 5v14 M5 12h14" /></svg>
         </Button>
       <Button onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "p", metaKey: true, bubbles: true }))}>Find file</Button>
-      <header><span className="workspace-context">{selected}</span><RetentionSettings /></header>
+      <header><span className="workspace-context">{selected}</span></header>
       </nav>
       {error && <p role="alert">{error}</p>}
       {selected === "agents" && <>
