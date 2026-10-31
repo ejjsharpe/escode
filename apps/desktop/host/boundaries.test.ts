@@ -133,7 +133,11 @@ for (const failure of ["none", "provider-response", "outcome", "final-outcome", 
 
 for (const failure of ["none", "provider-response", "outcome", "final-outcome", "allocation", "intent"] as const) test(`completion historical branch ${failure}`, async () => runHistoricalBranch(failure, true));
 
-async function runHistoricalBranch(failure: string, completion = false) {
+for (const failure of ["intent", "allocation", "outcome", "final-outcome"]) test(`summarized reservation ${failure}`, async () => runHistoricalBranch(failure, true, true));
+
+test("explicit summarized branch preserves files without native fork or automatic turn", async () => runHistoricalBranch("none", true, true));
+
+async function runHistoricalBranch(failure: string, completion = false, summarized = false) {
   const { Checkout } = await import("./project");
   const { captureTurnCheckpoint } = await import("./checkpoints");
   const { mkdir } = await import("node:fs/promises");
@@ -169,14 +173,14 @@ async function runHistoricalBranch(failure: string, completion = false) {
     boundary = "selected-completion";
   }
   await writeFile(join(root, "saved"), "today"); const index = await readFile(join(root, ".git/index"));
-  let missingHistory = false, unsupportedHistory = false;
+  let missingHistory = false, unsupportedHistory = false, changedSummary = false;
   const calls: any[] = [];
   const opened: Awaited<ReturnType<typeof Checkout.open>>[] = [];
   const service = new ChatService(store, async () => ({ async request(method, params) {
     calls.push([method, params]);
     if (unsupportedHistory) throw Error("Method not found");
-    if (method === "thread/turns/list") return { data: missingHistory ? [] : [{ id: "first" }, { id: "second" }], nextCursor: null };
-    if (method === "thread/fork") { if (failure === "provider-response") throw Error("Lost provider response"); return { thread: { id: "branched-provider" } }; }
+    if (method === "thread/turns/list") return { data: missingHistory ? [] : [{ id: "first", items: [{ id: "a", type: "agentMessage", text: "Earlier answer" }] }, { id: "second", items: [{ id: "b", type: "agentMessage", text: changedSummary ? "Changed answer" : "Completed answer" }] }], nextCursor: null };
+    if (method === "thread/fork") { if (summarized) throw Error("Native historical continuation unsupported"); if (failure === "provider-response") throw Error("Lost provider response"); return { thread: { id: "branched-provider" } }; }
     throw Error("Unexpected turn");
   }, respond() {}, close() {} }), undefined, undefined, { guard: () => () => {}, authorize: async () => {}, currentTarget: async () => root, managedRoot: join(dir, "managed"), checkout: async path => { const c = await Checkout.open(path); opened.push(c); return c; } });
   const original = globalThis.WebSocket;
@@ -190,14 +194,14 @@ async function runHistoricalBranch(failure: string, completion = false) {
     await client.persistWorkspace(recovery);
     const captured = await store.database.command("inspectCheckpoint", { commandId: chat.id, body: { boundary } });
     await store.database.command("checkpoint", { body: { ...captured, id: "missing-base", gitBase: "0".repeat(40) } });
-    expect((await client.branchHistory(root, chat.id, "missing-base", null, null)).status).toBe("unavailable");
+    expect((await client.branchHistory(root, chat.id, "missing-base", null, null, summarized)).status).toBe("unavailable");
     await store.database.command("checkpoint", { body: { ...captured, id: "missing-files", availability: "unavailable", files: undefined } });
-    expect((await client.branchHistory(root, chat.id, "missing-files", null, null)).status).toBe("unavailable");
+    expect((await client.branchHistory(root, chat.id, "missing-files", null, null, summarized)).status).toBe("unavailable");
     missingHistory = true;
-    expect((await client.branchHistory(root, chat.id, boundary, null, null)).status).toBe("unavailable");
+    expect((await client.branchHistory(root, chat.id, boundary, null, null, summarized)).status).toBe("unavailable");
     missingHistory = false;
     unsupportedHistory = true;
-    expect((await client.branchHistory(root, chat.id, boundary, null, null)).message).toContain("Method not found");
+    expect((await client.branchHistory(root, chat.id, boundary, null, null, summarized)).message).toContain("Method not found");
     unsupportedHistory = false;
     const invalid = await client.branchHistory(root, chat.id, "completion", null, null);
     expect(invalid.status).toBe("unavailable");
@@ -205,15 +209,20 @@ async function runHistoricalBranch(failure: string, completion = false) {
       await store.database.command("checkpoint", { body: { ...captured, id: "interrupted-completion", availability: "unavailable", files: undefined, completion: "interrupted", reason: "Turn interrupted; completion files unavailable" } });
       expect((await client.branchHistory(root, chat.id, "interrupted-completion", null, null)).message).toContain("interrupted");
     }
-    const choice = await client.branchHistory(root, chat.id, boundary, null, null);
+    const choice = await client.branchHistory(root, chat.id, boundary, null, null, summarized);
     expect(choice.status).toBe("ready");
+    if (summarized) {
+      changedSummary = true;
+      expect((await client.branchHistory(root, chat.id, boundary, choice.token, "changed-summary", true)).status).toBe("unavailable");
+      changedSummary = false;
+    }
     const command = store.database.command.bind(store.database);
     let writes = 0;
     store.database.command = async (operation, fields: any) => {
       if (operation === "rewindWrite" && ++writes === (failure === "intent" ? 1 : failure === "final-outcome" ? 5 : failure === "outcome" ? 4 : failure === "allocation" ? 3 : -1)) throw Error("Injected storage failure");
       return command(operation, fields);
     };
-    const result = await client.branchHistory(root, chat.id, boundary, choice.token, "branch-command");
+    const result = await client.branchHistory(root, chat.id, boundary, choice.token, "branch-command", summarized);
     store.database.command = command;
     if (failure === "intent") {
       expect(result.status).toBe("unavailable");
@@ -230,7 +239,7 @@ async function runHistoricalBranch(failure: string, completion = false) {
       if (failure !== "final-outcome") await expect(service.send(root, child.id, "must not run")).rejects.toThrow("Historical preparation incomplete");
       const recovered = new Chats(join(dir, "state"));
       const restarted = new ChatService(recovered, async () => { throw Error("Must not replay"); });
-      expect((await restarted.branchHistory(root, chat.id, boundary, choice.token, "branch-command")).status).toBe("uncertain");
+      expect((await restarted.branchHistory(root, chat.id, boundary, choice.token, "branch-command", summarized)).status).toBe("uncertain");
       expect((await recovered.get(root, child.id)).checkout).toBe(child.checkout);
       restarted.close(); await recovered.database.close();
       expect(await readFile(join(root, "saved"), "utf8")).toBe("today");
@@ -239,6 +248,16 @@ async function runHistoricalBranch(failure: string, completion = false) {
     }
     expect(result.status).toBe("applied");
     expect((await client.loadWorkspace()).state.drafts).toEqual(recovery.drafts);
+    if (summarized) {
+      const child = (await store.list(root)).find(c => c.id !== chat.id)!;
+      expect(child.draft).toContain("Completed answer");
+      expect(child.draft).toContain("not native historical provider context");
+      expect(child.threadId).toBeNull();
+      expect(await readFile(join(child.checkout, "saved"), "utf8")).toBe("completion captured");
+      expect(calls.filter(c => c[0] === "thread/fork" || c[0] === "turn/start")).toHaveLength(0);
+      expect(await readFile(join(root, "saved"), "utf8")).toBe("today");
+      return;
+    }
     const fork = calls.find(c => c[0] === "thread/fork")[1];
     expect(fork.lastTurnId).toBe(completion ? "second" : "first"); expect(fork.threadId).toBe("source-provider");
     expect(await readFile(join(fork.cwd, "saved"), "utf8")).toBe(completion ? "completion captured" : "captured");
@@ -248,7 +267,7 @@ async function runHistoricalBranch(failure: string, completion = false) {
     expect(execFileSync("git", ["-C", fork.cwd, "diff", "--cached"]).toString()).toBe("");
     expect(await readFile(join(root, "saved"), "utf8")).toBe("today"); expect(await readFile(join(root, ".git/index"))).toEqual(index);
     expect((await store.get(root, chat.id)).threadId).toBe("source-provider");
-    expect(await client.branchHistory(root, chat.id, boundary, choice.token, "branch-command")).toEqual(result);
+    expect(await client.branchHistory(root, chat.id, boundary, choice.token, "branch-command", summarized)).toEqual(result);
     expect(calls.filter(c => c[0] === "thread/fork")).toHaveLength(1);
     expect(calls.filter(c => c[0] === "turn/start")).toHaveLength(0);
     const children = (await store.list(root)).filter(c => c.id !== chat.id);

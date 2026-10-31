@@ -484,15 +484,15 @@ export class ChatService {
     return this.snapshot(project, id);
   }
   private rewindChoices = new Map<string, string>();
-  async branchHistory(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null) {
-    return this.rewind(project, id, boundary, token, commandId, false, true);
+  async branchHistory(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, summarized = false) {
+    return this.rewind(project, id, boundary, token, commandId, false, true, summarized);
   }
-  async rewind(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles = false, branching = false): Promise<import("@escode/contracts").RewindResult> {
+  async rewind(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles = false, branching = false, summarized = false): Promise<import("@escode/contracts").RewindResult> {
     const check = this.environment?.guard(project) ?? (() => {});
     await this.environment?.authorize(project);
     check();
     await this.store.get(project, id);
-    const identity = JSON.stringify(branching ? [project, id, boundary, token, true] : restoreFiles ? [project, id, boundary, token, true, "restore-files"] : [project, id, boundary, token]);
+    const identity = JSON.stringify(summarized ? [project, id, boundary, token, "summarized"] : branching ? [project, id, boundary, token, true] : restoreFiles ? [project, id, boundary, token, true, "restore-files"] : [project, id, boundary, token]);
     if (commandId) {
       const prior = await this.store.database.command("rewindRead", { commandId });
       if (prior) { if (prior.identity !== identity && !(!branching && !restoreFiles && prior.identity === JSON.stringify([project, id, boundary, token, false]))) throw Error("Rewind identity conflict"); return prior.result; }
@@ -517,6 +517,7 @@ export class ChatService {
       try {
         const restoration = restoreFiles ? await prepareRestoration(this.store, chat, boundary, check) : null;
         rpc = await this.connect(chat.checkout, () => {}, () => {});
+        const summaryItems: string[] = [];
         const turns: string[] = []; let cursor: string | null = null;
         const seen = new Set<string | null>();
         for (let n = 0; n < 50; n++) {
@@ -525,17 +526,25 @@ export class ChatService {
           const page = await rpc.request("thread/turns/list", { threadId: point.threadId, cursor, limit: 20, itemsView: "full", sortDirection: "asc" }) as { data: { id: string; status?: string }[]; nextCursor: string | null };
           this.historyPage({ ...page, data: page.data.map(t => ({ ...t, items: [] })) } as any, cursor);
           if (page.data.some(t => t.status === "inProgress")) return unavailable("Provider work is active.");
+          if (summarized) {
+            const target = page.data.findIndex(t => t.id === point.turnId);
+            const data = target < 0 ? page.data : page.data.slice(0, target + (point.kind === "after-turn" ? 1 : 0));
+            const history = this.historyPage({ ...page, data } as any, cursor);
+            if (!turns.includes(point.turnId)) summaryItems.push(...history.items.filter(i => i.text.trim()).map(i => `${i.type}: ${i.text}`));
+          }
           turns.push(...page.data.map(t => t.id)); cursor = page.nextCursor;
           if (cursor === null) break;
         }
         if (cursor !== null || new Set(turns).size !== turns.length) return unavailable("Provider history exceeds rewind limits or repeats turns.");
         const index = turns.indexOf(point.turnId) - (point.kind === "before-message" ? 1 : 0);
         if (!turns.includes(point.turnId) || index < 0) return unavailable("Provider history lost or no supported predecessor for this boundary.");
-        const captured = JSON.stringify([project, id, point, chat.directoryIdentity, turns, branching, branching ? createHash("sha256").update(JSON.stringify(snapshot)).digest("hex") : null, restoration?.captured]);
+        const summary = summarized ? "Summarized continuation — not native historical provider context. Review this copied text before Send; tool state and omitted provider context are not recreated.\n\n" + summaryItems.join("\n\n") : "";
+        if (summarized && (!summaryItems.length || Buffer.byteLength(summary) > 65536)) return unavailable("Required summary content unavailable or exceeds 64 KiB; no context was invented or truncated.");
+        const captured = JSON.stringify([summary, project, id, point, chat.directoryIdentity, turns, branching, branching ? createHash("sha256").update(JSON.stringify(snapshot)).digest("hex") : null, restoration?.captured]);
         if (!token && !commandId) {
           if (this.rewindChoices.size >= 100) this.rewindChoices.clear();
           const choice = randomUUID(); this.rewindChoices.set(choice, captured);
-          return { status: "ready", token: choice, message: branching ? "Create a separate historical chat and managed worktree. Captured files become uncommitted changes at the recorded base. Source files and drafts stay in place. No turn starts." : restoration ? "Restore saved files and rewind conversation. Saved edits will be replaced; newer eligible untracked files may be removed. Keep available unsaved text and loaded conflict baselines; saving later may conflict. Staging index stays current, not historical. Ignored untracked files, nested repositories, empty directories and environment are excluded. Later restore points may be abandoned. Provider/filesystem effects may partially succeed and will never replay. External writers can race restoration. No turn will start." : "Rewind conversation only. Current saved files, staging index, unsaved edits and unsent text stay in place. Later restore points may be abandoned. No turn will start." };
+          return { status: "ready", token: choice, message: summarized ? "Create a summarized continuation in a separate historical worktree. Copied historical text is placed in an unsent draft for review; this does not recreate native historical provider context. Source work stays in place. No turn starts." : branching ? "Create a separate historical chat and managed worktree. Captured files become uncommitted changes at the recorded base. Source files and drafts stay in place. No turn starts." : restoration ? "Restore saved files and rewind conversation. Saved edits will be replaced; newer eligible untracked files may be removed. Keep available unsaved text and loaded conflict baselines; saving later may conflict. Staging index stays current, not historical. Ignored untracked files, nested repositories, empty directories and environment are excluded. Later restore points may be abandoned. Provider/filesystem effects may partially succeed and will never replay. External writers can race restoration. No turn will start." : "Rewind conversation only. Current saved files, staging index, unsaved edits and unsent text stay in place. Later restore points may be abandoned. No turn will start." };
         }
         if (!token || !commandId || this.rewindChoices.get(token) !== captured) return unavailable("Selected boundary or provider history changed. Choose again.");
         check();
@@ -565,13 +574,13 @@ export class ChatService {
           }
           check();
           if (child) this.store.validateWorktree(child);
-          const response = await rpc.request("thread/fork", { threadId: point.threadId, lastTurnId: turns[index], ...(child ? { cwd: child.checkout } : {}) }) as { thread?: { id?: string } };
-          const threadId = response?.thread?.id;
-          if (typeof threadId !== "string" || !threadId || threadId.length > 100 || threadId === point.threadId) throw Error("Provider historical context unavailable");
+          const response = summarized ? null : await rpc.request("thread/fork", { threadId: point.threadId, lastTurnId: turns[index], ...(child ? { cwd: child.checkout } : {}) }) as { thread?: { id?: string } };
+          const threadId = summarized ? null : response?.thread?.id;
+          if (!summarized && (typeof threadId !== "string" || !threadId || threadId.length > 100 || threadId === point.threadId)) throw Error("Provider historical context unavailable");
           await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result, providerThreadId: threadId, ...(branching ? { checkpoint: snapshot, childId: child!.id } : {}) } });
-          await this.store.update(project, child?.id ?? id, { threadId, ...(branching ? { phase: "bound" as const, historicalPending: false } : {}) });
+          await this.store.update(project, child?.id ?? id, { threadId: threadId!, ...(branching ? { phase: summarized ? "draft" as const : "bound" as const, historicalPending: false, ...(summarized ? { draft: summary } : {}) } : {}) });
           await restoration?.apply();
-          const applied = { status: "applied" as const, token: null, message: branching ? `Historical chat ${child!.id} created at ${child!.checkout}. Open it in Chats; Send explicitly to continue.` : restoration ? "Conversation and saved files restored. Unsaved text and baselines retained; saving may conflict. Send explicitly to continue." : "Conversation rewound. Current files and drafts retained. Send explicitly to continue." };
+          const applied = { status: "applied" as const, token: null, message: summarized ? `Summarized continuation ${child!.id} created at ${child!.checkout}. Review the unsent draft in Chats, then Send explicitly. Native historical context was not recreated.` : branching ? `Historical chat ${child!.id} created at ${child!.checkout}. Open it in Chats; Send explicitly to continue.` : restoration ? "Conversation and saved files restored. Unsaved text and baselines retained; saving may conflict. Send explicitly to continue." : "Conversation rewound. Current files and drafts retained. Send explicitly to continue." };
           await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, providerThreadId: threadId, result: applied, ...(branching ? { checkpoint: snapshot, childId: child!.id } : {}) } });
           return applied;
         } catch (failure) {

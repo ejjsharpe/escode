@@ -64,7 +64,7 @@ export async function startHost(options: {
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
   checkpointPoints?: (project: string | null, id: string, cursor: string | null) => Promise<typeof CheckpointPage.Type>;
   rewind?: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles?: boolean) => Promise<RewindResult>;
-  branchHistory?: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null) => Promise<RewindResult>;
+  branchHistory?: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, summarized?: boolean) => Promise<RewindResult>;
   inspectFiles?: (project: string | null, id: string, boundary: string, path: string | null, cursor: string | null) => Promise<import("@escode/contracts").FileInspection>;
   inspectBoundary?: (project: string | null, id: string, boundary: string, cursor: string | null) => Promise<typeof BoundaryInspection.Type>;
   history?: (project: string | null, id: string, cursor: string | null) => Promise<HistoryPage>;
@@ -293,9 +293,9 @@ export async function startHost(options: {
           if (!options.rewind) throw Error("Rewind unavailable");
           return Schema.decodeUnknownSync(RewindResult)(await options.rewind(project, id, boundary, token, commandId, restoreFiles));
         }, catch: String }),
-        branchHistory: ({ project, id, boundary, token, commandId }) => Effect.tryPromise({ try: async () => {
+        branchHistory: ({ project, id, boundary, token, commandId, summarized }) => Effect.tryPromise({ try: async () => {
           if (!options.branchHistory) throw Error("Historical branching unavailable");
-          return Schema.decodeUnknownSync(RewindResult)(await options.branchHistory(project, id, boundary, token, commandId));
+          return Schema.decodeUnknownSync(RewindResult)(await options.branchHistory(project, id, boundary, token, commandId, summarized));
         }, catch: String }),
         inspectFiles: ({ project, id, boundary, path, cursor }) => Effect.tryPromise({ try: async () => {
           if (!options.inspectFiles) throw Error("File inspection unavailable");
