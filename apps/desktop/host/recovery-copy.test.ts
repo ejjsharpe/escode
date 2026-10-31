@@ -2,6 +2,7 @@ import { test, expect } from "vite-plus/test";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { FoundationState } from "./foundation-state";
 import { Chats } from "./chat";
 import { createRecoveryCopy, recoverCopy } from "./recovery-copy";
 
@@ -11,6 +12,7 @@ test("consistent copy during writes preserves originals and quarantines recovere
   try {
     const owner = await chats.database.ready;
     await chats.createDraft(null, "");
+    FoundationState.open(join(dir, "chats.sqlite-state-v1/receipts"), owner).close();
     const writing = (async () => { for (let i = 0; i < 12; i++) await chats.database.recoveryWrite("writer", "intent", { i }, i); })();
     const copy = await createRecoveryCopy(join(dir, "chats.sqlite-state-v1"), join(dir, "copy"), join(dir, "missing-spool"));
     await writing;
@@ -33,6 +35,7 @@ test("tampered content and wrong recovered ownership are refused before creating
   const chats = new Chats(join(dir, "chats"));
   try {
     const owner = await chats.database.ready;
+    FoundationState.open(join(dir, "chats.sqlite-state-v1/receipts"), owner).close();
     await createRecoveryCopy(join(dir, "chats.sqlite-state-v1"), join(dir, "copy"), join(dir, "spool"));
     await expect(recoverCopy(join(dir, "copy"), join(dir, "bad-owner"), { ...owner, hostId: "wrong" })).rejects.toThrow("owner");
     await writeFile(join(dir, "copy/state.sqlite"), "corrupted");
@@ -62,6 +65,7 @@ test("reconciliation retains quarantine on provider uncertainty then rejects sta
     const sends = new DurableSend(db);
     const stale = { commandId: "not-in-copy", admissionEpoch: sends.admissionEpoch, project: null, id: "chat", expected: "state", text: "hello" };
     await mkdir(join(dir, "spool"));
+    FoundationState.open(join(source, "receipts"), owner).close();
     await createRecoveryCopy(source, join(dir, "copy"), join(dir, "spool"));
     await recoverCopy(join(dir, "copy"), join(dir, "recovered"), owner);
     expect((await reconcileRecovery(join(dir, "recovered"), owner, async () => false)).ready).toBe(false);
@@ -89,7 +93,8 @@ test("missing referenced spool chunks are explicitly incomplete", async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-copy-spool-"));
   const chats = new Chats(join(dir, "chats"));
   try {
-    await chats.database.ready;
+    const owner = await chats.database.ready;
+    FoundationState.open(join(dir, "chats.sqlite-state-v1/receipts"), owner).close();
     const spool = join(dir, "spool");
     await new LiveSpool(spool).write("chat", "provider", [{ id: "body", turnId: "turn", type: "agentMessage", text: "output" }], false);
     const chunk = (await readdir(spool)).find(name => name.endsWith(".chunk"))!;
@@ -97,5 +102,45 @@ test("missing referenced spool chunks are explicitly incomplete", async () => {
     const result = await createRecoveryCopy(join(dir, "chats.sqlite-state-v1"), join(dir, "copy"), spool);
     expect(result.complete).toBe(false);
     expect(result.missing).toContain("spool/" + chunk);
+    const { reconcileRecovery } = await import("./recovery-copy");
+    await recoverCopy(join(dir, "copy"), join(dir, "recovered"), owner);
+    expect((await reconcileRecovery(join(dir, "recovered"), owner, async () => true)).ready).toBe(false);
+  } finally { await chats.database.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test("complete current-store cut retains external receipts and refuses unresolved evidence", async () => {
+  const { FoundationState } = await import("./foundation-state");
+  const { mkdir } = await import("node:fs/promises");
+  const { reconcileRecovery } = await import("./recovery-copy");
+  const dir = await mkdtemp(join(tmpdir(), "escode-copy-receipts-"));
+  const chats = new Chats(join(dir, "chats"));
+  try {
+    const owner = await chats.database.ready;
+    const receipts = FoundationState.open(join(dir, "chats.sqlite-state-v1/receipts"), owner);
+    receipts.admit({ commandId: "unresolved", admissionEpoch: receipts.admissionEpoch, project: null, id: "chat", expected: "state", text: "retained" });
+    receipts.close();
+    await mkdir(join(dir, "spool"));
+    const original = await readFile(join(dir, "chats.sqlite-state-v1/receipts/state.json"));
+    const manifest = await createRecoveryCopy(join(dir, "chats.sqlite-state-v1"), join(dir, "copy"), join(dir, "spool"));
+    expect(manifest.complete).toBe(true);
+    await recoverCopy(join(dir, "copy"), join(dir, "recovered"), owner);
+    expect(await readFile(join(dir, "recovered/receipts/state.json"))).toEqual(original);
+    expect((await reconcileRecovery(join(dir, "recovered"), owner, async () => true)).ready).toBe(false);
+    expect(await readFile(join(dir, "chats.sqlite-state-v1/receipts/state.json"))).toEqual(original);
+  } finally { await chats.database.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test("copy refuses a live external receipt writer without removing its lock", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-copy-busy-"));
+  const chats = new Chats(join(dir, "chats"));
+  try {
+    const owner = await chats.database.ready;
+    const receipts = FoundationState.open(join(dir, "chats.sqlite-state-v1/receipts"), owner);
+    try {
+      await expect(createRecoveryCopy(join(dir, "chats.sqlite-state-v1"), join(dir, "copy"), join(dir, "spool"))).rejects.toThrow("EEXIST");
+      expect(await readFile(join(dir, "chats.sqlite-state-v1/receipts/owner.lock"), "utf8")).toBe("");
+    } finally { receipts.close(); }
   } finally { await chats.database.close(); await rm(dir, { recursive: true, force: true }); }
 });

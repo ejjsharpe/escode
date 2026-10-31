@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 await import("./filesystem.mjs");
 await writeFile("dist/host/sqlite-worker.cjs", await readFile("host/sqlite-worker.cjs"));
 const bundle = await build({
-  entryPoints: ["host/main.ts", "host/preload.ts"],
+  entryPoints: ["host/main.ts", "host/preload.ts", "host/recovery-admin.ts"],
   outdir: "dist/host",
   bundle: true,
   metafile: true,

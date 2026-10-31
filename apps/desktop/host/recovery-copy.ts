@@ -1,5 +1,6 @@
+import { validateFoundationState } from "./foundation-state";
 import { DatabaseSync, backup } from "node:sqlite";
-import { mkdir, lstat, readFile, readdir, writeFile, copyFile } from "node:fs/promises";
+import { mkdir, lstat, readFile, readdir, writeFile, copyFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type { DurableIdentity } from "./durable-state";
@@ -32,6 +33,16 @@ function validate(db: DatabaseSync, expected?: Pick<DurableIdentity, "hostId" | 
 
 // Administrative host utility; never exposed as a client-selected filesystem path.
 export async function createRecoveryCopy(source: string, destination: string, spool: string) {
+  // The receipt owner lock fences its independent writer across the SQLite cut.
+  const lock = join(source, "receipts/owner.lock");
+  await writeFile(lock, "recovery copy", { flag: "wx", mode: 0o600 });
+  try { return await capture(source, destination, spool); }
+  finally { await unlink(lock); }
+}
+async function capture(source: string, destination: string, spool: string) {
+  const receiptBytes = await regular(join(source, "receipts/state.json"));
+  const receipts = JSON.parse(receiptBytes.toString());
+  validateFoundationState(receipts);
   await regular(source + ".established");
   await regular(join(source, "state.sqlite"));
   await mkdir(destination, { mode: 0o700 });
@@ -42,6 +53,10 @@ export async function createRecoveryCopy(source: string, destination: string, sp
   let owner;
   try { owner = validate(copied); } finally { copied.close(); }
   const files: Record<string, string> = { "state.sqlite": hash(await regular(join(destination, "state.sqlite"))) };
+  if (receipts.hostId !== owner.hostId || receipts.clientId !== owner.clientId) throw Error("Receipt owner mismatch");
+  await mkdir(join(destination, "receipts"), { mode: 0o700 });
+  await writeFile(join(destination, "receipts/state.json"), receiptBytes, { mode: 0o600 });
+  files["receipts/state.json"] = hash(receiptBytes);
   const missing: string[] = [];
   await mkdir(join(destination, "spool"), { mode: 0o700 });
   try {
@@ -63,10 +78,9 @@ export async function createRecoveryCopy(source: string, destination: string, sp
       files["spool/" + name] = hash(bytes);
     }
   } catch { missing.push("live-spool-v1"); }
-  // Receipt journals have independent writers: do not claim an atomic external cut.
-  missing.push("external receipt journals (not included)");
+
   const manifest = { version: 1, ...owner, complete: missing.length === 0, missing, files,
-    coverage: "SQLite consistent cut; individually captured spool indexes/chunks; no provider history, project files or checkpoint content. Spool may be newer than SQLite." };
+    coverage: "SQLite consistent cut with fenced receipt journal; individually captured spool indexes/chunks; no provider history, project files or checkpoint content. Spool may be newer than SQLite." };
   await writeFile(join(destination, "manifest.json"), JSON.stringify(manifest, null, 2), { mode: 0o600, flag: "wx" });
   return manifest;
 }
@@ -75,9 +89,10 @@ export async function recoverCopy(source: string, destination: string, expected:
   const manifest = JSON.parse((await regular(join(source, "manifest.json"))).toString());
   if (manifest.version !== 1 || manifest.hostId !== expected.hostId || manifest.clientId !== expected.clientId || !manifest.files || !Array.isArray(manifest.missing)) throw Error("Invalid recovery manifest/owner");
   for (const [name, digest] of Object.entries(manifest.files)) {
-    if (name !== "state.sqlite" && !/^spool\/[a-f0-9]{64}\.(chunk|index)$/.test(name)) throw Error("Invalid recovery content path");
+    if (name !== "state.sqlite" && name !== "receipts/state.json" && !/^spool\/[a-f0-9]{64}\.(chunk|index)$/.test(name)) throw Error("Invalid recovery content path");
     if (hash(await regular(join(source, name))) !== digest) throw Error("Recovery content checksum mismatch");
   }
+  if (!manifest.files["receipts/state.json"]) throw Error("Missing required receipt journal");
   if (!manifest.files["state.sqlite"]) throw Error("Missing recovery database");
   const db = new DatabaseSync(join(source, "state.sqlite"), { readOnly: true });
   try { validate(db, expected); } finally { db.close(); }
@@ -86,6 +101,12 @@ export async function recoverCopy(source: string, destination: string, expected:
   await writeFile(destination + ".recovery-pending", JSON.stringify(manifest), { mode: 0o600, flag: "wx" });
   await copyFile(join(source, "state.sqlite"), join(destination, "state.sqlite"), 1);
   if (hash(await regular(join(destination, "state.sqlite"))) !== manifest.files["state.sqlite"]) throw Error("Recovery source changed during copy");
+  const receiptBytes = await regular(join(source, "receipts/state.json"));
+  const receipts = JSON.parse(receiptBytes.toString());
+  validateFoundationState(receipts);
+  if (receipts.hostId !== expected.hostId || receipts.clientId !== expected.clientId || hash(receiptBytes) !== manifest.files["receipts/state.json"]) throw Error("Receipt identity/content mismatch");
+  await mkdir(join(destination, "receipts"), { mode: 0o700 });
+  await writeFile(join(destination, "receipts/state.json"), receiptBytes, { mode: 0o600, flag: "wx" });
   await writeFile(destination + ".established", "", { mode: 0o600, flag: "wx" });
   return manifest;
 }
@@ -93,10 +114,22 @@ export async function recoverCopy(source: string, destination: string, expected:
 // Provider inspection must be read-only and confirm the exact retained thread/context.
 export async function reconcileRecovery(directory: string, expected: Pick<DurableIdentity, "hostId" | "clientId">,
   inspectProvider: (threadId: string, checkout: string) => Promise<boolean>) {
-  const { realpath, stat, unlink } = await import("node:fs/promises");
+  const { realpath, stat } = await import("node:fs/promises");
   const pending = await regular(directory + ".recovery-pending");
   const db = new DatabaseSync(join(directory, "state.sqlite"), { readOnly: true });
-  const issues: string[] = [];
+  const manifest = JSON.parse(pending.toString());
+  const issues: string[] = [...manifest.missing.map((name: string) => "Incomplete content: " + name)];
+  const receipts = JSON.parse((await regular(join(directory, "receipts/state.json"))).toString());
+  validateFoundationState(receipts);
+  if (receipts.hostId !== expected.hostId || receipts.clientId !== expected.clientId) throw Error("Receipt owner mismatch");
+  if (receipts.receipts?.some(receipt => ["admitted", "dispatching", "uncertain"].includes(receipt.status))) issues.push("Unresolved external receipt evidence");
+  for (const record of receipts.records) {
+    try {
+      const info = await stat(record.path);
+      if (await realpath(record.path) !== record.path || String(info.dev) !== record.filesystemIdentity.dev || String(info.ino) !== record.filesystemIdentity.ino) throw Error("changed");
+      if (record.providerId && !await inspectProvider(record.providerId, record.path)) throw Error("provider unavailable");
+    } catch { issues.push("Unreconciled receipt association: " + record.id); }
+  }
   const files: { root: string; path: string; current: string | null; baseline: string }[] = [];
   try {
     validate(db, expected);
@@ -134,6 +167,7 @@ export async function reconcileRecovery(directory: string, expected: Pick<Durabl
         }
       }
     }
+    if (db.prepare("SELECT body FROM submissions").all().some(row => ["admitted", "dispatching", "uncertain"].includes(JSON.parse(String(row.body)).status))) issues.push("Unresolved SQLite submission evidence");
     if (db.prepare("SELECT count(*) AS n FROM preparation_results").get()!.n !== 0) issues.push("Uncertain preparation result");
   } finally { db.close(); }
   const report = { ready: issues.length === 0, issues, files, message: "Current disk hashes are observations; recovered edits and baselines remain unchanged. No provider work was resumed." };
