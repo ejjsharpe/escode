@@ -411,7 +411,7 @@ test.each(["move", "trash"] as const)("another client's %s reconciles independen
   } finally { project.close(); await db.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
-test.each(["mutation", "outcome", "acknowledgement"])("SIGKILL after native Trash %s retains edits and reconciles without replay", async window => {
+test.each(["mutation", "outcome", "acknowledgement", "partial-batch"])("SIGKILL after native Trash %s retains edits and reconciles without replay", async window => {
   const { spawn, execFileSync } = await import("node:child_process");
   const { realpath } = await import("node:fs/promises");
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-trash-crash-")));
@@ -431,11 +431,13 @@ test.each(["mutation", "outcome", "acknowledgement"])("SIGKILL after native Tras
     const baseline = await project.read('a.txt');
     state.drafts = [{ root: dir, path: 'a.txt', text: 'crash edit', disk: baseline }];
     await workspace.write(state);
+    const nativeTrash = project.trash.bind(project);
+    project.trash = (...args) => { const destination = nativeTrash(...args); owner.trashDestination = destination; return destination; };
     const pause = async () => { console.log(JSON.stringify(owner)); await new Promise(() => {}); };
     ${window === "mutation" ? `const trash = project.trash.bind(project); project.trash = (...args) => { const result = trash(...args); console.log(JSON.stringify(owner)); process.kill(process.pid, "SIGSTOP"); return result; };` : window === "outcome" ? `workspace.write = pause;` : ""}
     const operations = new FileOperations(workspace, dir + '/intent', owner);
     await operations.run(project, 'trash', 'a.txt', '');
-    ${window === "acknowledgement" ? "await operations.ack(dir); await pause();" : ""}`;
+    ${window === "acknowledgement" ? "await operations.ack(dir); await pause();" : window === "partial-batch" ? "await operations.ack(); try { await operations.run(project, 'trash', 'missing.txt', ''); } catch {} await pause();" : ""}`;
   const { build } = await import("esbuild");
   const { copyFile } = await import("node:fs/promises");
   await build({ stdin: { contents: script, resolveDir: import.meta.dirname }, outfile: join(dir, "child.mjs"), bundle: true, platform: "node", format: "esm" });
@@ -452,12 +454,14 @@ test.each(["mutation", "outcome", "acknowledgement"])("SIGKILL after native Tras
     });
     const exited = new Promise(resolve => child.once("exit", resolve));
     child.kill("SIGKILL"); await exited;
+    expect(await readFile(owner.trashDestination, "utf8")).toBe("original");
+    await rm(owner.trashDestination); // Only the native helper's test-owned result.
     await expect(readFile(join(dir, "a.txt"))).rejects.toThrow();
     db = new DurableState(join(dir, "db"));
     expect(await db.ready).toMatchObject({ hostId: owner.hostId, clientId: owner.clientId });
     const workspace = new Workspace(join(dir, "unused"), owner, db);
-    if (window !== "acknowledgement") expect((await workspace.read()).drafts[0]).toMatchObject({ text: "crash edit", disk: { text: "original" } });
-    if (window === "acknowledgement") expect(await new FileOperationJournal(join(dir, "intent"), owner, db).readIntent()).toBeNull();
+    if (window === "mutation" || window === "outcome") expect((await workspace.read()).drafts[0]).toMatchObject({ text: "crash edit", disk: { text: "original" } });
+    if (window === "acknowledgement" || window === "partial-batch") expect(await new FileOperationJournal(join(dir, "intent"), owner, db).readIntent()).toBeNull();
     else expect(await new FileOperationJournal(join(dir, "intent"), owner, db).readIntent()).toMatchObject({ kind: "trash", destination: "", ...(window === "outcome" ? { completed: true } : {}) });
     await writeFile(join(dir, "unrelated.txt"), "external after crash");
     const { Checkout } = await import("./project");

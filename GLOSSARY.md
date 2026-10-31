@@ -185,8 +185,11 @@ The dedicated file-operation journal stores and validates these records; workspa
 client recovery drafts and view memory separately. Copy intents additionally retain staging paths and available destination draft text.
 Completed saves carry their disk baseline independently of deletion outcomes, preserving
 available draft text. Authenticated direct rename/move requests and acknowledgements share the host socket;
-uncertain intents reject client acknowledgement. Completed move and batch facts protect workspace snapshots until the renderer
-reconciles and durably acknowledges them. Restart reconciles available drafts with actual
+uncertain intents reject client acknowledgement. Completed move and Trash facts protect each saved client’s workspace snapshots until its renderer
+reconciles, persists and acknowledges its own obligation. Moves retain each client’s independent
+text and loaded baseline; another client’s Trash retains its drafts at the missing original path.
+Workspace load delivers outstanding acknowledgement roots so recovered editors can release their
+handoff before another mutation. Restart reconciles available drafts with actual
 paths and saved baselines; uncertain outcomes retain work and block mutations.
 
 **Files clipboard reference**:

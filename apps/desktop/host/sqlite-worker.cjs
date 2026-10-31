@@ -78,7 +78,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
       if (!body || !body.completed || !['move', 'trash'].includes(body.kind)) throw Error('Invalid shared file fact');
       db.exec('BEGIN IMMEDIATE');
       try {
-        const clients = db.prepare("SELECT DISTINCT clientId FROM client_recovery WHERE kind='workspace'").all();
+        const clients = db.prepare("SELECT DISTINCT clientId FROM client_recovery WHERE kind='workspace' UNION SELECT ? AS clientId").all(clientId);
         for (const owner of clients) {
           const row = db.prepare("SELECT body, revision FROM client_recovery WHERE clientId=? AND kind='fileFacts'").get(owner.clientId);
           const facts = row ? JSON.parse(row.body) : [];

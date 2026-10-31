@@ -1,4 +1,27 @@
-# SQLite move/Trash handoff (#123, partial implementation)
+# SQLite move/Trash handoff (#123)
+
+## Completion follow-up
+
+The isolated `implement/123-recovery-delivery` worktree started at integration `e1fc441`, merged partial `10b56b0`, and then merged integration `d7fd558` (#125). Baseline `0a9c981` remains an ancestor. No issue closure, PR, or integration-branch merge was performed.
+
+Completed move/Trash facts now publish transactionally to separate obligations for every saved workspace client, including the originating client. Another client's acknowledgement cannot clear them. Recovery and late snapshot persistence reconcile independent move text and baselines. Another client's Trash preserves its drafts at the original missing paths. Save and copy behavior remain separately owned; no other client's loaded save baseline is replaced by this publication.
+
+Authenticated workspace load delivers outstanding acknowledgement roots. Renderer initialization persists the recovered workspace and awaits authenticated acknowledgements before mounting the editor. Failure is disclosed with edits retained. Multi-root acknowledgements retain facts for other roots. This directly fixes the previous permanently blocked restart path.
+
+Executed follow-up evidence:
+
+- Red/green regressions for restart acknowledgement delivery and independent-client move reconciliation.
+- Authenticated load/persist/ack regressions for independent client move and Trash text/baseline retention.
+- Actual native move and macOS Trash SIGKILL windows after mutation, committed outcome and acknowledgement. Mutation-only Trash remains uncertain with drafts retained; it is never inferred successful from absence.
+- Partial move and Trash subprocess batches: one successful native effect, followed by a missing-source failure, then SIGKILL. These are bounded partial-batch cases, not every inter-item timing.
+- Packaged Electron: all 11 existing operation/recovery scenarios passed, including authenticated preservation Save/Discard/Cancel, per-item failure and conflict choices. The strengthened interrupted-move recovery test additionally passes a visible folder rename after two restarts, retaining editor text and exact disk bytes. An initial locator failure was corrected to target the folder row.
+- Typecheck, lint, build and macOS package passed; final merged-tree results follow below.
+
+Qualification limits: no human VoiceOver/Finder review, power-loss, physical disk exhaustion or capacity/latency qualification. No live remote-client notification transport is added: other-client renderer convergence uses workspace load/reconnect; late snapshots are protected on persistence. Broader simultaneous multi-client notification/revocation qualification remains deferred by #117. Native Trash race and external-writer limits are unchanged. SQLite WAL NORMAL does not guarantee the latest acknowledged metadata after an OS crash or power loss.
+
+The earlier partial implementation record below is historical; its originating-client-only and missing-renderer-handoff limitations are superseded by this follow-up.
+
+## Original partial implementation
 
 This branch preserves the #122 direct SQLite replacement and adds client-owned completed operation facts in the same host database. Facts survive per-item journal clearance and restart until explicit renderer acknowledgement. Each replacement uses SQLite revision checking and the existing 16 MiB admission bound. Recovery validates stored facts and never repeats filesystem mutations. A completed current intent protects the result-to-fact-write crash window. Failed fact persistence reports a pending recovery handoff instead of claiming durable completion.
 

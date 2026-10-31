@@ -137,7 +137,7 @@ test("saved-project registration and interrupted move recovery survive together 
     }
     // A recovered renderer must release its handoff before the next user mutation.
     const page = await app.firstWindow();
-    await page.getByRole("treeitem", { name: "moved", exact: true }).click({ button: "right" });
+    await page.getByRole("treeitem", { name: "moved", exact: true }).locator(":scope > .tree-row").click({ button: "right" });
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Rename moved", exact: true }).click();
     await page.getByRole("textbox", { name: "Rename moved" }).fill("again");
