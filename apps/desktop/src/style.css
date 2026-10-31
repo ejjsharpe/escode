@@ -764,3 +764,13 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .project-tabs > header { flex-shrink: 0; }
 .project-tabs .retention-settings summary { white-space: nowrap; }
 .project-tabs .retention-settings form { position: fixed; top: 48px; right: 14px; }
+
+.chat-model-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-block: 8px;
+}
+.chat-model-controls label { display: flex; align-items: center; gap: 6px; }
+.chat-model-controls select { max-width: 100%; }

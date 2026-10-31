@@ -13,6 +13,7 @@ type ProjectArguments =
   | ["save", string, string, string, string]
   | ["diff", string, string, "staged" | "unstaged" | "untracked"];
 type ChatArguments =
+  | ["models", string | null, string, string?, string?]
   | [operation: "createDraft", project: string | null, checkout?: string]
   | [operation: "context", project: string | null, id: string, target: string | null]
   | [operation: "execution", project: string, id: string, mode: "new" | "reuse", value: string, commit: string]
@@ -127,6 +128,7 @@ contextBridge.exposeInMainWorld(
     chat: async (...call: ChatArguments) => {
       await chatStorageReady;
       const [operation, ...args] = call;
+      if (call[0] === "models") return hostClient.chatModels(call[1], call[2], call[3], call[4]);
       return ["createDraft", "context", "execution"].includes(operation)
       ? (async () => {
         if (call[0] === "createDraft") return hostClient.draftAction({ operation: call[0], project: call[1], ...(call[2] === undefined ? {} : { checkout: call[2] }) });

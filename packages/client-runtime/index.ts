@@ -100,6 +100,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     persistWorkspace: (state: typeof import("@escode/contracts").WorkspaceState.Type) => chatQuery(client => client.persistWorkspace({ state })),
     moveEntry: (command: import("@escode/contracts").MoveEntry) => chatQuery(client => client.moveEntry({ command })),
     ackFileOperation: (root: string) => chatQuery(client => client.ackFileOperation({ root })),
+    chatModels: (project: string | null, id: string, model?: string, effort?: string) => chatQuery(client => client.chatModels({ project, id, ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }) })),
     draftAction: (action: import("@escode/contracts").DraftAction) => chatQuery(client => client.draftAction({ action })),
     sendState: (project: string | null, id: string) => chatQuery(client => client.sendState({ project, id })),
     sendMessage: (command: SendCommand) => chatQuery(client => client.sendMessage({ command })),

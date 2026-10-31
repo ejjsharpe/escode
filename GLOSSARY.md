@@ -269,3 +269,9 @@ then disclose missing file coverage. Logical expiry drops eligible file payloads
 SQLite reuses free pages and may truncate an unblocked WAL without shrinking the
 main database. These checkpoints store file bytes in SQLite, create no Git snapshot
 objects, and grant no authority to prune project Git objects or retained worktrees.
+
+**Next-message model and effort**:
+A chat's explicit Codex model and supported reasoning effort, stored in host SQLite.
+Each model remembers its selected effort within the chat. Send captures these choices
+before preparation; editing them during preparation or execution affects only a later
+explicit Send. Catalog changes require an explicit supported selection, never substitution.
