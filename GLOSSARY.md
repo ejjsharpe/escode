@@ -230,7 +230,14 @@ effects may remain. Reservations and prior command evidence are retained. This
 exception never admits Send, approval or reply without a durable intent. After
 complete storage-worker loss, the running host may retain previously validated
 chat authority for cancellation of its existing live session only; authentication
-and exact captured-target checks still apply. Host restart discards this authority.
+and exact captured-target checks still apply. Cancellation results and rejection
+reasons remain visible alongside context/storage errors. Host restart discards this authority.
+
+Desktop chat composers, composer revisions and retained Send/control identities are
+client-owned records in host SQLite, hydrated before chat actions and included in
+recovery copies. The local client cache does not replace that authoritative copy.
+The chat-client record has a 4 MiB bound; persistence failure blocks Send/replies,
+while Stop retains its explicit emergency path. This does not add a transcript archive.
 
 ### Recovery copy
 

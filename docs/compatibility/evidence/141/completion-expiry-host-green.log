@@ -1,0 +1,9 @@
+$ node scripts/filesystem.mjs && vp test run host/checkpoint-expiry.test.ts host/client-chat.test.ts "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop
+
+
+ Test Files  2 passed (2)
+      Tests  25 passed (25)
+   Start at  13:58:02
+   Duration  3.73s (tests 81%, import 18%, transform 1%)

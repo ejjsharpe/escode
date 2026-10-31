@@ -1,6 +1,8 @@
 # Combined historical qualification (#141)
 
-Qualification remains open. This record does not accept or close #117 or #141.
+Qualification remains open for the user-owned manual gates. This record does not
+accept or close #117 or #141. The partial handoff ledger is retained below; the
+internal-gap follow-up records subsequent repairs and final qualification.
 Isolated branch `t3/issue-141-durable-state`, worktree
 `/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b`, starts at integration
 `79f3f6ea84c03efbafc0c9ad9a62113ae919ee87`; `0a9c981` remains an ancestor.
@@ -44,15 +46,17 @@ modified. Deterministic UI fixtures remain distinct from these live-provider res
 | 28–36 | Before/after branching and explicit summary UI modes; real Git/SQLite authenticated boundary tests cover source/index preservation, exact reservations, partial outcomes, SIGKILL and no replay; actual provider probe above independently checks context selection. |
 | 37–38 | No project inspection/rewind and explicit unavailable file coverage in packaged navigation and authenticated boundary tests; scratch folders remain Git-free. |
 | 39–48 | Retention/expiry host tests plus packaged settings/Never/restart and expiry UI; branch/recovery/uncertain dependencies protected. No worktree/conversation deletion. |
-| 49–51 | Capacity/exhaustion and durable Send/control host tests; packaged storage faults and worker-loss Stop. Superseded-target visible disclosure remains unresolved below. |
+| 49–51 | Capacity/exhaustion and durable Send/control host tests; packaged storage faults and worker-loss Stop. The partial superseded-target disclosure failure and its repair are recorded below. |
 | 52–55 | Packaged effective settings, recovery-copy/checkpoint-recovery-copy tests and packaged copy/recover/reconcile. Original files/store retained; provider/Git remain external dependencies. |
 | 56 | Current baseline and checkpoint-load measurements below; bounded local samples only. |
 
 This mapping combines the predecessor records with current runs; it does not
 claim every story was exercised as one uninterrupted live-provider UI journey.
 The final combined packaged suite uses real Electron/SQLite/Git and deterministic
-provider subprocesses. A fully combined live-provider UI/recovery journey remains
-unperformed; passing protocol fixtures does not fill that gap.
+provider subprocesses. The partial handoff lacked a combined live-provider UI/recovery journey. The
+follow-up below records the actual installed-provider UI/restart/recovery journey;
+the complex rewind/branch/restoration UI choices remain covered by deterministic
+provider fixtures, separately from the real native-context probe.
 
 ## Measurements and limits
 
@@ -166,3 +170,123 @@ rewind failure but does not replace the failed combined qualification. The lates
 18-test shutdown/context run passed after preserving the Send historical-pending
 guard and removing failed-open placeholder sessions. No clean full final-source
 host/combined run or complete parent acceptance is claimed.
+
+## Internal-gap follow-up on the isolated completion branch
+
+The preceding ledger describes the partial handoff at `706e8ee`; this section
+records subsequent work on `t3/complete-141-internal-gaps` in
+`/Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af`. The branch starts from
+integration `79f3f6e`, incorporates that exact partial commit, and retains
+`0a9c981`. No issue closure, PR, or merge into integration is performed.
+
+The existing superseded Stop packaged test went red again. The context-error
+alert took precedence over the command error, hiding cancellation results during
+storage loss. Command results now have their own alert alongside context/storage
+errors. The supersession fixture also needed a valid provider sequence: an active
+turn must complete before the replacement turn starts; an unsolicited competing
+turn-start notification is correctly ignored by the host. The existing exact
+stale-target and no-extra-interrupt assertions remain intact. The shutdown/open
+context guards, historical-pending Send guard and owner-lock cleanup from the
+partial branch are retained.
+
+The first actual-provider UI/recovery run exposed an additional internal gap:
+composer text survived restart in Chromium but disappeared when the SQLite copy
+was recovered into a fresh profile. A dedicated client-owned `chatClient` recovery
+record now persists composer text/revisions and retained Send/control identities
+through the authenticated host connection. Hydration precedes chat actions; the
+host binds storage to its authenticated desktop client, validates keys/string
+values, serializes writes with revision checks, and rejects records above 4 MiB.
+No transcript ownership changes. Pending Send persistence precedes dispatch;
+failed final clearing restores the local pending identity for status-only retry.
+Ordinary Stop still reaches host emergency admission when client persistence fails.
+The copy/recovery validator accepts this dedicated record without treating it as
+a filesystem intent requiring external reconciliation.
+
+The live test's original retained-composer assertion was kept. The repaired
+journey passed on installed Codex 0.166.0: fresh fixture Git checkout and app
+store, one tool-free paid turn, visible before/after inspection, application
+restart, retained unsent composer, consistent copy, recovery into a fresh profile,
+read-only actual-provider reconciliation, same thread identity and one user turn
+on reopening. It verifies source disk contents remain unchanged. Fixture threads
+remain provider-owned; no personal chat was opened or mutated. Quit dialogs use
+the existing explicit-confirmation fixture; automated execution does not certify
+native dialog or VoiceOver behavior. This journey is separate from the prior
+two-turn native-fork context probe and does not claim every historical operation
+was performed in a single live-provider conversation.
+
+Focused Send persistence tests went red before their fixes, then passed 20/20.
+The command-alert fix passed all four Emergency Stop cases, and loaded control
+passed three repetitions before the additional client-persistence fix. Full final
+source and binary results are recorded below.
+
+The first frozen-source packaged run after adding chat-client recovery passed
+20/21, failing expiry. Repeating after waiting for the public idle snapshot still
+failed 3/3, disproving the initial fixture-timing hypothesis; that fixture change
+was reverted. The worker conservatively treated the new nonempty chat-client
+record as a dependency on every historical file snapshot. The correct fix excludes
+that identity/composer record from file-dependency classification, like checkout
+authority, while retaining the record itself and all existing file-recovery,
+receipt, preparation and branch guards. The authenticated expiry test went red
+with a retained composer, then passed with the composer still intact after expiry.
+No expiry assertion, history assertion, or test deadline was weakened. Focused
+expiry plus Send tests passed 25/25 before the final serial run.
+
+### Frozen-source final results
+
+- Typecheck, lint (four existing warnings), build and unsigned arm64 packaging passed.
+- Full host: **364 passed, six skipped**, 42 files passed/two skipped, 305.24 seconds;
+  `bun run --cwd apps/desktop test -- --maxWorkers=1`.
+- Complete combined packaged suite: **21/21 passed**, 1.7 minutes, one worker;
+  history, checkpoints, retention, durable-state, navigation, Agents/file recovery,
+  SQLite qualification and Emergency Stop. Rewind and restoration use unchanged
+  assertions and deadlines. The binary was built once before these runs and was
+  not rebuilt concurrently.
+- Final loaded editing/control: **2/2 passed**, 11.0 seconds, one worker with
+  `ESCODE_CHECKPOINT_LOAD=1`. Actual worker fill/reclaim admitted 47 one-MiB
+  payloads in 2.25–2.34 seconds; cleanup reached 138.88 ms in this run. WAL was
+  zero at the successful cleanup observations; main-file observations were
+  46,268,416–49,418,240 bytes. These are bounded local samples, not physical
+  full-disk qualification or real Git scan load.
+
+Final unloaded renderer Save: 240.5 / 252.4 ms; outer Save verification:
+275.5 / 324.9 ms; editing: 137.9 / 54.3 ms. Under checkpoint worker load,
+renderer Save: 326.6 / 345.8 ms; outer Save: 439.9 / 492.4 ms; editing:
+150.7 / 91.6 ms. Loaded Send: 419.5 ms; Stop: 133.0 ms; emergency control:
+86.2 ms. Unloaded Send: 387.6–391.4 ms; Stop: 112.3–129.1 ms; emergency:
+43.9–57.8 ms; worker-loss emergency: 54.1 ms. Prior baseline/loaded Save samples
+above are preserved as earlier observations; no speedup is inferred between runs.
+
+Effective settings remain WAL / NORMAL (`synchronous=1`) /
+`checkpoint_fullfsync=1`. One hundred 4 KiB recovery writes measured median
+0.126583 ms, p95 0.241875 ms, maximum 2.07175 ms; aggregate SQLite/WAL/SHM bytes
+114,936 → 551,656. Fresh-store, external-effect, OS/power-loss, external-writer,
+no replay/continuation and protected-dependency limits remain unchanged.
+
+Final installed-provider packaged journey: **1/1 passed**, 45.9 seconds (46.2 seconds
+including runner startup), Codex **0.166.0** at the recorded actual installation.
+The final binary exercised UI before/after inspection, restart, consistent copy,
+fresh-profile recovery and actual-provider reconciliation with retained unsent
+text and exactly one user turn on reopening. No automatic replay or continuation
+was observed; source files remained intact.
+
+Separate actual Git-backed capture calls measured **163.322042 ms before-message**
+and **163.162458 ms after-turn**. Each is one whole `captureTurnCheckpoint` call,
+including Git discovery, file reads and SQLite persistence in the isolated fixture;
+these are not pure Git subprocess timings or aggregate Send/restart timers. The
+packaged copy/recover/reconcile script also passed with complete retained checkpoint
+and branch coverage and newer disk contents preserved.
+
+Final raw logs are `evidence/141/completion-{host,packaged,load,live,capture}.log`,
+with build/type/lint/package logs alongside them (console trailing whitespace normalized). Red regressions, rejected timing
+hypotheses and intermediate failures are retained separately. An intermediate
+host run loaded old code while new tests were being edited; its development
+failures are excluded from qualification. Final source was frozen for the complete
+serial host/packaged/load/live runs. The final integration-tip merge was already
+up to date at `79f3f6e`; both required ancestors remain reachable.
+
+No identified internal gap remains from this qualification. Current-build manual
+VoiceOver and native macOS lifecycle/dialog checks above are **unperformed and
+user-owned**. Physical ENOSPC/power-loss and the explicitly deferred exhaustive
+multi-client/revocation/full-capacity matrix remain unperformed. Final independent
+Astra reviews are subsequent work; this implementation task performs no closure,
+PR, or merge into integration, and does not claim complete parent acceptance.

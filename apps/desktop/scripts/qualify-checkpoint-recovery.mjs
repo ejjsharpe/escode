@@ -15,7 +15,9 @@ try {
  git('init'); await writeFile(join(repo,'saved'),'base'); git('add','saved'); git('-c','user.name=Test','-c','user.email=test@example.com','commit','-m','base');
  const info = await stat(repo);
  const chat = {id:'chat',project:repo,checkout:repo,draft:'',threadId:null,directoryIdentity:{path:repo,dev:info.dev,ino:info.ino}};
- await db.write([chat],0); await writeFile(join(repo,'saved'),'checkpoint'); await captureTurnCheckpoint(db,chat,null);
+ await db.write([chat],0); await writeFile(join(repo,'saved'),'checkpoint'); const beforeStart = performance.now(); assert.equal(await captureTurnCheckpoint(db,chat,null), null); console.log('before Git capture ms', performance.now()-beforeStart);
+ await db.command('checkpoint',{body:{id:'completion',chatId:chat.id,checkout:chat.checkout,threadId:null,commandId:null,completion:'pending',availability:'unavailable'}});
+ const afterStart = performance.now(); assert.equal(await captureTurnCheckpoint(db,chat,null,undefined,{id:'completion',turnId:'turn',completion:'completed',createdAt:Date.now()}),null); console.log('after Git capture ms', performance.now()-afterStart);
  const [point] = await db.command('checkpoints',{commandId:'chat'});
  await db.command('rewindWrite',{commandId:'branch',body:{checkpoint:point,result:{status:'applied'}}});
  const exe = workspace + '/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode';

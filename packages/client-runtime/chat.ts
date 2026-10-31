@@ -66,6 +66,7 @@ export function createChatClient(host: Host, {
           const state = await host.sendState(project, id);
           command = { ...state, commandId: crypto.randomUUID(), project, id, text };
           storage.setItem(sendKey(project, id), JSON.stringify(command));
+          await flush();
           receipt = await host.sendMessage(command);
         }
         if (receipt === null)
@@ -76,6 +77,8 @@ export function createChatClient(host: Host, {
         await flush();
         // Failed composer persistence must retain the identity for a status-only retry.
         storage.removeItem(sendKey(project, id));
+        try { await flush(); }
+        catch (error) { storage.setItem(sendKey(project, id), JSON.stringify(command)); throw error; }
         if (text !== command.text)
           throw Error("Previous Send accepted. Current text retained; Send again explicitly.");
         return composer(project, id);

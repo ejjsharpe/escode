@@ -313,8 +313,9 @@ export function ChatView({
                                 : "Disconnected"}
               </span>
             </div>
-            {(snapshot?.contextError || error || snapshot?.error) && (
-              <p role="alert">{snapshot?.contextError || error || snapshot?.error}</p>
+            {error && <p role="alert">{error}</p>}
+            {(snapshot?.contextError || snapshot?.error) && (
+              <p role="alert">{snapshot?.contextError || snapshot?.error}</p>
             )}
             {record?.initialSend === "uncertain" && (
               <p role="status">

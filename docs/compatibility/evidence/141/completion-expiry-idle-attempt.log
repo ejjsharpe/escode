@@ -1,0 +1,98 @@
+$ playwright test tests/history.spec.ts --grep expiry "--repeat-each=3"
+
+Running 3 tests using 1 worker
+
+(node:72433) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  1 tests/history.spec.ts:11:129 › saved new-format history: expiry (8.3s)
+(node:72604) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  2 tests/history.spec.ts:11:129 › saved new-format history: expiry (8.1s)
+(node:72798) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  3 tests/history.spec.ts:11:129 › saved new-format history: expiry (8.1s)
+
+
+  1) tests/history.spec.ts:11:129 › saved new-format history: expiry ───────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/) with timeout 5000ms
+      - waiting for getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/)
+
+
+       95 |       await page.getByRole("button", { name: /^After turn/ }).first().click();
+       96 |       const inspection = page.getByRole("region", { name: "Boundary inspection", exact: true });
+    >  97 |       await expect(inspection.getByText(/Saved files: unavailable.*expired/)).toBeVisible();
+          |                                                                               ^
+       98 |       await expect(inspection.getByText("first saved page", { exact: true })).toBeVisible();
+       99 |       await page.getByRole("button", { name: "Inspect saved files", exact: true }).click();
+      100 |       await expect(page.getByRole("region", { name: "Saved-file inspection", exact: true })).toContainText("expired after 30 days");
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop/tests/history.spec.ts:97:79
+
+    Error Context: test-results/history-saved-new-format-history-expiry/error-context.md
+
+  2) tests/history.spec.ts:11:129 › saved new-format history: expiry ───────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/) with timeout 5000ms
+      - waiting for getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/)
+
+
+       95 |       await page.getByRole("button", { name: /^After turn/ }).first().click();
+       96 |       const inspection = page.getByRole("region", { name: "Boundary inspection", exact: true });
+    >  97 |       await expect(inspection.getByText(/Saved files: unavailable.*expired/)).toBeVisible();
+          |                                                                               ^
+       98 |       await expect(inspection.getByText("first saved page", { exact: true })).toBeVisible();
+       99 |       await page.getByRole("button", { name: "Inspect saved files", exact: true }).click();
+      100 |       await expect(page.getByRole("region", { name: "Saved-file inspection", exact: true })).toContainText("expired after 30 days");
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop/tests/history.spec.ts:97:79
+
+    Error Context: test-results/history-saved-new-format-history-expiry-repeat1/error-context.md
+
+  3) tests/history.spec.ts:11:129 › saved new-format history: expiry ───────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/) with timeout 5000ms
+      - waiting for getByRole('region', { name: 'Boundary inspection', exact: true }).getByText(/Saved files: unavailable.*expired/)
+
+
+       95 |       await page.getByRole("button", { name: /^After turn/ }).first().click();
+       96 |       const inspection = page.getByRole("region", { name: "Boundary inspection", exact: true });
+    >  97 |       await expect(inspection.getByText(/Saved files: unavailable.*expired/)).toBeVisible();
+          |                                                                               ^
+       98 |       await expect(inspection.getByText("first saved page", { exact: true })).toBeVisible();
+       99 |       await page.getByRole("button", { name: "Inspect saved files", exact: true }).click();
+      100 |       await expect(page.getByRole("region", { name: "Saved-file inspection", exact: true })).toContainText("expired after 30 days");
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-b7fe17af/apps/desktop/tests/history.spec.ts:97:79
+
+    Error Context: test-results/history-saved-new-format-history-expiry-repeat2/error-context.md
+
+  3 failed
+    tests/history.spec.ts:11:129 › saved new-format history: expiry ────────────────────────────────
+    tests/history.spec.ts:11:129 › saved new-format history: expiry ────────────────────────────────
+    tests/history.spec.ts:11:129 › saved new-format history: expiry ────────────────────────────────
+error: script "smoke" exited with code 1

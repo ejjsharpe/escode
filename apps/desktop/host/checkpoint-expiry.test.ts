@@ -25,6 +25,10 @@ test("authenticated polling expires inactive file coverage without deleting conv
   const client = createHostClient(async () => host.bootstrap());
   try {
     await store.database.command("checkpoint", { body: { id: "point", chatId: chat.id, kind: "before-message", createdAt: 1, availability: "available", files: { "saved.txt": { mode: 33188, content: "YQ==" } } } });
+    const { clientId } = await store.database.ready;
+    const composer = { ["escode-composer:" + chat.id]: "retained unsent text" };
+    await store.database.recoveryWrite(clientId, "chatClient", composer, 0);
+    expect((await store.database.recoveryRead(clientId, "chatClient")).body).toEqual(composer);
     now = 29 * 86400000;
     expect((await client.checkpointPoints(null, chat.id, null)).points[0].availability).toBe("available");
     await client.openChat(null, chat.id);
@@ -33,6 +37,7 @@ test("authenticated polling expires inactive file coverage without deleting conv
     now = 60 * 86400000;
     expect((await client.checkpointPoints(null, chat.id, null)).points[0]).toMatchObject({ availability: "unavailable", reason: "File checkpoint expired after 30 days of chat inactivity" });
     expect((await store.get(null, chat.id)).id).toBe(chat.id);
+    expect((await store.database.recoveryRead(clientId, "chatClient")).body).toEqual(composer);
     expect(await readFile(join(dir, "saved.txt"), "utf8")).toBe("retained saved file");
     expect(await readFile(join(dir, ".git/index"))).toEqual(index);
     await client.openChat(null, chat.id);
