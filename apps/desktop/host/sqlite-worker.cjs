@@ -108,14 +108,14 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         value = 0;
         if (!recovery && !uncertain && !db.prepare('SELECT 1 FROM preparation_results LIMIT 1').get()) {
           const rows = db.prepare(`SELECT c.id, c.chatId, c.body FROM checkpoints c
-            WHERE json_extract(c.body,'$.availability')='available'
+            WHERE json_extract(c.body,'$.availability')='available' AND (? IS NULL OR c.id=?)
             AND coalesce((SELECT touched FROM checkpoint_activity WHERE chatId=c.chatId),
               (SELECT max(json_extract(body,'$.createdAt')) FROM checkpoints WHERE chatId=c.chatId)) <= ?
             AND NOT EXISTS (SELECT 1 FROM checkpoints pending WHERE pending.chatId=c.chatId AND json_extract(pending.body,'$.completion')='pending')
             AND c.chatId NOT IN (SELECT value FROM json_each(?))
             AND NOT EXISTS (SELECT 1 FROM submissions WHERE json_extract(body,'$.command.id')=c.chatId
               AND json_extract(body,'$.status') NOT IN ('accepted','rejected'))
-            ORDER BY c.rowid LIMIT 100`).all(body.now - 30 * 86400000, JSON.stringify(body.active));
+            ORDER BY c.rowid LIMIT 100`).all(body.boundary ?? null, body.boundary ?? null, body.now - 30 * 86400000, JSON.stringify(body.active));
           for (const row of rows) {
             const point = JSON.parse(row.body);
             delete point.files;
@@ -158,7 +158,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         const prior = row && JSON.parse(row.body);
         if (!prior || prior.completion !== 'pending' || prior.chatId !== body.chatId || prior.threadId !== body.threadId || prior.checkout !== body.checkout || prior.commandId !== body.commandId) throw Error('Completion boundary mismatch or already finalized');
       }
-      db.prepare('INSERT INTO checkpoint_activity VALUES (?, ?) ON CONFLICT(chatId) DO UPDATE SET touched=max(touched,excluded.touched)').run(body.chatId, body.createdAt);
+      db.prepare('INSERT INTO checkpoint_activity VALUES (?, ?) ON CONFLICT(chatId) DO UPDATE SET touched=max(touched,excluded.touched)').run(body.chatId, body.createdAt ?? Date.now());
       const encoded = JSON.stringify(body);
       const used = db.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))),0) AS n FROM checkpoints').get().n;
       if (used + Buffer.byteLength(encoded) > (body.availability === 'available' ? 50331648 : 67108864)) throw Error('Checkpoint storage capacity exhausted');

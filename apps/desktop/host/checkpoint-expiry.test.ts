@@ -121,13 +121,14 @@ test("authenticated messages and observed agent work reset inactivity independen
     day(58);
     expect((await client.checkpointPoints(dir, chat.id, null)).points[0].availability).toBe("available");
     expect((await send("two")).status).toBe("accepted");
-    day(87);
+    day(90);
+    expect((await client.checkpointPoints(dir, chat.id, null)).points[0].availability).toBe("available");
     notify({ method: "item/agentMessage/delta", params: { threadId: "provider", turnId: "turn-2", itemId: "answer", delta: "agent work" } });
     complete();
     await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
-    day(116);
+    day(119);
     expect((await client.checkpointPoints(dir, chat.id, null)).points[0].availability).toBe("available");
-    day(118);
+    day(121);
     expect((await client.checkpointPoints(dir, chat.id, null)).points[0].availability).toBe("unavailable");
     expect(turns).toBe(2);
   } finally { await client.close(); await host.close(); service.close(); await store.database.close(); globalThis.WebSocket = original; await rm(dir, { recursive: true, force: true }); }

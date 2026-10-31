@@ -88,13 +88,13 @@ export class ChatService {
     this.cleanupTimer = setInterval(() => { void this.cleanupCheckpoints().catch(() => {}); }, 60000);
     this.cleanupTimer.unref();
   }
-  async cleanupCheckpoints() {
+  async cleanupCheckpoints(boundary?: string) {
     if (this.cleanupBlocked) return 0;
     const active = [...new Set([...this.sessions.keys(), ...this.transitions.keys()])].filter(id => {
       const session = this.sessions.get(id);
       return this.transitions.has(id) || !!session && (session.turn.phase !== "idle" || !!session.completing || !!session.sending);
     });
-    return this.store.database.command("expireCheckpoints", { body: { now: this.clock(), active } });
+    return this.store.database.command("expireCheckpoints", { body: { now: this.clock(), active, boundary: boundary ?? null } });
   }
   async expectation(project: string | null, id: string) {
     const chat = await this.store.get(project, id);
@@ -510,7 +510,7 @@ export class ChatService {
     await this.environment?.authorize(project);
     check();
     await this.store.get(project, id);
-    await this.cleanupCheckpoints();
+    await this.cleanupCheckpoints(boundary);
     const identity = JSON.stringify(branching ? [project, id, boundary, token, true] : restoreFiles ? [project, id, boundary, token, true, "restore-files"] : [project, id, boundary, token]);
     if (commandId) {
       const prior = await this.store.database.command("rewindRead", { commandId });
@@ -607,12 +607,12 @@ export class ChatService {
   }
   async checkpointPoints(project: string | null, id: string, cursor: string | null) {
     await this.store.get(project, id);
-    await this.cleanupCheckpoints();
+    while (await this.cleanupCheckpoints() === 100) { /* Drain bounded worker batches before reporting availability. */ }
     return this.store.database.command("checkpointPoints", { commandId: id, body: { cursor } }) as Promise<import("@escode/contracts").CheckpointPage>;
   }
   async inspectFiles(project: string | null, id: string, boundary: string, path: string | null, cursor: string | null): Promise<import("@escode/contracts").FileInspection> {
     const chat = await this.store.get(project, id);
-    await this.cleanupCheckpoints();
+    await this.cleanupCheckpoints(boundary);
     const offset = Number(cursor ?? 0);
     if (!Number.isSafeInteger(offset) || offset < 0 || (path !== null && (!path || path.startsWith("/") || path.split("/").some(p => p === ".." || p === ".git")))) throw Error("Invalid file inspection target");
     const result: import("@escode/contracts").Mutable<import("@escode/contracts").FileInspection> = { availability: "unavailable", message: "", paths: [], nextCursor: null, before: null, after: null, beforeMode: null, afterMode: null };
