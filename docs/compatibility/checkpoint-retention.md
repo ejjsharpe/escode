@@ -37,7 +37,9 @@ status region, and reopening reloads authoritative settings.
   locked workspace dependencies.
 - Real SQLite, controllable clock and authenticated host tests:
   `bun run --cwd apps/desktop test -- host/checkpoint-expiry.test.ts
-  host/boundaries.test.ts --maxWorkers=1`: 20/20 passed after integration merge.
+  host/boundaries.test.ts --maxWorkers=1`: the initial combined run passed 20/20.
+  Fresh runs on merged source passed retention 5/5 (3.22s) and the expanded
+  boundary suite 20/20 (185.47s), including summarized continuation.
   Coverage includes defaults, shorter/longer policies, Never, persistence/restart,
   invalid values, elapsed-before-change/no resurrection, deliberate open, messages,
   agent activity, polling exclusion, retained branch copies, recovery drafts,
