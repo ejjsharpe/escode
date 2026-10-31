@@ -1,5 +1,5 @@
 import { test, expect } from "vite-plus/test";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
@@ -82,4 +82,53 @@ test("background expiry protects recovery, active and uncertain evidence and ret
     expect(await expire()).toBe(100);
     expect(await expire()).toBe(1);
   } finally { service.close(); await store.database.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("authenticated messages and observed agent work reset inactivity independently of polling", async () => {
+  const { DurableSend } = await import("./durable-send");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-expiry-activity-")));
+  execFileSync("git", ["init", dir]);
+  execFileSync("git", ["-C", dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "base"]);
+  const store = new Chats(join(dir, "state"));
+  const original = globalThis.WebSocket;
+  globalThis.WebSocket = class extends WebSocket { constructor(url: string) { super(url, { origin: "null" }); } } as any;
+  const start = Date.now();
+  let now = start, turns = 0;
+  let notify: (message: any) => void = () => {};
+  const service = new ChatService(store, async (_cwd, receive) => ({
+    async request(method: string) {
+      if (method === "account/read") return { account: { type: "chatgpt" } };
+      if (method === "thread/start" || method === "thread/resume") { notify = receive; return { thread: { id: "provider" }, cwd: dir, model: "fixture", approvalPolicy: "on-request", sandbox: { type: "workspaceWrite" } }; }
+      if (method === "turn/start") return { turn: { id: `turn-${++turns}` } };
+      return {};
+    }, respond() {}, close() {},
+  }), undefined, undefined, undefined, () => now);
+  const chat = await store.create(dir);
+  const sends = new DurableSend(store.database);
+  const host = await startHost({ ...await store.database.ready, origin: "null", list: async () => ({ kind: "denied", message: "unused" }),
+    checkpointPoints: (...args) => service.checkpointPoints(...args),
+    openChat: (...args) => service.open(...args),
+    sendMessage: command => sends.execute(command, async () => { await service.send(command.project, command.id, command.text, undefined, command.commandId); }) });
+  const client = createHostClient(async () => host.bootstrap());
+  const day = (n: number) => { now = start + n * 86400000; };
+  const complete = () => notify({ method: "turn/completed", params: { threadId: "provider", turn: { id: `turn-${turns}`, status: "completed" } } });
+  try {
+    await store.database.command("checkpoint", { body: { id: "original", chatId: chat.id, kind: "before-message", createdAt: start, availability: "available", files: {} } });
+    const send = (id: string) => client.sendMessage({ commandId: id, admissionEpoch: sends.admissionEpoch, project: dir, id: chat.id, expected: "fixture", text: "message" });
+    await client.openChat(dir, chat.id);
+    day(29); expect(await send("one")).toMatchObject({ status: "accepted", message: "" }); complete();
+    await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+    day(58);
+    expect((await client.checkpointPoints(dir, chat.id, null)).points[0].availability).toBe("available");
+    expect((await send("two")).status).toBe("accepted");
+    day(87);
+    notify({ method: "item/agentMessage/delta", params: { threadId: "provider", turnId: "turn-2", itemId: "answer", delta: "agent work" } });
+    complete();
+    await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+    day(116);
+    expect((await client.checkpointPoints(dir, chat.id, null)).points[0].availability).toBe("available");
+    day(118);
+    expect((await client.checkpointPoints(dir, chat.id, null)).points[0].availability).toBe("unavailable");
+    expect(turns).toBe(2);
+  } finally { await client.close(); await host.close(); service.close(); await store.database.close(); globalThis.WebSocket = original; await rm(dir, { recursive: true, force: true }); }
 });

@@ -74,7 +74,7 @@ export class ChatService {
       this.transitions.delete(id);
     }
   }
-  private activityWrites = new WeakMap<Session, number>();
+  private activityWrites = new WeakMap<Session, { now: number }>();
   private cleanupBlocked = false;
   private cleanupTimer: ReturnType<typeof setInterval>;
   constructor(
@@ -750,11 +750,18 @@ export class ChatService {
     const p = message.params;
     if (!p || p.threadId !== s.threadId) return;
     if (message.method?.startsWith("turn/") || message.method?.startsWith("item/")) {
-      const now = this.clock();
-      if (now - (this.activityWrites.get(s) ?? -Infinity) >= 60000) {
-        this.activityWrites.set(s, now);
-        void this.store.database.command("checkpointActivity", { commandId: s.chatId, body: { now } })
-          .catch(() => { this.cleanupBlocked = true; });
+      const pending = this.activityWrites.get(s);
+      if (pending) pending.now = this.clock();
+      else {
+        const activity = { now: this.clock() };
+        this.activityWrites.set(s, activity);
+        void (async () => {
+          let written: number;
+          do {
+            written = activity.now;
+            await this.store.database.command("checkpointActivity", { commandId: s.chatId, body: { now: written } });
+          } while (written !== activity.now);
+        })().catch(() => { this.cleanupBlocked = true; }).finally(() => this.activityWrites.delete(s));
       }
     }
     if (message.method === "serverRequest/resolved") {
