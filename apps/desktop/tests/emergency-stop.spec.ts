@@ -17,8 +17,10 @@ const timer=setInterval(()=>{if(require('node:fs').existsSync(${JSON.stringify(j
 createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line); if(!m.id)return; let result={};
  if(m.method==='initialize')result={userAgent:'fixture'};
+ if(m.method==='config/read')result={config:{}};
+ if(m.method==='configRequirements/read')result={requirements:null};
  if(m.method==='account/read')result={account:{}};
- if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:m.params.threadId??'saved-provider'},cwd:process.cwd(),model:'fixture',sandbox:{type:'readOnly'},approvalPolicy:'on-request'};
+ if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:m.params.threadId??'saved-provider'},cwd:process.cwd(),model:'fixture',sandbox:m.params.sandbox==='danger-full-access'?{type:'dangerFullAccess'}:{type:'readOnly',networkAccess:false},approvalPolicy:m.params.approvalPolicy||'on-request',approvalsReviewer:'user'};
  if(m.method==='turn/start'){require('node:fs').appendFileSync(${JSON.stringify(join(dir, "effects"))},'turn\\n');result={turn:{id:'sent'}};}
  if(m.method==='turn/interrupt')require('node:fs').appendFileSync(${JSON.stringify(join(dir, "effects"))},'stop\\n');
  if(m.method==='thread/turns/list')result={data:[{id:'t',items:[{id:'i',type:'agentMessage',text:m.params.cursor===null?'first saved page':'second saved page'}]}],nextCursor:m.params.cursor===null?'second':null};

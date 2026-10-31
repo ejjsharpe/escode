@@ -24,6 +24,7 @@ test("packaged app loads CSS, Monaco and tools without a development PATH", asyn
       "lifecycle",
       "onClose",
       "chat",
+      "copyConversationCode",
       "toolStatus",
       "project",
     ]);

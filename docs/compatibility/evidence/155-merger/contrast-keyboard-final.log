@@ -1,0 +1,63 @@
+$ playwright test tests/sidebar-qualification.spec.ts tests/chat-summaries.spec.ts tests/conversation-layout.spec.ts "--timeout=60000"
+
+Running 5 tests using 1 worker
+
+(node:57937) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 tests/chat-summaries.spec.ts:9:1 › fresh summaries exclude old metadata and bodies, release detail polling during navigation (7.3s)
+  ✓  2 tests/chat-summaries.spec.ts:81:1 › recent rows use last user message time and retain exact context (1.4s)
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+  ✓  3 tests/chat-summaries.spec.ts:109:1 › thirty chats across five projects keep one list while three run (6.4s)
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+  ✘  4 tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows (10.2s)
+(node:58459) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  5 tests/sidebar-qualification.spec.ts:8:1 › Files Diff Chats retain keyboard controls at desktop narrow short and native 200 percent (3.1s)
+
+
+  1) tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows 
+
+    Error: expect(locator).toBeInViewport() failed
+
+    Locator:  getByRole('button', { name: 'Allow once', exact: true })
+    Expected: in viewport
+    Received: viewport ratio 0
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeInViewport" getByRole('button', { name: 'Allow once', exact: true }) with timeout 5000ms
+      - waiting for getByRole('button', { name: 'Allow once', exact: true })
+        14 × locator resolved to <button tabindex="0" type="button">Allow once</button>
+           - unexpected value "viewport ratio 0"
+
+
+      93 |         const action = page.getByRole("button", { name, exact: true });
+      94 |         await expect(action).toBeFocused();
+    > 95 |         await expect(action).toBeInViewport();
+         |                              ^
+      96 |         await page.keyboard.press("Tab");
+      97 |       }
+      98 |       expect(await auditTextContrast(page)).toEqual([]);
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-8b2d5f46/apps/desktop/tests/conversation-layout.spec.ts:95:30
+
+    Error Context: test-results/conversation-layout-readab-59b6e-Stop-in-constrained-windows/error-context.md
+
+  1 failed
+    tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows 
+  4 passed (29.0s)
+error: script "smoke" exited with code 1

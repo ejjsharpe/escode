@@ -1,0 +1,10 @@
+$ node scripts/filesystem.mjs && vp test run host/permissions.test.ts host/models.test.ts
+
+ RUN  v5.0.5 /private/tmp/escode-144-merger/apps/desktop
+
+
+ Test Files  2 passed (2)
+      Tests  2 passed (2)
+   Start at  19:56:25
+   Duration  488ms (import 72%, tests 16%, transform 11%, worker 1%)
+

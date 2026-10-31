@@ -1,0 +1,11 @@
+$ nx typecheck desktop
+
+ NX   1 task: 1 succeeded
+
+
+Re-run with --output-style=static to inline logs.
+
+  Run duration:      5.6s
+  Cache:             0/1 hit (0%)
+  Critical path:     5.5s (1 task)
+  Recoverable time:  <1ms

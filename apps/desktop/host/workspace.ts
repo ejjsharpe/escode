@@ -32,6 +32,7 @@ function validate(value: unknown): asserts value is WorkspaceState {
   const s = value as WorkspaceState;
   if (
     !s ||
+    (s.sidebarWidth !== undefined && (!Number.isFinite(s.sidebarWidth) || s.sidebarWidth < 190 || s.sidebarWidth > 380)) ||
     !Array.isArray(s.projects) ||
     !Array.isArray(s.drafts) ||
     typeof s.selected !== "string" ||

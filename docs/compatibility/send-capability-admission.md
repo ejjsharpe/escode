@@ -1,0 +1,33 @@
+# Final targeted Send capability integration (#144 / #152 / #155)
+
+2026-10-31. Isolated merger based on `f1c12b6472dc0ebed2767dc2cde79645741c82b8`, fast-forwarded to admission fix `749152f671cd41e8a7fcc6c222e003355dfcf42c`. Read README, tracker conventions, the live three issues, saved specification and all supplied review rounds. No open `wayfinder:map` was returned. Implementation is explicitly authorized by this task. No product concepts changed.
+
+## Finding resolutions
+
+- **Round 3 spec P2 / standards P2 (same finding):** `sendInContext` checks the discovered installation and captured restricted choice before `prepareScratch`, `prepareSend`, reservations, binding and provider thread creation. Fresh scratch/Supervised and deferred-worktree/Auto-accept host regressions preserve complete saved identity/context/text/policy, exercise context changes, assert no directories/reservations/Git branches/worktrees/provider starts, and then prepare once on explicit Full access. The final connected-session version/policy check remains in place, as do checkout/directory/resource validation and captured settings.
+- **New connected-client finding, fixed here:** deterministic capability rejection originally returned `rejected: false`; durable Send consequently retained an uncertain receipt, preventing a later explicit Full access Send. The new packaged regression failed on that transition for both draft types. The host regression then failed with two expected-true/actual-false rejection assertions. The admission guard now marks this pre-dispatch refusal `rejected: true`, using the existing durable terminal receipt classification. Connected-client review also found rejected receipts were retained indefinitely; the client now releases only a terminal rejected identity after successful persistence, retaining composer text and requiring a new explicit Send. Cleanup failure restores the identity. Added client regressions cover fresh and recovered rejection, no automatic replay, distinct next command identity and cleanup persistence failure. Uncertain dispatch handling and durable storage are unchanged. An explicit later Send receives a fresh command; rejected commands are never replayed.
+- **Title containment:** the independent title connection checks the same observed installation before thread creation. Existing permissions regression asserts zero title thread/turn starts and retained fallback. No restricted title inference or silent Full access substitution is introduced.
+- **Earlier spec P1, saved-policy reconnect:** retained history/identity remains accessible, conflict blocks Send and explicit matching-policy resolution clears it. Existing permission regression passes; this is supported resolution, not a claim that installed Codex honors resume overrides.
+- **Earlier spec P2 and round 2 activation follow-up:** catalog/Send validation reads remain free of current-default writes. Deliberate activation/selection carries foreground identity and generation ordering. Both model regressions pass, including delayed activation/catalog completion.
+- **Earlier standards P3, repeated permission mappings:** `threadPermission` and `permissionPolicy` remain shared by thread start/resume, matching and turn submission.
+- **Earlier stale Stop finding:** terminal rejection cleanup and successful Stop error clearing remain intact. This merger does not alter those paths; prior packaged evidence is retained in the consolidated sidebar qualification. No claim that the original nondeterministic race is eliminated.
+
+## Checks and bounds
+
+Focused host suite: permissions, models, durable Send, scratch, worktree drafts and project drafts: **51 passed, 2 existing skipped**. Initial attempts could not resolve dependencies in this fresh checkout; `bun install --frozen-lockfile` completed without tracked dependency changes. Build, package, typecheck and lint passed before the additional terminal-receipt fix; final checks are recorded below.
+
+The packaged application regression uses isolated data/repositories, restricted PATH and a controllable Codex **0.166.0 fixture**. It exercises fresh No project and deferred-worktree rejection, preserved prompt/identity/policy/editable context controls, no reservations/provider identity/Git allocations, terminal receipt cleanup, then one prepared resource and one task thread/turn after explicit Full access. It does not qualify real restricted execution.
+
+Actual installed discovery remains `codex-cli 0.166.0` (`codex --version`), obtained by `tools.ts` through the selected executable's version command and retained on the RPC connection. The guard is deliberately exact-version containment of the observed isolation failure. No claim that unobserved versions enforce isolation, no replacement of custom/managed policies, and no silent access widening. Existing installed-provider evidence remains authoritative; no new model inference was consumed for this merger.
+
+Human/platform gates remain: real restricted modes on the observed installation are unavailable; qualified sandbox/network/approval/effort enforcement and provider resume behavior, plus actual manual VoiceOver/native acceptance, remain outstanding. Full #144/#152/#155 acceptance is not claimed. Prior visual/workload evidence and its limits are retained in `agents-sidebar-qualification.md`.
+
+No root checkout dirty files, integration ref, PR, tracker or agent mutations. Parent owns draft PR #156. No broad regression reruns.
+
+Final validation after the receipt repair:
+
+- Focused permissions + durable Send + client chat: **33 passed**; after adding cleanup-failure coverage, client chat alone: **22 passed**.
+- Final typecheck, lint, build and macOS directory package passed; `git diff --check` passed.
+- Logs: `/tmp/escode-final-host.log`, `/tmp/escode-admission-receipt-red.log`, `/tmp/escode-admission-client-red.log`, `/tmp/escode-admission-final-focused.log`, `/tmp/escode-admission-final-client2.log`, `/tmp/escode-admission-final-{build2,package2,types4,lint4}.log`. Packaged final run: `/tmp/escode-admission-final-packaged3.log`.
+- Initial packaged failures are retained in `/tmp/escode-admission-debug.log` and `/tmp/escode-admission-final-packaged-green.log`: these establish the blocked transition and retained receipt. Other iterations corrected test waits for persisted settings, JSON property-order comparison and the duplicate status locator; they were test-harness issues, not additional production defects.
+- Final packaged fresh scratch and deferred-worktree cases: **2 passed (15.1s)**, including Stop after the single accepted Full access turn. No remaining actionable finding established in this targeted review; the platform/human gates above remain open.

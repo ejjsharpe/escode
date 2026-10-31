@@ -13,7 +13,13 @@ type ProjectArguments =
   | ["save", string, string, string, string]
   | ["diff", string, string, "staged" | "unstaged" | "untracked"];
 type ChatArguments =
+  | ["defaults", string | null, string, "app" | "project", import("@escode/contracts").ChatDefaults?]
+  | ["permissions", string | null, string, ("supervised" | "edits" | "full")?]
+  | [operation: "renameTitle", project: string | null, id: string, title: string]
+  | [operation: "regenerateTitle", project: string | null, id: string]
+  | ["models", string | null, string, string?, string?, boolean?]
   | [operation: "createDraft", project: string | null, checkout?: string]
+  | [operation: "archive", project: string | null, id: string, archived: boolean]
   | [operation: "context", project: string | null, id: string, target: string | null]
   | [operation: "execution", project: string, id: string, mode: "new" | "reuse", value: string, commit: string]
   | [operation: "targets"]
@@ -66,10 +72,11 @@ async function control(operation: "stop" | "answer" | "emergencyStop", project: 
   const receipt = saved ? (await hostClient.sendStatus(command.commandId) ?? await hostClient.sendMessage(command)) : await hostClient.sendMessage(command);
   if (!receipt) throw Error("Control outcome unavailable; command identity retained. Refresh to inspect current work.");
   if (receipt.reason === "emergency-stop-available") return { reason: receipt.reason, message: receipt.message };
-  if (receipt.status !== "accepted") throw Error(`${operation} ${receipt.status}: ${receipt.message}`);
+  if (receipt.status !== "accepted" && receipt.status !== "rejected") throw Error(`${operation} ${receipt.status}: ${receipt.message}`);
   localStorage.removeItem(key);
   try { await flushChatStorage(); }
   catch (error) { localStorage.setItem(key, JSON.stringify(command)); throw error; }
+  if (receipt.status === "rejected") throw Error(`${operation} rejected: ${receipt.message}`);
 }
 async function transfer(root: string, kind: "paste" | "duplicate" | "drag-move" | "drag-copy" | "import", parent: string, paths: string[]) {
   const key = `escode-transfer:${JSON.stringify([root, kind, parent, paths])}`;
@@ -126,10 +133,20 @@ contextBridge.exposeInMainWorld(
     },
     chat: async (...call: ChatArguments) => {
       await chatStorageReady;
+      if (call[0] === "renameTitle" || call[0] === "regenerateTitle") return hostClient.titleAction({
+        project: call[1], id: call[2], ...(call[0] === "renameTitle" ? { title: call[3] } : {}) });
       const [operation, ...args] = call;
-      return ["createDraft", "context", "execution"].includes(operation)
+      if (call[0] === "defaults") return hostClient.chatDefaults(call[1], call[2], call[3], call[4]);
+      if (call[0] === "permissions") return hostClient.chatPermissions(call[1], call[2], call[3]);
+      if (call[0] === "models") return hostClient.chatModels(call[1], call[2], call[3], call[4], call[5]);
+      return ["archive", "createDraft", "context", "execution"].includes(operation)
       ? (async () => {
         if (call[0] === "createDraft") return hostClient.draftAction({ operation: call[0], project: call[1], ...(call[2] === undefined ? {} : { checkout: call[2] }) });
+        if (call[0] === "archive") {
+          const [, project, id, archived] = call;
+          const { expected } = await hostClient.sendState(project, id);
+          return hostClient.draftAction({ operation: "archive", project, id, expected, archived });
+        }
         if (call[0] === "context") {
           const [, project, id, target] = call;
           const { expected } = await hostClient.sendState(project, id);
@@ -151,6 +168,7 @@ contextBridge.exposeInMainWorld(
       : call[0] === "send" ? chatClient.send(call[1], call[2], call[3])
       : ipcRenderer.invoke("chat", operation, ...args);
     },
+    copyConversationCode: (text: string) => ipcRenderer.invoke("copy-conversation-code", text),
     toolStatus: () => ipcRenderer.invoke("tools:status"),
     project: (...call: ProjectArguments) =>
       call[0] === "status" ? hostClient.gitStatus(call[1])

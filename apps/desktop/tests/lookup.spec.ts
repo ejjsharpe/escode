@@ -40,7 +40,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await page.getByRole('button',{name:'Hide Git-ignored files',exact:true}).click();
 
  await expect(page.getByRole('treeitem',{name:'deep',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await page.keyboard.press("Meta+p");
  await measured.time('first discovery after launch',async()=>{
  await page.getByLabel('Exact file path').fill('closed-only');
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('No eligible matches');
@@ -71,13 +71,13 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
    await page.keyboard.press('Escape');await page.waitForTimeout(750);measured.resources('one root popup closed baseline');
    await measured.time('ten popup cancel cycles',async()=>{
      for(let i=0;i<10;i++) {
-       await page.getByRole('button',{name:'Find file',exact:true}).click();
+       await page.keyboard.press("Meta+p");
        await page.getByLabel('Exact file path').fill('candidate');await page.waitForTimeout(140);
        await page.keyboard.press('Escape');
      }
    });
    await page.waitForTimeout(750);measured.resources('one root after ten popup cancellations');
-   await page.getByRole('button',{name:'Find file',exact:true}).click();
+   await page.keyboard.press("Meta+p");
    await page.getByLabel('Exact file path').fill('wkb');await expect(result).toBeVisible();
  }
  const freshness=performance.now();
@@ -111,7 +111,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await symlink(join(dir,'outside-policy'),join(root,'deep/.ignore'));
  await expect(page.getByRole('status').filter({hasText:'ignore rules unavailable'})).toBeVisible();
  await page.keyboard.press('Escape'); await rm(join(root,'deep/.ignore'));
- await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await page.keyboard.press("Meta+p");
  await page.getByLabel('Exact file path').fill('wkb'); await expect(result).toBeVisible();
  await measured.time('external create to result',async()=>{
  await writeFile(join(root,'workbench.ts'),'basename wins');
@@ -135,7 +135,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await expect(page.getByRole('dialog',{name:'Find file',exact:true})).toHaveCount(0);
  await expect(page.locator('.monaco-editor:visible')).toContainText('unloaded editor target');
  await expect(page.getByRole('tab',{name:'deep/workbench.ts',exact:true})).not.toHaveAccessibleDescription(/Preview/);
- await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await page.keyboard.press("Meta+p");
  await expect(page.getByLabel('Exact file path')).toHaveValue('');
  await expect(page.getByRole('group',{name:'Recent files'}).getByRole('option').first()).toHaveText('deep/workbench.ts');
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('capped');
@@ -150,7 +150,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await expect(page.getByRole('option',{name:'node_modules/known.txt',exact:true})).toBeVisible();
  await page.keyboard.press('Enter');
  await expect(page.locator('.monaco-editor:visible')).toContainText('ignored familiar file');
- await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await page.keyboard.press("Meta+p");
  await page.getByLabel('Exact file path').fill('node_modules/missing.txt');
  await page.keyboard.press('Enter');
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('retry');
@@ -161,7 +161,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  const restarted=await app.firstWindow();
  const restoredMeasurement=await lookupMeasurement(app,restarted,{dataset});
  const recentStart=performance.now();
- await restarted.getByRole('button',{name:'Find file',exact:true}).click();
+ await restarted.keyboard.press("Meta+p");
  await expect(restarted.getByLabel('Exact file path')).toHaveValue('');
  await expect(restarted.getByRole('group',{name:'Recent files'}).getByRole('option').first()).toHaveText('node_modules/known.txt');
  restoredMeasurement.record('restart blank recents',performance.now()-recentStart);
@@ -174,16 +174,16 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await restarted.getByRole('button',{name:'Open project…',exact:true}).click();
  await expect(restarted.locator('header')).toContainText(second);
  await expect(restarted.locator('.view-nav:visible')).toContainText(second);
- await restarted.getByRole('button',{name:'Find file',exact:true}).click();
+ await restarted.keyboard.press("Meta+p");
  await expect(restarted.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('No recent files');
  await restarted.getByLabel('Exact file path').fill('node_modules/known.txt');await restarted.getByLabel('Exact file path').press('Enter');
  await expect(restarted.locator('.monaco-editor:visible')).toContainText('second checkout bytes');
- await restarted.getByRole('button',{name:'Find file',exact:true}).click();
+ await restarted.keyboard.press("Meta+p");
  await expect(restarted.getByRole('group',{name:'Recent files'}).getByRole('option')).toHaveText(['node_modules/known.txt']);
  await restarted.keyboard.press('Escape');
  // The same history journey owns Agents scope: each open root contributes its exact target.
  await restarted.getByRole('button',{name:'Agents',exact:true}).click();
- await restarted.getByRole('button',{name:'Find file',exact:true}).click();
+ await restarted.keyboard.press("Meta+p");
  const recent=restarted.getByRole('group',{name:'Recent files'}).getByRole('option');
  await expect(recent.filter({hasText:'node_modules/known.txt'})).toHaveCount(2);
  await expect(recent.filter({hasText:second}).first()).toContainText('node_modules/known.txt');
@@ -194,7 +194,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await restarted.keyboard.press('Escape');
  await restarted.getByRole('navigation',{name:'Projects'}).locator('button[aria-pressed]').filter({hasText:'repo'}).click();
  await expect(restarted.locator('header')).toContainText(root);
- await restarted.getByRole('button',{name:'Find file',exact:true}).click();
+ await restarted.keyboard.press("Meta+p");
  await restarted.getByLabel('Exact file path').fill('known');
  await expect(restarted.getByRole('option',{name:'node_modules/known.txt',exact:true})).toHaveCount(1);
  await restarted.getByLabel('Exact file path').press('Enter');
@@ -228,7 +228,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await expect(page.locator('header')).toContainText(linked);
  await expect(page.locator('.monaco-editor:visible')).toContainText('linked editor target');
  await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
- await agents.click(); await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await agents.click(); await page.keyboard.press("Meta+p");
  await expect(recent.filter({hasText:'node_modules/known.txt'})).toHaveCount(2);
  await expect(recent.filter({hasText:linked})).toHaveCount(0);
  await page.getByLabel('Exact file path').fill('known');
@@ -244,7 +244,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
    await page.locator('.project-tab-close').first().click();
    await expect(page.locator('.project-tab-close')).toHaveCount(remaining-1);
  }
- await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await page.keyboard.press("Meta+p");
  await expect(page.getByRole('dialog',{name:'Find file',exact:true})).toContainText('No open checkouts');
  await page.keyboard.press('Escape');
  // Aggregate limits differ from each root's own result budget.
@@ -254,7 +254,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
    for(let file=0;file<17;file++) await writeFile(join(bounded,`cap-${file}.txt`),'bounded');
    await open(bounded);
  }
- await agents.click(); await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await agents.click(); await page.keyboard.press("Meta+p");
  const boundedStart=performance.now();
  await page.getByLabel('Exact file path').fill('cap');
  await expect(page.getByRole('option')).toHaveCount(100);
@@ -273,7 +273,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
    }
    await page.getByRole('navigation',{name:'Projects'}).locator('button[aria-pressed]').filter({hasText:'bounded-0'}).click();
    await restoredMeasurement.time('21000-file preflight exhaustion',async()=>{
-     await page.getByRole('button',{name:'Find file',exact:true}).click();
+     await page.keyboard.press("Meta+p");
      await page.getByLabel('Exact file path').fill('over');
      await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('Incomplete');
      await expect(page.getByRole('option')).toHaveCount(0);

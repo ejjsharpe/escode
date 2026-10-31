@@ -41,6 +41,13 @@ test("projects and checkout selections retain buffers, drafts and mode without d
       await expect(page.locator("header")).toContainText(root);
     };
     await open(a);
+    const resize = page.getByRole("separator", { name: "Resize sidebar", exact: true });
+    await resize.focus();
+    await page.keyboard.press("Home");
+    await expect(resize).toHaveAttribute("aria-valuenow", "190");
+    await page.keyboard.press("ArrowRight");
+    await expect(resize).toHaveAttribute("aria-valuenow", "200");
+    await expect(resize).toBeFocused();
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("textbox", { name: "Rename a.txt", exact: true })).toBeFocused();
@@ -68,8 +75,8 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(exactPath).toHaveValue("binary.txt");
     await page.keyboard.press("Escape");
     await expect(page.locator(".monaco-editor textarea:focus")).toHaveCount(1);
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
-    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
+    await page.keyboard.press("Meta+p");
     await expect(exactPath).toHaveValue("");
     await exactPath.fill(join(b, "a.txt"));
     await page.keyboard.press("Enter");
@@ -79,7 +86,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(lookup).toHaveCount(0);
     await expect(page.locator(".monaco-editor:visible")).toContainText("deliberately excluded");
     await expect(page.getByRole("tab", { name: "node_modules/known.txt", exact: true })).not.toHaveAccessibleDescription(/Preview/);
-    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.keyboard.press("Meta+p");
     await exactPath.fill("a.txt");
     await page.keyboard.press("Enter");
     await expect(lookup).toHaveCount(0);
@@ -144,10 +151,11 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     execFileSync("git", ["-C", a, "switch", "-c", "changed-branch"]);
     // Reload only here to load seeded associations; ordinary navigation never reloads.
     await page.reload();
+    await expect(resize).toHaveAttribute("aria-valuenow", "200");
     await open(a);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Chat 2 ·/ })).toHaveCount(0);
+    await page.getByRole("button", { name: /^Chat 1 ·/ }).click();
     await expect(page.getByLabel("Message Codex")).toHaveValue("original message draft");
     await expect(page.getByLabel("Message Codex")).toBeEnabled();
     await page.getByLabel("Message Codex").focus();
@@ -167,8 +175,8 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await open(worktree);
     await expect(page.locator(".view-nav:visible")).toContainText(worktree);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Chat 1", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "Chat 2", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Chat 1 ·/ })).toHaveCount(0);
+    await page.getByRole("button", { name: /^Chat 2 ·/ }).click();
     await expect(page.getByLabel("Message Codex")).toHaveValue("worktree message draft");
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(page.getByRole("button", { name: "Hide Git-ignored files", exact: true })).toHaveAttribute("aria-pressed", "false");
@@ -181,7 +189,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     );
     await open(a);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await page.getByRole("button", { name: /^Chat 1 ·/ }).click();
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Hide Git-ignored files", exact: true }),
@@ -220,6 +228,28 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("alpha draft");
     await page.screenshot({ path: "test-results/navigation.png" });
+    const sidebar = page.getByRole("complementary", { name: "Files sidebar" });
+    await sidebar.evaluate(element => { element.scrollTop = 24; });
+    const scroll = await sidebar.evaluate(element => element.scrollTop);
+    await resize.focus();
+    await page.keyboard.press("End");
+    await expect(resize).toHaveAttribute("aria-valuenow", "380");
+    await expect(resize).toBeFocused();
+    expect(await sidebar.evaluate(element => element.scrollTop)).toBe(scroll);
+    const handle = (await resize.boundingBox())!;
+    await page.mouse.move(handle.x + 3, handle.y + 30);
+    await page.mouse.down();
+    await page.mouse.move(270, handle.y + 30);
+    await page.mouse.up();
+    await expect(resize).toHaveAttribute("aria-valuenow", "270");
+    await page.setViewportSize({ width: 800, height: 500 });
+    await expect(sidebar.getByRole("button", { name: "Files", exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("button", { name: "Diff", exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("button", { name: "Chats", exact: true })).toBeVisible();
+    await sidebar.getByText("Settings", { exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Checkpoint retention", exact: true })).toBeVisible();
+    await sidebar.getByText("Settings", { exact: true }).click();
+    await page.screenshot({ path: "test-results/navigation-narrow-short.png" });
   } finally {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async (_window: unknown, options?: any) => ({
@@ -288,7 +318,7 @@ test("cancelled and edited lookup invocations reject delayed validation and file
         (globalThis as any).lookupNeedle = needle;
         (globalThis as any).releaseLookup = undefined;
       }, needle);
-      await page.getByRole("button", { name: "Find file", exact: true }).click();
+      await page.keyboard.press("Meta+p");
       await page.getByLabel("Exact file path").fill("slow.txt");
       await page.keyboard.press("Enter");
       await expect.poll(() => app.evaluate(() => typeof (globalThis as any).releaseLookup)).toBe("function");
@@ -307,7 +337,7 @@ test("cancelled and edited lookup invocations reject delayed validation and file
       await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
       await expect(page.locator(".monaco-editor:visible")).toContainText("original editor");
     }
-    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.keyboard.press("Meta+p");
     await page.getByLabel("Exact file path").fill("slow.txt");
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog", { name: "Find file", exact: true })).toHaveCount(0);
@@ -343,7 +373,7 @@ test("cancelled and edited lookup invocations reject delayed validation and file
       (globalThis as any).releaseLookup = undefined;
     });
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.keyboard.press("Meta+p");
     await page.getByLabel("Exact file path").fill("slow.txt");
     await expect.poll(() => app.evaluate(() => typeof (globalThis as any).releaseLookup)).toBe("function");
     await page.evaluate(root => window.escode.lookupFile(root, "a.txt"), root);
@@ -370,4 +400,29 @@ test("cancelled and edited lookup invocations reject delayed validation and file
     await page.keyboard.press("Escape");
 
   } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test("sidebar width survives Quit and remains independent of another client", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-sidebar-restart-")));
+  let app = await launchDesktop(join(dir, "client-a"));
+  try {
+    let page = await app.firstWindow();
+    let resize = page.getByRole("separator", { name: "Resize sidebar", exact: true });
+    await resize.focus();
+    await page.keyboard.press("End");
+    await expect(resize).toHaveAttribute("aria-valuenow", "380");
+    await app.close();
+    app = await launchDesktop(join(dir, "client-a"));
+    page = await app.firstWindow();
+    resize = page.getByRole("separator", { name: "Resize sidebar", exact: true });
+    await expect(resize).toHaveAttribute("aria-valuenow", "380");
+    await app.close();
+    app = await launchDesktop(join(dir, "client-b"));
+    page = await app.firstWindow();
+    await expect(page.getByRole("separator", { name: "Resize sidebar", exact: true })).toHaveAttribute("aria-valuenow", "270");
+  } finally {
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });

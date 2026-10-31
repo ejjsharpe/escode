@@ -1,0 +1,32 @@
+$ node scripts/filesystem.mjs && vp test run host/permissions.test.ts "--testTimeout=2000"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-8b2d5f46/apps/desktop
+
+ ❯ host/permissions.test.ts (4 tests | 1 failed) 2347ms
+   × unqualified read-only title execution retains the fallback without a provider turn 2005ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/permissions.test.ts > unqualified read-only title execution retains the fallback without a provider turn
+Error: Test timed out in 2000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ host/permissions.test.ts:85:1
+     83| });
+     84|
+     85| test("unqualified read-only title execution retains the fallback witho…
+       | ^
+     86|   const dir = await mkdtemp(join(tmpdir(), "escode-title-isolation-"));
+     87|   const store = new Chats(join(dir, "chats"));
+ ❯ VitestModuleRunner.directRequest ../../node_modules/.bun/@voidzero-dev+vite-plus-core@1.4.0+df38b84d380caece/node_modules/@voidzero-dev/vite-plus-core/dist/vite/node/module-runner.js:1262:59
+ ❯ VitestModuleRunner.cachedRequest ../../node_modules/.bun/@voidzero-dev+vite-plus-core@1.4.0+df38b84d380caece/node_modules/@voidzero-dev/vite-plus-core/dist/vite/node/module-runner.js:1169:73
+ ❯ VitestModuleRunner.import ../../node_modules/.bun/@voidzero-dev+vite-plus-core@1.4.0+df38b84d380caece/node_modules/@voidzero-dev/vite-plus-core/dist/vite/node/module-runner.js:1124:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  20:25:21
+   Duration  2.71s (tests 90%, import 9%, transform 1%)
+
+error: script "test" exited with code 1

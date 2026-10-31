@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import type { Checkout } from "./project";
 import { randomUUID } from "node:crypto";
 export type SavedChat = {
+  titleSource?: string;
+  titleRequest?: string;
   id: string;
   project: string | null;
   checkout: string;
@@ -30,7 +32,14 @@ export type SavedChat = {
   phase?: "draft" | "bound";
   initialSend?: "preparing" | "creating" | "unaccepted" | "uncertain" | "accepted";
   removed?: boolean;
+  nextPermission?: "supervised" | "edits" | "full";
+  nextModel?: { model: string; effort: string; remembered: Record<string, string> };
   draft: string;
+  title?: string;
+  archived?: boolean;
+  latestUserMessageAt?: number;
+  latestUserMessageCreatedAt?: number;
+  updatedAt?: number;
   createdAt?: number;
   legacyOrder?: number;
 };
@@ -58,6 +67,14 @@ export class Chats {
       try { await this.database.write(chats, revision); }
       catch (error) { this.failed = true; throw error; }
       return result;
+    });
+    this.queue = task.catch(() => {});
+    return task;
+  }
+  archive(project: string | null, id: string, archived: boolean) {
+    const task = this.queue.then(() => {
+      if (this.failed) throw Error("Chat storage unavailable; explicit recovery required.");
+      return this.database.command("archive", { body: { project, id, archived } });
     });
     this.queue = task.catch(() => {});
     return task;
@@ -91,6 +108,7 @@ export class Chats {
           c.phase === "draft" &&
           c.project === project &&
           c.checkout === checkout &&
+          !c.archived &&
           !c.draft &&
           !c.worktree &&
           !c.historicalPending &&
@@ -305,6 +323,30 @@ export class Chats {
     if (!chat) throw Error("Unknown chat in this project.");
     return chat;
   }
+  title(project: string | null, id: string, value: string, request?: string) {
+    return this.change(chats => {
+      const chat = chats.find(c => c.id === id && c.project === project);
+      if (!chat) throw Error("Unknown chat in this project.");
+      if (request !== undefined && chat.titleRequest !== request) return;
+      const title = value.trim();
+      if (!title || title.length > 256 || /[\r\n\x00-\x1f]/.test(title)) throw Error("Enter a title of 1–256 characters on one line.");
+      chat.title = title;
+      chat.titleRequest = undefined;
+    });
+  }
+  titleGeneration(project: string | null, id: string, text?: string, explicit = false) {
+    return this.change(chats => {
+      const chat = chats.find(c => c.id === id && c.project === project);
+      if (!chat) throw Error("Unknown chat in this project.");
+      if (!explicit && text !== undefined && (chat.titleSource || chat.title)) return null;
+      const source = chat.titleSource ?? text?.replace(/[\s\x00-\x1f]+/g, " ").trim().slice(0, 4000);
+      if (!source) throw Error("Send a message before regenerating its title.");
+      chat.titleSource = source;
+      chat.title ??= source.slice(0, 120);
+      chat.titleRequest = randomUUID();
+      return { source, request: chat.titleRequest, checkout: chat.checkout };
+    });
+  }
   draft(project: string | null, id: string, text: string) {
     return this.update(project, id, { draft: text });
   }
@@ -314,12 +356,15 @@ export class Chats {
     fields: Partial<
       Pick<
         SavedChat,
+        | "nextPermission"
+        | "nextModel"
         | "historicalPending"
         | "directoryIdentity"
         | "availabilityError"
         | "threadId"
         | "draft"
         | "hasSent"
+        | "latestUserMessageAt"
         | "removed"
         | "phase"
         | "initialSend"
@@ -332,7 +377,9 @@ export class Chats {
     return this.change((chats) => {
       const chat = chats.find((c) => c.id === id && c.project === project);
       if (!chat) throw Error("Unknown chat in this project.");
-      Object.assign(chat, fields);
+      const latestUserMessageAt = fields.latestUserMessageAt === undefined ? chat.latestUserMessageAt
+        : Math.max(chat.latestUserMessageAt ?? 0, fields.latestUserMessageAt);
+      Object.assign(chat, fields, latestUserMessageAt === undefined ? {} : { latestUserMessageAt });
     });
   }
 }

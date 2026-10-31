@@ -57,11 +57,11 @@ The keyboard-operated Cmd+P / Find file popup searches eligible filenames and pa
 
 Persisted **recent files** contain bounded exact checkout/file metadata, scoped independently of approval and distinct from session-local Reopen Closed history. Blank lookup shows scoped recents; typed lookup combines separately filtered recents with ranked discovery. An open popup uses coalesced host invalidation after file and local/nested ignore-policy changes, including repository-local excludes shared by linked worktrees. Observation failure remains disclosed; Refresh or reopening reinstalls observation and rescans. See the [navigation specification](docs/specifications/checkout-tabs-file-lookup.md), [recent-file evidence](docs/compatibility/recent-files.md) and [recursive lookup evidence](docs/compatibility/recursive-file-lookup.md) for contracts, budgets and qualification limits.
 
-**Project picker**:
-The searchable all-saved-project selection always opened by Agents New chat, including No project and projects with closed editor tabs. Ordered-character project-name filtering, path disambiguation and cancellation are implemented. Validated client navigation state retains recent-use ordering and each project’s last-used editor checkout across editor closure and restart. Explicit project selection or editor use updates recency; background output does not. New drafts use the remembered checkout, retaining unavailable targets without fallback.
+**Draft execution context**:
+Agents New chat opens focused composition using the most recently used editor project's remembered checkout, the saved original checkout when no editor checkout has been used, or No project when no project is saved. Checkout-local creation captures that exact checkout. Before first Send, compact project and checkout controls allow explicit changes while preserving text; later navigation never retargets a draft. Unavailable identities stay selected. First Send alone binds execution and prepares resources; bound context is read-only, with paths and management details on demand.
 
 **Project tab**:
-An editor view of one checkout of a project, with its own Files, Source Control and checkout-scoped Chats views. Different checkouts of the same project can have separate tabs; reopening an open checkout focuses its existing tab. Open membership and selected workspace restore independently per client. Host-owned approval retains the checkout directory identity; a missing or replaced directory keeps its exact unavailable tab and recovery edits until explicitly retried or closed.
+An editor view of one checkout of a project, with its own icon-labelled Files, Diff and checkout-scoped Chats switches at the top of the sidebar. Diff uses the existing Source Control comparison authority and shared working-file buffer. The always-visible sidebar supports pointer and keyboard resizing (190–380 pixels), with one width remembered across restarts in the client’s workspace recovery state. Different checkouts of the same project can have separate tabs; reopening an open checkout focuses its existing tab. Open membership and selected workspace restore independently per client. Host-owned approval retains the checkout directory identity; a missing or replaced directory keeps its exact unavailable tab and recovery edits until explicitly retried or closed.
 
 **File tab**:
 The editor header for one file inside a checkout editor. Its normal editor and comparisons share that tab and the client's working-file buffer. The accepted specification requires tabs, order, active file, selected view and editor positions to be remembered independently per checkout. The [file-tab specification](docs/specifications/file-editor-tabs.md) was accepted by the user on 2026-10-31. The initial visible ordered set, exact file reuse and active identity are implemented in the file-tab foundation slice. Normal, Git comparison and save-conflict views now share one tab and working buffer, with remembered view-specific cursor/scroll positions independent of the sidebar. Single and captured-batch file closes now share Save/Discard/Cancel, defer discards and tab removal until persistence succeeds, and select the MRU survivor. Contextual Cmd+W leaves an empty checkout open. Files and Source Control share one replaceable preview per checkout; deliberate opening, editing and Keep Open retain that same tab. Restoration retains exact unavailable file tabs and drafts with Retry controls; host-owned checkout approvals retain directory identity across restart. Working text and loaded baselines remain in the existing recovery path. Drag ordering, active-tab reveal, disambiguated labels and keyboard tab-strip controls are implemented. Ctrl+Tab selects from a checkout-local recent-tabs picker without changing the editor or recency until Control release; Escape cancels. Cmd+Option+Left/Right follows visual order independently of recency. These shortcuts respect visible Files/Source Control, dialogs and input scope; Reopen Closed restores successful explicit close actions in the current client/checkout session. Fixed top-level checkout tabs and lookup belong to the [accepted checkout/search handoff](docs/specifications/checkout-tabs-file-lookup.md), whose map is complete.
@@ -86,6 +86,9 @@ A saved Codex conversation, including the user's messages and the agent's work a
 
 **Chat summary**:
 The host's metadata and activity projection for one saved chat or chat draft, shared by Agents and project Chats. It excludes unsent message text, transcript bodies and live request payloads. Summary delivery does not subscribe to background conversation details. See [host summary evidence](docs/compatibility/chat-summaries.md).
+
+**Last user message**:
+Chat-list recency uses the latest user-role message update, then user-message creation, then chat update/creation. Descending chat identity breaks ties. Relative row times use that same event; assistant output, completion, opening and sent-chat title changes do not promote a chat.
 
 **History page**:
 A bounded portion of a saved chat's provider history, loaded explicitly through the execution host. Message bodies and pages carry content revisions; choosing another page replaces the displayed portion. Unloaded or unavailable portions are disclosed. See [saved history evidence](docs/compatibility/saved-history.md).
@@ -269,3 +272,40 @@ then disclose missing file coverage. Logical expiry drops eligible file payloads
 SQLite reuses free pages and may truncate an unblocked WAL without shrinking the
 main database. These checkpoints store file bytes in SQLite, create no Git snapshot
 objects, and grant no authority to prune project Git objects or retained worktrees.
+
+- **Archived chat**: A shared conversation hidden from recent lists by host-owned metadata. Archive requires idle work without unresolved requests or uncertain operations; Restore retains its identity, draft, resources and recency.
+
+**Chat title**:
+Shared host-owned conversation metadata displayed in Agents and checkout-local Chats.
+First Send starts one independent ephemeral title request, with bounded first-message
+text as its fallback. Rename accepts a single line up to 256 characters. Regenerate
+uses the retained first message; results match the current persisted request identity
+so Rename or a newer request supersedes delayed output. Titles never alter transcripts
+or sent-chat recency.
+**Next-message model and effort**:
+A chat's explicit Codex model and supported reasoning effort, stored in host SQLite.
+Each Codex model remembers its selected effort across chats. Send captures these choices
+before preparation; editing them during preparation or execution affects only a later
+explicit Send. Catalog changes require an explicit supported selection, never substitution.
+
+**Next-message permissions**:
+A per-chat explicit Codex approval and sandbox choice captured before Send preparation.
+Supervised uses read-only access and user-reviewed on-request approvals; Auto-accept
+edits requests workspace and temporary-directory writes with command networking disabled and
+user-reviewed approval for broader access; Full access disables the sandbox and
+command approval. Custom or managed restrictions require resolution in Codex
+configuration before presets can replace them. A saved-policy resume conflict retains
+history and drafts and blocks Send until explicitly resolved to the retained policy.
+Editing a choice never sends work.
+
+Installed Codex 0.166.0 qualification observed shell HTTPS access under a restricted network request. escode refuses restricted Send for this version and discloses the unsupported isolation; saved policy is retained and Full access requires an explicit choice.
+
+**New chat defaults**:
+Host-owned app settings and per-project overrides for model, effort and permissions.
+Current model selection is updated by foreground chat activation or an explicit model/effort selection in that chat; catalog
+reads and Send validation cannot change it. New drafts use project overrides before
+app defaults, current chat model, remembered
+Codex model/effort and the catalog default. Explicit draft choices survive changes.
+Effort memory is shared per Codex model. Permissions reset from project/app settings,
+with factory Full access; another chat's permission edit never becomes a default.
+Custom or managed Codex policy remains subject to explicit resolution.

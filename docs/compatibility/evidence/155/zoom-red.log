@@ -1,0 +1,30 @@
+$ playwright test tests/conversation-layout.spec.ts "--timeout=90000"
+
+Running 1 test using 1 worker
+
+(node:79867) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows (10.6s)
+
+
+  1) tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows 
+
+    Error: expect(received).toBeGreaterThanOrEqual(expected)
+
+    Expected: >= 60
+    Received:    0
+
+      71 |     await expect(page.getByLabel("Message Codex")).toBeInViewport();
+      72 |     await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeInViewport();
+    > 73 |     expect((await page.getByLabel("Conversation history").boundingBox())!.height).toBeGreaterThanOrEqual(60);
+         |                                                                                   ^
+      74 |     await page.screenshot({ path: "test-results/conversation-native-200.png" });
+      75 |     await page.getByRole("button", { name: "Stop", exact: true }).focus();
+      76 |     await page.keyboard.press("Enter");
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-54dcf325/apps/desktop/tests/conversation-layout.spec.ts:73:83
+
+    Error Context: test-results/conversation-layout-readab-59b6e-Stop-in-constrained-windows/error-context.md
+
+  1 failed
+    tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows 
+error: script "smoke" exited with code 1

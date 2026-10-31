@@ -72,6 +72,10 @@ export async function startHost(options: {
   history?: (project: string | null, id: string, cursor: string | null) => Promise<HistoryPage>;
   moveEntry?: (command: import("@escode/contracts").MoveEntry) => Promise<unknown>;
   ackFileOperation?: (root: string) => Promise<void>;
+  titleAction?: (action: import("@escode/contracts").TitleAction) => Promise<void>;
+  chatDefaults?: (project: string | null, id: string, scope: "app" | "project", value?: import("@escode/contracts").ChatDefaults) => Promise<import("@escode/contracts").ChatDefaults>;
+  chatPermissions?: (project: string | null, id: string, choice?: string) => Promise<import("@escode/contracts").PermissionChoices>;
+  chatModels?: (project: string | null, id: string, model?: string, effort?: string, activate?: boolean) => Promise<import("@escode/contracts").ModelChoices>;
   draftAction?: (action: import("@escode/contracts").DraftAction) => Promise<unknown>;
   clientChatStorage?: (state?: Record<string, string>) => Promise<Record<string, string>>;
   sendState?: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
@@ -145,7 +149,7 @@ export async function startHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["checkpointRetention", "observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "clientChatStorage", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "branchHistory", "inspectFiles", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["chatDefaults", "chatPermissions", "chatModels", "checkpointRetention", "observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "clientChatStorage", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "branchHistory", "inspectFiles", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "titleAction", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -249,6 +253,13 @@ export async function startHost(options: {
           if (!options.ackFileOperation) throw Error("Acknowledgement unavailable");
           await options.ackFileOperation(root);
         }, catch: String }),
+        titleAction: ({ action }) => Effect.tryPromise({ try: async () => {
+          if (!options.titleAction) throw Error("Title editing unavailable");
+          await options.titleAction(action);
+        }, catch: String }),
+        chatDefaults: ({ project, id, scope, value }) => Effect.tryPromise({ try: async () => { if (!options.chatDefaults) throw Error("Defaults unavailable"); return options.chatDefaults(project, id, scope, value); }, catch: String }),
+        chatPermissions: ({ project, id, choice }) => Effect.tryPromise({ try: async () => { if (!options.chatPermissions) throw Error("Permission controls unavailable"); return options.chatPermissions(project, id, choice); }, catch: String }),
+        chatModels: ({ project, id, model, effort, activate }) => Effect.tryPromise({ try: async () => { if (!options.chatModels) throw Error("Model catalog unavailable"); return options.chatModels(project, id, model, effort, activate); }, catch: String }),
         draftAction: ({ action }) => Effect.tryPromise({ try: async () => {
           if (!options.draftAction) throw Error("Draft editing unavailable");
           return Schema.decodeUnknownSync(DraftRecord)({ ...await options.draftAction(action) as object, draft: "" });

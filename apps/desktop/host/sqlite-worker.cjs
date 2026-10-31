@@ -11,6 +11,10 @@ const validate = chats => {
     if (!chat || typeof chat.id !== 'string' || !chat.id || chat.id.length > 256 || ids.has(chat.id) ||
         !(chat.project === null || typeof chat.project === 'string') || typeof chat.checkout !== 'string' ||
         typeof chat.draft !== 'string' || !(chat.threadId === null || typeof chat.threadId === 'string') ||
+        (chat.archived !== undefined && typeof chat.archived !== 'boolean') ||
+        (chat.title !== undefined && (typeof chat.title !== 'string' || !chat.title.trim() || chat.title.length > 256 || /[\r\n\x00-\x1f]/.test(chat.title))) ||
+        (chat.titleSource !== undefined && (typeof chat.titleSource !== 'string' || chat.titleSource.length > 4000)) ||
+        (chat.titleRequest !== undefined && (typeof chat.titleRequest !== 'string' || chat.titleRequest.length > 256)) ||
         (chat.phase !== undefined && !['draft', 'bound'].includes(chat.phase)) ||
         (chat.directoryIdentity && (typeof chat.directoryIdentity.path !== 'string' || !Number.isSafeInteger(chat.directoryIdentity.dev) || !Number.isSafeInteger(chat.directoryIdentity.ino)))) throw Error('Malformed draft storage');
     ids.add(chat.id);
@@ -70,6 +74,7 @@ try {
   db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA checkpoint_fullfsync=ON');
   const settings = { journalMode: db.prepare('PRAGMA journal_mode').get().journal_mode, synchronous: db.prepare('PRAGMA synchronous').get().synchronous, checkpointFullfsync: db.prepare('PRAGMA checkpoint_fullfsync').get().checkpoint_fullfsync };
   if (settings.journalMode !== 'wal' || settings.synchronous !== 1 || settings.checkpointFullfsync !== 1) throw Error('SQLite durability settings unavailable');
+  db.exec('CREATE TABLE IF NOT EXISTS chat_defaults (scope TEXT PRIMARY KEY, body TEXT NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS checkpoint_activity (chatId TEXT PRIMARY KEY, touched INTEGER NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS rewinds (id TEXT PRIMARY KEY, body TEXT NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS client_recovery (clientId TEXT NOT NULL, kind TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(clientId, kind))');
@@ -78,8 +83,8 @@ try {
   const storageBytes = `(SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM chats) +
     (SELECT coalesce(sum(length(CAST(body AS BLOB))+length(CAST(association AS BLOB))),0) FROM submissions) +
     (SELECT coalesce(sum(length(CAST(previous AS BLOB))+length(CAST(result AS BLOB))),0) FROM preparation_results) +
-    (SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM client_recovery)`;
-  for (const table of ['chats', 'submissions', 'preparation_results', 'client_recovery']) {
+    (SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM client_recovery) + (SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM chat_defaults)`;
+  for (const table of ['chats', 'submissions', 'preparation_results', 'client_recovery', 'chat_defaults']) {
     for (const event of ['INSERT', 'UPDATE']) db.exec(`CREATE TEMP TRIGGER bound_${table}_${event} AFTER ${event} ON ${table}
       BEGIN SELECT CASE WHEN ${storageBytes} > 67108864 OR
       (SELECT count(DISTINCT clientId) FROM client_recovery) > 256 OR
@@ -89,10 +94,34 @@ try {
   db.exec(`UPDATE submissions SET body=json_set(body, '$.status', 'uncertain', '$.message', 'Host restarted; inspect provider history. Work was not resent.') WHERE json_extract(body, '$.status') IN ('admitted', 'dispatching')`);
   parentPort.postMessage({ id: 0, value: { ...identity[0], settings } });
 } catch (e) { parentPort.postMessage({ id: 0, error: String(e) }); db?.close(); process.exitCode = 1; }
-if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body }) => {
+if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body, scope }) => {
   try {
     let value;
-    if (operation === 'checkpointRetention') {
+    if (operation === 'chatDefaults') {
+      if (typeof scope !== 'string' || scope.length > 4096) throw Error('Invalid defaults scope');
+      if (body !== undefined) {
+        const encoded = JSON.stringify(body);
+        if (Buffer.byteLength(encoded) > 65536) throw Error('Defaults capacity exhausted');
+        if (!db.prepare('SELECT 1 FROM chat_defaults WHERE scope=?').get(scope) && db.prepare('SELECT count(*) AS count FROM chat_defaults').get().count >= 256) throw Error('Defaults scope capacity exhausted');
+        db.prepare('INSERT INTO chat_defaults VALUES (?,?) ON CONFLICT(scope) DO UPDATE SET body=excluded.body').run(scope, encoded);
+      }
+      value = JSON.parse(db.prepare('SELECT body FROM chat_defaults WHERE scope=?').get(scope)?.body || '{}');
+    } else if (operation === 'archive') {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const row = db.prepare('SELECT body FROM chats WHERE id=?').get(body.id);
+        const chat = row && JSON.parse(row.body);
+        if (!chat || chat.project !== body.project) throw Error('Unknown chat in this project');
+        if (body.archived && (['preparing','creating','uncertain'].includes(chat.initialSend) ||
+          db.prepare("SELECT 1 FROM submissions WHERE json_extract(body,'$.command.id')=? AND json_extract(body,'$.status') NOT IN ('accepted','rejected') LIMIT 1").get(body.id) ||
+          db.prepare("SELECT 1 FROM rewinds WHERE json_extract(body,'$.result.status')='uncertain' AND json_extract(json_extract(body,'$.identity'),'$[1]')=? LIMIT 1").get(body.id)))
+          throw Error('Archive blocked by an unresolved or uncertain operation; inspect and resolve it first.');
+        chat.archived = body.archived;
+        db.prepare('UPDATE chats SET body=? WHERE id=?').run(JSON.stringify(chat), body.id);
+        db.prepare('UPDATE identity SET revision=revision+1').run();
+        db.exec('COMMIT');
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+    } else if (operation === 'checkpointRetention') {
       if (body !== undefined) {
         if (body.days !== null && (!Number.isSafeInteger(body.days) || body.days < 1 || body.days > 36500)) throw Error('Retention must be 1–36500 whole days or Never');
         db.prepare('UPDATE checkpoint_policy SET days=? WHERE singleton=1').run(body.days);
@@ -249,6 +278,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
           if (command.admissionEpoch !== epoch) throw Error('Expired admission epoch; work was not resent');
           const association = db.prepare('SELECT body FROM chats WHERE id=?').get(command.id);
           if (!association || JSON.parse(association.body).project !== command.project) throw Error('Chat association unavailable');
+          if (JSON.parse(association.body).archived && !command.control) throw Error('Restore this archived chat before sending.');
           if (db.prepare('SELECT count(*) AS n FROM submissions').get().n >= 1000) throw Error('Submission capacity exhausted');
           const admitted = { hostId, clientId, command, status: 'admitted', message: '' };
           db.prepare('INSERT INTO submissions VALUES (?, ?, ?)').run(command.commandId, JSON.stringify(admitted), association.body);

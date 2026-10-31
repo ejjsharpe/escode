@@ -62,7 +62,7 @@ test("frame observations for cold, cached, large and remembered expansion", asyn
     await expect(row("remembered/child/deep/file-0000.txt")).toBeVisible();
     await row("remembered").click();
     // Remount with remembered expansion but a cold model, independent of Refresh cache policy.
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect(row("remembered")).toBeVisible();
     await observe("remembered", "remembered");
@@ -103,7 +103,7 @@ test("single-line rows retain complete names, restore identity and keep the acti
     });
     await expect.poll(anchor).toBeTruthy();
     const before = await anchor();
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await expect.poll(anchor).toBe(before);
     expect(await tree.getByRole("treeitem").count()).toBeLessThan(100);

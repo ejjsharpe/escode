@@ -1,0 +1,11 @@
+bun install v1.4.4 (38afee6c8)
+
+$ node apps/desktop/node_modules/electron/install.js
+
++ @types/node@26.6.6
++ nx@24.0.2
++ typescript@7.0.2
+
+555 packages installed [6.96s]
+
+Blocked 1 postinstall. Run `bun pm untrusted` for details.

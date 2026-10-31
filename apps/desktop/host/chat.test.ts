@@ -61,6 +61,14 @@ test("turns, approvals and Stop stay scoped; reconnect invalidates old callbacks
     await service.open(dir, a.id);
     await service.open(dir, b.id);
     await service.send(dir, a.id, "hello");
+    const sentAt = (await store.get(dir, a.id)).latestUserMessageAt;
+    await new Promise(resolve => setTimeout(resolve, 20));
+    for (const method of ["item/started", "item/completed"]) peers[0].emit({
+      method, params: { threadId: "thread-0", turnId: "turn-1",
+        item: { id: "user-1", type: "userMessage", content: [] } },
+    });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect((await store.get(dir, a.id)).latestUserMessageAt).toBe(sentAt);
     expect(service.checkoutActive(dir, a.id)).toBe(true);
     expect(service.checkoutActive(dir, b.id)).toBe(false);
     await expect(service.send(dir, a.id, "duplicate")).rejects.toThrow("active turn");

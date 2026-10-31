@@ -152,3 +152,5 @@ Context menus copy absolute/relative paths and request Finder reveal for the tar
 [Integrated Files acceptance](docs/compatibility/files-acceptance.md) maps all ten explorer
 scenarios to reproducible checks. Finder/native Trash and VoiceOver checks remain user-owned follow-up, removed from
 issue 48 acceptance at the user’s request.
+
+[New chat defaults evidence](docs/compatibility/chat-defaults.md) records app defaults, project overrides, shared Codex effort memory and factory permission reset, with bounded fixture qualification and retained provider-policy limits.

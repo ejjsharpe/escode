@@ -84,7 +84,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       .poll(() => import("node:fs/promises").then((fs) => fs.readFile(join(root, "a.txt"), "utf8")))
       .toBe("keyboard edit");
     await page.keyboard.press("Control+Shift+m");
-    await activate(page.getByRole("button", { name: "Source Control", exact: true }));
+    await activate(page.getByRole("button", { name: "Diff", exact: true }));
     await activate(page.getByRole("button", { name: "a.txt", exact: true }));
     const diff = page.getByRole("textbox", { name: "unstaged · a.txt modified", exact: true });
     await expect(diff).toBeEditable();

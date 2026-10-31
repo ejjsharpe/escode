@@ -1,0 +1,12 @@
+$ playwright test tests/permissions.spec.ts tests/models.spec.ts tests/conversation-layout.spec.ts "--timeout=60000"
+
+Running 3 tests using 1 worker
+
+(node:17824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows (7.5s)
+
+  ✓  2 tests/models.spec.ts:7:1 › next message model persists and changing a running turn never queues work (9.9s)
+  ✓  3 tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work (10.0s)
+
+  3 passed (27.7s)

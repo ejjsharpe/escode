@@ -106,6 +106,20 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("alpha text");
     await expect(page.locator(".transcript:visible")).toContainText("Saved history");
     await page.getByRole("textbox", { name: "Message Codex" }).fill("shared text");
+    await page.getByText("Chat actions", { exact: true }).click();
+    await page.getByRole("button", { name: "Archive chat", exact: true }).click();
+    await expect(rows.filter({ hasText: "alpha" })).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
+    await expect(page.getByRole("status").filter({ hasText: "belongs to the Archived" })).toBeVisible();
+    await page.getByRole("button", { name: "Show archived chats", exact: true }).click();
+    await expect(rows.filter({ hasText: "alpha" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Show recent chats", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Show recent chats", exact: true })).toBeFocused();
+    await page.getByRole("button", { name: "Restore chat", exact: true }).click();
+    await page.getByRole("button", { name: "Show recent chats", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Show archived chats", exact: true })).toBeFocused();
+    await expect(rows.filter({ hasText: "alpha" })).toHaveCount(1);
+
     await page
       .getByRole("navigation", { name: "Projects" })
       .getByRole("button", { name: "alpha", exact: true })
@@ -113,15 +127,24 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await expect(page.locator(".monaco-editor:visible")).toContainText("dirty alpha");
     await expect(page.locator(".view-nav:visible")).toContainText(a);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Chat 1", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Chat 1 ·/ })).toHaveCount(0);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await rows.filter({ hasText: "alpha" }).click();
     await page.getByRole("button", { name: "Open checkout", exact: true }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await page.getByRole("button", { name: /^Chat 1 ·/ }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
     await expect(page.locator(".view-nav:visible")).toContainText(worktree);
-    expect((await readFile(join(dir, "events"), "utf8")).match(/initialize/g)).toHaveLength(1);
+    await page.getByText("Chat actions", { exact: true }).click();
+    await page.getByRole("button", { name: "Archive chat", exact: true }).click();
+    await expect(page.locator(".chat-list:visible .agent-row")).toHaveCount(0);
+    await page.getByRole("button", { name: "Show archived chats", exact: true }).click();
+    await expect(page.locator(".chat-list:visible .agent-row")).toHaveCount(1);
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
+    await page.getByRole("button", { name: "Restore chat", exact: true }).click();
+    await page.getByRole("button", { name: "Show recent chats", exact: true }).click();
+
+    expect((await readFile(join(dir, "events"), "utf8")).match(/thread\/resume/g)).toHaveLength(1);
     const dragComposerHandle = async (distance: number) => {
       const textarea = page.getByRole("textbox", { name: "Message Codex" });
       await textarea.scrollIntoViewIfNeeded();
@@ -139,7 +162,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
       .height;
     expect(await dragComposerHandle(120)).toBeGreaterThan(localHeight + 60);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await rows.filter({ hasText: "beta" }).click();
+    await rows.filter({ hasText: "beta / beta" }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("beta text");
     await expect(
       page.getByRole("navigation", { name: "Projects" }).locator("button[aria-pressed]"),
@@ -191,7 +214,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
         element.scrollTop = 0;
       });
       await page.getByText("Effective Codex settings · fixture", { exact: true }).click();
-      await expect(history.locator("details")).toHaveAttribute("open", "");
+      await expect(history.locator("details").filter({ hasText: "Effective Codex settings" })).toHaveAttribute("open", "");
       await expect(history.locator("details pre")).toContainText("workspaceWrite");
       const expanded = await panelGeometry();
       expect(expanded.documentHeight).toBeLessThanOrEqual(expanded.viewport);
@@ -281,7 +304,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     app.process().kill("SIGKILL");
     await exited;
     // Explicit recovery after this test has confirmed the crashed writer exited.
-    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user, dir);
     page = await app.firstWindow();
     await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
@@ -330,19 +353,12 @@ test("Agents keeps an unavailable remembered selection and validates catalogue a
     await expect(
       page.getByText("No saved chats. Start without a project or open a project."),
     ).toBeVisible();
+    expect(JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).agentsChat).toBe("missing-chat");
     const newChat = page.getByRole("button", { name: "New chat", exact: true });
     await newChat.click();
-    const picker = page.getByRole("dialog", { name: "Choose project" });
-    await expect(picker).toBeVisible();
-    await expect(picker.getByRole("combobox", { name: "New chat project" })).toBeFocused();
-    await expect(picker.getByRole("option")).toHaveText(["No project"]);
-    await page.keyboard.press("Tab");
-    await expect(picker.getByRole("button", { name: "Cancel" })).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(picker.getByRole("combobox", { name: "New chat project" })).toBeFocused();
-    await page.keyboard.press("Escape");
-    await expect(newChat).toBeFocused();
-    await expect(page.locator(".agent-row")).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeFocused();
+    await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toHaveValue("");
+    await expect(page.locator(".agent-row")).toHaveCount(1);
     expect(
       await page.evaluate(async () => {
         try {
@@ -353,16 +369,14 @@ test("Agents keeps an unavailable remembered selection and validates catalogue a
         }
       }),
     ).toBe(true);
-    expect(JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).agentsChat).toBe(
-      "missing-chat",
-    );
+
   } finally {
     await app.close();
     await rm(user, { recursive: true, force: true });
   }
 });
 
-test("Agents and local Chats keep newest-first order and original labels through selection and activity", async () => {
+test("Agents and local Chats promote user messages and preserve labels through selection and activity", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-chat-order-")));
   const root = join(dir, "repo"),
     user = join(dir, "user");
@@ -434,31 +448,23 @@ send({id:m.id,result});});`,
     }, records);
     const page = await app.firstWindow();
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    const newChat = page.getByRole("button", { name: "New chat", exact: true });
-    await newChat.click();
-    const picker = page.getByRole("dialog", { name: "Choose project" });
-    await expect(picker.getByRole("option")).toHaveCount(2);
-    await expect(picker.getByRole("option").first()).toContainText(root);
-    await page.mouse.click(5, 590);
-    await expect(picker).not.toBeVisible();
-    await expect(newChat).toBeFocused();
-    await expect(page.locator(".agent-row")).toHaveCount(3);
     await page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "repo", exact: true }).click();
     const localRows = page.locator(".chat-list:visible li button");
     const globalRows = page.locator(".agent-row strong");
     const labels = ["Chat 3", "Chat 2", "Chat 1"];
-    await expect(localRows).toHaveText(labels);
+    await expect(localRows.locator("strong")).toHaveText(labels);
     await localRows.nth(1).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("older prompt");
-    await expect(localRows).toHaveText(labels);
+    await expect(localRows.locator("strong")).toHaveText(labels);
     await page.getByRole("button", { name: "Send message", exact: true }).click();
-    await expect(localRows).toHaveText(["Chat 3", "Chat 2 · Needs input", "Chat 1"]);
+    await expect(localRows.locator("strong")).toHaveText(["older prompt", "Chat 3", "Chat 1"]);
+    await expect(localRows.first()).toHaveAttribute("aria-label", /Needs input/);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await expect(globalRows).toHaveText(labels);
-    await page.locator(".agent-row").filter({ hasText: "Chat 2" }).click();
+    await expect(globalRows).toHaveText(["older prompt", "Chat 3", "Chat 1"]);
+    await page.locator(".agent-row").filter({ hasText: "older prompt" }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeVisible();
-    await expect(page.locator(".agent-row").nth(1)).toContainText("Needs input");
-    await expect(globalRows).toHaveText(labels);
+    await expect(page.locator(".agent-row").first()).toHaveAttribute("aria-label", /Needs input/);
+    await expect(globalRows).toHaveText(["older prompt", "Chat 3", "Chat 1"]);
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByText("Requested information format", { exact: true }).click();
     const mcpResponse = page.getByRole("textbox", { name: "MCP response" });
@@ -493,10 +499,10 @@ send({id:m.id,result});});`,
     await expect(page.getByRole("status")).toHaveText("Ready");
     await page.locator(".agent-row").filter({ hasText: "Chat 3" }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("newer prompt");
-    await expect(page.locator(".agents [role=alert]")).toContainText("Fixture error line 199");
+    await expect(page.locator(".agents [role=alert]").first()).toContainText("Fixture error line 199");
     await page.setViewportSize({ width: 728, height: 600 });
-    await page.locator(".agents [role=alert]").scrollIntoViewIfNeeded();
-    await expect(page.locator(".agents [role=alert]")).toBeInViewport();
+    await page.locator(".agents [role=alert]").first().scrollIntoViewIfNeeded();
+    await expect(page.locator(".agents [role=alert]").first()).toBeInViewport();
     await page.getByRole("button", { name: "Send message", exact: true }).scrollIntoViewIfNeeded();
     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeInViewport({
       ratio: 1,
@@ -505,13 +511,13 @@ send({id:m.id,result});});`,
       await page.locator(".transcript:visible").evaluate((history) => history.clientHeight),
     ).toBeGreaterThanOrEqual(80);
     await page.screenshot({ path: "test-results/agents-short-window-error.png" });
-    await expect(globalRows).toHaveText(labels);
+    await expect(globalRows).toHaveText(["older prompt", "Chat 3", "Chat 1"]);
     await page
       .getByRole("navigation", { name: "Projects" })
       .getByRole("button", { name: "repo", exact: true })
       .click();
-    await expect(localRows).toHaveText(labels);
-    await expect(localRows.nth(1)).toHaveAttribute("aria-pressed", "true");
+    await expect(localRows.locator("strong")).toHaveText(["older prompt", "Chat 3", "Chat 1"]);
+    await expect(localRows.first()).toHaveAttribute("aria-pressed", "true");
   } finally {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
@@ -521,7 +527,7 @@ send({id:m.id,result});});`,
   }
 });
 
-test("Agents picker retains deliberate project recency and checkout defaults across restart", async () => {
+test("Agents composition retains deliberate editor project recency and checkout defaults across restart", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-create-order-")));
   const user = join(dir, "user");
   const roots = ["Alpha", "Beta", "Gamma", "nested/Alpha"].map((name) => join(dir, name));
@@ -561,50 +567,14 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
   let app = await launchDesktop(user);
   try {
     let page = await app.firstWindow();
-    const rows = page.locator(".agent-row span");
-    await expect(rows).toHaveText(["Gamma", "Beta", "Alpha"]);
+    const rows = page.locator(".agent-row .chat-row-context");
+    await expect(rows).toHaveText(["Gamma / Gamma", "Beta / Beta", "Alpha / Alpha"]);
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    const picker = page.getByRole("dialog", { name: "Choose project" });
-    const search = picker.getByRole("combobox", { name: "New chat project" });
-    const options = picker.getByRole("option");
-    await expect(options).toHaveCount(5);
-    await expect(options.filter({ hasText: roots[0] })).toHaveCount(1);
-    await expect(options.filter({ hasText: roots[3] })).toHaveCount(1);
-    const order = await options.allTextContents();
-    await expect.poll(() => options.allTextContents()).toEqual(order);
-    await search.fill("GM");
-    await expect(options).toContainText(["Gamma"]);
-    await search.fill("ammaG");
-    await expect(options).toHaveCount(0);
-    await expect(picker.getByRole("status")).toHaveText("No matching projects");
-    await page.keyboard.press("Enter");
-    await expect(rows).toHaveText(["Gamma", "Beta", "Alpha"]);
-    await picker.getByRole("button", { name: "Cancel" }).click();
-    await expect(page.getByRole("button", { name: "New chat", exact: true })).toBeFocused();
-    await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await expect(search).toHaveValue("");
-    await search.fill("Alpha");
-    await expect(options).toHaveCount(2);
-    await expect(options.nth(0)).toHaveAttribute("aria-selected", "true");
-    await page.keyboard.press("ArrowDown");
-    await expect(options.nth(1)).toHaveAttribute("aria-selected", "true");
-    await page.keyboard.press("ArrowUp");
-    await expect(options.nth(0)).toHaveAttribute("aria-selected", "true");
-    await page.keyboard.press("ArrowDown");
-    await page.setViewportSize({ width: 728, height: 600 });
-    await expect(options.nth(1)).toBeInViewport();
-    await page.screenshot({ path: "test-results/agents-project-picker.png" });
-    await page.keyboard.press("Enter");
-    await expect(picker).not.toBeVisible();
-    await expect(rows).toHaveText(["Alpha", "Gamma", "Beta", "Alpha"]);
-    await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeVisible();
-    await expect(page.locator(".chat-conversation")).toContainText(roots[3]);
-    await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Projects" }).locator(".project-tab")).toHaveCount(0);
-    await page.screenshot({ path: "test-results/agents-creation-order.png" });
-    await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await expect(options.first()).toContainText(roots[3]);
-    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Choose project" })).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeFocused();
+    await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toHaveValue(roots[0]);
+    await page.screenshot({ path: "test-results/composer-first-default.png" });
+    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(roots[3]);
     const composer = page.getByRole("textbox", { name: "Message Codex" });
     await composer.fill("captured original prompt");
     await app.evaluate(({ dialog }, root) => {
@@ -621,7 +591,7 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header")).toContainText(roots[3]);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.keyboard.press("Meta+p");
     await page.getByLabel("Exact file path").fill(join(linked, "lookup.txt"));
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog", { name: "Find file", exact: true })).toHaveCount(0);
@@ -633,11 +603,11 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
     await expect(page.getByRole("navigation", { name: "Projects" }).locator(".project-tab")).toHaveCount(0);
     await expect(composer).toHaveValue("captured original prompt");
     await expect(page.locator(".chat-conversation")).toContainText(roots[3]);
+    await expect(page.locator(".chat-conversation .directory")).toHaveText(`Checkout: ${roots[3]}`);
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.keyboard.press("Enter");
-    await expect(picker).not.toBeVisible();
+
     await expect(rows).toHaveCount(5);
-    await expect(page.locator(".chat-conversation > .directory")).toHaveText(`Checkout: ${linked}`);
+    await expect(page.locator(".chat-conversation .directory")).toHaveText(`Checkout: ${linked}`);
     await composer.fill("captured alternate prompt");
     // Use another project deliberately, without opening an editor or changing checkout defaults.
     await page.locator(".agent-row").filter({ hasText: "Gamma" }).click();
@@ -645,15 +615,9 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
     await rm(linked, { recursive: true, force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
-    const restartedPicker = page.getByRole("dialog", { name: "Choose project" });
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await expect(restartedPicker.getByRole("option").nth(0)).toContainText(roots[2]);
-    await expect(restartedPicker.getByRole("option").nth(1)).toContainText(roots[3]);
-    await page.waitForTimeout(1200); // One summary refresh must not reorder deliberate use.
-    await expect(restartedPicker.getByRole("option").first()).toContainText(roots[2]);
-    await restartedPicker.getByRole("option").nth(1).click();
     await expect(page.locator(".chat-conversation")).toContainText(linked);
-    await expect(page.getByRole("alert").filter({ hasText: "Checkout unavailable" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "Checkout unavailable" }).first()).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Projects" }).locator(".project-tab")).toHaveCount(0);
     await page.getByRole("textbox", { name: "Message Codex" }).fill("unavailable prompt retained");
     await page.locator(".agent-row").filter({ hasText: "Alpha" }).nth(2).click();

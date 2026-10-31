@@ -16,7 +16,7 @@ import { mkdirSync } from "node:fs";
 import { startHost } from "@escode/host";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { draftSettings, toolStatus } from "./tools";
+import { connectCodex, draftSettings, toolStatus } from "./tools";
 import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
 import { Workspace } from "./workspace";
@@ -107,7 +107,7 @@ app.whenReady().then(async () => {
     },
     checkout: root => checkout(root), currentTarget: root => currentTarget(root),
     managedRoot: join(app.getPath("userData"), "worktrees"),
-  });
+  }, undefined, connectCodex);
   const projects = new Map<string, Checkout>();
   const projectSessions = new Map<string, object>();
   const unapprovedProjects = new Set<string>();
@@ -139,6 +139,11 @@ app.whenReady().then(async () => {
     )
       throw Error("Invalid native import sender or references.");
     return files.captureNativeImport(paths);
+  });
+  ipcMain.handle("copy-conversation-code", (event, text: unknown) => {
+    if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
+        event.senderFrame.url !== documentURL || typeof text !== "string" || text.length > 4 * 1024 * 1024) throw Error("Invalid code copy request");
+    clipboard.writeText(text);
   });
   ipcMain.handle("native-clipboard-capture", async (event) => {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
@@ -388,6 +393,9 @@ app.whenReady().then(async () => {
     },
     gitStatus: async root => (await checkout(root)).status(),
     worktreeOptions: async root => (await checkout(root)).repositoryGit.worktreeOptions(),
+    chatDefaults: (project, id, scope, value) => chats.defaults(project, id, scope, value),
+    chatPermissions: (project, id, choice) => chats.permissions(project, id, choice),
+    chatModels: (project, id, model, effort, activate) => chats.models(project, id, model, effort, activate),
     draftAction: action => chats.draftAction(action),
     sendState: async (root, id) => {
       try {
@@ -419,6 +427,7 @@ app.whenReady().then(async () => {
       return sends.execute(command, dispatch);
     },
     chatSnapshot: async (root, id) => { await authorizeHistory(root, id); return chats.inspect(root, id); },
+    titleAction: async action => { await authorizeHistory(action.project, action.id); await chats.titleAction(action); },
     checkpointRetention: days => chats.checkpointRetention(days),
     openChat: async (root, id) => { await authorizeHistory(root, id); return chats.open(root, id); },
     checkpointPoints: async (root, id, cursor) => { await authorizeHistory(root, id); return chats.checkpointPoints(root, id, cursor); },
@@ -435,7 +444,7 @@ app.whenReady().then(async () => {
         const contextError = c.phase === "draft" && ((c.project === null && !c.scratch) || (c.worktree && !c.worktree.reservation))
           ? c.availabilityError : await store.validateDirectory(c);
         return { id: c.id, project: c.project, checkout: c.checkout, threadId: c.threadId,
-          createdAt: c.createdAt, legacyOrder: c.legacyOrder, phase: c.phase, initialSend: c.initialSend,
+          archived: c.archived, title: c.title, latestUserMessageAt: c.latestUserMessageAt, latestUserMessageCreatedAt: c.latestUserMessageCreatedAt, updatedAt: c.updatedAt, createdAt: c.createdAt, legacyOrder: c.legacyOrder, phase: c.phase, initialSend: c.initialSend,
           removed: c.removed, scratch: c.scratch, hasSent: c.hasSent, worktree: c.worktree, ...activity, unavailable: !!(c.removed || contextError || activity.unavailable) };
       }));
     },

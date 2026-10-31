@@ -23,14 +23,14 @@ for (const packaged of [false, true]) {
       await page.keyboard.press("Meta+a");
       await page.keyboard.type("my edits");
       await expect(page.getByText("a.txt • Unsaved", { exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "Source Control", exact: true }).click();
+      await page.getByRole("button", { name: "Diff", exact: true }).click();
       await page.getByRole("button", { name: "Files", exact: true }).click();
       await expect(page.locator(".monaco-editor")).toContainText("my edits");
       await writeFile(join(root, "a.txt"), "external\n");
       await page.keyboard.press("Meta+s");
       await expect(page.locator(".conflict")).toBeVisible();
       await expect(
-        page.getByRole("button", { name: "Source Control", exact: true }),
+        page.getByRole("button", { name: "Diff", exact: true }),
       ).toBeDisabled();
       await page.getByRole("button", { name: "Compare", exact: true }).click();
       await expect(page.locator(".monaco-diff-editor")).toBeVisible();
@@ -58,7 +58,7 @@ for (const packaged of [false, true]) {
       await expect(page.locator(".monaco-diff-editor")).toHaveCount(0);
       await expect(page.locator(".monaco-editor")).toContainText("reload this");
       await expect(page.getByText("a.txt • Unsaved", { exact: true })).toHaveCount(0);
-      await page.getByRole("button", { name: "Source Control", exact: true }).click();
+      await page.getByRole("button", { name: "Diff", exact: true }).click();
       await page.getByRole("button", { name: "a.txt", exact: true }).click();
       await expect(page.locator(".monaco-diff-editor")).toContainText("reload this");
       await writeFile(join(root, "a.txt"), "new external");
@@ -74,7 +74,7 @@ for (const packaged of [false, true]) {
       await page.getByRole("combobox", { name: "File view", exact: true }).selectOption("file");
       await expect(page.locator(".monaco-diff-editor")).toHaveCount(0);
       await expect(page.locator(".monaco-editor")).toContainText("new external");
-      await page.getByRole("button", { name: "Source Control", exact: true }).click();
+      await page.getByRole("button", { name: "Diff", exact: true }).click();
       await page.getByRole("combobox", { name: "File view", exact: true }).selectOption("untracked");
       await expect(page.locator(".monaco-diff-editor")).toContainText("new external");
       await page.getByRole("button", { name: "Files", exact: true }).click();

@@ -1,0 +1,10 @@
+$ node scripts/filesystem.mjs && vp test run host/permissions.test.ts host/models.test.ts
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-8b2d5f46/apps/desktop
+
+
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
+   Start at  20:22:05
+   Duration  893ms (import 48%, tests 33%, transform 19%)
+

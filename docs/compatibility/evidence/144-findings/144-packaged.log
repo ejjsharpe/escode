@@ -1,0 +1,44 @@
+$ playwright test tests/permissions.spec.ts tests/models.spec.ts "--timeout=90000"
+
+Running 2 tests using 1 worker
+
+(node:4656) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 tests/models.spec.ts:7:1 › next message model persists and changing a running turn never queues work (13.9s)
+  ✘  2 tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work (8.3s)
+
+
+  1) tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  locator('span[role=status]')
+    Expected: "Running"
+    Received: "Bound · Disconnected"
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveText" locator('span[role=status]') with timeout 5000ms
+      - waiting for locator('span[role=status]')
+        3 × locator resolved to <span role="status">Preparing…</span>
+          - unexpected value "Preparing…"
+        11 × locator resolved to <span role="status">Bound · Disconnected</span>
+           - unexpected value "Bound · Disconnected"
+
+
+      41 |     await page.getByLabel("Next message model").selectOption("b");
+      42 |     await expect(page.getByLabel("Next message effort")).toHaveValue("medium");
+    > 43 |     await expect(page.locator("span[role=status]")).toHaveText("Running");
+         |                                                     ^
+      44 |     await page.getByLabel("Next message model").selectOption("b");
+      45 |     expect((await readFile(log, "utf8")).trim().split("\n").map(x => JSON.parse(x))).toEqual([expect.objectContaining({ model: "a", effort: "high", approvalPolicy: "on-request", approvalsReviewer: "user", sandboxPolicy: { type: "readOnly", networkAccess: false } })]);
+      46 |     await expect(page.getByLabel("Next message effort")).toHaveValue("medium");
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-e35fccb4/apps/desktop/tests/permissions.spec.ts:43:53
+
+    Error Context: test-results/permissions-next-message-p-b3cf5-ning-turn-never-queues-work/error-context.md
+
+  1 failed
+    tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work 
+  1 passed (22.7s)
+error: script "smoke" exited with code 1

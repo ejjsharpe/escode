@@ -1,0 +1,8 @@
+$ playwright test tests/chat-summaries.spec.ts -g "thirty chats" "--timeout=45000"
+
+Running 1 test using 1 worker
+
+(node:45329) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  1 tests/chat-summaries.spec.ts:108:1 › thirty chats across five projects keep one list while three run (38.1s)

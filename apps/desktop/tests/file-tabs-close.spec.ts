@@ -117,7 +117,7 @@ test("failed persistence vetoes the whole close and retry preserves comparison s
   try {
     await f.open("a.txt"); await f.edit("retained A");
     await f.open("b.txt"); await f.edit("retained B");
-    await f.page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await f.page.getByRole("button", { name: "Diff", exact: true }).click();
     await f.page.getByRole("button", { name: "b.txt", exact: true }).click();
     await expect(f.page.getByRole("combobox", { name: "File view" })).toHaveValue("untracked");
     await f.choices([2]);
@@ -203,7 +203,7 @@ test("read-only comparisons without a working buffer close through the tab contr
     git("add", ".");
     git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "initial");
     await rm(join(f.root, "a.txt"));
-    await f.page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await f.page.getByRole("button", { name: "Diff", exact: true }).click();
     await f.page.getByRole("button", { name: "a.txt", exact: true }).click();
     await expect(f.page.locator(".content:visible > [role=status]")).toContainText("Working file unavailable");
     await f.page.getByRole("button", { name: "Close a.txt", exact: true }).click();
@@ -264,7 +264,7 @@ for (const command of ["Close Others", "Close to the Right", "Close All"]) {
     const f = await fixture();
     try {
       await f.open("a.txt"); await f.open("b.txt"); await f.open("c.txt"); await f.open("d.txt");
-      await f.page.getByRole("button", { name: "Source Control", exact: true }).click();
+      await f.page.getByRole("button", { name: "Diff", exact: true }).click();
       await f.page.getByRole("button", { name: "c.txt", exact: true }).click();
       await expect(f.page.getByRole("combobox", { name: "File view" })).toHaveValue("untracked");
       await f.tab("b.txt").click({ button: "right" });

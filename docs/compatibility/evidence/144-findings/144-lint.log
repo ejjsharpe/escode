@@ -1,0 +1,9 @@
+$ vp lint
+tests/sqlite-qualification.spec.ts:21:67: warning eslint(no-unused-expressions): Expected expression to be used help: Consider using this expression or removing it
+host/checkpoints.ts:14:22: warning unicorn(no-useless-fallback-in-spread): Empty fallbacks in spreads are unnecessary help: Spreading falsy values in object literals won't add any unexpected properties, so it's unnecessary to add an empty object as fallback.
+host/boundaries.test.ts:288:11: warning eslint(no-unused-vars): Variable 'Checkout' is declared but never used. Unused variables should start with a '_'. help: Consider removing this declaration.
+host/sqlite-worker.cjs:15:128: warning eslint(no-control-regex): Unexpected control characters help: Avoid matching control characters in regular expressions. If intentional, disable this rule for the expression.
+host/recovery-copy.ts:134:29: warning unicorn(no-useless-spread): Using a spread operator here creates a new array unnecessarily. help: `manifest.missing.map` returns a new array. Spreading it into an array expression to create a new array is redundant.
+host/chat-service.ts:276:48: warning eslint(no-control-regex): Unexpected control characters help: Avoid matching control characters in regular expressions. If intentional, disable this rule for the expression.
+host/chat.ts:332:49: warning eslint(no-control-regex): Unexpected control characters help: Avoid matching control characters in regular expressions. If intentional, disable this rule for the expression.
+host/chat.ts:342:60: warning eslint(no-control-regex): Unexpected control characters help: Avoid matching control characters in regular expressions. If intentional, disable this rule for the expression.

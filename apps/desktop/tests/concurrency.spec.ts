@@ -9,7 +9,10 @@ test("background requests keep focus; replies, stop and connection loss stay wit
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-concurrent-")));
   const a = join(dir, "alpha"),
     b = join(dir, "beta");
-  for (const root of [a, b]) execFileSync("git", ["init", root]);
+  for (const root of [a, b]) {
+    execFileSync("git", ["init", root]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "--allow-empty", "-m", "Fixture"]);
+  }
   const lookupFiles=Number(process.env.ESCODE_LOOKUP_FILES ?? 0);
   for(let folder=0;folder<Math.ceil(lookupFiles/100);folder++) {
     const path=join(a,'dataset',String(folder));await mkdir(path,{recursive:true});
@@ -26,12 +29,15 @@ let threadId='thread-'+process.pid; const turnId='turn'; let nextRequestId=99;
 createInterface({input:process.stdin}).on('line', line => {
  const m=JSON.parse(line); if(!m.id) return;
  if(!m.method) { appendFileSync(${JSON.stringify(join(dir, "events"))},JSON.stringify({responseId:m.id,result:m.result,threadId})+'\\n'); send({method:'item/agentMessage/delta',params:{threadId,turnId,itemId:'reply',delta:'Answered by '+process.pid}}); return; }
- appendFileSync(${JSON.stringify(join(dir, "events"))},JSON.stringify({method:m.method,threadId})+'\\n');
+ appendFileSync(${JSON.stringify(join(dir, "events"))},JSON.stringify({method:m.method,threadId:m.params?.threadId??threadId})+'\\n');
  if(m.method==='thread/resume') threadId=m.params.threadId;
  let result={};
  if(m.method==='initialize') result={userAgent:'codex/0.165.0'};
+ if(m.method==='config/read')result={config:{}};
+ if(m.method==='configRequirements/read')result={requirements:null};
+ if(m.method==='model/list') result={data:[{id:'fixture',model:'fixture',displayName:'Fixture',isDefault:true,hidden:false,supportedReasoningEfforts:[{reasoningEffort:'low',description:'Low'}],defaultReasoningEffort:'low'}],nextCursor:null};
  if(m.method==='account/read') result={account:{}};
- if(m.method==='thread/start'||m.method==='thread/resume') result={thread:{id:threadId},cwd:process.cwd(),model:'fixture',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
+ if(m.method==='thread/start'||m.method==='thread/resume') result={thread:{id:threadId},cwd:process.cwd(),model:'fixture',approvalPolicy:m.params.approvalPolicy||'on-request',approvalsReviewer:'user',sandbox:m.params.sandbox==='danger-full-access'?{type:'dangerFullAccess'}:{type:'readOnly',networkAccess:false}};
  if(m.method==='thread/turns/list') result={data:[],nextCursor:null};
  if(m.method==='turn/start') {
   result={turn:{id:turnId}};
@@ -69,7 +75,10 @@ createInterface({input:process.stdin}).on('line', line => {
           await window.escode.chat("create", a, a),
           await window.escode.chat("create", b, b),
         ];
-        await Promise.all(chats.map((c) => window.escode.chat("open", c.project, c.id)));
+        await Promise.all(chats.map(async (c, i) => {
+          await window.escode.chat("renameTitle", c.project, c.id, ["First alpha", "Second alpha", "First beta"][i]);
+          await window.escode.chat("open", c.project, c.id);
+        }));
         return chats.map((c) => c.id);
       },
       { a, b },
@@ -79,10 +88,12 @@ createInterface({input:process.stdin}).on('line', line => {
     await page.reload();
     await open(a);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await page.getByRole("button", { name: /^First alpha ·/ }).click();
     await expect(page.getByRole("status")).toHaveText("Ready");
-    await page.getByRole("button", { name: "Retry connection / reload history" }).click();
-    await page.getByRole("button", { name: "Chat 2", exact: true }).click();
+    await page.getByText("Chat actions", { exact: true }).click();
+    await page.getByRole("button", { name: "Reload history", exact: true }).click();
+    await page.getByText("Chat actions", { exact: true }).click();
+    await page.getByRole("button", { name: /^Second alpha ·/ }).click();
     await expect
       .poll(() =>
         page.evaluate(
@@ -91,7 +102,7 @@ createInterface({input:process.stdin}).on('line', line => {
         ),
       )
       .toBe(true);
-    await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toHaveAttribute(
+    await expect(page.getByRole("button", { name: /^Second alpha ·/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -106,7 +117,7 @@ createInterface({input:process.stdin}).on('line', line => {
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line));
-    const connections = (await events()).filter((e) => e.method === "initialize").length;
+    const connections = (await events()).filter((e) => ["thread/start", "thread/resume"].includes(e.method) && e.threadId === before.threadId).length;
     await page.getByRole("textbox", { name: "Message Codex" }).fill("delayed");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect
@@ -126,7 +137,7 @@ createInterface({input:process.stdin}).on('line', line => {
     await expect(approval).toBeEnabled();
     await expect(page.locator(".chat-actions:visible [role=status]")).toHaveText("Needs input");
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await page.locator(".agent-row").filter({ hasText: "Chat 2" }).click();
+    await page.locator(".agent-row").filter({ hasText: "Second alpha" }).click();
     await expect(approval).toBeEnabled();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("delayed");
     await page
@@ -204,7 +215,7 @@ createInterface({input:process.stdin}).on('line', line => {
       ]);
     await expect(approval).toHaveCount(0);
     await expect(sendAnswers).toHaveCount(0);
-    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByRole("alert")).toHaveText([]);
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("delayed");
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeDisabled();
     await expect(page.locator(".transcript:visible")).toContainText("Answered by");
@@ -217,7 +228,7 @@ createInterface({input:process.stdin}).on('line', line => {
     });
     expect(after.threadId).toBe(before.threadId);
     expect(after.busy).toBe(true);
-    expect((await events()).filter((e) => e.method === "initialize")).toHaveLength(connections);
+    expect((await events()).filter((e) => ["thread/start", "thread/resume"].includes(e.method) && e.threadId === before.threadId)).toHaveLength(connections);
     expect(
       (await events()).filter((e) => e.method === "turn/start" && e.threadId === before.threadId),
     ).toHaveLength(1);
@@ -233,7 +244,7 @@ createInterface({input:process.stdin}).on('line', line => {
     await page.getByRole("button", { name: /Chats/ }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("second draft");
 
-    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await page.getByRole("button", { name: /^First alpha ·/ }).click();
     await expect(page.getByRole("button", { name: "New chat on current checkout" })).toBeEnabled();
     // Gate the store's atomic replacement after opening the selected chat has settled.
     await app.evaluate(() => {
@@ -250,21 +261,21 @@ createInterface({input:process.stdin}).on('line', line => {
     });
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
     await expect.poll(() => app.evaluate(() => !!(globalThis as any).releaseChatCreate)).toBe(true);
-    await page.getByRole("button", { name: "Chat 2", exact: true }).click();
+    await page.getByRole("button", { name: /^Second alpha ·/ }).click();
     await app.evaluate(() => {
       (globalThis as any).releaseChatCreate();
       delete (globalThis as any).releaseChatCreate;
     });
-    await expect(page.getByRole("button", { name: "Chat 3", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toHaveAttribute(
+    await expect(page.getByRole("button", { name: /^Chat 3 ·/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Second alpha ·/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("second draft");
-    await expect(page.locator(".view-nav:visible")).toContainText(a);
+    await expect(page.locator(".view-nav:visible")).toContainText("alpha");
     await open(b);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await page.getByRole("button", { name: /^First beta ·/ }).click();
     const input = page.getByRole("textbox", { name: "Message Codex" });
     await input.fill("keep focus");
     await input.focus();
@@ -309,7 +320,7 @@ createInterface({input:process.stdin}).on('line', line => {
       .getByRole("button", { name: "alpha · Needs input" })
       .click();
     await page.getByRole("button", { name: "Chats · Needs input", exact: true }).click();
-    await page.getByRole("button", { name: "Chat 1 · Needs input", exact: true }).click();
+    await page.getByRole("button", { name: /^First alpha ·.*Needs input/ }).click();
     await expect(
       page.getByText("These chats share files in this checkout. Their edits can interact."),
     ).toBeVisible();

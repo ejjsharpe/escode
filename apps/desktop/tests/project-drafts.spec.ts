@@ -53,8 +53,9 @@ createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line)
 fs.appendFileSync(${JSON.stringify(join(dir, "calls"))},m.method+'\\n');
 let result={}; if(m.method==='initialize')result={userAgent:'codex/0.165.0'};
 if(m.method==='account/read')result={account:{}};
-if(m.method==='config/read' && m.params.cwd===process.cwd())result={config:{model:'fixture',approval_policy:'on-request',sandbox_mode:'read-only'}};
-if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:'draft-thread'},cwd:process.cwd(),model:'fixture',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
+if(m.method==='configRequirements/read')result={requirements:null};
+if(m.method==='config/read')result={config:{model:'fixture',approval_policy:'on-request',sandbox_mode:'read-only'}};
+if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:'draft-thread'},cwd:process.cwd(),model:'fixture',approvalPolicy:m.params.approvalPolicy||'on-request',approvalsReviewer:'user',sandbox:m.params.sandbox==='danger-full-access'?{type:'dangerFullAccess'}:{type:'readOnly',networkAccess:false}};
 if(m.method==='thread/turns/list')result={data:[],nextCursor:null};
 if(m.method==='turn/start') { result={turn:{id:'turn'}}; send({method:'turn/started',params:{threadId:'draft-thread',turn:{id:'turn'}}}); }
 if(m.method==='turn/interrupt')send({method:'turn/completed',params:{threadId:'draft-thread',turn:{id:'turn'}}});
@@ -65,9 +66,11 @@ send({id:m.id,result});});`,
   try {
     let page = await app.firstWindow();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: alpha }).click();
+    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(alpha);
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
+    await page.getByText("Chat actions", { exact: true }).click();
     await expect(page.getByText("Effective Codex settings · fixture", { exact: true })).toBeVisible();
+    await page.getByText("Chat actions", { exact: true }).click();
     await message().fill("Retain this draft");
     const records = async () => {
       const chats = JSON.parse(await readChatFixture(join(user, "host-chats-v1.json"), "utf8")).chats;
@@ -93,7 +96,8 @@ send({id:m.id,result});});`,
     await page.screenshot({ path: "test-results/escode-33-draft.png" });
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: beta }).click();
+    await expect(message()).toHaveValue("");
+    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(beta);
     await expect(page.locator(".agent-row").filter({ hasText: "Chat 2" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -145,7 +149,7 @@ send({id:m.id,result});});`,
     }, beta);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header span")).toHaveText(beta);
-    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: /^Chats(?: ·.*)?$/ }).click();
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
     await expect(
       page.getByRole("combobox", { name: "Project context", exact: true }),
@@ -158,7 +162,7 @@ send({id:m.id,result});});`,
     }, worktree);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.locator("header span")).toHaveText(worktree);
-    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: /^Chats(?: ·.*)?$/ }).click();
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
     await message().fill("Independent linked draft");
     expect((await records()).at(-1).checkout).toBe(worktree);
@@ -175,6 +179,9 @@ send({id:m.id,result});});`,
     await expect(page.locator(".agents .directory")).toContainText(worktree);
     expect((await records()).find((chat: { id: string }) => chat.id === local.id)).toMatchObject({
       id: local.id, createdAt: local.createdAt, checkout: worktree, draft: "Move from local Chats",
+    });
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
     });
     await app.close();
     app = await launchDesktop(user, dir);

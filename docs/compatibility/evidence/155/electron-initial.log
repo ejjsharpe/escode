@@ -1,0 +1,8 @@
+$ playwright test tests/chat-summaries.spec.ts tests/chat-titles.spec.ts tests/agents.spec.ts tests/navigation.spec.ts tests/models.spec.ts tests/permissions.spec.ts tests/project-drafts.spec.ts tests/worktree-drafts.spec.ts tests/conversation-layout.spec.ts tests/concurrency.spec.ts tests/emergency-stop.spec.ts tests/editable-diff.spec.ts tests/file-tabs.spec.ts
+
+Running 33 tests using 1 worker
+
+(node:69320) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'other')
+  ✘   1 tests/agents.spec.ts:11:1 › Agents restores closed saved projects and shares conversations without moving editor context (45.0s)

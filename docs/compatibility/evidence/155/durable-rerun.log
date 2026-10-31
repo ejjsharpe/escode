@@ -1,0 +1,10 @@
+$ node scripts/filesystem.mjs && vp test run host/durable-send.test.ts "--testTimeout=30000"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-54dcf325/apps/desktop
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  19:41:33
+   Duration  20.20s (tests 96%, import 4%)
+

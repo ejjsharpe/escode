@@ -1,0 +1,60 @@
+$ node scripts/filesystem.mjs && vp test run host/permissions.test.ts
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-8b2d5f46/apps/desktop
+
+ ❯ host/permissions.test.ts (3 tests | 1 failed) 508ms
+   × Codex 0.166 restricted execution is refused without replacing saved policy 220ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/permissions.test.ts > Codex 0.166 restricted execution is refused without replacing saved policy
+AssertionError: promise resolved "{ …(13) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "busy": true,
++   "chatId": "48e703e3-1b4f-4b1f-8cfa-4477d3489fa7",
++   "connected": true,
++   "controlTarget": "[\"18f6d01d-52d2-482b-8574-dff14897469b\",\"turn\",null]",
++   "error": "File checkpoint unavailable: Error: Command failed: git -C /var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-network-policy-rxEbx2 rev-parse HEAD
++ fatal: not a git repository (or any of the parent directories): .git
++ ",
++   "history": undefined,
++   "items": [],
++   "preparing": false,
++   "project": "/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-network-policy-rxEbx2",
++   "requests": [],
++   "settings": {
++     "approval": "on-request",
++     "model": "a",
++     "reasoning": null,
++     "sandbox": {
++       "networkAccess": false,
++       "type": "readOnly",
++     },
++   },
++   "threadId": "original",
++   "turnId": "turn",
+  }
+
+ ❯ host/permissions.test.ts:79:64
+     77|     const service = new ChatService(store, connect as never);
+     78|     await service.open(dir, chat.id);
+     79|     await expect(service.send(dir, chat.id, "retained prompt")).reject…
+       |                                                                ^
+     80|     expect(turns).toBe(0);
+     81|     expect((await store.get(dir, chat.id)).nextPermission).toBe("super…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  20:22:23
+   Duration  856ms (tests 67%, import 29%, transform 4%)
+
+error: script "test" exited with code 1

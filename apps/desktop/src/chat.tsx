@@ -1,14 +1,23 @@
+import { ConversationText } from "./conversation";
+import { ArchiveFooter } from "./archive-footer";
+import { ChatRow } from "./chat-row";
 import { Boundaries } from "./boundaries";
 import { DraftWorktreeChoices, CheckoutBranch } from "./worktrees";
 import { useProjectChats } from "./chat-state";
 import { memory, persist } from "./workspace";
 import { compareChats } from "./chat-order";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@base-ui/react/button";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
+  (operation: "defaults", project: string | null, id: string, scope: "app" | "project", value?: import("@escode/contracts").ChatDefaults): Promise<import("@escode/contracts").ChatDefaults>;
+  (operation: "permissions", project: string | null, id: string, choice?: "supervised" | "edits" | "full"): Promise<import("@escode/contracts").PermissionChoices>;
+  (operation: "archive", project: string | null, id: string, archived: boolean): Promise<unknown>;
+  (operation: "renameTitle", project: string | null, id: string, title: string): Promise<void>;
+  (operation: "regenerateTitle", project: string | null, id: string): Promise<void>;
+  (operation: "models", project: string | null, id: string, model?: string, effort?: string, activate?: boolean): Promise<import("@escode/contracts").ModelChoices>;
   (operation: "composer", project: string | null, id: string): Promise<string>;
   (operation: "targets"): Promise<{ project: string | null; checkout: string }[]>;
   (operation: "createDraft", project: string | null, checkout?: string): Promise<SavedChat>;
@@ -40,6 +49,87 @@ export interface ChatBridge {
     token: string,
     answer: unknown,
   ): Promise<void>;
+}
+function DefaultControls({ project, id, catalog, blocked }: { project: string | null; id: string; catalog: import("@escode/contracts").ModelChoices; blocked: boolean }) {
+  const [values, setValues] = useState<Record<string, import("@escode/contracts").ChatDefaults>>({});
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let current = true;
+    for (const scope of project === null ? ["app" as const] : ["app" as const, "project" as const]) {
+      void window.escode.chat("defaults", project, id, scope).then(value => { if (current) setValues(old => ({ ...old, [scope]: value })); }).catch(e => { if (current) setError(String(e)); });
+    }
+    return () => { current = false; };
+  }, [project, id]);
+  const save = async (scope: "app" | "project", value: import("@escode/contracts").ChatDefaults) => {
+    setSaving(true);
+    try { const result = await window.escode.chat("defaults", project, id, scope, value); setValues(old => ({ ...old, [scope]: result })); setError(""); }
+    catch (e) { setError(String(e)); } finally { setSaving(false); }
+  };
+  return <details><summary>New chat defaults</summary><p>Applies to new drafts. Existing chats retain their choices. Project overrides take precedence over app defaults.</p>
+    {(["app", "project"] as const).filter(scope => scope === "app" || project !== null).map(scope => {
+      const value = values[scope];
+      const label = scope === "app" ? "App default" : "Project override";
+      const model = catalog.models.find(m => m.model === value?.model);
+      return <fieldset key={scope} disabled={saving || !value}><legend>{label}</legend>
+        <label>Model <select aria-label={label + " model"} value={value?.model ?? ""} onChange={e => {
+          const selected = catalog.models.find(m => m.model === e.target.value);
+          const { model: _model, effort: _effort, ...rest } = value!;
+          void save(scope, selected ? { ...rest, model: selected.model, effort: selected.defaultEffort } : rest);
+        }}><option value="">{scope === "app" ? "Current / remembered / Codex default" : "Use app default"}</option>
+          {value?.model && !model && <option value={value.model}>{value.model} (unavailable)</option>}
+          {catalog.models.map(m => <option key={m.model} value={m.model}>{m.name}</option>)}
+        </select></label>
+        {value?.model && <label>Effort <select aria-label={label + " effort"} disabled={!model} value={value.effort} onChange={e => void save(scope, { ...value, effort: e.target.value })}>
+          {!model?.efforts.includes(value.effort!) && <option value={value.effort}>{value.effort} (unavailable)</option>}
+          {model?.efforts.map(e => <option key={e}>{e}</option>)}
+        </select></label>}
+        <label>Permissions <select aria-label={label + " permissions"} disabled={blocked} value={value?.permission ?? ""} onChange={e => {
+          const { permission: _permission, ...rest } = value!;
+          void save(scope, e.target.value ? { ...rest, permission: e.target.value as "full" | "edits" | "supervised" } : rest);
+        }}><option value="">{scope === "app" ? "Factory: Full access" : "Use app default"}</option><option value="supervised">Supervised</option><option value="edits">Auto-accept edits</option><option value="full">Full access</option></select></label>
+      </fieldset>;
+    })}{error && <p role="alert">{error}</p>}
+  </details>;
+}
+function ModelControls({ project, id, onSaving, existingError }: { project: string | null; id: string; onSaving: (saving: boolean) => void; existingError?: string | null }) {
+  const [permissions, setPermissions] = useState<import("@escode/contracts").PermissionChoices | null>(null);
+  const [catalog, setCatalog] = useState<import("@escode/contracts").ModelChoices | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void window.escode.chat("permissions", project, id).then(value => { if (current) setPermissions(value); }).catch(e => { if (current) setError(String(e)); });
+    void window.escode.chat("models", project, id, undefined, undefined, true).then(value => { if (current) setCatalog(value); }).catch(e => { if (current) setError(String(e)); });
+    return () => { current = false; };
+  }, [project, id]);
+  const choose = async (model: string, effort?: string) => {
+    setSaving(true); onSaving(true);
+    try { setCatalog(await window.escode.chat("models", project, id, model, effort)); setError(""); }
+    catch (e) { setError(String(e)); }
+    finally { setSaving(false); onSaving(false); }
+  };
+  const model = catalog?.models.find(m => m.model === catalog.choice?.model);
+  return <div className="chat-model-controls" aria-label="Next message settings" title="Applies only to your next explicit Send">
+    <span>Next message</span>
+    <label>Model <select aria-label="Next message model" disabled={saving || !catalog} value={catalog?.choice?.model ?? ""} onChange={e => void choose(e.target.value)}>
+      <option value="" disabled>Codex configured default</option>
+      {catalog?.choice && !model && <option value={catalog.choice.model}>{catalog.choice.model} (unavailable)</option>}
+      {catalog?.models.map(m => <option key={m.model} value={m.model}>{m.name}</option>)}
+    </select></label>
+    {catalog?.choice && <label>Effort <select aria-label="Next message effort" disabled={saving || !model} value={catalog.choice.effort} onChange={e => void choose(catalog.choice!.model, e.target.value)}>
+      {!model?.efforts.includes(catalog.choice.effort) && <option value={catalog.choice.effort}>{catalog.choice.effort} (unavailable)</option>}
+      {model?.efforts.map(e => <option key={e} value={e}>{e}</option>)}
+    </select></label>}
+    <label title="Supervised: read-only with approval. Auto-accept edits: workspace and temporary-directory writes, command networking requested off (provider enforcement required); broader access needs approval. Full access: no sandbox or command approval.">Permissions <select aria-label="Next message permissions" disabled={saving || !permissions || permissions.blocked} value={permissions?.blocked ? "" : permissions?.choice ?? ""} onChange={async e => {
+      setSaving(true); onSaving(true);
+      try { setPermissions(await window.escode.chat("permissions", project, id, e.target.value as "supervised" | "edits" | "full")); setError(""); }
+      catch (e) { setError(String(e)); } finally { setSaving(false); onSaving(false); }
+    }}><option value="" disabled>{permissions?.blocked ? "Custom / managed Codex policy" : "Inherited Codex policy"}</option><option value="supervised">Supervised</option><option value="edits">Auto-accept edits</option><option value="full">Full access</option></select></label>
+    {permissions?.message && <span role="status">{permissions.message}</span>}
+    {catalog && <DefaultControls project={project} id={id} catalog={catalog} blocked={!permissions || permissions.blocked} />}
+    {error && !existingError && <span role="alert">{error}</span>}
+  </div>;
 }
 function Request({
   request: wireRequest,
@@ -172,15 +262,25 @@ export function ChatView({
 }) {
   const [store, { chats, snapshots, history, drafts, pending, responding, errors, emergencyTargets }] =
     useProjectChats(project);
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const [targets, setTargets] = useState<{ project: string | null; checkout: string }[]>([]);
   useEffect(() => {
     void window.escode.chat("targets").then(setTargets);
   }, []);
+  const [archived, setArchived] = useState(false);
   const scopedChats = global ? chats : chats.filter(c => c.checkout === checkout && (c.phase !== "draft" || !c.worktree));
   const record = scopedChats.find((c) => c.id === selected);
   const unsent = record?.phase === "draft";
+  const composer = useRef<HTMLTextAreaElement>(null);
   const error = errors[selected] || errors[""] || "";
   const working = !!pending[selected];
+  const focused = useRef("");
+  useEffect(() => {
+    if (record?.phase === "draft" && !working && focused.current !== record.id) {
+      composer.current?.focus();
+      focused.current = record.id;
+    }
+  }, [record?.id, working]);
   const draft = drafts[selected] ?? "";
   useEffect(() => {
     if (!selected) return;
@@ -223,19 +323,11 @@ export function ChatView({
               New chat on current checkout
             </Button>
             <ul>
-              {[...scopedChats].sort(compareChats).map((c) => (
-                <li key={c.id}>
-                  <Button aria-pressed={selected === c.id} onClick={() => void select(c.id)}>
-                    Chat {chats.findIndex((chat) => chat.id === c.id) + 1}
-                    {c.needsInput
-                      ? " · Needs input"
-                      : c.busy
-                        ? " · Running"
-                        : ""}
-                  </Button>
-                </li>
+              {[...scopedChats].filter(c => !!c.archived === archived).sort(compareChats).map((c) => (
+                <ChatRow key={c.id} fallbackTitle={`Chat ${chats.findIndex(chat => chat.id === c.id) + 1}`} chat={c} selected={selected === c.id} select={() => void select(c.id)} />
               ))}
             </ul>
+            <ArchiveFooter archived={archived} toggle={() => setArchived(!archived)} />
           </div>,
           document.getElementById(sidebarId)!,
         )}
@@ -243,54 +335,42 @@ export function ChatView({
         {!record ? (
           <p>Create or select a saved chat to begin. Choose the current checkout or a worktree.</p>
         ) : (
-          <>
+          <div className={`conversation-layout ${!unsent || items.length ? "has-messages" : "is-empty"}`}>
+            {!global && !!record.archived !== archived && <p role="status">This conversation belongs to the {record.archived ? "Archived" : "Recent"} list.</p>}
+
+            {!record.archived && ["uncertain", "creating", "preparing"].includes(record.initialSend ?? "") && <p role="status">Archive is blocked until the pending or uncertain operation is resolved.</p>}
+            {record.archived && <p role="status">Archived conversation. Restore to send another message.</p>}
             {chats.find((c) => c.id === selected)?.removed && (
               <p role="status">
                 Checkout removed. History and drafts are retained; this chat cannot run.
               </p>
             )}
             <div className="conversation-heading">
-              <h2>Chat {chats.findIndex((c) => c.id === selected) + 1}</h2>
-              <p>{project?.split("/").at(-1) ?? "No project"}</p>
+              <h2 title={record.title}>{record.title || `Chat ${chats.findIndex((c) => c.id === selected) + 1}`}</h2>
+              <TitleActions project={project} id={selected} title={record.title ?? ""}>
+              <Button disabled={!record.archived && (working || snapshot?.busy || !!snapshot?.requests.length || record.initialSend === "uncertain" || record.initialSend === "creating" || record.initialSend === "preparing")}
+                onClick={() => void run(() => window.escode.chat("archive", project, selected, !record.archived))}>{record.archived ? "Restore chat" : "Archive chat"}</Button>
+              {!record.archived && (working || snapshot?.busy || !!snapshot?.requests.length) && <p>Archive requires an idle chat without unresolved work.</p>}
+              <Button disabled={working} onClick={() => void store.reconnect(selected)}>Reload history</Button>
+              <Boundaries key={selected} project={project} id={selected} />
+              {Boolean(snapshot?.settings) && (
+                <details>
+                  <summary>Effective Codex settings · {(snapshot!.settings as { model?: string }).model}</summary>
+                  <pre>{JSON.stringify(snapshot.settings, null, 2)}</pre>
+                </details>
+              )}
+              </TitleActions>
+
             </div>
-            <p className="directory">
-              {project === null
-                ? "Scratch folder: "
-                : record?.worktree && !record.worktree.reservation
-                  ? "Source checkout: "
-                  : "Checkout: "}
-              {record?.checkout || "Allocated on first Send"}
-            </p>
             {record?.checkout && chats.filter((c) => c.checkout === record.checkout).length > 1 && (
               <p>These chats share files in this checkout. Their edits can interact.</p>
             )}
-            {project !== null &&
-              record?.checkout &&
-              (record.phase !== "draft" || !record.worktree) && (
-                <CheckoutBranch root={record.checkout} />
-              )}
             <div className="chat-actions">
               {global && project && record?.checkout && !record.removed && (record.phase !== "draft" || !record.worktree) && (
                 <Button onClick={() => window.dispatchEvent(new CustomEvent("open-checkout", { detail: { project, id: record.id } }))}>
                   Open checkout
                 </Button>
               )}
-              <Button
-                disabled={working}
-                onClick={() => void store.reconnect(selected)}
-              >
-                Retry connection / reload history
-              </Button>
-              <Button disabled={working || snapshot?.busy} onClick={() => void window.escode.chat("resolveSend", project, selected).then(() => store.reconnect(selected))}>
-                Resolve previous Send…
-              </Button>
-              <Button
-                disabled={!(snapshot?.busy || snapshot?.preparing) || !snapshot?.controlTarget}
-                onClick={() => void store.stop(selected)}
-              >
-                Stop
-              </Button>
-              {emergencyTargets[selected] && <><Button onClick={() => void store.emergencyStop(selected)}>Emergency Stop</Button><span>Emergency Stop may not be recorded. External effects may remain; reserved resources are retained.</span></>}
               <span role="status">
                 {working && (!snapshot || (unsent && !snapshot.busy && !snapshot.requests.length))
                   ? unsent
@@ -313,6 +393,17 @@ export function ChatView({
                                 : "Disconnected"}
               </span>
             </div>
+            {(error || snapshot?.error || snapshot?.contextError || record.initialSend === "uncertain" || (!unsent && !snapshot?.connected)) && <div className="chat-recovery">
+              <Button
+                disabled={working}
+                onClick={() => void store.reconnect(selected)}
+              >
+                Retry connection / reload history
+              </Button>
+              {record.initialSend === "uncertain" && <Button disabled={working || snapshot?.busy} onClick={() => void window.escode.chat("resolveSend", project, selected).then(() => store.reconnect(selected))}>
+                Resolve previous Send…
+              </Button>}
+            </div>}
             {error && <p role="alert">{error}</p>}
             {(snapshot?.contextError || snapshot?.error) && (
               <p role="alert">{snapshot?.contextError || snapshot?.error}</p>
@@ -331,13 +422,6 @@ export function ChatView({
               </p>
             )}
             <div className="transcript" role="region" aria-label="Conversation history">
-              <Boundaries key={selected} project={project} id={selected} />
-              {Boolean(snapshot?.settings) && (
-                <details>
-                  <summary>Effective Codex settings · {(snapshot!.settings as { model?: string }).model}</summary>
-                  <pre>{JSON.stringify(snapshot.settings, null, 2)}</pre>
-                </details>
-              )}
               {(history[selected] || snapshot?.history) && (
                 <nav aria-label="History pages">
                   <Button disabled={working} onClick={() => store.history(selected, null)}>First history page</Button>
@@ -355,7 +439,7 @@ export function ChatView({
                         ? "Codex"
                         : item.type}
                   </h2>
-                  <pre>{item.text}</pre>
+                  {item.type === "agentMessage" || item.type === "userMessage" ? <ConversationText text={item.text} /> : /error|fail/i.test(item.type + " " + item.text) ? <pre role="alert">{item.text}</pre> : <details><summary>Tool activity · {item.type}</summary><pre>{item.text}</pre></details>}
                 </article>
               ))}
               {snapshot?.requests.map((request) => (
@@ -367,15 +451,32 @@ export function ChatView({
                 />
               ))}
             </div>
+            <details className="execution-context">
+              <summary>{project?.split("/").at(-1) ?? "No project"} · {record?.worktree && !record.worktree.reservation ? "New worktree on first Send" : record?.checkout.split("/").at(-1) || "Scratch on first Send"}</summary>
+            <p className="directory">
+              {project === null
+                ? "Scratch folder: "
+                : record?.worktree && !record.worktree.reservation
+                  ? "Source checkout: "
+                  : "Checkout: "}
+              {record?.checkout || "Allocated on first Send"}
+            </p>
+            {record?.checkout && (project === null || record.worktree && !record.worktree.reservation) && <Button type="button" onClick={() => void run(() => navigator.clipboard.writeText(record.checkout))}>Copy execution path</Button>}
+            {project !== null &&
+              record?.checkout &&
+              (record.phase !== "draft" || !record.worktree) && (
+                <CheckoutBranch root={record.checkout} />
+              )}
+            </details>
             <form
               className="chat-compose"
               onSubmit={(e) => {
                 e.preventDefault();
-                void store.send(selected);
+                if (!record.archived && !settingsSaving) void store.send(selected);
               }}
             >
               {unsent && !record?.scratch && !record?.worktree?.reservation && (
-                <label>
+                <label className="draft-context">
                   Project context
                   <select
                     aria-label="Project context"
@@ -384,6 +485,7 @@ export function ChatView({
                     onChange={(e) => void changeContext(e.target.value || null)}
                   >
                     <option value="">No project</option>
+                    {project && !targets.some(t => t.project === project) && <option value={project}>{project} · Unavailable</option>}
                     {targets
                       .filter((t) => t.project !== null)
                       .map((t) => (
@@ -464,6 +566,7 @@ export function ChatView({
               )}
               <label htmlFor={sidebarId + "-message"}>Message Codex</label>
               <textarea
+                ref={composer}
                 disabled={working}
                 id={sidebarId + "-message"}
                 maxLength={100000}
@@ -472,10 +575,11 @@ export function ChatView({
                   store.edit(selected, e.target.value);
                 }}
               />
-              <Button
+              <ModelControls key={selected} project={project} id={selected} onSaving={setSettingsSaving} existingError={error || snapshot?.contextError} />
+              <div className="compose-actions"><Button
                 type="submit"
                 disabled={
-                  working ||
+                  record.archived || working || settingsSaving ||
                   !!snapshot?.contextError ||
                   (!!record?.scratch && !!(error || snapshot?.error)) ||
                   (!unsent && !snapshot?.connected) ||
@@ -485,12 +589,37 @@ export function ChatView({
               >
                 Send message
               </Button>
-              <p>Stop retains completed file changes. Send a new message to continue.</p>
+              {(snapshot?.busy || snapshot?.preparing || !!snapshot?.requests.length) && snapshot?.controlTarget && <Button type="button" onClick={() => void store.stop(selected)}>Stop</Button>}
+              {emergencyTargets[selected] && <><Button type="button" onClick={() => void store.emergencyStop(selected)}>Emergency Stop</Button><span>Emergency Stop may not be recorded. External effects may remain; reserved resources are retained.</span></>}
+              </div>
             </form>
-          </>
+          </div>
         )}
         {!selected && error && <p role="alert">{error}</p>}
       </>
     </>
   );
+}
+
+function TitleActions({ project, id, title, children }: { project: string | null; id: string; title: string; children: React.ReactNode }) {
+  const [error, setError] = useState("");
+  const run = async (action: () => Promise<void>) => {
+    setError("");
+    try { await action(); } catch (failure) { setError(String(failure)); }
+  };
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(title);
+  useEffect(() => { setEditing(false); setValue(title); }, [id, title]);
+  return <details className="title-actions"><summary>Chat actions</summary>
+    {children}
+    {error && <p role="alert">{error}</p>}
+    <Button onClick={() => { setValue(title); setEditing(true); }}>Rename</Button>
+    <Button onClick={() => void run(() => window.escode.chat("regenerateTitle", project, id))}>Regenerate title</Button>
+    {editing && <form onSubmit={event => { event.preventDefault(); void run(async () => {
+      await window.escode.chat("renameTitle", project, id, value); setEditing(false);
+    }); }}>
+      <label>Chat title<input autoFocus maxLength={256} value={value} onChange={event => setValue(event.target.value)} /></label>
+      <Button type="submit">Save title</Button><Button type="button" onClick={() => setEditing(false)}>Cancel</Button>
+    </form>}
+  </details>;
 }

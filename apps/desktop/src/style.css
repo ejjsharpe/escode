@@ -623,9 +623,9 @@ aside > .directory { margin: 0 0 16px; font-size: 11px; }
 aside h2 { font-size: 11px; font-weight: 600; letter-spacing: .04em; }
 aside > ul { margin-top: 8px; }
 .content { min-height: 0; overflow: auto; background: #131416; }
-.toolbar { min-height: 40px; border-bottom: 1px solid var(--border); background: #18191d; font-size: 12px; }
+.toolbar { flex-wrap: wrap; min-height: 40px; border-bottom: 1px solid var(--border); background: #18191d; font-size: 12px; }
 .editor { min-height: 0; }
-.toolbar > span { flex: 1; min-width: 0; }
+.toolbar > span { flex: 1 0 100px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [role="status"] { background: #1b1c20; color: #a4a3b0; font-size: 11px; padding: 6px 12px; }
 .files-tools { gap: 4px; margin: 0 0 12px; }
 .files-tools button, .files-operation-actions button {
@@ -748,3 +748,77 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .retention-settings label { display: block; margin: 12px 0; }
 .retention-settings input[type=number] { width: 90px; }
 .retention-settings :focus-visible { outline: 2px solid #b7aaf5; outline-offset: 3px; }
+
+.conversation-heading { position: relative; }
+.conversation-heading h2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 100px; }
+.title-actions { position: absolute; right: 0; top: 0; z-index: 1; }
+.title-actions[open] { padding: 8px; max-width: min(340px, 100%); background: var(--background, #202126); border: 1px solid var(--border); }
+.title-actions form { display: grid; gap: 8px; }
+.title-actions input { width: 100%; box-sizing: border-box; }
+/* One window-owned width, shared by the existing checkout and chat sidebars. */
+.sidebar-layout { display: contents; }
+.workspace, .agents .workspace { position: relative; grid-template-columns: var(--sidebar-width, 270px) minmax(0, 1fr); }
+.sidebar-resize { position: absolute; z-index: 4; left: calc(var(--sidebar-width, 270px) - 3px); top: 0; bottom: 0; width: 6px; cursor: col-resize; touch-action: none; }
+.sidebar-resize:hover, .sidebar-resize:focus-visible { background: var(--accent); outline: none; }
+.view-nav { flex-wrap: wrap; overflow: visible; padding: 0; gap: 4px; margin-bottom: 14px; flex-shrink: 0; }
+.view-nav button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 1; padding: 7px 4px; }
+.view-nav .directory { flex-basis: 100%; max-width: 100%; margin: 4px 0; }
+.project-tabs > header { margin-left: auto; padding: 0 4px 4px; min-height: 0; border: 0; background: transparent; -webkit-app-region: no-drag; }
+.workspace-context { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.agents-heading { display: none; }
+
+.project-tabs > header { flex-shrink: 0; }
+.project-tabs .retention-settings summary { white-space: nowrap; }
+.project-tabs .retention-settings form { position: fixed; top: 48px; right: 14px; }
+
+.chat-model-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-block: 8px;
+}
+.chat-model-controls label { display: flex; align-items: center; gap: 6px; }
+.chat-model-controls select { max-width: 100%; }
+.agent-row { width: 100%; min-width: 0; text-align: left; display: flex; flex-direction: column; gap: 4px; }
+.agent-row .chat-row-heading { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; color: inherit; }
+.agent-row strong, .agent-row .chat-row-context { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.agent-row .chat-row-heading strong { flex: 1; }
+.agent-row svg, .agent-row time { flex-shrink: 0; }
+.agent-row time { margin-left: auto; font-size: 11px; color: #a4a3b0; }
+.agent-row .chat-row-context { font-size: 12px; color: #a4a3b0; }
+.agents .agent-row { margin-bottom: 0; border-color: transparent; border-radius: 4px; padding: 8px 12px; }
+.agents .agent-row[aria-pressed="true"] { border-color: #756b9c; }
+
+.chat-sidebar-footer { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-top: 1px solid #303138; }
+.agents aside, .chat-list { display: flex; flex-direction: column; }
+.chat-sidebar-footer button[aria-pressed="true"] { background: var(--surface-selected, #363636); }
+
+.chat-compose .draft-context { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+.chat-compose .draft-context select { width: auto; max-width: min(300px, 100%); min-width: 0; }
+.chat-compose .worktree-choices:not([open]) { padding-bottom: 0; border-bottom: 0; font-size: 12px; }
+.execution-context { font-size: 12px; overflow-wrap: anywhere; }
+.execution-context summary { cursor: pointer; }
+
+/* The transcript owns scrolling; composition stays within the conversation viewport. */
+.chat-conversation, .agents .chat-conversation { overflow: hidden; min-width: 0; }
+.conversation-layout { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; gap: 8px; }
+.conversation-layout > * { flex-shrink: 0; }
+.conversation-layout .transcript { flex: 1 1 0; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+.conversation-layout .transcript > *, .conversation-layout > .chat-compose { width: 100%; max-width: 75ch; margin-inline: auto; }
+.conversation-layout.is-empty .transcript { flex: 1; }
+.conversation-layout.is-empty::after { content: ""; flex: 1; }
+.conversation-layout .chat-compose { margin-top: 0; max-height: 55vh; overflow: auto; flex-shrink: 0; }
+.conversation-layout .chat-compose textarea { min-height: 54px; max-height: 160px; }
+.conversation-text { line-height: 1.65; overflow-wrap: anywhere; }
+.conversation-text a { color: #c7bdff; text-decoration: underline; }
+.conversation-text pre { overflow: auto; white-space: pre; }
+.code-block { background: #131416; padding: 12px; border-radius: 6px; }
+.code-block button { float: right; }
+.conversation-layout article { padding-block: 12px; }
+.conversation-layout article > h2 { font-size: 13px; color: #bcbcc7; }
+.chat-model-controls > *, .chat-model-controls select { min-width: 0; }
+@media (max-height: 600px) { .conversation-layout .chat-compose { padding: 8px; gap: 4px; max-height: 30vh; } .conversation-heading h2 { margin-block: 0; } }
+.compose-actions { position: sticky; bottom: -8px; display: flex; flex-wrap: wrap; gap: 8px; background: #1b1c20; padding-block: 4px; }
+.conversation-layout .chat-compose { display: block; }
+.conversation-layout .chat-compose > * { margin-block: 4px; }
