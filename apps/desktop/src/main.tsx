@@ -199,6 +199,7 @@ function CheckoutView({
   const [saving, setSaving] = useState(false);
   const [fileClosing, setFileClosing] = useState(false);
   const closeInFlight = useRef(false);
+  const transferNavigation = useRef(false);
   useEffect(
     () => onBlocked(root, !!conflict || saving || fileClosing),
     [conflict, saving, fileClosing, root, onBlocked],
@@ -721,6 +722,7 @@ function CheckoutView({
     closeInFlight.current = true;
     setFileClosing(!transferring);
     setTransferProgress(transferring);
+    transferNavigation.current = transferring;
     setMessage(
       transferring
         ? "Transferring files… Navigation and chat Stop remain available. Earlier move undo history resets."
@@ -752,6 +754,7 @@ function CheckoutView({
           : transferring
             ? await projectCall("transfer", root, kind, destination, sources)
             : null;
+      transferNavigation.current = false;
       const results = batch
         ? batch.results
         : [
@@ -894,12 +897,13 @@ function CheckoutView({
       closeInFlight.current = false;
       setFileClosing(false);
       setTransferProgress(false);
+      transferNavigation.current = false;
       editor.current?.updateOptions({ readOnly: false });
     }
   }
   fileKeepers.set(root, keepOpen);
   fileOpeners.set(root, async request => {
-    if (request.root !== root || closeInFlight.current) return false;
+    if (request.root !== root || (closeInFlight.current && !transferNavigation.current)) return false;
     const opened = await activation.open({ file: request.path, view: request.view, intent: request.intent, current: request.current });
     if (opened && request.intent === "keep")
       setFocusRequest({ file: request.path, current: activation.checkpoint() });

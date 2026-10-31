@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { CreateReceipt, CreateCommand, SendReceipt, type SendCommand } from "@escode/contracts";
+import { SendReceipt, type SendCommand } from "@escode/contracts";
 import {
   closeSync,
   constants,
@@ -27,7 +27,7 @@ export type FoundationRecord = {
   providerId: string | null;
   ownership: "external" | "managed-worktree" | "scratch";
 };
-type State = { version: 1; hostId: string; clientId: string; records: FoundationRecord[]; creates?: (typeof CreateReceipt.Type)[]; receipts?: SendReceipt[] };
+type State = { version: 1; hostId: string; clientId: string; records: FoundationRecord[]; receipts?: SendReceipt[] };
 const maximumBytes = 1024 * 1024;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 function validate(value: unknown): asserts value is State {
@@ -45,7 +45,6 @@ function validate(value: unknown): asserts value is State {
     Schema.decodeUnknownSync(Schema.Array(SendReceipt))(state.receipts);
     if (state.receipts.some(r => r.hostId !== state.hostId || r.clientId !== state.clientId)) throw Error("Invalid receipt owner");
   }
-  if (state.creates !== undefined) Schema.decodeUnknownSync(Schema.Array(CreateReceipt))(state.creates);
   const ids = new Set<string>();
   for (const record of state.records) {
     if (
@@ -158,28 +157,6 @@ export class FoundationState {
     validate(state);
     this.persist(state);
     this.state = state;
-  }
-
-  create(command: typeof CreateCommand.Type, effect: () => string): typeof CreateReceipt.Type {
-    command = Schema.decodeUnknownSync(CreateCommand)(command);
-    const previous = this.read().creates?.find(r => r.command.commandId === command.commandId);
-    if (previous) {
-      if (JSON.stringify(previous.command) !== JSON.stringify(command)) throw Error("Command identity conflict");
-      return previous.status === "dispatching" ? { ...previous, status: "uncertain", message: "Creation outcome uncertain. Inspect the exact path; creation was not repeated." } : previous;
-    }
-    if (command.admissionEpoch !== this.admissionEpoch) throw Error("Expired creation epoch. Inspect the exact path; creation was not repeated.");
-    const state = this.read();
-    state.creates ??= [];
-    if (state.creates.length >= 1000) throw Error("Creation receipt capacity exhausted; retained outcomes were not pruned.");
-    let receipt: typeof CreateReceipt.Type = { command, status: "dispatching", message: "", path: "" };
-    state.creates.push(receipt);
-    this.persist(state); this.state = state;
-    try { receipt = { ...receipt, status: "accepted", path: effect() }; }
-    catch (error) { receipt = { ...receipt, status: (error as { rejected?: boolean })?.rejected ? "rejected" : "uncertain", message: `Creation failed or uncertain; inspect the exact path before further action. ${String(error)}` }; }
-    const completed = this.read();
-    completed.creates![completed.creates!.length - 1] = receipt;
-    this.persist(completed); this.state = completed;
-    return receipt;
   }
 
   readonly admissionEpoch = randomUUID();

@@ -152,7 +152,7 @@ const TransferPaths = Schema.Array(Schema.String).check(Schema.isMinLength(1), S
 export const TransferAction = Schema.Union([
   Schema.Struct({ root: Schema.String, operation: Schema.Literal("drag-capture"), paths: TransferPaths }),
   Schema.Struct({ root: Schema.String, operation: Schema.Literal("clipboard-capture"), kind: Schema.Literals(["copy", "cut"]), paths: TransferPaths }),
-  Schema.Struct({ root: Schema.String, operation: Schema.Literal("transfer"), kind: Schema.Literals(["paste", "duplicate", "drag-move", "drag-copy", "import"]), parent: Schema.String, paths: Schema.Array(Schema.String).check(Schema.isMaxLength(10000)) }),
+  Schema.Struct({ root: Schema.String, operation: Schema.Literal("transfer"), commandId: Schema.String, admissionEpoch: Schema.String, kind: Schema.Literals(["paste", "duplicate", "drag-move", "drag-copy", "import"]), parent: Schema.String, paths: Schema.Array(Schema.String).check(Schema.isMaxLength(10000)) }),
 ]);
 export type TransferAction = typeof TransferAction.Type;
 export const TransferResult = Schema.Union([Schema.String, Schema.Struct({
