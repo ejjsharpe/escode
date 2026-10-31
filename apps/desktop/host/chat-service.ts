@@ -102,11 +102,11 @@ export class ChatService {
       // Custom profiles, roots and managed policy require resolution in Codex configuration first.
       const effective = this.sessions.get(id)?.settings as { sandbox?: Record<string, unknown>; approval?: unknown } | undefined;
       const sandbox = effective?.sandbox;
-      const customSession = sandbox && (!["readOnly", "workspaceWrite", "dangerFullAccess"].includes(sandbox.type as string) || sandbox.networkAccess === true ||
+      const customSession = sandbox && (typeof sandbox === "string" ? !["read-only", "workspace-write", "danger-full-access"].includes(sandbox) : (!["readOnly", "workspaceWrite", "dangerFullAccess"].includes(sandbox.type as string) || sandbox.networkAccess === true ||
         sandbox.excludeTmpdirEnvVar === true || sandbox.excludeSlashTmp === true ||
         Object.keys(sandbox).some(key => !["type", "networkAccess", "writableRoots", "excludeTmpdirEnvVar", "excludeSlashTmp"].includes(key)) ||
         (Array.isArray(sandbox.writableRoots) && sandbox.writableRoots.length > 0) ||
-        (effective?.approval != null && !["on-request", "never"].includes(effective.approval as string)));
+        (effective?.approval != null && !["on-request", "never"].includes(effective.approval as string))));
       const blocked = !!customSession || requirements.requirements != null ||
         (c.sandbox_mode != null && !["read-only", "workspace-write", "danger-full-access"].includes(c.sandbox_mode as string)) || ["permissions", "default_permissions", "sandbox_workspace_write", "network"].some(k => c[k] != null)
         || (c.approval_policy != null && !["on-request", "never"].includes(c.approval_policy as string));
