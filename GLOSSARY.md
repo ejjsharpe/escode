@@ -243,3 +243,7 @@ it does not undo external effects, replay commands or resume live requests.
 Recovery copies retain command receipts within the consistent SQLite cut. Unresolved receipts and missing required content retain quarantine; admission epoch rotation is not reconciliation. The administrative provider inspector reads exact saved thread and checkout identities without resuming work.
 
 - **Boundary inspection**: Read-only, bounded browsing of provider-owned conversation history through a recorded before-message or after-turn boundary. It leaves the live conversation, composer and files unchanged. Provider history availability is independent of saved-file coverage; retained files cannot establish complete conversation history.
+
+Historical branches can select an available completion boundary: native provider context
+includes the completed turn, paired with that boundary's Git base and saved files.
+The next message's fresh before-state is a separate target.

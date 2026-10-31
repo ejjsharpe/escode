@@ -508,7 +508,7 @@ export class ChatService {
       if (!point?.turnId || !point.threadId || point.threadId !== chat.threadId) return unavailable("Provider boundary reference unavailable.");
       let snapshot: any;
       if (branching) {
-        if (!project || !this.environment || point.kind !== "before-message") return unavailable("Historical branching requires a project before-message checkpoint.");
+        if (!project || !this.environment) return unavailable("Historical branching requires a project checkpoint.");
         const coverage = await this.inspectFiles(project, id, boundary, null, null);
         if (coverage.availability !== "available") return unavailable(coverage.message);
         snapshot = await this.store.database.command("inspectCheckpoint", { commandId: id, body: { boundary } });
