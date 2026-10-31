@@ -176,7 +176,7 @@ app.whenReady().then(async () => {
       const errors: string[] = [];
       const restored = [];
       for (const item of state.projects) {
-        if (!approved.some((p) => p.project === item.project && p.root === item.root)) {
+        if (!approved.some((p) => p.project === item.project && p.root === item.root && p.directoryIdentity)) {
           unapprovedProjects.add(item.project);
           errors.push(
             `${item.root}: Use Open project to approve this saved directory. Saved state is retained.`,
@@ -194,6 +194,11 @@ app.whenReady().then(async () => {
         if (!projectSessions.has(item.project)) projectSessions.set(item.project, {});
         try {
           const p = await Checkout.restore(item.root, item.project, helper);
+          const approval = approved.find(a => a.project === item.project && a.root === item.root);
+          if (p.root !== item.root || approval?.directoryIdentity && p.checkoutIdentity() !== approval.directoryIdentity) {
+            p.close();
+            throw Error("Checkout identity changed. Restore the original directory.");
+          }
           projects.get(p.root)?.close();
           projects.set(p.root, p);
           restored.push(await p.status());
@@ -284,6 +289,17 @@ app.whenReady().then(async () => {
   const helper = join(app.isPackaged ? process.resourcesPath : __dirname, "filesystem");
   const checkout = async (root: unknown) => {
     if (typeof root !== "string") throw Error("Invalid checkout");
+    const approval = (await workspace.approved()).find(p => p.root === root);
+    if (approval && !approval.directoryIdentity)
+      throw Error("Use Open project to approve this saved directory identity. Saved state is retained.");
+    const validate = (candidate: Checkout) => {
+      if (candidate.root !== root || approval?.directoryIdentity && candidate.checkoutIdentity() !== approval.directoryIdentity) {
+        candidate.close();
+        projects.delete(root);
+        throw Error("Checkout identity changed. Restore the original directory.");
+      }
+      return candidate;
+    };
     const existing = projects.get(root);
     const associations = await Promise.all([...projectSessions.keys()].map((id) => store.list(id)));
     const linked = associations.flat().filter((c) => c.checkout === root && !c.removed);
@@ -294,21 +310,22 @@ app.whenReady().then(async () => {
       if (existing) {
         try {
           existing.checkoutIdentity();
-          return existing;
+          return validate(existing);
         } catch {
           // Only the validated original directory may replace a stale cache entry.
           existing.close();
           projects.delete(root);
         }
       }
-    } else if (existing) return existing;
-    const candidate = saved
-      ? await Checkout.restore(root, saved.project!, helper)
+    } else if (existing) return validate(existing);
+    const candidate = saved || approval
+      ? await Checkout.restore(root, saved?.project ?? approval!.project, helper)
       : await Checkout.open(root, helper);
     if (!projectSessions.has(candidate.repositoryGit.repository())) {
       candidate.close();
       throw Error("Open this project first.");
     }
+    validate(candidate);
     projects.set(candidate.root, candidate);
     return candidate;
   };
@@ -406,7 +423,7 @@ app.whenReady().then(async () => {
       const target = await checkout(chat.checkout);
       target.checkoutIdentity();
       if (target.repositoryGit.repository() !== identity) throw Error("Checkout belongs to another project.");
-      await workspace.approve(identity, target.root);
+      await workspace.approve(identity, target.root, target.checkoutIdentity());
       return target.status();
     }
     if (operation === "open" && args.length === 0) {
@@ -417,7 +434,7 @@ app.whenReady().then(async () => {
       if (existing) candidate.close();
       const opened = existing ?? candidate;
       try {
-        await workspace.approve(opened.repositoryGit.repository(), opened.root);
+        await workspace.approve(opened.repositoryGit.repository(), opened.root, opened.checkoutIdentity());
       } catch (error) {
         if (!existing) opened.close();
         throw error;

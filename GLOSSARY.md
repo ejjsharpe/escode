@@ -59,7 +59,7 @@ The accepted filename/path search within the active checkout tab, or exactly the
 The searchable all-saved-project selection always opened by Agents New chat, including No project and projects with closed editor tabs. Ordered-character project-name filtering, path disambiguation and cancellation are implemented. Persisted recent-use ordering and remembered checkout defaults follow separately in #108; until then draft creation retains the existing validated default.
 
 **Project tab**:
-An editor view of one checkout of a project, with its own Files, Source Control and checkout-scoped Chats views. Different checkouts of the same project can have separate tabs; reopening an open checkout focuses its existing tab.
+An editor view of one checkout of a project, with its own Files, Source Control and checkout-scoped Chats views. Different checkouts of the same project can have separate tabs; reopening an open checkout focuses its existing tab. Open membership and selected workspace restore independently per client. Host-owned approval retains the checkout directory identity; a missing or replaced directory keeps its exact unavailable tab and recovery edits until explicitly retried or closed.
 
 **File tab**:
 The planned editor header for one file inside a checkout-specific project tab. Its normal editor and comparisons share that tab and the client's working-file buffer. Tabs, order, active file, selected view and editor positions are remembered independently per checkout. The [file-tab specification](docs/specifications/file-editor-tabs.md) was accepted by the user on 2026-10-31. This complements the [accepted checkout/search handoff](docs/specifications/checkout-tabs-file-lookup.md); file tabs remain subsequent implementation work.
