@@ -50,6 +50,7 @@ declare global {
       inspectBoundary: (project: string | null, id: string, boundary: string, cursor: string | null) => Promise<import("@escode/contracts").BoundaryInspection>;
       chatHistory: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").HistoryPage>;
       chatSummaries: (apply: (value: import("@escode/contracts").ChatSummaries) => void, error: (message: string) => void) => () => void;
+      copyConversationCode(text: string): Promise<void>;
       toolStatus(): Promise<unknown>;
       project: ProjectBridge;
       observeFiles(root: string, notify: (error?: string, ready?: boolean) => void): () => void;

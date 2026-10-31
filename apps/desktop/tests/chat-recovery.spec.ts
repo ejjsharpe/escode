@@ -22,8 +22,10 @@ const threadId=process.cwd(),send=m=>process.stdout.write(JSON.stringify(m)+'\\n
 createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);if(!m.id||!m.method)return;
 fs.appendFileSync(${JSON.stringify(wire)},JSON.stringify({cwd:process.cwd(),...m})+'\\n');
 let result={};if(m.method==='initialize')result={userAgent:'codex/0.165.0'};
+if(m.method==='config/read')result={config:{}};
+if(m.method==='configRequirements/read')result={requirements:null};
 if(m.method==='account/read')result={account:{}};
-if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:threadId},cwd:threadId,model:'fixture',sandbox:{type:'readOnly'},approvalPolicy:'on-request'};
+if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:threadId},cwd:threadId,model:'fixture',sandbox:m.params.sandbox==='danger-full-access'?{type:'dangerFullAccess'}:{type:'readOnly',networkAccess:false},approvalPolicy:m.params.approvalPolicy||'on-request',approvalsReviewer:'user'};
 if(m.method==='thread/turns/list')result={data:[{id:'turn',items:[{id:'reply',type:'agentMessage',text:'retained history'}]}],nextCursor:null};
 if(m.method==='turn/start'){result={turn:{id:'turn'}};send({method:'turn/started',params:{threadId,turn:{id:'turn'}}});send({method:'item/completed',params:{threadId,turnId:'turn',item:{id:'reply',type:'agentMessage',text:'retained history'}}});send({id:99,method:'item/commandExecution/requestApproval',params:{threadId,turnId:'turn',command:'fixture'}})}
 if(m.method==='turn/interrupt')send({method:'turn/completed',params:{threadId,turn:{id:'turn'}}});

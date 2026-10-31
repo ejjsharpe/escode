@@ -167,6 +167,7 @@ contextBridge.exposeInMainWorld(
       : call[0] === "send" ? chatClient.send(call[1], call[2], call[3])
       : ipcRenderer.invoke("chat", operation, ...args);
     },
+    copyConversationCode: (text: string) => ipcRenderer.invoke("copy-conversation-code", text),
     toolStatus: () => ipcRenderer.invoke("tools:status"),
     project: (...call: ProjectArguments) =>
       call[0] === "status" ? hostClient.gitStatus(call[1])

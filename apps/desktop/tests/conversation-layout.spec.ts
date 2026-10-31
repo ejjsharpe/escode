@@ -14,8 +14,10 @@ createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line)
 let result={};
 if(m.method==='initialize')result={userAgent:'fixture'};
 if(m.method==='model/list')result={data:[{id:'a',hidden:false,isDefault:true,description:'Alpha model',model:'a',displayName:'Alpha',supportedReasoningEfforts:[{description:'Effort',reasoningEffort:'low'},{description:'Effort',reasoningEffort:'high'}],defaultReasoningEffort:'low'},{id:'b',hidden:false,isDefault:false,description:'Beta model',model:'b',displayName:'Beta',supportedReasoningEfforts:[{description:'Effort',reasoningEffort:'medium'}],defaultReasoningEffort:'medium'}],nextCursor:null};
+if(m.method==='config/read')result={config:{}};
+if(m.method==='configRequirements/read')result={requirements:null};
 if(m.method==='account/read')result={account:{}};
-if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:'thread'},cwd:process.cwd(),model:'a',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
+if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:'thread'},cwd:process.cwd(),model:'a',approvalPolicy:m.params.approvalPolicy||'on-request',approvalsReviewer:'user',sandbox:m.params.sandbox==='danger-full-access'?{type:'dangerFullAccess'}:{type:'readOnly',networkAccess:false}};
 if(m.method==='thread/turns/list')result={data:[],nextCursor:null};
 if(m.method==='turn/start'){appendFileSync(${JSON.stringify(log)},JSON.stringify(m.params)+'\\n');result={turn:{id:'turn'}};send({method:'turn/started',params:{threadId:'thread',turn:{id:'turn'}}});send({method:'item/agentMessage/delta',params:{threadId:'thread',turnId:'turn',itemId:'answer',delta:${JSON.stringify('## Result\n\n**Ready**\n\n```js\nconst answer = 42;\n```\n\n<script>alert(1)</script>\n\n[unsafe](javascript:alert%281%29)')}}});send({id:99,method:'item/commandExecution/requestApproval',params:{threadId:'thread',turnId:'turn',itemId:'command',command:'fixture approval'}});}
 if(m.method==='turn/interrupt')send({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn'}}});

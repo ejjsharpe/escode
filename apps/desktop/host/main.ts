@@ -140,6 +140,11 @@ app.whenReady().then(async () => {
       throw Error("Invalid native import sender or references.");
     return files.captureNativeImport(paths);
   });
+  ipcMain.handle("copy-conversation-code", (event, text: unknown) => {
+    if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
+        event.senderFrame.url !== documentURL || typeof text !== "string" || text.length > 4 * 1024 * 1024) throw Error("Invalid code copy request");
+    clipboard.writeText(text);
+  });
   ipcMain.handle("native-clipboard-capture", async (event) => {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
         event.senderFrame.url !== documentURL) throw Error("Invalid sender");
