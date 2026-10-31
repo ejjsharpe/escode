@@ -228,11 +228,15 @@ export class Checkout {
         }, 500);
       };
       // Both sources share one invalidation timer; events never grant filesystem authority.
-      watchers.push(watch(this.root, { recursive: true, persistent: false }, changed));
+      watchers.push(watch(this.root, { recursive: true, persistent: false }, (_event, path) => {
+        const name = path?.toString();
+        // Git status/index churn cannot change discovery; repository excludes can.
+        if (name?.startsWith(".git/") && name !== ".git/info" && !name.startsWith(".git/info/")) return;
+        changed();
+      }).on("error", failed));
       if (!policy.startsWith(this.root + "/")) watchers.push(watch(policy, { recursive: true, persistent: false }, (_event, path) => {
         if (!path || path.toString() === ".git" || path.toString() === "info" || path.toString().startsWith("info/")) changed();
-      }));
-      watchers.forEach(watcher => watcher.on("error", failed));
+      }).on("error", failed));
       this.checkoutIdentity();
       this.checkPolicyDirectory();
       this.watchDisposers.add(dispose);
