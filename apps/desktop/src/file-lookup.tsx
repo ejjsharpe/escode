@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@base-ui/react/button";
-import { openFile } from "./workspace";
+import { comparePathScores } from "../host/lookup-score";
+import { memory, openFile } from "./workspace";
 
 function highlightedPath(path: string, positions: readonly number[]) {
   const parts = [];
@@ -13,15 +14,23 @@ function highlightedPath(path: string, positions: readonly number[]) {
   return parts;
 }
 
-export function FileLookup({ root, project, onClose }: {
-  root: string; project: string; onClose: () => void;
+export type LookupRoot = { root: string; project: string; branch?: string };
+type LookupRow = import("@escode/contracts").LookupResult["results"][number] & LookupRoot;
+export function FileLookup({ root = "", project = "", roots, onClose }: {
+  root?: string; project?: string; roots?: readonly LookupRoot[]; onClose: () => void;
 }) {
+  const scope = roots ?? [{ root, project }];
+  const scopeKey = JSON.stringify(scope.map(({ root, project }) => [root, project]));
+  const liveScope = useRef(scopeKey);
+  liveScope.current = scopeKey;
+  const inScope = (target: LookupRoot) => scope.some(r => r.root === target.root && r.project === target.project) &&
+    memory.projects.some(r => r.root === target.root && r.project === target.project);
   const dialog = useRef<HTMLDialogElement>(null);
   const origin = useRef(document.activeElement);
   const generation = useRef(0);
   const busy = useRef(false);
   const activated = useRef(false);
-  const [results, setResults] = useState<import("@escode/contracts").LookupResult["results"]>([]);
+  const [results, setResults] = useState<LookupRow[]>([]);
   const [selected, setSelected] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [query, setQuery] = useState("");
@@ -36,36 +45,84 @@ export function FileLookup({ root, project, onClose }: {
     };
   }, []);
   useEffect(() => {
+    const request = ++generation.current;
     setResults([]); setSelected(0);
-    if (!query.trim()) return;
-    const request = generation.current;
-    setMessage("Searching checkout…");
-    let stop: (() => void) | undefined;
-    const timer = setTimeout(() => {
-      stop = window.escode.searchFiles(root, query, result => {
-        if (request !== generation.current || !dialog.current?.open) return;
-        setResults(result.results);
-        setMessage(result.partial ? (result.message || "Partial coverage. Refine the query or Refresh.") : result.results.length ? `${result.results.length} matches` : "No eligible matches. You can still open an exact path.");
-      }, error => { if (request === generation.current) setMessage(`Search unavailable: ${error}. Refresh to retry or open an exact path.`); });
-    }, 120);
-    return () => { clearTimeout(timer); stop?.(); };
-  }, [root, query, refresh]);
+    setMessage(!scope.length ? "No open checkouts" : "Type a filename or path. Exact paths can also be opened.");
+    if (!query.trim() || !scope.length) return;
+    let stopped = false, stop: (() => void) | undefined, next = 0;
+    let rows: LookupRow[] = [], bytes = 0, capped = scope.length > 32;
+    const coverage: string[] = [];
+    const size = (row: LookupRow) => (row.path.length + row.root.length + row.project.length) * 6 + row.positions.length * 8 + 128;
+    const current = () => !stopped && request === generation.current && liveScope.current === scopeKey && !!dialog.current?.open;
+    const scan = () => {
+      if (!current()) return;
+      if (next >= Math.min(scope.length, 32)) {
+        setMessage(`${rows.length} matches${capped ? "; Partial coverage: search capped. Refine the query or Refresh." : ""}${coverage.length ? "; " + coverage.join("; ") : ""}${!rows.length && !capped && !coverage.length ? ". No eligible matches. You can still open an exact path." : ""}`);
+        return;
+      }
+      const target = scope[next++];
+      setMessage(`Searching checkout ${next} of ${Math.min(scope.length, 32)}…`);
+      stop = window.escode.searchFiles(target.root, query, result => {
+        if (!current()) return;
+        if (result.partial) coverage.push(`Incomplete: ${target.root}. ${result.message}`);
+        for (const resultRow of result.results) {
+          const row = { ...resultRow, ...target };
+          const index = rows.findIndex(other => comparePathScores(row, other, query) < 0);
+          if (rows.length === 100 && index < 0) { capped = true; continue; }
+          rows.splice(index < 0 ? rows.length : index, 0, row); bytes += size(row);
+          while (rows.length > 100 || bytes > 512 * 1024) { bytes -= size(rows.pop()!); capped = true; }
+        }
+        setResults([...rows]);
+        scan();
+      }, error => {
+        if (!current()) return;
+        coverage.push(`Unavailable: ${target.root}. ${error.slice(0, 2048)}`);
+        scan();
+      });
+    };
+    const timer = setTimeout(scan, 120);
+    return () => { stopped = true; generation.current++; clearTimeout(timer); stop?.(); rows = []; };
+  }, [scopeKey, query, refresh]);
   useEffect(() => { document.getElementById(`lookup-result-${selected}`)?.scrollIntoView({ block: "nearest" }); }, [selected]);
-  const activate = async (target = query) => {
+  const activate = async (row?: LookupRow) => {
     if (!query || busy.current) return;
     const request = ++generation.current;
-    const current = () => request === generation.current && !!dialog.current?.open;
+    const invocationScope = scopeKey;
+    const current = () => request === generation.current && liveScope.current === invocationScope && !!dialog.current?.open;
     busy.current = true;
     setMessage("Opening exact path…");
     try {
-      const path = await window.escode.lookupFile(root, target);
-      if (!current()) return;
-      const opened = await openFile({ root, path, view: "file", intent: "keep", current });
-      if (!current()) return;
+      let target: LookupRoot | undefined = row, path = "";
+      if (row) {
+        if (!inScope(row)) throw Error("Checkout is no longer open.");
+        path = await window.escode.lookupFile(row.root, row.path);
+      } else if (!roots) {
+        target = scope[0];
+        if (!inScope(target)) throw Error("Checkout is no longer open.");
+        path = await window.escode.lookupFile(target.root, query);
+      } else {
+        if (scope.length > 32) throw Error("Exact lookup is capped at 32 checkouts. Select a checkout and retry locally.");
+        for (const candidate of scope) {
+          if (!current()) return;
+          if (!inScope(candidate)) continue;
+          try {
+            const found = await window.escode.lookupFile(candidate.root, query);
+            if (target) throw Error("ambiguous");
+            target = candidate; path = found;
+          } catch (error) {
+            if (String(error).includes("ambiguous")) throw Error("Several checkouts contain this path. Choose a result or enter an absolute path.");
+          }
+        }
+        if (!target) throw Error("File could not be opened in the current scope. Check the path and retry.");
+      }
+      if (!target || !current() || !inScope(target)) return;
+      const openingCurrent = () => current() && inScope(target!);
+      const opened = await openFile({ root: target.root, path, view: "file", intent: "keep", current: openingCurrent });
+      if (!openingCurrent()) return;
       if (!opened) throw Error("File could not be opened. Check the path and retry.");
       activated.current = true;
       onClose();
-      window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
+      window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project: target.project, root: target.root } }));
     } catch (error) {
       if (current()) setMessage(String(error) + " Edit the path or press Enter to retry.");
     } finally { busy.current = false; }
@@ -76,20 +133,21 @@ export function FileLookup({ root, project, onClose }: {
       onCancel={event => { event.preventDefault(); generation.current++; onClose(); }}
       onKeyDown={event => event.stopPropagation()}>
       <h2 id="file-lookup-title">Find file</h2>
-      <p id="file-lookup-scope">Active checkout: {root}</p>
+      <p id="file-lookup-scope">{roots ? `Open checkouts (${scope.length})` : `Active checkout: ${root}`}</p>
       <input autoFocus aria-label="Exact file path" maxLength={4096} value={query}
         placeholder="Filename, path, or quoted contiguous piece"
         role="combobox" aria-controls="lookup-results" aria-expanded={results.length > 0}
         aria-activedescendant={results.length ? `lookup-result-${selected}` : undefined}
         onChange={event => { generation.current++; setQuery(event.target.value); setMessage("Press Enter or choose Open file."); }}
         onKeyDown={event => {
-          if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void activate(results[selected]?.path ?? query); }
+          if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void activate(results[selected]); }
           if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setSelected(index => results.length ? (index + (event.key === "ArrowDown" ? 1 : results.length - 1)) % results.length : 0); }
         }} />
       <div id="lookup-results" role="listbox" aria-label="Matching files" className="lookup-results">
-        {results.map((result, index) => <div key={result.path} id={`lookup-result-${index}`} role="option" aria-selected={index === selected}
-          onMouseDown={event => event.preventDefault()} onClick={() => void activate(result.path)}>
+        {results.map((result, index) => <div key={result.root + ":" + result.path} id={`lookup-result-${index}`} role="option" aria-selected={index === selected}
+          onMouseDown={event => event.preventDefault()} onClick={() => void activate(result)}>
           {highlightedPath(result.path, result.positions)}
+          {roots && <small className="lookup-root">{result.project.split("/").at(-1)} · {result.branch} · {result.root}</small>}
         </div>)}
       </div>
       <p role="status">{message}</p>

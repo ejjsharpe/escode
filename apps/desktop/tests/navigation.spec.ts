@@ -243,6 +243,10 @@ test("cancelled and edited lookup invocations reject delayed validation and file
     await app.evaluate(() => {
       const events = process.getBuiltinModule("events"), emit = events.EventEmitter.prototype.emit;
       events.EventEmitter.prototype.emit = function(event: string, ...args: any[]) {
+        if (event === "message" && typeof (this as any).send === "function") {
+          const text = Buffer.from(args[0]).toString();
+          if (text.includes('"tag":"searchFiles"')) ((globalThis as any).searchRequests ??= []).push(text);
+        }
         if (event === "message" && typeof (this as any).send === "function" && !(this as any).lookupDelay) {
           const socket = this as any, send = socket.send;
           socket.lookupDelay = true;
@@ -294,5 +298,46 @@ test("cancelled and edited lookup invocations reject delayed validation and file
     await expect(page.locator(".monaco-editor:visible")).toContainText("delayed lookup document");
     await expect(page.getByRole("tab", { name: "slow.txt", exact: true })).not.toHaveAccessibleDescription(/Preview/);
     await page.screenshot({ path: "test-results/exact-lookup.png" });
+    // Global activation must not resurrect a checkout closed while validation is in flight.
+    const second = join(dir, "second");
+    execFileSync("git", ["init", second]);
+    await writeFile(join(second, "slow.txt"), "second checkout");
+    await app.evaluate(({ dialog }, second) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [second] });
+    }, second);
+    await page.getByRole("button", { name: "Open project…", exact: true }).click();
+    await expect(page.locator("header")).toContainText(second);
+    await app.evaluate(() => {
+      (globalThis as any).searchRequests = [];
+      (globalThis as any).lookupNeedle = '"positions"';
+      (globalThis as any).releaseLookup = undefined;
+    });
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.getByLabel("Exact file path").fill("slow.txt");
+    await expect.poll(() => app.evaluate(() => typeof (globalThis as any).releaseLookup)).toBe("function");
+    await page.evaluate(root => window.escode.lookupFile(root, "a.txt"), root);
+    expect(await app.evaluate(() => (globalThis as any).searchRequests.length)).toBe(1);
+    await page.locator(".project-tab-close").first().evaluate((button: HTMLButtonElement) => button.click());
+    await expect(page.getByRole("option")).toHaveCount(1);
+    await expect(page.getByRole("option")).toContainText(second);
+    await app.evaluate(() => (globalThis as any).releaseLookup());
+    await expect(page.getByRole("option")).toHaveCount(1);
+    await app.evaluate(() => {
+      (globalThis as any).lookupNeedle = '"slow.txt"';
+      (globalThis as any).releaseLookup = undefined;
+    });
+    await page.keyboard.press("Enter");
+    await expect.poll(() => app.evaluate(() => typeof (globalThis as any).releaseLookup)).toBe("function");
+    // Exercise the existing close control while the native response is held at the wire.
+    await page.locator(".project-tab-close").evaluate((button: HTMLButtonElement) => button.click());
+    await expect(page.getByRole("dialog", { name: "Find file", exact: true })).toContainText("No open checkouts");
+    await app.evaluate(() => (globalThis as any).releaseLookup());
+    await page.evaluate(root => window.escode.lookupFile(root, "a.txt"), root);
+    await expect(page.locator(".project-tab")).toHaveCount(0);
+    await expect(page.locator("header")).toContainText("agents");
+    await expect(page.getByLabel("Exact file path")).toHaveValue("slow.txt");
+    await page.keyboard.press("Escape");
+
   } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }
 });

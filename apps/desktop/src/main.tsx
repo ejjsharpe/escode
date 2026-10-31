@@ -1238,7 +1238,19 @@ function ProjectView({
 }
 function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
   const [projects, setProjects] = useState<Status[]>(restored);
+  const [agentsLookup, setAgentsLookup] = useState(false);
   const [selected, setSelected] = useState(memory.selected || "agents");
+  useEffect(() => {
+    if (selected !== "agents") setAgentsLookup(false);
+    const key = (event: KeyboardEvent) => {
+      if (selected !== "agents" || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "p" ||
+          event.altKey || event.shiftKey || event.repeat || event.target instanceof HTMLInputElement ||
+          document.querySelector('dialog[open], [role="dialog"], [role="menu"], .tree-edit')) return;
+      event.preventDefault(); event.stopImmediatePropagation(); setAgentsLookup(true);
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [selected]);
   useEffect(() => {
     const moved = () => setSelected("agents");
     window.addEventListener("draft-context-changed", moved);
@@ -1296,7 +1308,10 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
   }
   useEffect(() => window.escode.onClose(() => void close()), [projects]);
   useEffect(() => {
-    const reveal = (event: Event) => setSelected((event as CustomEvent).detail.root);
+    const reveal = (event: Event) => {
+      const target = (event as CustomEvent).detail;
+      if (memory.projects.some(p => p.root === target.root && p.project === target.project)) setSelected(target.root);
+    };
     window.addEventListener("reveal-file", reveal);
     const listener = (event: Event) =>
       setError("Recovery draft could not be saved: " + (event as CustomEvent).detail);
@@ -1383,7 +1398,11 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
         </Button>
       </nav>
       {error && <p role="alert">{error}</p>}
-      {selected === "agents" && <AgentsView />}
+      {selected === "agents" && <>
+        <div className="view-nav"><Button onClick={() => setAgentsLookup(true)}>Find file</Button></div>
+        <AgentsView />
+        {agentsLookup && <FileLookup roots={projects} onClose={() => setAgentsLookup(false)} />}
+      </>}
       {projects.map((p) => {
         if (!callbacks.current.has(p.root))
           callbacks.current.set(p.root, (value) =>
