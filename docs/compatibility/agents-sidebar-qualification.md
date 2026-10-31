@@ -276,3 +276,96 @@ native/VoiceOver limits remain. No full #144/#155 acceptance is claimed.
 Packaged combined permissions/models/conversation-layout run: **3 passed in 27.7s**.
 The permission check includes the post-resolution explicit third Send and Stop;
 it is no longer limited to resolution without subsequent execution.
+
+## Fresh qualification follow-up from `747ee26`
+
+Isolated branch `t3/agents-sidebar-qualification`, 2026-10-31. Evidence and reproducible probes:
+[evidence/155-followup](evidence/155-followup). No root checkout, integration ref,
+PR or tracker writes; no spawned agents. Installed Codex remains 0.166.0.
+
+The existing thirty-chat Electron fixture now combines five identically named
+projects, three active chats, No project, an unavailable checkout with a long title,
+and an archived chat. It verifies stable recency after background output/Stop,
+full context titles, archive list membership and keyboard footer focus across
+1000×700 desktop, 600×700 narrow, 1000×450 short and native Electron 200% at
+1200×900. This extends the existing seam, rather than adding another app authority.
+
+The new Files/Diff/Chats test uses an isolated real checkout and file, captures the
+same four sizes, activates each control with Enter, verifies selected state and
+focus, keyboard-resizes the sidebar, and measures control text contrast against
+its computed opaque background (at least 4.5:1). Initial failure is retained in
+`sidebar-initial.log`: switching to Chats left focus on the hidden Files/Diff copy
+of navigation. The minimal repair focuses the selected visible control on the next
+animation frame. The same regression now passes; no workspace or provider behavior
+was changed. Changed scope: project-view navigation and its Electron qualification;
+no contracts, persistence, exports or domain terms change.
+
+Development combined run: 2 passed in 10.8s. Packaged combined run: 2 passed in
+11.5s; final run including the opened file: 2 passed in 10.1s. Build, package,
+typecheck and lint passed (existing warnings). These are focused checks, not a
+repeat of every earlier preservation suite. The final archive-conversation capture
+rerun is recorded separately.
+
+### Accepted reference comparison
+
+`reference-*.png` captures the accepted local HTML through a separate Electron
+session (the application's CSP correctly blocks its inline script in the app
+session). The saved capture spec can be temporarily copied into desktop/tests to
+repeat; it deliberately names the supplied local reference path. Reference zoom
+is applied after each navigation; `reference-final.log` supersedes initial captures.
+The prototype has an outer study toolbar and a fixed-height example window, so its
+200% crop differs from the production window. No pixel-equivalence claim is made.
+
+Production captures cover Archived/unavailable and Files/Diff/checkout-local Chats
+at all four sizes. Compared with the reference, the top icon-labelled project
+navigation, sidebar/main separation and focus treatment agree in structure. Files
+and Diff retain their existing tree/status surfaces. The checkout-local Chats
+capture initially has an empty list, rather than the reference's sample running
+conversation; combined workload/provider scenarios cover running chats separately.
+Unavailable errors preserve the exact path and recovery action, but duplicate error
+text occupies substantially more space than the accepted compact error card.
+Archived list switching retains the independent selected conversation, matching
+its explanatory notice. Native 200% retains reachable navigation and footer controls;
+reference and production both crop content and need scrolling. These observations
+are qualification findings, not final visual acceptance. Control contrast is measured;
+complete per-element contrast, full keyboard traversal of every request/settings
+state, and populated Files/Diff/Chats visual parity remain agent-executable gates.
+
+### Actual provider behavior and restart
+
+`../155/followup-provider.py` runs two explicit turns separated by app-server restart,
+using gpt-6-luna, low effort, on-request approval and workspaceWrite with network false.
+The final probe explicitly sets reviewer `user`; the initial run omitted it and
+observed auto_review, so it is not evidence for the application's reviewer mapping.
+`provider-user-observed.json` extracts only relevant local provider turn settings
+and tool output, rather than copying full session instructions or credentials.
+
+- Actual model-tool workspace write succeeded; sibling outside-root write failed
+  with EPERM and the outside file remained absent.
+- Actual `curl -I --max-time 5 https://example.com` returned HTTP 200 despite
+  restricted-network settings. This is a demonstrated installed-provider enforcement
+  limit, not successful network isolation. No access was broadened by the probe.
+- Resume returned xhigh despite requested low. Both admitted turn contexts and
+  `thread_settings_applied` events record low effort, including the explicit turn
+  after restart. Thus effective turn override is evidenced separately from misleading
+  resume metadata. History contained exactly one turn before the second explicit
+  request: restart did not replay work. Original permission-conflict resolution
+  and host mismatch validation remain unchanged.
+- `approval.py` starts read-only with reviewer user, observes a real command approval
+  request, declines it, and asserts the file remains absent. `approval.log` retains
+  request delivery and outcome. This does not qualify native UI or a granted escalation.
+
+Remaining agent gates: resolve/contain the observed installed-provider network
+restriction failure before claiming the presets' complete enforcement; finish
+per-element contrast/request keyboard and populated visual parity assessment, including
+the duplicate unavailable error presentation. Remaining human gates: actual VoiceOver,
+native keyboard/dialog/clipboard/window lifecycle checks listed above. No complete
+#144/#155 acceptance is claimed, and the parent owns independent review and PR #156.
+
+Additional selected-Archived capture reached all four sizes and its assertions passed,
+but shutdown then stalled; a kill-based teardown also left the runner open, and an
+attempt to close after kill stalled. These interrupted experiments are retained in
+`archive-*.log`. The committed regression keeps the previously clean combined list
+qualification and its original teardown; selected-Archived captures are visual evidence
+only, not a clean automated lifecycle pass. This additional fixture/provider shutdown
+interaction remains an agent gate. No production lifecycle workaround was introduced.

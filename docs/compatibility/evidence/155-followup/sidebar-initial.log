@@ -1,0 +1,40 @@
+$ playwright test tests/sidebar-qualification.spec.ts "--timeout=90000"
+
+Running 1 test using 1 worker
+
+(node:27333) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  1 tests/sidebar-qualification.spec.ts:8:1 › Files Diff Chats retain keyboard controls at desktop narrow short and native 200 percent (7.8s)
+
+
+  1) tests/sidebar-qualification.spec.ts:8:1 › Files Diff Chats retain keyboard controls at desktop narrow short and native 200 percent 
+
+    Error: expect(locator).toBeFocused() failed
+
+    Locator:  getByRole('button', { name: 'Chats', exact: true })
+    Expected: focused
+    Received: inactive
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeFocused" getByRole('button', { name: 'Chats', exact: true }) with timeout 5000ms
+      - waiting for getByRole('button', { name: 'Chats', exact: true })
+        14 × locator resolved to <button tabindex="0" type="button" aria-pressed="true">…</button>
+           - unexpected value "inactive"
+
+
+      23 |         await control.focus();
+      24 |         await page.keyboard.press("Enter");
+    > 25 |         await expect(control).toBeFocused();
+         |                               ^
+      26 |         await expect(control).toHaveAttribute("aria-pressed", "true");
+      27 |         await expect(control).toBeInViewport();
+      28 |         await page.screenshot({ path: `test-results/sidebar-${mode}-${width}-${height}-${zoom}.png` });
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-1adea5b7/apps/desktop/tests/sidebar-qualification.spec.ts:25:31
+
+    Error Context: test-results/sidebar-qualification-File-bc0e6-hort-and-native-200-percent/error-context.md
+
+  1 failed
+    tests/sidebar-qualification.spec.ts:8:1 › Files Diff Chats retain keyboard controls at desktop narrow short and native 200 percent 
+error: script "smoke" exited with code 1
