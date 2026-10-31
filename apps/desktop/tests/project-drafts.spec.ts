@@ -66,7 +66,8 @@ send({id:m.id,result});});`,
   try {
     let page = await app.firstWindow();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(alpha);
+    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: alpha || "No project" }).click();
     const message = () => page.getByRole("textbox", { name: "Message Codex" });
     await page.getByText("Chat actions", { exact: true }).click();
     await expect(page.getByText("Effective Codex settings · fixture", { exact: true })).toBeVisible();
@@ -78,15 +79,18 @@ send({id:m.id,result});});`,
     };
     await expect.poll(async () => (await records())[0]?.draft).toBe("Retain this draft");
     const original = (await records())[0];
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(beta);
+    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: beta || "No project" }).click();
     await expect(message()).toHaveValue("Retain this draft");
     await expect(page.locator(".agents .directory")).toContainText(worktree);
     await expect.poll(async () => (await records())[0]?.project).toBe(beta);
     await message().fill("Newer prompt in beta");
     await expect.poll(async () => (await records())[0]?.draft).toBe("Newer prompt in beta");
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(alpha);
+    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: alpha || "No project" }).click();
     await expect(message()).toHaveValue("Newer prompt in beta");
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(beta);
+    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: beta || "No project" }).click();
     await expect(message()).toHaveValue("Newer prompt in beta");
     await message().fill("Retain this draft");
     expect((await readFile(join(dir, "calls"), "utf8")).includes("thread/start")).toBe(false);
@@ -97,7 +101,8 @@ send({id:m.id,result});});`,
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     await expect(message()).toHaveValue("");
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(beta);
+    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: beta || "No project" }).click();
     await expect(page.locator(".agent-row").filter({ hasText: "Chat 2" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -118,9 +123,7 @@ send({id:m.id,result});});`,
     await expect(page.locator(".agents .directory")).toContainText(worktree);
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeEnabled();
-    await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toHaveCount(
-      0,
-    );
+    await expect(page.getByRole("button", { name: "Project", exact: true })).toBeDisabled();
     await expect.poll(async () => (await records())[0]).toMatchObject({
       id: original.id,
       createdAt: original.createdAt,
@@ -152,7 +155,7 @@ send({id:m.id,result});});`,
     await page.getByRole("button", { name: /^Chats(?: ·.*)?$/ }).click();
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
     await expect(
-      page.getByRole("combobox", { name: "Project context", exact: true }),
+      page.getByRole("button", { name: "Project", exact: true }),
     ).toBeVisible();
     await message().fill("Move from local Chats");
     const local = (await records()).at(-1);
@@ -168,9 +171,8 @@ send({id:m.id,result});});`,
     expect((await records()).at(-1).checkout).toBe(worktree);
     await page.locator('.project-tab button').filter({ hasText: "Beta" }).first().click();
     await expect(message()).toHaveValue("Move from local Chats");
-    await page.getByText("Execution checkout choices", { exact: true }).click();
-    await page.getByRole("combobox", { name: "Draft existing worktree" }).selectOption(worktree);
-    await page.getByRole("button", { name: "Use discovered worktree" }).click();
+    await page.getByRole("button", { name: "Worktree", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: worktree }).click();
     await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",

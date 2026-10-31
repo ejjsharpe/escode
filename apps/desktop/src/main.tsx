@@ -93,7 +93,6 @@ const styles = stylex.create({
     color: "#dedee5",
     backgroundColor: "#131416",
     minHeight: "100vh",
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
   },
 });
 function CheckoutView({

@@ -357,7 +357,7 @@ test("Agents keeps an unavailable remembered selection and validates catalogue a
     const newChat = page.getByRole("button", { name: "New chat", exact: true });
     await newChat.click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeFocused();
-    await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toHaveValue("");
+    await expect(page.getByRole("button", { name: "Project", exact: true })).toContainText("No project");
     await expect(page.locator(".agent-row")).toHaveCount(1);
     expect(
       await page.evaluate(async () => {
@@ -572,9 +572,10 @@ test("Agents composition retains deliberate editor project recency and checkout 
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Choose project" })).toHaveCount(0);
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeFocused();
-    await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toHaveValue(roots[0]);
+    await expect(page.getByRole("button", { name: "Project", exact: true })).toContainText((roots[0] || "No project").split("/").at(-1)!);
     await page.screenshot({ path: "test-results/composer-first-default.png" });
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(roots[3]);
+    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: roots[3] || "No project" }).click();
     const composer = page.getByRole("textbox", { name: "Message Codex" });
     await composer.fill("captured original prompt");
     await app.evaluate(({ dialog }, root) => {

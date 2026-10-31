@@ -300,12 +300,9 @@ Editing a choice never sends work.
 
 Installed Codex 0.166.0 qualification observed shell HTTPS access under a restricted network request. escode refuses restricted Send for this version and discloses the unsupported isolation; saved policy is retained and Full access requires an explicit choice.
 
-**New chat defaults**:
-Host-owned app settings and per-project overrides for model, effort and permissions.
-Current model selection is updated by foreground chat activation or an explicit model/effort selection in that chat; catalog
-reads and Send validation cannot change it. New drafts use project overrides before
-app defaults, current chat model, remembered
-Codex model/effort and the catalog default. Explicit draft choices survive changes.
-Effort memory is shared per Codex model. Permissions reset from project/app settings,
-with factory Full access; another chat's permission edit never becomes a default.
-Custom or managed Codex policy remains subject to explicit resolution.
+**Automatic chat choices**:
+New drafts use the current chat model, remembered Codex model/effort, then the catalog
+default. Effort memory is shared per model. Existing chats retain their explicit choices.
+New chats start with Full access; another chat's access edit never becomes a default.
+Custom or managed Codex restrictions still require explicit resolution. Saved app and
+project overrides are no longer applied or editable.

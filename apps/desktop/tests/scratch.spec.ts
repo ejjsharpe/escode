@@ -72,9 +72,7 @@ send({id:m.id,result});});`,
     const first = (await records())[0];
     expect(await readdir(user)).not.toContain("scratch");
     expect(await readFile(calls, "utf8").catch(() => "")).toBe("");
-    await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toHaveValue(
-      "",
-    );
+    await expect(page.getByRole("button", { name: "Project", exact: true })).toContainText("No project");
     await page.setViewportSize({ width: 728, height: 600 });
     await message().scrollIntoViewIfNeeded();
     await expect(message()).toBeInViewport();
@@ -181,7 +179,8 @@ test("one repository offers No project and text-bearing local drafts move throug
   };
     await expect.poll(async () => (await records())[0].draft).toBe("move this prompt");
     const original = (await records())[0];
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption("");
+    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: "No project" }).click();
     await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -196,10 +195,11 @@ test("one repository offers No project and text-bearing local drafts move throug
     await expect(page.getByRole("button", { name: "New chat", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     await expect(
-      page.getByRole("combobox", { name: "Project context", exact: true }),
+      page.getByRole("button", { name: "Project", exact: true }),
     ).toBeVisible();
     await expect(message).toHaveValue("");
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(repo);
+    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: repo || "No project" }).click();
     await expect(
       page.locator(".agent-row").filter({ hasText: "Chat 1" }).filter({ hasText: "Alpha" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -208,7 +208,8 @@ test("one repository offers No project and text-bearing local drafts move throug
     expect(textDraft.draft).toBe("move this prompt");
     await page.locator(".agent-row").filter({ hasText: "No project" }).click();
     await expect(message).toHaveValue("move this prompt");
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(repo);
+    await page.getByRole("button", { name: "Project", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: repo || "No project" }).click();
     await expect(message).toHaveValue("move this prompt");
     await expect.poll(async () => (await records()).find((c: any) => c.id === original.id)).toMatchObject({
       id: original.id,

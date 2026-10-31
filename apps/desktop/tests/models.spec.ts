@@ -27,10 +27,9 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
   try {
     let page = await app.firstWindow();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await expect(page.getByText("New chat defaults", { exact: true })).toHaveCount(0);
     await page.getByLabel("Message Codex").fill("retain my text");
     await expect(page.getByLabel("Next message permissions")).toHaveValue("full");
-    await page.getByText("New chat defaults", { exact: true }).click();
-    await page.getByLabel("App default model").selectOption("b");
     await expect(page.getByLabel("Next message model")).toHaveValue("a");
     await page.getByLabel("Next message model").selectOption("a");
     await page.getByLabel("Next message effort").selectOption("high");
@@ -66,8 +65,6 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     await expect(page.locator("span[role=status]")).toHaveText("Running");
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.locator("span[role=status]")).toHaveText("Ready");
-    await page.getByText("New chat defaults", { exact: true }).click();
-    await expect(page.getByLabel("App default model")).toHaveValue("b");
     await page.screenshot({ path: "test-results/models.png" });
     const next = await page.evaluate(async () => {
       const draft = await window.escode.chat("createDraft", null);
@@ -78,7 +75,6 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     });
     expect(next).toMatchObject({ model: { model: "b", effort: "medium" }, permission: "full" });
     await page.evaluate(async id => {
-      await window.escode.chat("defaults", null, id, "app", {});
       await window.escode.chat("models", null, id, "a", undefined, true);
     }, next.id);
     // Reactivating the saved B chat must supersede the last edited A chat.
@@ -116,25 +112,20 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     await page.getByRole("button", { name: "Open project…" }).click();
     const projectResult = await page.evaluate(async () => {
       const target = (await window.escode.chat("targets")).find(t => t.project !== null)!;
-      const draft = await window.escode.chat("createDraft", target.project);
-      await window.escode.chat("defaults", target.project, draft.id, "app", { model: "b", effort: "medium", permission: "supervised" });
-      await window.escode.chat("defaults", target.project, draft.id, "project", { model: "a", effort: "low", permission: "edits" });
+
       const fresh = await window.escode.chat("createDraft", target.project);
       return { project: target.project, id: fresh.id, models: await window.escode.chat("models", target.project, fresh.id), permissions: await window.escode.chat("permissions", target.project, fresh.id) };
     });
-    expect(projectResult.models.choice).toEqual({ model: "a", effort: "low" });
-    expect(projectResult.permissions.choice).toBe("edits");
-    await expect(page.evaluate(async ({ project, id }) => window.escode.chat("defaults", project, id, "project", { model: "missing", effort: "max" }), projectResult)).rejects.toThrow();
+    expect(projectResult.models.choice).toEqual({ model: "a", effort: "high" });
+    expect(projectResult.permissions.choice).toBe("full");
     await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); });
     app.process().kill("SIGKILL");
     app = await launchDesktop(join(dir, "user"), dir);
     page = await app.firstWindow();
-    expect(await page.evaluate(async ({ project, id }) => window.escode.chat("defaults", project, id, "project"), projectResult)).toEqual({ model: "a", effort: "low", permission: "edits" });
     expect(await page.evaluate(async id => window.escode.chat("models", null, id), remembered.id)).toMatchObject({ choice: { model: "a", effort: "high" } });
     expect(await page.evaluate(async id => window.escode.chat("composer", null, id), remembered.id)).toBe("preserved new draft");
     await writeFile(join(dir, "managed"), "managed policy");
     expect(await page.evaluate(async id => window.escode.chat("permissions", null, id), remembered.id)).toMatchObject({ blocked: true });
-    await expect(page.evaluate(async id => window.escode.chat("defaults", null, id, "app", { permission: "full" }), remembered.id)).rejects.toThrow();
     expect(await page.evaluate(async id => window.escode.chat("composer", null, id), remembered.id)).toBe("preserved new draft");
   } finally { app.process().kill("SIGKILL"); await rm(dir, { recursive: true, force: true }); }
 });

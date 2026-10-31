@@ -1,3 +1,5 @@
+import { Popover } from "@base-ui/react/popover";
+import { ContextPicker } from "./context-picker";
 import React, { useEffect, useState, useRef } from "react";
 import { Button } from "@base-ui/react/button";
 import { persist, flush } from "./workspace";
@@ -131,7 +133,6 @@ export function DraftWorktreeChoices({
 }) {
   const [options, setOptions] = useState<Options>();
   const [ref, setRef] = useState(chat.worktree?.ref ?? "");
-  const [reuse, setReuse] = useState("");
   const observation = useRef(0);
   const refreshing = useRef(false);
   const [error, setError] = useState("");
@@ -158,81 +159,21 @@ export function DraftWorktreeChoices({
     return () => { clearInterval(timer); observation.current++; };
   }, [chat.id, chat.checkout, chat.worktree?.source]);
   return (
-    <details className="worktree-choices">
-      <summary>Execution checkout choices</summary>
-      <fieldset disabled={busy}>
-        <legend>
-          {chat.worktree ? "New managed worktree selected" : "Existing checkout selected"}
-        </legend>
-        <p>
-          New worktrees use committed files only. Staged, unstaged, untracked, ignored and unsaved
-          edits stay in the original checkout. No fetch or setup runs.
-        </p>
-        {options && (
-          <>
-            <label>
-              Local base
-              <select
-                aria-label="Draft local base"
-                value={ref}
-                onChange={(e) => setRef(e.target.value)}
-              >
-                {!options.bases.some((b) => b.ref === ref) && (
-                  <option value={ref}>{ref || "No committed base available"}</option>
-                )}
-                {options.bases.map((b) => (
-                  <option key={b.ref} value={b.ref}>
-                    {b.ref}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p>
-              Resolved commit:{" "}
-              <code>
-                {options.bases.find((b) => b.ref === ref)?.commit ??
-                  "Unavailable; choose another base"}
-              </code>
-            </p>
-            <Button
-              type="button"
-              disabled={!options.bases.some((b) => b.ref === ref)}
-              onClick={() =>
-                void choose("new", ref, options.bases.find((b) => b.ref === ref)!.commit)
-              }
-            >
-              Use new managed worktree on first Send
-            </Button>
-            <label>
-              Existing project worktree
-              <select
-                aria-label="Draft existing worktree"
-                value={reuse}
-                onChange={(e) => setReuse(e.target.value)}
-              >
-                <option value="">Choose explicitly…</option>
-                {options.checkouts.map((root) => (
-                  <option key={root} value={root}>
-                    {root}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Button type="button" disabled={!reuse} onClick={() => void choose("reuse", reuse, "")}>
-              Use discovered worktree
-            </Button>
-            <p>
-              Chats sharing a checkout share files; their edits can interact. Branches and worktrees
-              are retained.
-            </p>
-          </>
-        )}
-        <Button type="button" onClick={() => void refresh()}>
-          Refresh available bases and worktrees
-        </Button>
-        {error && <p role="alert">{error}</p>}
-      </fieldset>
-    </details>
+    <>
+      <ContextPicker label="Worktree" disabled={busy || !options} value={chat.worktree ? "new" : chat.checkout}
+        options={[{ value: "new", label: "New worktree", detail: "Created on first Send from committed files" }, ...Array.from(new Set([chat.checkout, ...(options?.checkouts ?? [])])).map(root => ({ value: root, label: root.split("/").at(-1)!, detail: root }))]}
+        onChange={value => {
+          if (value === "new") {
+            const base = options?.bases.find(base => base.ref === ref);
+            if (base) void choose("new", base.ref, base.commit);
+            else setError("No committed base available. Commit a change before creating a worktree.");
+          } else void choose("reuse", value, "");
+        }} />
+      {chat.worktree ? <ContextPicker label="Branch" disabled={busy || !options} value={chat.worktree.ref}
+        options={(options?.bases ?? []).map(base => ({ value: base.ref, label: base.ref, detail: base.commit }))}
+        onChange={value => { const base = options?.bases.find(base => base.ref === value); if (base) void choose("new", value, base.commit); }} /> : <CheckoutBranch root={chat.checkout} />}
+      {error && <p role="alert">{error}</p>}
+    </>
   );
 }
 
@@ -264,16 +205,18 @@ export function CheckoutBranch({ root }: { root: string }) {
     };
   }, [root]);
   return (
-    <details className="checkout-branch">
-      <summary>
+    <Popover.Root>
+      <Popover.Trigger className="context-picker-trigger" aria-label="Branch">
         {branch ? (
           <>
-            Branch: <code>{branch}</code>
+            <span>{branch}</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m6 9 6 6 6-6" /></svg>
           </>
         ) : (
           "Branch unavailable"
         )}
-      </summary>
+      </Popover.Trigger>
+      <Popover.Portal><Popover.Positioner sideOffset={8} className="context-picker-positioner"><Popover.Popup className="context-picker-popup">
+      <Popover.Title className="context-picker-title">Current branch</Popover.Title><div className="context-picker-options"><p>Existing checkout branches are managed with Git.</p>
       {branch && (
         <Button
           type="button"
@@ -293,6 +236,7 @@ export function CheckoutBranch({ root }: { root: string }) {
         Copy execution path
       </Button>
       {error && <p role="status">{error}</p>}
-    </details>
+      </div></Popover.Popup></Popover.Positioner></Popover.Portal>
+    </Popover.Root>
   );
 }

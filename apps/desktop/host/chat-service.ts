@@ -78,30 +78,6 @@ const matchesPermission = (choice: SavedChat["nextPermission"], approval: unknow
 const networkUnsupported = "Codex 0.166.0 network isolation is unsupported by the installed model-tool execution path. Restricted Send is blocked. Retain this policy and use a qualified Codex installation, or explicitly choose Full access if unrestricted networking is intended.";
 const permissionResolution = "Codex retained its saved permission policy. History and draft are available. Send is blocked: select the matching saved policy in Next message permissions (Supervised for read-only, Auto-accept edits for workspace writes, Full access for unrestricted access), or resolve the policy in Codex and reconnect.";
 export class ChatService {
-  private async configured(project: string | null): Promise<import("@escode/contracts").ChatDefaults> {
-    const app = await this.store.database.command("chatDefaults", { scope: "app" });
-    const local = project === null ? {} : await this.store.database.command("chatDefaults", { scope: "project:" + project });
-    return { ...app, ...local };
-  }
-  async defaults(project: string | null, id: string, scope: "app" | "project", value?: import("@escode/contracts").ChatDefaults) {
-    await this.environment?.authorize(project);
-    await this.store.get(project, id);
-    if (scope === "project" && project === null) throw Error("Choose a project before configuring overrides");
-    if (value) {
-      if (value.model) {
-        const catalog = await this.models(project, id);
-        const model = catalog.models.find(m => m.model === value.model);
-        if (!model || !model.efforts.includes(value.effort!)) throw Error("Choose an available model and supported effort");
-      } else if (value.effort) throw Error("Choose a model for this effort");
-      if (value.permission) {
-        const policy = await this.permissions(project, id);
-        if (policy.blocked) throw Error(policy.message);
-        permissionPolicy(value.permission);
-      }
-    }
-    return this.store.database.command("chatDefaults", { scope: scope === "app" ? "app" : "project:" + project, ...(value === undefined ? {} : { body: value }) });
-  }
-
   async permissions(project: string | null, id: string, choice?: string) {
     await this.environment?.authorize(project);
     const chat = await this.store.get(project, id);
@@ -126,8 +102,7 @@ export class ChatService {
       const conflict = session?.permissionConflict && (session.permissionReviewer !== "user" || !matchesPermission((choice ?? chat.nextPermission) as SavedChat["nextPermission"], effective?.approval, sandbox));
       const message = conflict ? permissionResolution : blocked ? "Custom or managed Codex policy retained. Resolve it in Codex configuration before choosing a preset." : "";
       if (!chat.nextPermission && !chat.hasSent && !chat.threadId && !blocked) {
-        const defaults = await this.configured(project);
-        chat.nextPermission = defaults.permission ?? "full";
+        chat.nextPermission = "full";
         await this.store.update(project, id, { nextPermission: chat.nextPermission });
       }
       if (choice !== undefined) {
@@ -163,12 +138,11 @@ export class ChatService {
       let choice = chat.nextModel;
       const memory = await this.store.database.command("chatDefaults", { scope: "remembered" }) as { model?: string; efforts?: Record<string, string> };
       if (!choice && !chat.hasSent && !chat.threadId) {
-        const defaults = await this.configured(project);
         const current = await this.store.database.command("chatDefaults", { scope: "current" }) as { model?: string; effort?: string };
-        const selected = defaults.model ?? current.model ?? memory.model ?? providerDefault;
+        const selected = current.model ?? memory.model ?? providerDefault;
         const entry = models.find(m => m.model === selected);
         if (selected) {
-          choice = { model: selected, effort: defaults.effort ?? (current.model === selected ? current.effort : undefined) ?? memory.efforts?.[selected] ?? entry?.defaultEffort ?? "unavailable", remembered: {} };
+          choice = { model: selected, effort: (current.model === selected ? current.effort : undefined) ?? memory.efforts?.[selected] ?? entry?.defaultEffort ?? "unavailable", remembered: {} };
           await this.store.update(project, id, { nextModel: choice });
         }
       }
@@ -326,10 +300,8 @@ export class ChatService {
         target = checkout.root;
       }
       check();
-      const defaults = await this.configured(project);
-      check();
       const draft = await this.store.createDraft(project, target, true);
-      await this.store.update(project, draft.id, { nextPermission: defaults.permission ?? "full" });
+      await this.store.update(project, draft.id, { nextPermission: "full" });
       return this.store.get(project, draft.id);
     }
     return this.inContext(project, action.id, async () => {

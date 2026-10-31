@@ -393,7 +393,6 @@ app.whenReady().then(async () => {
     },
     gitStatus: async root => (await checkout(root)).status(),
     worktreeOptions: async root => (await checkout(root)).repositoryGit.worktreeOptions(),
-    chatDefaults: (project, id, scope, value) => chats.defaults(project, id, scope, value),
     chatPermissions: (project, id, choice) => chats.permissions(project, id, choice),
     chatModels: (project, id, model, effort, activate) => chats.models(project, id, model, effort, activate),
     draftAction: action => chats.draftAction(action),

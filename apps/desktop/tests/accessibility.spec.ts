@@ -117,10 +117,11 @@ createInterface({input:process.stdin}).on('line',line=>{
     );
     await activate(page.getByRole("button", { name: "Agents", exact: true }));
     await activate(page.getByRole("button", { name: "New chat", exact: true }));
-    const context = page.getByRole("combobox", { name: "Project context", exact: true });
+    const context = page.getByRole("button", { name: "Project", exact: true });
     await reach(context);
-    await context.selectOption("");
-    await expect(context).toHaveValue("");
+    await page.keyboard.press("Enter");
+    await activate(page.locator(".context-picker-options button").filter({ hasText: "No project" }));
+    await expect(context).toContainText("No project");
     await reach(compose);
     await page.keyboard.type("keyboard scratch question");
     await activate(page.getByRole("button", { name: "Send message", exact: true }));

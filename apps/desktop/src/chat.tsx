@@ -1,3 +1,5 @@
+import * as stylex from "@stylexjs/stylex";
+import { ContextPicker } from "./context-picker";
 import { ConversationText } from "./conversation";
 import { ArchiveFooter } from "./archive-footer";
 import { ChatRow } from "./chat-row";
@@ -11,8 +13,12 @@ import { createPortal } from "react-dom";
 import { Button } from "@base-ui/react/button";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
+const chatStyles = stylex.create({
+  checkpointNotice: { fontSize: 12, color: "#a4a3b0", margin: 0 },
+  checkpointSummary: { cursor: "pointer" },
+  historyControls: { display: "flex", flexWrap: "wrap", gap: 8 },
+});
 export interface ChatBridge {
-  (operation: "defaults", project: string | null, id: string, scope: "app" | "project", value?: import("@escode/contracts").ChatDefaults): Promise<import("@escode/contracts").ChatDefaults>;
   (operation: "permissions", project: string | null, id: string, choice?: "supervised" | "edits" | "full"): Promise<import("@escode/contracts").PermissionChoices>;
   (operation: "archive", project: string | null, id: string, archived: boolean): Promise<unknown>;
   (operation: "renameTitle", project: string | null, id: string, title: string): Promise<void>;
@@ -50,48 +56,6 @@ export interface ChatBridge {
     answer: unknown,
   ): Promise<void>;
 }
-function DefaultControls({ project, id, catalog, blocked }: { project: string | null; id: string; catalog: import("@escode/contracts").ModelChoices; blocked: boolean }) {
-  const [values, setValues] = useState<Record<string, import("@escode/contracts").ChatDefaults>>({});
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    let current = true;
-    for (const scope of project === null ? ["app" as const] : ["app" as const, "project" as const]) {
-      void window.escode.chat("defaults", project, id, scope).then(value => { if (current) setValues(old => ({ ...old, [scope]: value })); }).catch(e => { if (current) setError(String(e)); });
-    }
-    return () => { current = false; };
-  }, [project, id]);
-  const save = async (scope: "app" | "project", value: import("@escode/contracts").ChatDefaults) => {
-    setSaving(true);
-    try { const result = await window.escode.chat("defaults", project, id, scope, value); setValues(old => ({ ...old, [scope]: result })); setError(""); }
-    catch (e) { setError(String(e)); } finally { setSaving(false); }
-  };
-  return <details><summary>New chat defaults</summary><p>Applies to new drafts. Existing chats retain their choices. Project overrides take precedence over app defaults.</p>
-    {(["app", "project"] as const).filter(scope => scope === "app" || project !== null).map(scope => {
-      const value = values[scope];
-      const label = scope === "app" ? "App default" : "Project override";
-      const model = catalog.models.find(m => m.model === value?.model);
-      return <fieldset key={scope} disabled={saving || !value}><legend>{label}</legend>
-        <label>Model <select aria-label={label + " model"} value={value?.model ?? ""} onChange={e => {
-          const selected = catalog.models.find(m => m.model === e.target.value);
-          const { model: _model, effort: _effort, ...rest } = value!;
-          void save(scope, selected ? { ...rest, model: selected.model, effort: selected.defaultEffort } : rest);
-        }}><option value="">{scope === "app" ? "Current / remembered / Codex default" : "Use app default"}</option>
-          {value?.model && !model && <option value={value.model}>{value.model} (unavailable)</option>}
-          {catalog.models.map(m => <option key={m.model} value={m.model}>{m.name}</option>)}
-        </select></label>
-        {value?.model && <label>Effort <select aria-label={label + " effort"} disabled={!model} value={value.effort} onChange={e => void save(scope, { ...value, effort: e.target.value })}>
-          {!model?.efforts.includes(value.effort!) && <option value={value.effort}>{value.effort} (unavailable)</option>}
-          {model?.efforts.map(e => <option key={e}>{e}</option>)}
-        </select></label>}
-        <label>Permissions <select aria-label={label + " permissions"} disabled={blocked} value={value?.permission ?? ""} onChange={e => {
-          const { permission: _permission, ...rest } = value!;
-          void save(scope, e.target.value ? { ...rest, permission: e.target.value as "full" | "edits" | "supervised" } : rest);
-        }}><option value="">{scope === "app" ? "Factory: Full access" : "Use app default"}</option><option value="supervised">Supervised</option><option value="edits">Auto-accept edits</option><option value="full">Full access</option></select></label>
-      </fieldset>;
-    })}{error && <p role="alert">{error}</p>}
-  </details>;
-}
 function ModelControls({ project, id, onSaving, existingError }: { project: string | null; id: string; onSaving: (saving: boolean) => void; existingError?: string | null }) {
   const [permissions, setPermissions] = useState<import("@escode/contracts").PermissionChoices | null>(null);
   const [catalog, setCatalog] = useState<import("@escode/contracts").ModelChoices | null>(null);
@@ -111,23 +75,28 @@ function ModelControls({ project, id, onSaving, existingError }: { project: stri
   };
   const model = catalog?.models.find(m => m.model === catalog.choice?.model);
   return <div className="chat-model-controls" aria-label="Next message settings" title="Applies only to your next explicit Send">
-    <span className="control-label">Next message</span>
-    <label><span className="control-label">Model</span> <select aria-label="Next message model" disabled={saving || !catalog} value={catalog?.choice?.model ?? ""} onChange={e => void choose(e.target.value)}>
-      <option value="" disabled>Codex configured default</option>
-      {catalog?.choice && !model && <option value={catalog.choice.model}>{catalog.choice.model} (unavailable)</option>}
-      {catalog?.models.map(m => <option key={m.model} value={m.model}>{m.name}</option>)}
-    </select></label>
-    {catalog?.choice && <label><span className="control-label">Effort</span> <select aria-label="Next message effort" disabled={saving || !model} value={catalog.choice.effort} onChange={e => void choose(catalog.choice!.model, e.target.value)}>
-      {!model?.efforts.includes(catalog.choice.effort) && <option value={catalog.choice.effort}>{catalog.choice.effort} (unavailable)</option>}
-      {model?.efforts.map(e => <option key={e} value={e}>{e}</option>)}
-    </select></label>}
-    <label title="Supervised: read-only with approval. Auto-accept edits: workspace and temporary-directory writes, command networking requested off (provider enforcement required); broader access needs approval. Full access: no sandbox or command approval."><span className="control-label">Permissions</span> <select aria-label="Next message permissions" disabled={saving || !permissions || permissions.blocked} value={permissions?.blocked ? "" : permissions?.choice ?? ""} onChange={async e => {
-      setSaving(true); onSaving(true);
-      try { setPermissions(await window.escode.chat("permissions", project, id, e.target.value as "supervised" | "edits" | "full")); setError(""); }
-      catch (e) { setError(String(e)); } finally { setSaving(false); onSaving(false); }
-    }}><option value="" disabled>{permissions?.blocked ? "Custom / managed Codex policy" : "Inherited Codex policy"}</option><option value="supervised">Supervised</option><option value="edits">Auto-accept edits</option><option value="full">Full access</option></select></label>
+    <ContextPicker label="Next message model" disabled={saving || !catalog} value={catalog?.choice?.model ?? ""}
+      options={[
+        ...(!catalog?.choice ? [{ value: "", label: "Codex configured default", disabled: true }] : !model ? [{ value: catalog.choice.model, label: `${catalog.choice.model} (unavailable)`, disabled: true }] : []),
+        ...(catalog?.models.map(m => ({ value: m.model, label: m.name })) ?? []),
+      ]} onChange={value => void choose(value)} />
+    <ContextPicker label="Next message effort" disabled={saving || !model || !catalog?.choice} value={catalog?.choice?.effort ?? ""}
+      options={[
+        ...(!catalog?.choice ? [{ value: "", label: "Reasoning", disabled: true }] : !model?.efforts.includes(catalog.choice.effort) ? [{ value: catalog.choice.effort, label: `${catalog.choice.effort} (unavailable)`, disabled: true }] : []),
+        ...(model?.efforts.map(effort => ({ value: effort, label: effort })) ?? []),
+      ]} onChange={value => void choose(catalog!.choice!.model, value)} />
+    <ContextPicker label="Next message permissions" disabled={saving || !permissions || permissions.blocked} value={permissions?.blocked ? "" : permissions?.choice ?? ""}
+      options={[
+        { value: "", label: permissions?.blocked ? "Custom / managed Codex policy" : "Inherited Codex policy", disabled: true },
+        { value: "supervised", label: "Supervised", detail: "Read-only; broader access needs approval." },
+        { value: "edits", label: "Auto-accept edits", detail: "Workspace and temporary-directory writes. Broader access needs approval; network restrictions require provider support." },
+        { value: "full", label: "Full access", detail: "No sandbox or command approval." },
+      ]} onChange={async value => {
+        setSaving(true); onSaving(true);
+        try { setPermissions(await window.escode.chat("permissions", project, id, value as "supervised" | "edits" | "full")); setError(""); }
+        catch (e) { setError(String(e)); } finally { setSaving(false); onSaving(false); }
+      }} />
     {permissions?.message && <span role="status">{permissions.message}</span>}
-    {catalog && <DefaultControls project={project} id={id} catalog={catalog} blocked={!permissions || permissions.blocked} />}
     {error && !existingError && <span role="alert">{error}</span>}
   </div>;
 }
@@ -291,6 +260,7 @@ export function ChatView({
   const run = (action: () => Promise<unknown>) => store.run(selected, action);
   const snapshot = snapshots[selected];
   const page = history[selected];
+  const checkpointWarning = snapshot?.error?.startsWith("File checkpoint unavailable") ? snapshot.error : null;
   const liveItems = (snapshot?.items ?? []).filter(item => !item.revision);
   const items = page
     ? [...page.items.filter(saved => !liveItems.some(item => saved.id === item.id && saved.turnId === item.turnId)), ...liveItems]
@@ -313,7 +283,26 @@ export function ChatView({
               <Button disabled={!record.archived && (working || snapshot?.busy || !!snapshot?.requests.length || record.initialSend === "uncertain" || record.initialSend === "creating" || record.initialSend === "preparing")}
                 onClick={() => void run(() => window.escode.chat("archive", project, selected, !record.archived))}>{record.archived ? "Restore chat" : "Archive chat"}</Button>
               {!record.archived && (working || snapshot?.busy || !!snapshot?.requests.length) && <p>Archive requires an idle chat without unresolved work.</p>}
-              <Button disabled={working} onClick={() => void store.reconnect(selected)}>Reload history</Button>
+<div className="chat-recovery">
+              <Button
+                disabled={working}
+                onClick={() => void store.reconnect(selected)}
+              >
+                Retry connection / reload history
+              </Button>
+              {record.initialSend === "uncertain" && <Button disabled={working || snapshot?.busy} onClick={() => void window.escode.chat("resolveSend", project, selected).then(() => store.reconnect(selected))}>
+                Resolve previous Send…
+              </Button>}
+            </div>
+              {(history[selected] || snapshot?.history) && (
+                <nav aria-label="History pages" {...stylex.props(chatStyles.historyControls)}>
+                  <Button disabled={working} onClick={() => store.history(selected, null)}>First history page</Button>
+                  <Button disabled={working || !(history[selected] ?? snapshot?.history)?.nextCursor}
+                    onClick={() => store.history(selected, (history[selected] ?? snapshot?.history)?.nextCursor ?? null)}>Next history page</Button>
+                  <p aria-live="polite">Showing one history page. Other portions are not loaded.</p>
+                </nav>
+              )}
+
               <Boundaries key={selected} project={project} id={selected} />
               {Boolean(snapshot?.settings) && (
                 <details>
@@ -327,6 +316,11 @@ export function ChatView({
             {record?.checkout && chats.filter((c) => c.checkout === record.checkout).length > 1 && (
               <p>These chats share files in this checkout. Their edits can interact.</p>
             )}
+            {checkpointWarning && <details {...stylex.props(chatStyles.checkpointNotice)}>
+              <summary {...stylex.props(chatStyles.checkpointSummary)}>File restore unavailable</summary>
+              <p>This turn has no file checkpoint, so its file changes cannot be restored from history.</p>
+              <p>{checkpointWarning}</p>
+            </details>}
             <div className="chat-actions">
               {global && project && record?.checkout && !record.removed && (record.phase !== "draft" || !record.worktree) && (
                 <Button onClick={() => window.dispatchEvent(new CustomEvent("open-checkout", { detail: { project, id: record.id } }))}>
@@ -396,19 +390,8 @@ export function ChatView({
               </p>
             )}
             {!global && conversationToolbar}
-            {(error || snapshot?.error || snapshot?.contextError || record.initialSend === "uncertain" || (!unsent && !snapshot?.connected)) && <div className="chat-recovery">
-              <Button
-                disabled={working}
-                onClick={() => void store.reconnect(selected)}
-              >
-                Retry connection / reload history
-              </Button>
-              {record.initialSend === "uncertain" && <Button disabled={working || snapshot?.busy} onClick={() => void window.escode.chat("resolveSend", project, selected).then(() => store.reconnect(selected))}>
-                Resolve previous Send…
-              </Button>}
-            </div>}
             {error && <p role="alert">{error}</p>}
-            {(snapshot?.contextError || snapshot?.error) && (
+            {(snapshot?.contextError || (snapshot?.error && !checkpointWarning)) && (
               <p role="alert">{snapshot?.contextError || snapshot?.error}</p>
             )}
             {record?.initialSend === "uncertain" && (
@@ -425,14 +408,6 @@ export function ChatView({
               </p>
             )}
             <div className="transcript" role="region" aria-label="Conversation history">
-              {(history[selected] || snapshot?.history) && (
-                <nav aria-label="History pages">
-                  <Button disabled={working} onClick={() => store.history(selected, null)}>First history page</Button>
-                  <Button disabled={working || !(history[selected] ?? snapshot?.history)?.nextCursor}
-                    onClick={() => store.history(selected, (history[selected] ?? snapshot?.history)?.nextCursor ?? null)}>Next history page</Button>
-                  <p aria-live="polite">Showing one history page. Other portions are not loaded.</p>
-                </nav>
-              )}
               {items.map((item) => (
                 <article key={item.turnId + item.id}>
                   <h2>
@@ -456,25 +431,9 @@ export function ChatView({
             </div>
             <div className="compose-context">
               {unsent && !record?.scratch && !record?.worktree?.reservation && (
-                <label className="draft-context">
-                  <span className="control-label">Project context</span>
-                  <select
-                    aria-label="Project context"
-                    value={project ?? ""}
-                    disabled={working}
-                    onChange={(e) => void changeContext(e.target.value || null)}
-                  >
-                    <option value="">No project</option>
-                    {project && !targets.some(t => t.project === project) && <option value={project}>{project} · Unavailable</option>}
-                    {targets
-                      .filter((t) => t.project !== null)
-                      .map((t) => (
-                        <option key={t.project!} value={t.project!}>
-                          {t.project?.split("/").at(-1) ?? "No project"}
-                        </option>
-                      ))}
-                  </select>
-                </label>
+                <ContextPicker label="Project" value={project ?? ""} disabled={working}
+                  options={[{ value: "", label: "No project" }, ...Array.from(new Set([project, ...targets.map(t => t.project)].filter((p): p is string => p !== null))).map(p => ({ value: p, label: p.split("/").at(-1)!, detail: p }))]}
+                  onChange={value => void changeContext(value || null)} />
               )}
               {record && project !== null && unsent && !record.worktree?.reservation && (
                 <DraftWorktreeChoices
@@ -535,33 +494,12 @@ export function ChatView({
                     : "Copy execution path"}
                 </Button>
               )}
-            <details className="execution-context">
-              <summary>{global && unsent ? "Chat details" : `${project?.split("/").at(-1) ?? "No project"}${record.checkout && record.checkout !== project ? ` · ${record.checkout.split("/").at(-1)}` : ""}`}</summary>
-              {global && conversationToolbar}
-                  {unsent && project !== null && !record.scratch && !record.worktree?.reservation && (
-                    <Button
-                      type="button"
-                      disabled={working}
-                      onClick={() => void changeContext(project)}
-                    >
-                      Use current checkout
-                    </Button>
-                  )}
-            <p className="directory">
-              {project === null
-                ? "Scratch folder: "
-                : record?.worktree && !record.worktree.reservation
-                  ? "Source checkout: "
-                  : "Checkout: "}
-              {record?.checkout || "Allocated on first Send"}
-            </p>
-            {record?.checkout && (project === null || record.worktree && !record.worktree.reservation) && <Button type="button" onClick={() => void run(() => navigator.clipboard.writeText(record.checkout))}>Copy execution path</Button>}
-            {project !== null &&
-              record?.checkout &&
-              (record.phase !== "draft" || !record.worktree) && (
-                <CheckoutBranch root={record.checkout} />
-              )}
-            </details>
+            {!(unsent && !record.scratch && !record.worktree?.reservation) && <ContextPicker label="Project" value={project ?? ""} options={[{ value: project ?? "", label: project?.split("/").at(-1) ?? "No project", detail: project ?? undefined }]} disabled onChange={() => {}} />}
+            {(project === null || !unsent || record.worktree?.reservation) && <>
+              <ContextPicker label="Worktree" value={record.checkout ?? ""} options={[{ value: record.checkout ?? "", label: record.checkout?.split("/").at(-1) || "Scratch folder", detail: record.checkout || "Allocated on first Send" }]} disabled onChange={() => {}} />
+              {project && record.checkout ? <CheckoutBranch root={record.checkout} /> : <ContextPicker label="Branch" value="" options={[{ value: "", label: "No branch" }]} disabled onChange={() => {}} />}
+            </>}
+
             </div>
             <form
               className="chat-compose"

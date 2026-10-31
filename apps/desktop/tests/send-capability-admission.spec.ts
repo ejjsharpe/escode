@@ -37,8 +37,9 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
       await page.getByRole("button", { name: "Open project…" }).click();
       await page.getByRole("button", { name: "Chats", exact: true }).click();
       await page.getByRole("button", { name: "New chat on current checkout" }).click();
-      await page.getByText("Execution checkout choices", { exact: true }).click();
-      await page.getByRole("button", { name: "Use new managed worktree on first Send" }).click();
+      await page.getByRole("button", { name: "Worktree", exact: true }).click();
+      if (!await page.locator(".context-picker-popup").count()) await page.getByRole("button", { name: "Worktree", exact: true }).click();
+    await page.locator(".context-picker-options button").filter({ hasText: "New worktree" }).click();
     } else await page.getByRole("button", { name: "New chat", exact: true }).click();
     const message = page.getByLabel("Message Codex");
     await message.fill("retain rejected draft");
@@ -50,7 +51,7 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("alert").filter({ hasText: "network isolation" }).first()).toBeVisible();
     await expect(message).toHaveValue("retain rejected draft");
-    await expect(page.getByLabel("Project context", { exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Project", exact: true })).toBeEnabled();
     await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("escode-send:")))).toEqual([]);
     const after = (await records())[0];
     expect(after).toMatchObject({ id: before.id, checkout: before.checkout, phase: "draft", nextPermission: before.nextPermission });
