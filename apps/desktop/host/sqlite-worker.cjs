@@ -11,6 +11,9 @@ const validate = chats => {
     if (!chat || typeof chat.id !== 'string' || !chat.id || chat.id.length > 256 || ids.has(chat.id) ||
         !(chat.project === null || typeof chat.project === 'string') || typeof chat.checkout !== 'string' ||
         typeof chat.draft !== 'string' || !(chat.threadId === null || typeof chat.threadId === 'string') ||
+        (chat.title !== undefined && (typeof chat.title !== 'string' || !chat.title.trim() || chat.title.length > 256 || /[\r\n\x00-\x1f]/.test(chat.title))) ||
+        (chat.titleSource !== undefined && (typeof chat.titleSource !== 'string' || chat.titleSource.length > 4000)) ||
+        (chat.titleRequest !== undefined && (typeof chat.titleRequest !== 'string' || chat.titleRequest.length > 256)) ||
         (chat.phase !== undefined && !['draft', 'bound'].includes(chat.phase)) ||
         (chat.directoryIdentity && (typeof chat.directoryIdentity.path !== 'string' || !Number.isSafeInteger(chat.directoryIdentity.dev) || !Number.isSafeInteger(chat.directoryIdentity.ino)))) throw Error('Malformed draft storage');
     ids.add(chat.id);

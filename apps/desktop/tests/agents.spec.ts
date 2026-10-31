@@ -362,7 +362,7 @@ test("Agents keeps an unavailable remembered selection and validates catalogue a
   }
 });
 
-test("Agents and local Chats keep newest-first order and original labels through selection and activity", async () => {
+test("Agents and local Chats share fallback titles without reordering on activity", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-chat-order-")));
   const root = join(dir, "repo"),
     user = join(dir, "user");
@@ -452,10 +452,11 @@ send({id:m.id,result});});`,
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("older prompt");
     await expect(localRows).toHaveText(labels);
     await page.getByRole("button", { name: "Send message", exact: true }).click();
-    await expect(localRows).toHaveText(["Chat 3", "Chat 2 · Needs input", "Chat 1"]);
+    labels[1] = "older prompt";
+    await expect(localRows).toHaveText(["Chat 3", "older prompt · Needs input", "Chat 1"]);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await expect(globalRows).toHaveText(labels);
-    await page.locator(".agent-row").filter({ hasText: "Chat 2" }).click();
+    await page.locator(".agent-row").filter({ hasText: "older prompt" }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeVisible();
     await expect(page.locator(".agent-row").nth(1)).toContainText("Needs input");
     await expect(globalRows).toHaveText(labels);

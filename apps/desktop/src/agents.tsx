@@ -21,11 +21,7 @@ function ChatRow({
     <li>
       <Button className="agent-row" aria-pressed={selected} onClick={select}>
         <strong>
-          Chat{" "}
-          {Math.max(
-            0,
-            chats.filter(c => c.project === chat.project).findIndex((c) => c.id === chat.id),
-          ) + 1}
+          {chat.title || `Chat ${Math.max(0, chats.filter(c => c.project === chat.project).findIndex(c => c.id === chat.id)) + 1}`}
         </strong>
         <span>{chat.project?.split("/").at(-1) ?? "No project"}</span>
         <small>{status}</small>

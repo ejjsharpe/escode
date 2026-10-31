@@ -13,6 +13,8 @@ type ProjectArguments =
   | ["save", string, string, string, string]
   | ["diff", string, string, "staged" | "unstaged" | "untracked"];
 type ChatArguments =
+  | [operation: "renameTitle", project: string | null, id: string, title: string]
+  | [operation: "regenerateTitle", project: string | null, id: string]
   | [operation: "createDraft", project: string | null, checkout?: string]
   | [operation: "context", project: string | null, id: string, target: string | null]
   | [operation: "execution", project: string, id: string, mode: "new" | "reuse", value: string, commit: string]
@@ -126,6 +128,8 @@ contextBridge.exposeInMainWorld(
     },
     chat: async (...call: ChatArguments) => {
       await chatStorageReady;
+      if (call[0] === "renameTitle" || call[0] === "regenerateTitle") return hostClient.titleAction({
+        project: call[1], id: call[2], ...(call[0] === "renameTitle" ? { title: call[3] } : {}) });
       const [operation, ...args] = call;
       return ["createDraft", "context", "execution"].includes(operation)
       ? (async () => {

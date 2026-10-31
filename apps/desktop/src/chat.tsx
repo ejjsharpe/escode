@@ -9,6 +9,8 @@ import { Button } from "@base-ui/react/button";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
+  (operation: "renameTitle", project: string | null, id: string, title: string): Promise<void>;
+  (operation: "regenerateTitle", project: string | null, id: string): Promise<void>;
   (operation: "composer", project: string | null, id: string): Promise<string>;
   (operation: "targets"): Promise<{ project: string | null; checkout: string }[]>;
   (operation: "createDraft", project: string | null, checkout?: string): Promise<SavedChat>;
@@ -226,7 +228,7 @@ export function ChatView({
               {[...scopedChats].sort(compareChats).map((c) => (
                 <li key={c.id}>
                   <Button aria-pressed={selected === c.id} onClick={() => void select(c.id)}>
-                    Chat {chats.findIndex((chat) => chat.id === c.id) + 1}
+                    {c.title || `Chat ${chats.findIndex((chat) => chat.id === c.id) + 1}`}
                     {c.needsInput
                       ? " · Needs input"
                       : c.busy
@@ -250,7 +252,8 @@ export function ChatView({
               </p>
             )}
             <div className="conversation-heading">
-              <h2>Chat {chats.findIndex((c) => c.id === selected) + 1}</h2>
+              <h2 title={record.title}>{record.title || `Chat ${chats.findIndex((c) => c.id === selected) + 1}`}</h2>
+              <TitleActions project={project} id={selected} title={record.title ?? ""} />
               <p>{project?.split("/").at(-1) ?? "No project"}</p>
             </div>
             <p className="directory">
@@ -493,4 +496,26 @@ export function ChatView({
       </>
     </>
   );
+}
+
+function TitleActions({ project, id, title }: { project: string | null; id: string; title: string }) {
+  const [error, setError] = useState("");
+  const run = async (action: () => Promise<void>) => {
+    setError("");
+    try { await action(); } catch (failure) { setError(String(failure)); }
+  };
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(title);
+  useEffect(() => { setEditing(false); setValue(title); }, [id, title]);
+  return <details className="title-actions"><summary>Chat actions</summary>
+    {error && <p role="alert">{error}</p>}
+    <Button onClick={() => { setValue(title); setEditing(true); }}>Rename</Button>
+    <Button onClick={() => void run(() => window.escode.chat("regenerateTitle", project, id))}>Regenerate title</Button>
+    {editing && <form onSubmit={event => { event.preventDefault(); void run(async () => {
+      await window.escode.chat("renameTitle", project, id, value); setEditing(false);
+    }); }}>
+      <label>Chat title<input autoFocus maxLength={256} value={value} onChange={event => setValue(event.target.value)} /></label>
+      <Button type="submit">Save title</Button><Button type="button" onClick={() => setEditing(false)}>Cancel</Button>
+    </form>}
+  </details>;
 }
