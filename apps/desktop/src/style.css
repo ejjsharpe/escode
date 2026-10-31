@@ -807,7 +807,7 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .conversation-layout .transcript { flex: 1 1 0; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
 .conversation-layout .transcript > *, .conversation-layout > .chat-compose { width: 100%; max-width: 75ch; margin-inline: auto; }
 .conversation-layout.is-empty .transcript { flex: 1; }
-.conversation-layout.is-empty .chat-compose { margin-bottom: auto; }
+.conversation-layout.is-empty::after { content: ""; flex: 1; }
 .conversation-layout .chat-compose { margin-top: 0; max-height: 55vh; overflow: auto; flex-shrink: 0; }
 .conversation-layout .chat-compose textarea { min-height: 54px; max-height: 160px; }
 .conversation-text { line-height: 1.65; overflow-wrap: anywhere; }
