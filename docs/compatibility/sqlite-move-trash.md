@@ -2,7 +2,7 @@
 
 ## Completion follow-up
 
-The isolated `implement/123-recovery-delivery` worktree started at integration `e1fc441`, merged partial `10b56b0`, and then merged integration `d7fd558` (#125). Baseline `0a9c981` remains an ancestor. No issue closure, PR, or integration-branch merge was performed.
+The isolated `implement/123-recovery-delivery` worktree started at integration `e1fc441`, merged partial `10b56b0`, and then merged integration `d7fd558` (#125), `f203878` (#124), and `4023763` (qualification only). Baseline `0a9c981` remains an ancestor. No issue closure, PR, or integration-branch merge was performed.
 
 Completed move/Trash facts now publish transactionally to separate obligations for every saved workspace client, including the originating client. Another client's acknowledgement cannot clear them. Recovery and late snapshot persistence reconcile independent move text and baselines. Another client's Trash preserves its drafts at the original missing paths. Save and copy behavior remain separately owned; no other client's loaded save baseline is replaced by this publication.
 
@@ -15,7 +15,11 @@ Executed follow-up evidence:
 - Actual native move and macOS Trash SIGKILL windows after mutation, committed outcome and acknowledgement. Mutation-only Trash remains uncertain with drafts retained; it is never inferred successful from absence.
 - Partial move and Trash subprocess batches: one successful native effect, followed by a missing-source failure, then SIGKILL. These are bounded partial-batch cases, not every inter-item timing.
 - Packaged Electron: all 11 existing operation/recovery scenarios passed, including authenticated preservation Save/Discard/Cancel, per-item failure and conflict choices. The strengthened interrupted-move recovery test additionally passes a visible folder rename after two restarts, retaining editor text and exact disk bytes. An initial locator failure was corrected to target the folder row.
-- Typecheck, lint, build and macOS package passed; final merged-tree results follow below.
+- On the merged #124/#125 tree, all 73 focused operation/journal/recovery/creation/transfer-crash/Send/control/preparation tests pass. Typecheck, lint, build and macOS package pass.
+- Earlier packaged reruns reported 10/11 passing: Trash Save intermittently lost Files focus despite correct bytes and retained text. After deferring Files focus until completion editor effects settle, the final packaged run passes all 11 scenarios (39.5 seconds), including post-restart visible rename. The failing assertion preceded this ordering fix.
+- The final serial host result follows below. Its lookup-policy case failed once; the complete lookup file passes all five cases on targeted rerun. No unrelated lookup code was changed.
+
+Merge reconciliation retained the validated journal-owned `fileFacts` implementation from #123 rather than #124's parallel writer for the same recovery kind, while keeping #124 command storage/routes and its `fileCommands` worker admission. The integrated transfer and subprocess tests pass.
 
 Qualification limits: no human VoiceOver/Finder review, power-loss, physical disk exhaustion or capacity/latency qualification. No live remote-client notification transport is added: other-client renderer convergence uses workspace load/reconnect; late snapshots are protected on persistence. Broader simultaneous multi-client notification/revocation qualification remains deferred by #117. Native Trash race and external-writer limits are unchanged. SQLite WAL NORMAL does not guarantee the latest acknowledged metadata after an OS crash or power loss.
 
@@ -53,3 +57,9 @@ Merged integration e1fc441 (durable preparation), resolving the worker request-d
 The broad serial suite overlapped the integration merge and reported durable-Send and worktree-preparation failures. It is not a clean final full-suite result; durable Send passes on the subsequent isolated rerun. Complete broad regression qualification remains outstanding.
 
 A further integration gap is explicit: after restart, durable facts retain a handoff gate until an explicit client acknowledgement. The existing load-workspace route does not deliver a new acknowledgement obligation to the renderer. Automatic restart handoff delivery must be integrated before this branch is suitable for acceptance; otherwise a recovered client can remain blocked from subsequent file operations. The direct coordinator test explicitly acknowledges and therefore does not establish this UI behavior.
+
+## Final integrated follow-up result
+
+At integration `4023763`, the settled serial host suite finished: **336 passed, four skipped, one failed** (39 files passed, one skipped, one failed; 196.03 seconds). The failure is `host/lookup.test.ts:106`, waiting for a repository-exclude watcher notification (`notifications` remained zero). The complete lookup file passes all five tests on isolated rerun. This is not a clean full-suite pass. The merge during this run added only #125 documentation and its separate Playwright fixture; no host source changed during this final run.
+
+All 73 focused host checks pass, including the merged transfer crash and control cases. The final SQLite recovery suite includes 18 cases. Final typecheck, lint, build and package pass. The final packaged operation/recovery run passes all 11 tests, after the Files focus ordering fix. No known unmet functional #123 acceptance criterion remains within the declared local restart/reconnect scope. Human native/Finder and accessibility review remains unperformed; exhaustive concurrent remote-client delivery remains outside the parent qualification scope. The watcher failure above remains an explicit broad-regression qualification gap.

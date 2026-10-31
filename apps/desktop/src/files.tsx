@@ -223,9 +223,10 @@ export function FilesTree({
     }
   }
   function restoreFocus() {
-    requestAnimationFrame(() => {
+    // Let completion's editor effects settle before returning focus to Files.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
       if (tree.current?.getClientRects().length) tree.current.focus();
-    });
+    }));
   }
   async function commit() {
     if (!edit || committing.current) return;
