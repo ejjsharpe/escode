@@ -1,3 +1,4 @@
+import { ArchiveFooter } from "./archive-footer";
 import { SidebarResize } from "./sidebar";
 import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@base-ui/react/button";
@@ -89,7 +90,8 @@ function ProjectPicker({ targets, create, dismiss, error }: {
 
 export function AgentsView() {
   const { chats: catalogue, error: summaryError } = useChatSummaries();
-  const chats = [...catalogue].sort(compareChats);
+  const [archived, setArchived] = useState(false);
+  const chats = [...catalogue].filter(c => !!c.archived === archived).sort(compareChats);
   const [selected, setSelected] = useState(memory.agentsChat ?? "");
   const [error, setError] = useState("");
   const [targets, setTargets] = useState<{ project: string | null; checkout: string }[]>([]);
@@ -135,7 +137,7 @@ export function AgentsView() {
       clearInterval(timer);
     };
   }, []);
-  const chat = chats?.find((c) => c.id === selected);
+  const chat = catalogue.find((c) => c.id === selected);
   return (
     <section className="agents" aria-label="Agents">
       <div className="agents-heading">
@@ -169,10 +171,12 @@ export function AgentsView() {
               />
             ))}
           </ul>
+          <ArchiveFooter archived={archived} toggle={() => setArchived(!archived)} />
           {(error || targetError || summaryError) && <p role="alert">{error || targetError || summaryError}</p>}
         </aside>
         <section className="content" aria-label="Agent conversation">
           <div className="chat-conversation">
+            {chat && !!chat.archived !== archived && <p role="status">This conversation belongs to the {chat.archived ? "Archived" : "Recent"} list.</p>}
             {chat ? (
               <ChatView
                 key={chat.project ?? "no-project"}

@@ -1,0 +1,27 @@
+# Chat Archive and Restore (#149)
+
+Archive is host-owned metadata on the existing SQLite chat record. Authenticated actions use the existing chat transition lock and expected-state check. The storage queue preserves concurrent composer writes; SQLite atomically checks retained command receipts before Archive and rejects new Sends against archived chats. Running/preparing/opening/completing sessions, outstanding requests, uncertain first Sends and uncertain historical operations block Archive. Restore changes no recency fields.
+
+Agents and exact-checkout Chats filter the shared summary catalog. Their footer icon beside Settings toggles Archived/Recent with an accessible action label and pressed state. Selection and composer text remain independent of the list filter; an outside-list notice explains retained selection. The conversation action restores the same identity. No provider archive command, transcript copy, Stop, resource deletion or cleanup is involved.
+
+Focused host tests cover restart persistence, draft/identity/creation-time preservation, stale action rejection, preparation races, uncertain work and both orderings of durable Send/Archive admission. Electron Agents scenarios cover archive/restore in global and checkout-local views, retained draft/history/editor context and footer state. A rendered Archived capture was inspected at `/tmp/escode-149-archived.png` during development.
+
+Qualification limits: manual VoiceOver, packaged/native and 200% zoom checks remain with integrated parent qualification. The full host suite was interrupted after failures in expiry, dropped-response reconnect, lookup, shutdown and worktree preparation under concurrent machine load; it is not a passing full-suite claim. Focused rerun results are recorded in the implementation handoff. The first Agents run passed all four tests; a concurrent expanded run hit the existing 45-second test/teardown deadlines, prompting an isolated longer-deadline rerun.
+
+Final focused result: 14 host admission tests passed. The expanded global/local Electron archive scenario passed alone (14 seconds, 120-second allowance). Typecheck and build passed; lint retains four pre-existing warnings.
+
+The five host files that failed under concurrent load subsequently passed with one worker: 32 passed, one opt-in test skipped (`checkpoint-expiry`, `durable-send`, `lookup`, `shutdown`, `worktree-drafts`). This bounds the observed failures without claiming completion of the interrupted full suite.
+
+Final complete Agents rerun: all four tests passed in 40.9 seconds with the command-line 120-second allowance. The global/local archive test passed in 12.2 seconds. Settings remains available in Files/Diff sidebar footers and chat-list footers without duplicating it in the top strip.
+
+Integration: merged `integration/agents-sidebar-144` at `c31eb80` (title slice). Resolved combined validation and consolidated Rename/Regenerate/Archive/Restore into one Chat actions menu. Combined host archive/chat checks passed: 23 passed, one opt-in live-provider test skipped. Typecheck/build passed; lint now reports eight inherited warnings, including the title slice's control-character validation expressions.
+
+Final combined Electron qualification after merging titles: all ten Agents and chat-title scenarios passed in 1.0 minute (`--timeout=120000`).
+
+Fresh merger qualification (2026-10-31): isolated branch `t3/implement-archive-restore-spec` starts from title integration `c31eb80`, includes archive commit `9c069ff` and merges model/effort integration `8ab8812`. Conflict resolution retains both archive and settings-saving Send guards, both authenticated preload actions, both glossary concepts, archive scenarios and the model catalog fixture's task-resume expectation. No application defect required a new production fix. A new host regression verifies delayed title/composer writes preserve archive metadata and original recency, and manual Rename defeats stale title completion. Footer toggle assertions verify keyboard focus remains on the updated action.
+
+The first combined Electron run passed 14/15; navigation failed because its unscoped Settings locator matched a retained hidden checkout. Scoped both clicks to the existing visible sidebar (red run followed by a passing focused rerun). Before model integration, typecheck/build passed, host checks passed 29 with one opt-in skipped, and the strengthened archive scenario passed. After model integration, typecheck/build pass and lint retains eight inherited warnings. The first host rerun had one preparation test hit its 15-second deadline (30 passed, one skipped); the complete focused rerun with one worker and a 60-second allowance passed 32, one opt-in live-provider skipped, across chat commands, chat, durable Send, SQLite controls and models. No timeout/config changes were committed.
+
+Limits: this is fixture-backed development-build qualification; no new packaged-app, installed-provider permission, manual VoiceOver or 200% zoom qualification is claimed. Concurrent permission implementation remains owned by the parent. No PR, issue, integration ref or root-checkout edits were made.
+
+Final post-merge Electron result: all 16 scenarios passed in 2.0 minutes with `--timeout=120000`, covering Agents, titles, model choices, navigation and Agents Files recovery. The latest integration tip was rechecked and merged (`Already up to date`) at `8ab88123d4a68aa66dfed8bf0631641b66b2c03e` before handoff. Permission work is not present in that tip. `git diff --check` passes.

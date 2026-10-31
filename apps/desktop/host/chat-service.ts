@@ -238,7 +238,7 @@ export class ChatService {
     await this.environment?.authorize(project);
     const detail = this.snapshot(project, id);
     return JSON.stringify([this.revision(id), chat.checkout, chat.threadId, chat.phase, chat.directoryIdentity,
-      chat.worktree, chat.scratch, detail.connected, detail.busy, detail.turnId]);
+      chat.worktree, chat.scratch, chat.archived, detail.connected, detail.busy, detail.turnId]);
   }
   private async expectState(project: string | null, id: string, expected: string, message: string) {
     if (await this.expectation(project, id) !== expected) throw Error(message);
@@ -267,6 +267,13 @@ export class ChatService {
     return this.inContext(project, action.id, async () => {
       await this.expectState(project, action.id, action.expected, "Draft changed. Inspect and retry.");
       check();
+      if (operation === "archive") {
+        const s = this.sessions.get(action.id);
+        if (action.archived && s && (s.turn.phase !== "idle" || s.sending || s.completing || s.connection.opening || s.requests.length))
+          throw Error("Archive requires an idle chat without unresolved requests.");
+        await this.store.archive(project, action.id, action.archived);
+        return this.store.get(project, action.id);
+      }
       if (operation === "context") {
         const targetCheck = env.guard(action.target);
         targetCheck();

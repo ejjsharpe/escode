@@ -273,6 +273,8 @@ SQLite reuses free pages and may truncate an unblocked WAL without shrinking the
 main database. These checkpoints store file bytes in SQLite, create no Git snapshot
 objects, and grant no authority to prune project Git objects or retained worktrees.
 
+- **Archived chat**: A shared conversation hidden from recent lists by host-owned metadata. Archive requires idle work without unresolved requests or uncertain operations; Restore retains its identity, draft, resources and recency.
+
 **Chat title**:
 Shared host-owned conversation metadata displayed in Agents and checkout-local Chats.
 First Send starts one independent ephemeral title request, with bounded first-message
