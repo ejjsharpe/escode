@@ -62,9 +62,8 @@ unavailable restoration with a conversation-only alternative and no confirm acti
 The restoration screenshot was visually inspected in the incumbent desktop UI.
 
 No paid live provider, manual VoiceOver, broad full suite, exhaustive multi-client,
-capacity or crash-at-every-file-effect qualification was performed. Packaged dirty
-editor restoration is not separately exercised; authenticated recovery text and
-loaded baselines are checked. Native provider context fidelity remains fixture
+capacity or crash-at-every-file-effect qualification was performed. Packaged dirty editor restoration is additionally exercised below; authenticated
+recovery text and loaded baselines remain independently checked. Native provider context fidelity remains fixture
 qualified rather than certified against a live paid conversation. These are
 verification limits, not a claim of complete parent-spec acceptance.
 
@@ -92,3 +91,47 @@ Final rebuilt/repackaged combined-tip history suite: **5/5 passed (40.2s)**,
 including historical branching and protected restoration. The merged restoration
 result screenshot was visually inspected. The remaining qualification and
 conservative collision-refusal limits above are unchanged.
+
+## Packaged dirty editor gate — 2026-10-31
+
+Follow-up branch `implement/133-packaged-dirty-editor`, isolated checkout
+`/tmp/escode-133-dirty`, starts at `e3e015d18856ac513b66def96456986af311583f`
+and merges integration `b269f704ee714ac834fc7589fd17bf76ea09c427`, preserving
+`0a9c981` and the completion-branching scenario.
+
+The restoration scenario in `tests/history.spec.ts` now opens the isolated
+checkout through the packaged UI and types unsaved text through Monaco keyboard
+input. Cancelling restoration leaves today's disk bytes unchanged. Confirming
+restoration writes the selected checkpoint bytes while retaining the editor text
+and Unsaved indicator. Ordinary Save raises a conflict without writing. Compare
+shows restored disk text alongside the unsaved text; Cancel retains both.
+A subsequent external write also conflicts without being overwritten. Finally,
+putting back exactly the originally loaded disk text allows ordinary Save,
+without Overwrite, to write the retained editor text. This distinguishes retention
+of the original loaded baseline from rebasing onto restored or external bytes;
+recovery-record assertions alone are not the evidence for this gate.
+
+No production defect was exposed; changes are limited to the existing packaged
+fixture and this evidence. Initial runs exposed fixture navigation mistakes
+(hidden Files view, an incorrect accessible checkout-tab name, and a
+combined-suite activation race), corrected
+without weakening assertions. The focused packaged restoration rerun passed.
+Post-merge authenticated boundary/editor tests pass 24/24; typecheck, lint,
+build and unsigned arm64 package pass. Frozen installation uses repository
+Bun 1.4.4; the system Bun 1.3.14 cannot parse this lockfile.
+
+No live paid provider, new manual VoiceOver or physical power-loss qualification
+is claimed. The provider remains deterministic. No UI styling or product concepts
+changed, and no issue closure, PR or merge into integration is performed.
+
+The broader six-case history rerun is not a pass: one run passed five cases
+but hit the restoration fixture activation race above. After fixing that wait,
+a subsequent run passed navigation/streaming/files and timed out in the existing
+branch case at 45 seconds, followed by worker teardown timeout; branch-after was
+interrupted and restoration did not run in that attempt. Other packaged suites
+were active concurrently; causation is unproven. No timeout or behavioral
+assertion was relaxed. The focused gate is qualified separately.
+
+Final focused packaged gate after the activation wait: **1/1 passed (22.1s)**.
+The dirty-conflict screenshot was visually inspected: retained Unsaved state,
+restored text versus editor text and Compare/Overwrite/Reload/Cancel are visible.
