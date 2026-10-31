@@ -28,3 +28,26 @@ test("catalog choices remember each model's effort and survive reopening without
     expect(calls.every(c => c === "model/list")).toBe(true);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("a delayed background catalog read cannot replace a deliberate current selection", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-model-race-"));
+  const store = new Chats(join(dir, "chats"));
+  let release: (() => void) | undefined;
+  let delay = false;
+  const connect = async () => ({ request: async () => {
+    if (delay) { delay = false; await new Promise<void>(resolve => { release = resolve; }); }
+    return { data: ["a", "b"].map(model => ({ model, displayName: model, supportedReasoningEfforts: [{ reasoningEffort: "low" }], defaultReasoningEffort: "low" })), nextCursor: null };
+  }, close() {} });
+  try {
+    const service = new ChatService(store, connect as never);
+    const background = await store.create(dir), foreground = await store.create(dir);
+    await service.models(dir, background.id, "b");
+    delay = true;
+    const pending = service.models(dir, background.id);
+    while (!release) await new Promise(resolve => setTimeout(resolve, 1));
+    await service.models(dir, foreground.id, "a");
+    release(); await pending;
+    const draft = await store.create(dir);
+    expect((await service.models(dir, draft.id)).choice).toEqual({ model: "a", effort: "low" });
+  } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
+});

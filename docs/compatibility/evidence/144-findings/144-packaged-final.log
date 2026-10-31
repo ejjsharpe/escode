@@ -1,0 +1,47 @@
+$ playwright test tests/permissions.spec.ts tests/models.spec.ts "--timeout=90000"
+
+Running 2 tests using 1 worker
+
+(node:5212) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 tests/models.spec.ts:7:1 › next message model persists and changing a running turn never queues work (11.9s)
+  ✘  2 tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work (37.4s)
+
+
+  1) tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work 
+
+    TimeoutError: locator.click: Timeout 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: 'Send message', exact: true })
+        - locator resolved to <button disabled tabindex="0" type="submit" data-disabled="">Send message</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+          - waiting 100ms
+        58 × waiting for element to be visible, enabled and stable
+           - element is not enabled
+         - retrying click action
+           - waiting 500ms
+
+
+      57 |     await expect(page.getByRole("alert")).toContainText("Codex retained its saved permission policy");
+      58 |     await page.getByLabel("Message Codex").fill("blocked draft");
+    > 59 |     await page.getByRole("button", { name: "Send message", exact: true }).click();
+         |                                                                           ^
+      60 |     await expect(page.getByLabel("Message Codex")).toHaveValue("blocked draft");
+      61 |     expect((await readFile(log, "utf8")).trim().split("\n")).toHaveLength(1);
+      62 |     await page.getByLabel("Next message permissions").selectOption("supervised");
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-e35fccb4/apps/desktop/tests/permissions.spec.ts:59:75
+
+    Error Context: test-results/permissions-next-message-p-b3cf5-ning-turn-never-queues-work/error-context.md
+
+  1 failed
+    tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work 
+  1 passed (49.6s)
+error: script "smoke" exited with code 1

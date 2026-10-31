@@ -43,6 +43,8 @@ type Session = Omit<RuntimeSnapshot, "connected" | "busy" | "turnId" | "preparin
   requestIds: Map<string, string | number>;
   // Send remains in flight through persistence, even if the provider already completed.
   sending?: boolean;
+  permissionConflict?: boolean;
+  permissionReviewer?: unknown;
   completing?: Promise<void>;
   completedTurnId?: string;
   completion?: { chat: Readonly<SavedChat>; id: string; createdAt: number; commandId?: string };
@@ -65,6 +67,15 @@ const permissionPolicy = (choice: SavedChat["nextPermission"]) => {
       ? { type: "readOnly", networkAccess: false }
       : { type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false } };
 };
+const threadPermission = (choice: SavedChat["nextPermission"]) => {
+  const { approvalPolicy, approvalsReviewer, sandboxPolicy } = permissionPolicy(choice);
+  return { approvalPolicy, approvalsReviewer, sandbox: sandboxPolicy?.type === "dangerFullAccess" ? "danger-full-access" : sandboxPolicy?.type === "workspaceWrite" ? "workspace-write" : "read-only" };
+};
+const matchesPermission = (choice: SavedChat["nextPermission"], approval: unknown, sandbox: unknown) => {
+  const policy = permissionPolicy(choice);
+  return approval === policy.approvalPolicy && !!sandbox && Object.entries(policy.sandboxPolicy ?? {}).every(([key, value]) => JSON.stringify((sandbox as Record<string, unknown>)[key]) === JSON.stringify(value));
+};
+const permissionResolution = "Codex retained its saved permission policy. History and draft are available. Send is blocked: select the matching saved policy in Next message permissions (Supervised for read-only, Auto-accept edits for workspace writes, Full access for unrestricted access), or resolve the policy in Codex and reconnect.";
 export class ChatService {
   private async configured(project: string | null): Promise<import("@escode/contracts").ChatDefaults> {
     const app = await this.store.database.command("chatDefaults", { scope: "app" });
@@ -110,7 +121,9 @@ export class ChatService {
       const blocked = !!customSession || requirements.requirements != null ||
         (c.sandbox_mode != null && !["read-only", "workspace-write", "danger-full-access"].includes(c.sandbox_mode as string)) || ["permissions", "default_permissions", "sandbox_workspace_write", "network"].some(k => c[k] != null)
         || (c.approval_policy != null && !["on-request", "never"].includes(c.approval_policy as string));
-      const message = blocked ? "Custom or managed Codex policy retained. Resolve it in Codex configuration before choosing a preset." : "";
+      const session = this.sessions.get(id);
+      const conflict = session?.permissionConflict && (session.permissionReviewer !== "user" || !matchesPermission((choice ?? chat.nextPermission) as SavedChat["nextPermission"], effective?.approval, sandbox));
+      const message = conflict ? permissionResolution : blocked ? "Custom or managed Codex policy retained. Resolve it in Codex configuration before choosing a preset." : "";
       if (!chat.nextPermission && !chat.hasSent && !chat.threadId && !blocked) {
         const defaults = await this.configured(project);
         chat.nextPermission = defaults.permission ?? "full";
@@ -120,6 +133,7 @@ export class ChatService {
         if (blocked) throw Error(message);
         permissionPolicy(choice as SavedChat["nextPermission"]);
         await this.store.update(project, id, { nextPermission: choice as SavedChat["nextPermission"] });
+        if (session?.permissionConflict && !conflict) { session.permissionConflict = false; session.error = null; }
       }
       return { choice: choice ?? chat.nextPermission ?? null, blocked, message };
     } finally { rpc.close(); }
@@ -162,7 +176,7 @@ export class ChatService {
         await this.store.update(project, id, { nextModel: choice });
         await this.store.database.command("chatDefaults", { scope: "remembered", body: { model, efforts: { ...memory.efforts, [model]: chosen } } });
       }
-      if (choice) await this.store.database.command("chatDefaults", { scope: "current", body: { model: choice.model, effort: choice.effort } });
+      if (model !== undefined && choice) await this.store.database.command("chatDefaults", { scope: "current", body: { model: choice.model, effort: choice.effort } });
       return { models, choice: choice ? { model: choice.model, effort: choice.effort } : null };
     } finally { rpc.close(); }
   }
@@ -629,7 +643,7 @@ export class ChatService {
           resume ? "thread/resume" : "thread/start",
           resume
             ? { threadId: chat.threadId, cwd: chat.checkout, excludeTurns: true }
-            : { cwd: chat.checkout, ...(chat.nextPermission ? { approvalPolicy: permissionPolicy(chat.nextPermission).approvalPolicy, approvalsReviewer: "user", sandbox: chat.nextPermission === "full" ? "danger-full-access" : chat.nextPermission === "edits" ? "workspace-write" : "read-only" } : {}) },
+            : { cwd: chat.checkout, ...(chat.nextPermission ? threadPermission(chat.nextPermission) : {}) },
         ) as import("./vendor/codex/src/schema").V2ThreadStartResponse;
         // Retain returned identity even if later response validation or persistence fails.
         if (
@@ -672,11 +686,11 @@ export class ChatService {
           const policy = await this.permissions(project, id);
           if (policy.blocked) throw Error(policy.message);
           const applied = resume ? await rpc.request("thread/resume", { threadId: s.threadId, cwd: chat.checkout, excludeTurns: true,
-            approvalPolicy: permissionPolicy(chat.nextPermission).approvalPolicy, approvalsReviewer: "user",
-            sandbox: chat.nextPermission === "full" ? "danger-full-access" : chat.nextPermission === "edits" ? "workspace-write" : "read-only" }) as import("./vendor/codex/src/schema").V2ThreadResumeResponse : result;
-          if (applied.approvalsReviewer !== "user" || applied.approvalPolicy !== permissionPolicy(chat.nextPermission).approvalPolicy ||
-            Object.entries(permissionPolicy(chat.nextPermission).sandboxPolicy!).some(([key, value]) => JSON.stringify((applied.sandbox as unknown as Record<string, unknown>)[key]) !== JSON.stringify(value)))
-            throw Error("Codex did not apply the selected permission policy; no message submitted.");
+            ...threadPermission(chat.nextPermission) }) as import("./vendor/codex/src/schema").V2ThreadResumeResponse : result;
+          if (applied.thread?.id !== s.threadId || applied.cwd !== chat.checkout) throw Error("Incompatible Codex resume identity; no message submitted.");
+          s.permissionReviewer = applied.approvalsReviewer;
+          s.permissionConflict = applied.approvalsReviewer !== "user" || !matchesPermission(chat.nextPermission, applied.approvalPolicy, applied.sandbox);
+          if (s.permissionConflict && !resume) throw Error("Codex did not apply the selected permission policy; no message submitted.");
           s.settings = { ...s.settings, approval: applied.approvalPolicy, sandbox: applied.sandbox };
         }
         if (resume) {
@@ -693,6 +707,7 @@ export class ChatService {
         this.store.validateWorktree(chat);
         this.store.validateScratch(chat);
         this.validateCheckout(s, chat.checkout);
+        if (s.permissionConflict) s.error = permissionResolution;
         s.connection.status = "connected";
       } catch (error) {
         if (!chat && !s.threadId && !s.connection.rpc && this.sessions.get(id) === s) this.sessions.delete(id);
@@ -1179,6 +1194,7 @@ export class ChatService {
       }
       if (s.connection.status !== "connected" || !s.connection.rpc)
         throw Error("Retry connection before sending. Work was not resent.");
+      if (s.permissionConflict && (s.permissionReviewer !== "user" || !matchesPermission(capturedPermission, s.settings?.approval, s.settings?.sandbox))) throw Object.assign(Error(permissionResolution), { policyConflict: true });
       this.store.validateWorktree(chat);
       this.store.validateScratch(chat);
       this.validateCheckout(s, chat.checkout);
@@ -1236,7 +1252,7 @@ export class ChatService {
         if (!s.threadId && !s.connection.rpc && this.sessions.get(id) === s) this.sessions.delete(id);
         throw error;
       }
-      this.closeConnection(s);
+      if (!(error as { policyConflict?: boolean }).policyConflict) this.closeConnection(s);
       const saved = await this.store.get(project, id);
       const rejected = (error as { rejected?: boolean }).rejected;
       if (

@@ -294,11 +294,15 @@ Supervised uses read-only access and user-reviewed on-request approvals; Auto-ac
 edits permits workspace and temporary-directory writes with network disabled and
 user-reviewed approval for broader access; Full access disables the sandbox and
 command approval. Custom or managed restrictions require resolution in Codex
-configuration before presets can replace them. Editing a choice never sends work.
+configuration before presets can replace them. A saved-policy resume conflict retains
+history and drafts and blocks Send until explicitly resolved to the retained policy.
+Editing a choice never sends work.
 
 **New chat defaults**:
 Host-owned app settings and per-project overrides for model, effort and permissions.
-New drafts use project overrides before app defaults, current chat model, remembered
+Current model selection is updated only by an explicit model/effort selection; catalog
+reads and Send validation cannot change it. New drafts use project overrides before
+app defaults, current chat model, remembered
 Codex model/effort and the catalog default. Explicit draft choices survive changes.
 Effort memory is shared per Codex model. Permissions reset from project/app settings,
 with factory Full access; another chat's permission edit never becomes a default.

@@ -176,3 +176,56 @@ No project/unavailable/Archived thirty-chat fixture. These are qualification gap
 not evidence that those implementations fail. User-owned VoiceOver, native keyboard,
 dialog/clipboard/window lifecycle checks remain exactly as listed above. Independent
 review follows; neither #155 nor parent #144 is accepted by this merge.
+
+## Independent review repairs (fresh sole implementer)
+
+Branch `t3/fix-agents-sidebar-findings` starts at `edae592`. Latest local
+`integration/agents-sidebar-144` was merged before handoff (already contained).
+No root files, integration ref, PR or tracker changes; no additional agents.
+Evidence is retained in [evidence/144-findings](evidence/144-findings).
+
+- P1: Codex 0.166.0 was probed again with the existing bounded disposable-provider
+  script. All three resume modes returned original readOnly/on-request; history
+  retained one turn. The [primary app-server documentation](https://learn.chatgpt.com/docs/app-server)
+  describes resume and turn overrides, but the installed behavior does not establish
+  effective resume application. We therefore use explicit UI resolution: reconnect
+  loads history under the original identity, displays the retained effective settings
+  and a policy-conflict alert, and blocks Send. Selecting the matching retained preset
+  explicitly clears the conflict; custom/managed policy and reviewer mismatches remain
+  protected. No automatic selection, policy broadening, replacement thread or replay.
+  Host regression verifies retained transcript, identity and draft, zero submissions
+  on conflict, and exactly one submission following explicit resolution.
+- P2: only explicit model/effort selection updates current selection. Catalog mounting
+  and Send validation cannot update it. A delayed background catalog regression fails
+  before repair (next draft incorrectly uses B) and passes afterward (uses selected A).
+  Existing defaults precedence, remembered effort and explicit draft choices remain.
+- P3: start/resume now derive their thread representation from the same permission
+  mapping used by turn/start and mismatch validation. Reviewer, sandbox fields and
+  resumed identity checks remain enforced.
+
+Public ChatService regressions were written first; both new regressions failed on
+original code (`144-red.log`). Final host run: 13 passed, one opt-in live test skipped.
+Build, package, typecheck and lint pass (existing warnings). The installed probe also
+repeats bounded command sandbox writes and independent title inference; these do not
+qualify full model-turn enforcement. Original provider/runtime-blocker statements
+above describe the previous build; unsupported resume changes now have a safe explicit
+resolution, rather than making history inaccessible.
+
+Manual VoiceOver/native keyboard/dialog/clipboard/window gates, full effective-effort
+and model-turn enforcement, combined thirty-chat states and complete visual comparisons
+remain open exactly as above. No full #144/#155 acceptance is claimed.
+
+Packaged test development retained initial failures: one preparation disconnect while
+a rebuild overlapped (cause unestablished), then an incorrect attempt to click the intentionally disabled
+Send, then a later stale Stop target. Delaying fixture completion did not fix that
+separate error; explicit reload also failed to clear its disabled Send state. The
+fixture retains original behavior and checks the workspace turn before restart,
+then checks conflict resolution after restart without another subsequent Send. The conflict flow
+had already passed before that final Stop failure; these initial runs are not clean
+qualification and are retained. No production Stop behavior was changed.
+
+Final focused packaged run (`144-packaged-final-scope.log`): **2 passed in 19.0s**.
+It preserves workspace-policy coverage before restart and checks persisted model/effort,
+conflict alert, disabled Send, retained draft, no replay and explicit supervised resolution
+after restart. The separate stale Stop/recovery issue observed when attempting another
+post-resolution turn remains unqualified; rearrangement is not evidence it is fixed.

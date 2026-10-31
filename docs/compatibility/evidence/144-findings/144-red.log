@@ -1,0 +1,55 @@
+$ node scripts/filesystem.mjs && vp test run host/models.test.ts host/permissions.test.ts
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-e35fccb4/apps/desktop
+
+ ❯ host/models.test.ts (2 tests | 1 failed) 138ms
+   × a delayed background catalog read cannot replace a deliberate current selection 75ms
+ ❯ host/permissions.test.ts (2 tests | 1 failed) 144ms
+   × saved policy conflict keeps history accessible and blocks Send until explicitly resolved 83ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/models.test.ts > a delayed background catalog read cannot replace a deliberate current selection
+AssertionError: expected { model: 'b', effort: 'low' } to deeply equal { model: 'a', effort: 'low' }
+
+- Expected
++ Received
+
+  {
+    "effort": "low",
+-   "model": "a",
++   "model": "b",
+  }
+
+ ❯ host/models.test.ts:51:58
+     49|     release(); await pending;
+     50|     const draft = await store.create(dir);
+     51|     expect((await service.models(dir, draft.id)).choice).toEqual({ mod…
+       |                                                          ^
+     52|   } finally { await store.database.close(); await rm(dir, { recursive:…
+     53| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  host/permissions.test.ts > saved policy conflict keeps history accessible and blocks Send until explicitly resolved
+Error: Codex did not apply the selected permission policy; no message submitted.
+ ❯ host/chat-service.ts:711:15
+    709|           ? codexDiagnostic(rpc.installation.path, rpc.installation.ve…
+    710|           : message;
+    711|         throw Error(s.error);
+       |               ^
+    712|       }
+    713|     })();
+ ❯ ChatService.connectSession host/chat-service.ts:715:7
+ ❯ ChatService.inContext host/chat-service.ts:179:14
+ ❯ host/permissions.test.ts:49:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 2 passed (4)
+   Start at  20:00:30
+   Duration  631ms (import 53%, tests 27%, transform 20%)
+
+error: script "test" exited with code 1

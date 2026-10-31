@@ -1,0 +1,11 @@
+$ playwright test tests/permissions.spec.ts tests/models.spec.ts "--timeout=90000"
+
+Running 2 tests using 1 worker
+
+(node:7915) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 tests/models.spec.ts:7:1 › next message model persists and changing a running turn never queues work (9.3s)
+  ✓  2 tests/permissions.spec.ts:6:1 › next message permission persists and changing a running turn never queues work (9.3s)
+
+  2 passed (19.0s)
