@@ -140,6 +140,7 @@ send({id:m.id,result});});`,
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, beta);
     await page.getByRole("button", { name: "Open project…" }).click();
+    await expect(page.locator("header span")).toHaveText(beta);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
     await expect(
@@ -152,6 +153,7 @@ send({id:m.id,result});});`,
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, worktree);
     await page.getByRole("button", { name: "Open project…" }).click();
+    await expect(page.locator("header span")).toHaveText(worktree);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "New chat on current checkout" }).click();
     await message().fill("Independent linked draft");
