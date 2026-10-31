@@ -1,5 +1,6 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
-import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -80,12 +81,12 @@ test("lazy tree keyboard, independent selection, menus, refresh and restart reco
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.focus,
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.focus,
       )
       .toBe("b.txt");
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
-    await rm(join(user, "foundation/owner.lock"), { force: true });
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     tree = page.getByRole("tree", { name: "Files", exact: true });
@@ -210,7 +211,7 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.scroll,
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.scroll,
       )
       .toBe(scroll);
     await open(other);
@@ -222,13 +223,13 @@ test("loaded directories revalidate on expansion; missing paths recover and scro
     expect(await tree.evaluate((el) => el.scrollTop)).toBe(scroll);
     await expect
       .poll(async () => {
-        const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+        const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
         return state.selected === root && state.views[root].files.scroll === scroll;
       })
       .toBe(true);
     app.process().kill("SIGKILL");
     await new Promise((resolve) => app.process().once("exit", resolve));
-    await rm(join(user, "foundation/owner.lock"), { force: true });
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user);
     page = await app.firstWindow();
     await expect

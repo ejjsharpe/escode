@@ -1,6 +1,5 @@
-import { readFile } from "node:fs/promises";
+import type { DurableState } from "./durable-state";
 import { isAbsolute } from "node:path";
-import { atomicWriteJson } from "./atomic-write";
 
 export type Intent = {
   root: string;
@@ -18,19 +17,16 @@ export type Intent = {
 
 export class FileOperationJournal {
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(private file: string, private owner?: { hostId: string; clientId: string }) {}
-  private decode(value: unknown) {
-    if (!this.owner) return value;
-    const stored = value as { storageVersion?: number; hostId?: string; clientId?: string };
-    if (stored?.storageVersion !== 1 || stored.hostId !== this.owner.hostId || stored.clientId !== this.owner.clientId)
-      throw Error("Unsupported or wrongly owned client recovery store; retained for inspection.");
-    return value;
-  }
+  private revision?: number;
+  constructor(_file: string, private owner: { hostId: string; clientId: string }, readonly database: DurableState) {}
+
   async readIntent(): Promise<Intent | null> {
     await this.queue;
     try {
-      const v = this.decode(JSON.parse(await readFile(this.file, "utf8"))) as any;
-      if (v === null || (this.owner && v.intent === null)) return null;
+      const stored = await this.database.recoveryRead(this.owner.clientId, "intent");
+      this.revision = stored.revision;
+      const v = stored.body as any;
+      if (v === null) return null;
       if (
         !v ||
         !isAbsolute(v.root) ||
@@ -79,16 +75,16 @@ export class FileOperationJournal {
     }
   }
   writeIntent(intent: Intent | null) {
-    return this.change(() => this.replace(this.file, intent));
+    return this.change(() => this.replace(intent));
   }
   private change(edit: () => Promise<void>) {
     const task = this.queue.then(edit);
     this.queue = task.catch(() => {});
     return task;
   }
-  private replace(file: string, value: unknown) {
-    return atomicWriteJson(file, () => this.owner && file === this.file
-      ? { ...(value === null ? { intent: null } : value as object), storageVersion: 1, ...this.owner }
-      : value);
+  private async replace(value: unknown) {
+    if (this.revision === undefined) this.revision = (await this.database.recoveryRead(this.owner.clientId, "intent")).revision;
+    await this.database.recoveryWrite(this.owner.clientId, "intent", value, this.revision);
+    this.revision++;
   }
 }

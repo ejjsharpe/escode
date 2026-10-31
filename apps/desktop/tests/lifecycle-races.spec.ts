@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -32,21 +33,19 @@ for (const dirty of [false, true]) {
       }
       await expect
         .poll(async () => {
-          const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+          const state = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
           return dirty ? state.drafts[0]?.text : state.views[root]?.path;
         })
         .toBe(dirty ? "discard this" : "a.txt");
       // Hold the actual atomic replacement so user input can arrive before close completes.
       await app.evaluate(() => {
-        const fs = process.getBuiltinModule("fs/promises") as any;
-        const rename = fs.rename;
-        fs.rename = async (...args: unknown[]) => {
-          if (!String(args[1]).endsWith("/client-workspace-v1.json")) return rename(...args);
-          fs.rename = rename;
-          await new Promise<void>((resolve) => {
-            (globalThis as any).releasePersistence = resolve;
-          });
-          return rename(...args);
+        const { Worker } = process.getBuiltinModule("worker_threads") as any;
+        const post = Worker.prototype.postMessage;
+        Worker.prototype.postMessage = async function(message: any) {
+          if (message.operation !== "recoveryWrite" || message.kind !== "workspace") return post.call(this, message);
+          Worker.prototype.postMessage = post;
+          await new Promise<void>(resolve => { (globalThis as any).releasePersistence = resolve; });
+          return post.call(this, message);
         };
       });
       await page.getByRole("button", { name: "Close file", exact: true }).click();
@@ -68,7 +67,7 @@ for (const dirty of [false, true]) {
       await expect(page.locator(".monaco-editor:visible")).toHaveCount(0);
       expect(await app.evaluate(() => (globalThis as any).dirtyPrompts)).toBe(dirty ? 1 : 0);
       await app.close();
-      expect(JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts).toEqual([]);
+      expect(JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts).toEqual([]);
       expect(await readFile(join(root, "a.txt"), "utf8")).toBe("original");
     } finally {
       try {

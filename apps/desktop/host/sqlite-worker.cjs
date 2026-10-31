@@ -52,13 +52,31 @@ try {
   db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA checkpoint_fullfsync=ON');
   const settings = { journalMode: db.prepare('PRAGMA journal_mode').get().journal_mode, synchronous: db.prepare('PRAGMA synchronous').get().synchronous, checkpointFullfsync: db.prepare('PRAGMA checkpoint_fullfsync').get().checkpoint_fullfsync };
   if (settings.journalMode !== 'wal' || settings.synchronous !== 1 || settings.checkpointFullfsync !== 1) throw Error('SQLite durability settings unavailable');
+  db.exec('CREATE TABLE IF NOT EXISTS client_recovery (clientId TEXT NOT NULL, kind TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(clientId, kind))');
   db.exec(`UPDATE submissions SET body=json_set(body, '$.status', 'uncertain', '$.message', 'Host restarted; inspect provider history. Work was not resent.') WHERE json_extract(body, '$.status') IN ('admitted', 'dispatching')`);
   parentPort.postMessage({ id: 0, value: { ...identity[0], settings } });
 } catch (e) { parentPort.postMessage({ id: 0, error: String(e) }); db?.close(); process.exitCode = 1; }
-if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt }) => {
+if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, kind, body }) => {
   try {
     let value;
-    if (operation === 'read') value = { chats: db.prepare('SELECT body FROM chats ORDER BY rowid').all().map(row => JSON.parse(row.body)), revision: db.prepare('SELECT revision FROM identity').get().revision };
+    if (operation === 'recoveryRead' || operation === 'recoveryWrite') {
+      if (typeof clientId !== 'string' || !clientId || !['workspace', 'intent'].includes(kind)) throw Error('Invalid recovery owner');
+      if (operation === 'recoveryRead') {
+        const row = db.prepare('SELECT body, revision FROM client_recovery WHERE clientId=? AND kind=?').get(clientId, kind);
+        value = row ? { body: JSON.parse(row.body), revision: row.revision } : { body: null, revision: 0 };
+      } else {
+        const encoded = JSON.stringify(body);
+        if (!encoded || Buffer.byteLength(encoded) > 16 * 1024 * 1024) throw Error('Recovery storage capacity exhausted');
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          const current = db.prepare('SELECT revision FROM client_recovery WHERE clientId=? AND kind=?').get(clientId, kind);
+          if ((current?.revision ?? 0) !== revision) throw Error('Recovery storage changed; reopen before retrying');
+          db.prepare('INSERT INTO client_recovery VALUES (?, ?, ?, ?) ON CONFLICT(clientId,kind) DO UPDATE SET revision=excluded.revision, body=excluded.body').run(clientId, kind, revision + 1, encoded);
+          db.exec('COMMIT');
+        } catch (e) { db.exec('ROLLBACK'); throw e; }
+      }
+    }
+    else if (operation === 'read') value = { chats: db.prepare('SELECT body FROM chats ORDER BY rowid').all().map(row => JSON.parse(row.body)), revision: db.prepare('SELECT revision FROM identity').get().revision };
     else if (operation === 'write') {
       validate(chats);
       db.exec('BEGIN IMMEDIATE');

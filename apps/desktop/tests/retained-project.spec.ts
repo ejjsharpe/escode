@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -128,18 +129,17 @@ send({id:m.id,result});});`,
     await writeFile(join(a, "a.txt"), "baseline");
     await open(b);
     await choice(1);
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.length).toBe(3);
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.length).toBe(3);
     // Fail the actual workspace replacement after Discard, retaining all available models.
     await app.evaluate((_, a) => {
-      const fs = process.getBuiltinModule("fs/promises") as any;
-      const rename = fs.rename;
-      fs.rename = async (...args: unknown[]) => {
-        if (String(args[1]).endsWith("/client-workspace-v1.json") &&
-            !JSON.parse(await fs.readFile(args[0], "utf8")).projects.some((p: { root: string }) => p.root === a)) {
-          fs.rename = rename;
-          throw Error("probe checkout close persistence denied");
+      const { Worker } = process.getBuiltinModule("worker_threads") as any;
+      const post = Worker.prototype.postMessage;
+      Worker.prototype.postMessage = function(message: any) {
+        if (message.operation === "recoveryWrite" && message.kind === "workspace" && !message.body.projects.some((p: { root: string }) => p.root === a)) {
+          Worker.prototype.postMessage = post;
+          this.emit("message", { id: message.id, error: "probe checkout close persistence denied" }); return;
         }
-        return rename(...args);
+        return post.call(this, message);
       };
     }, a);
     await alphaTab.click({ button: "middle" });

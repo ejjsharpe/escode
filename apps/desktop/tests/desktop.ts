@@ -10,22 +10,11 @@ export async function launchDesktop(
   tools?: string,
   packaged = process.env.ESCODE_PACKAGED === "1",
 ) {
-  // Explicitly seeded test recovery belongs to this installation's sole client.
   await mkdir(userData, { recursive: true });
   const store = new Chats(join(userData, "durable-chats-v1"));
-  const { hostId, clientId } = await store.database.ready;
+  const owner = await store.database.ready;
+  const seededWorkspace = (await store.database.recoveryRead(owner.clientId, "workspace")).body !== null;
   await store.database.close();
-  let seededWorkspace = false;
-  for (const name of ["client-workspace-v1.json", "client-file-operation-v1.json"]) {
-    const file = join(userData, name);
-    try {
-      const state = JSON.parse(await readFile(file, "utf8"));
-      if (state && state.storageVersion === undefined) {
-        if (name === "client-workspace-v1.json") seededWorkspace = true;
-        await writeFile(file, JSON.stringify({ ...state, storageVersion: 1, hostId, clientId }));
-      }
-    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-  }
   // Seeded approvals represent a native choice in this fixture, never a runtime migration.
   const approvalsFile = join(userData, "approved-projects.json");
   if (seededWorkspace) {
@@ -83,4 +72,25 @@ export async function readChatFixture(file: string, _encoding: string) {
   const store = new Chats(join(dirname(file), "durable-chats-v1"));
   try { return JSON.stringify({ chats: (await store.database.read()).chats }); }
   finally { await store.database.close(); }
+}
+
+export async function readRecoveryFixture(file: string, _encoding?: string) {
+  const { dirname } = await import("node:path");
+  const { DatabaseSync } = await import("node:sqlite");
+  const database = new DatabaseSync(join(dirname(file), "durable-chats-v1.sqlite-state-v1/state.sqlite"), { readOnly: true });
+  try {
+    const owner = database.prepare("SELECT clientId FROM identity").get()!;
+    const row = database.prepare("SELECT body FROM client_recovery WHERE clientId=? AND kind=?").get(owner.clientId as string, file.includes("file-operation") ? "intent" : "workspace");
+    return row?.body as string ?? "null";
+  } finally { database.close(); }
+}
+export async function writeRecoveryFixture(file: string, bytes: string | Uint8Array) {
+  const { dirname } = await import("node:path");
+  const database = new Chats(join(dirname(file), "durable-chats-v1")).database;
+  try {
+    const owner = await database.ready;
+    const kind = file.includes("file-operation") ? "intent" : "workspace";
+    const previous = await database.recoveryRead(owner.clientId, kind);
+    await database.recoveryWrite(owner.clientId, kind, JSON.parse(String(bytes)), previous.revision);
+  } finally { await database.close(); }
 }

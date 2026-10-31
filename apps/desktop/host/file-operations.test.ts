@@ -16,8 +16,8 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import * as child from "node:child_process";
 import { Checkout } from "./project";
-import { Workspace } from "./workspace";
-import { FileOperationJournal } from "./file-operation-journal";
+import { Workspace } from "./recovery-fixture";
+import { FileOperationJournal } from "./recovery-fixture";
 import { FileOperations } from "./file-operations";
 vi.mock("node:child_process", async (original) => ({
   ...(await original<typeof import("node:child_process")>()),

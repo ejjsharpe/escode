@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -31,8 +32,8 @@ test("file tabs reuse dirty buffers and insert to the right without reordering e
     await treeFile("b.txt").click();
     await expect(tabs.getByRole("tab")).toHaveText(["a.txt", "c.txt", "b.txt"]);
     await expect(tabs.getByRole("tab", { name: "b.txt", exact: true })).toHaveAttribute("aria-selected", "true");
-    await expect.poll(async () => JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.openFiles).toEqual(["a.txt", "c.txt", "b.txt"]);
-    await expect.poll(async () => JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.path).toBe("b.txt");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.openFiles).toEqual(["a.txt", "c.txt", "b.txt"]);
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.path).toBe("b.txt");
     await page.reload();
     await expect(tabs.getByRole("tab")).toHaveText(["a.txt", "c.txt", "b.txt"]);
     await expect(tabs.getByRole("tab", { name: "b.txt", exact: true })).toHaveAttribute("aria-selected", "true");
@@ -220,9 +221,9 @@ test("normal and comparison cursor and scroll positions survive switching and re
     await page.keyboard.type("DIFF");
     await expect(page.locator(".modified-in-monaco-diff-editor")).toContainText("line030DIFF");
     await view.selectOption("file");
-    await expect.poll(async () => JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.fileViews?.["a.txt"]).toBe("file");
-    await expect.poll(async () => JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8")).drafts.find((d: { path: string }) => d.path === "a.txt")?.text).toContain("line080NORMAL");
-    await expect.poll(async () => JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8")).drafts.find((d: { path: string }) => d.path === "a.txt")?.text).toContain("line030DIFF");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.fileViews?.["a.txt"]).toBe("file");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(dir, "user/client-workspace-v1.json"), "utf8")).drafts.find((d: { path: string }) => d.path === "a.txt")?.text).toContain("line080NORMAL");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(dir, "user/client-workspace-v1.json"), "utf8")).drafts.find((d: { path: string }) => d.path === "a.txt")?.text).toContain("line030DIFF");
     await page.reload();
     await expect(normal).toBeEditable();
     await expect(page.locator(".editor .view-lines")).toContainText("line080NORMAL");
@@ -262,7 +263,7 @@ test("preview browsing replaces only clean previews and Keep Open retains the sa
     await expect(page.getByRole("tree")).toBeFocused();
     await page.getByRole("button", { name: "Keep Open", exact: true }).click();
     await file("c.txt").click();
-    await expect.poll(async () => JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.preview).toBe("c.txt");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(dir, "user/client-workspace-v1.json"), "utf8")).views[root]?.preview).toBe("c.txt");
     await page.reload();
     await expect(tabs.getByRole("tab", { name: "c.txt", exact: true })).toHaveAccessibleDescription("Preview");
     await file("b.txt").click();
@@ -326,8 +327,8 @@ test("deliberate opening and edits keep files open after undo, Save and recovery
     await file("a.txt").click();
     await page.getByRole("textbox", { name: "a.txt editor", exact: true }).focus();
     await page.keyboard.type("recovered");
-    await expect.poll(async () => JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8")).drafts.find((d: { path: string }) => d.path === "a.txt")?.text).toContain("recovered");
-    const recovered = JSON.parse(await readFile(join(dir, "user/client-workspace-v1.json"), "utf8"));
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(dir, "user/client-workspace-v1.json"), "utf8")).drafts.find((d: { path: string }) => d.path === "a.txt")?.text).toContain("recovered");
+    const recovered = JSON.parse(await readRecoveryFixture(join(dir, "user/client-workspace-v1.json"), "utf8"));
     recovered.views[root].preview = "a.txt";
     await page.evaluate(state => window.escode.lifecycle("persist", state), recovered);
     await page.reload();

@@ -153,7 +153,7 @@ A difference detected before saving between a file's loaded disk version and its
 **Recovery draft**:
 A persisted unsaved file buffer belonging to one client, with its checkout/file identity and loaded disk
 baseline. Another client’s Save or Discard does not remove it. Available drafts reopen as unsaved edits and use the ordinary save-conflict
-check. Recovery uses a versioned host/client-owned store and authenticated host actions. Ordinary saves retain journalled disk outcomes and protect the completed baseline against late recovery snapshots until matching reconciliation. Explicit discard removes the draft; recovery is best effort, not a guarantee
+check. Recovery uses host-owned SQLite records keyed by client identity and authenticated host actions; [SQLite recovery evidence](docs/compatibility/sqlite-file-recovery.md) records the bounded checks. Ordinary saves retain journalled disk outcomes and protect the completed baseline against late recovery snapshots until matching reconciliation. Explicit discard removes the draft; recovery is best effort, not a guarantee
 that the latest keystroke survives a crash.
 
 **Files view**:

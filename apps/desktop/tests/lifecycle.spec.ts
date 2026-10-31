@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -30,10 +31,10 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
       )
       .toBe("recover these edits");
-    const durable = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
+    const durable = JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8"));
     await page.evaluate((state) => window.escode.lifecycle("persist", state), durable);
     console.log(
       `Recovery draft acknowledged ${Date.now() - recoveryStarted} ms after typing began; crash recovery below starts from this durable draft.`,
@@ -56,14 +57,14 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       .click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("recover these edits");
     await expect
-      .poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")))
+      .poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")))
       .toMatchObject({ selected: root, projects: [{ root }, { root: other }] });
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
     await writeFile(join(root, "a.txt"), "external");
     // The crashed owner is known dead; explicitly release its fail-closed storage lock.
-    await rm(join(user, "foundation", "owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1", "receipts", "owner.lock"));
     app = await launch();
     page = await app.firstWindow();
     await expect(
@@ -96,7 +97,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     await expect(page.locator(".monaco-editor:visible")).toHaveCount(0);
     await expect
       .poll(
-        async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.length,
+        async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.length,
       )
       .toBe(0);
     await app.close();
@@ -264,7 +265,7 @@ createInterface({input:process.stdin}).on('line',line=>{
         await expect(page.getByRole("status")).toHaveText("Running");
         expect(await readFile(join(root, "a.txt"), "utf8")).toBe("committed");
         expect(
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0].text,
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts[0].text,
         ).toBe("save on close");
       }
       if (closeProject) {
@@ -416,7 +417,7 @@ test("cancelled Quit retains an earlier Discard choice", async () => {
     await page.bringToFront();
     await page.getByRole("treeitem", { name: /^a.txt/ }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("unsaved a.txt");
-    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.length).toBe(2);
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts.length).toBe(2);
   } finally {
     app.process().kill("SIGKILL");
     await rm(dir, { recursive: true, force: true });

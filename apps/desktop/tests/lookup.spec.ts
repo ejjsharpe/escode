@@ -1,10 +1,9 @@
+import { writeRecoveryFixture } from "./desktop";
 import { test, expect, _electron } from '@playwright/test';
 import { mkdtemp, realpath, mkdir, writeFile, rm, rename, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { FoundationState } from '../host/foundation-state';
-import { Workspace } from '../host/workspace';
 import { launchDesktop } from './desktop';
 import { createServer } from 'vite-plus';
 import electron from 'electron';
@@ -23,12 +22,10 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  }
  // Static metadata fixture: full retained history, including a closed root and default-glob targets.
  await mkdir(join(dir,'user'),{recursive:true});
- const foundation=FoundationState.open(join(dir,'user/foundation'));
- const {hostId,clientId}=foundation.read();foundation.close();
  const seeded=[{root:join(dir,'closed'),path:'closed-only.txt'},{root,path:'.DS_Store'},
    {root,path:'node_modules/.DS_Store'},{root,path:'node_modules/known.txt'},
    ...Array.from({length:196},(_,i)=>({root,path:`cap${String(i).padStart(3,'0')}.txt`}))];
- await new Workspace(join(dir,'user/client-workspace-v1.json'),{hostId,clientId}).write({projects:[],selected:'',views:{},drafts:[],recentFiles:seeded});
+ await writeRecoveryFixture(join(dir,'user/client-workspace-v1.json'),JSON.stringify({projects:[],selected:'',views:{},drafts:[],recentFiles:seeded}));
  await mkdir(join(root,'node_modules'));await writeFile(join(root,'node_modules/known.txt'),'ignored familiar file');
  await writeFile(join(root,'.gitignore'),'node_modules/\n');
  const server=process.env.ESCODE_LOOKUP_DEV ? await createServer({server:{host:'127.0.0.1',port:0,strictPort:true}}) : undefined;

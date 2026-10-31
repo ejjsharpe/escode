@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createFileWorkflow } from "./file-workflow";
 import { FoundationState } from "./foundation-state";
-import { Workspace } from "./workspace";
+import { Workspace } from "./recovery-fixture";
 import { Checkout } from "./project";
 
 test("collision consent shares the mutation gate and Keep Both preserves existing files", async () => {

@@ -1,3 +1,4 @@
+import { readRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -125,18 +126,19 @@ test("failed persistence vetoes the whole close and retry preserves comparison s
     await expect(f.page.getByRole("textbox", { name: "untracked · b.txt modified", exact: true })).toBeFocused();
     await expect(f.tabs.getByRole("tab")).toHaveCount(2);
     expect(await f.app.evaluate(() => (globalThis as any).closePrompts)).toEqual([`Save changes to ${f.root}/b.txt?`]);
-    await expect.poll(async () => JSON.parse(await readFile(join(f.dir, "user/client-workspace-v1.json"), "utf8")).drafts.length).toBe(2);
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(f.dir, "user/client-workspace-v1.json"), "utf8")).drafts.length).toBe(2);
     await f.app.evaluate(() => {
-      const fs = process.getBuiltinModule("fs/promises") as any, rename = fs.rename;
+      const { Worker } = process.getBuiltinModule("worker_threads") as any;
+      const post = Worker.prototype.postMessage;
       (globalThis as any).denyClosePersistence = true;
       (globalThis as any).closeWriteFailures = 0;
-      fs.rename = async (...args: any[]) => {
-        if ((globalThis as any).denyClosePersistence && String(args[1]).endsWith("/client-workspace-v1.json") &&
-          ((globalThis as any).closeWriteFailures > 0 || Object.values(JSON.parse(await fs.readFile(args[0], "utf8")).views).some((view: any) => view.openFiles?.length === 0))) {
+      Worker.prototype.postMessage = function(message: any) {
+        if ((globalThis as any).denyClosePersistence && message.operation === "recoveryWrite" && message.kind === "workspace" &&
+          ((globalThis as any).closeWriteFailures > 0 || Object.values(message.body.views).some((view: any) => view.openFiles?.length === 0))) {
           (globalThis as any).closeWriteFailures++;
-          throw Error("close persistence denied");
+          this.emit("message", { id: message.id, error: "close persistence denied" }); return;
         }
-        return rename(...args);
+        return post.call(this, message);
       };
     });
     await f.choices([1, 1]);
@@ -153,7 +155,7 @@ test("failed persistence vetoes the whole close and retry preserves comparison s
     await f.tab("a.txt").click({ button: "right" });
     await f.page.getByRole("menuitem", { name: "Close All", exact: true }).click();
     await expect(f.tabs.getByRole("tab")).toHaveCount(0);
-    await expect.poll(async () => JSON.parse(await readFile(join(f.dir, "user/client-workspace-v1.json"), "utf8")).drafts).toEqual([]);
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(f.dir, "user/client-workspace-v1.json"), "utf8")).drafts).toEqual([]);
     await f.page.reload();
     await expect(f.tabs.getByRole("tab")).toHaveCount(0);
   } finally { await f.cleanup(); }
@@ -224,7 +226,7 @@ test("preview close clears persisted identity and batch Cancel retains promoted 
     await expect(f.tab("b.txt")).toHaveAccessibleDescription("Preview");
     await f.page.getByRole("button", { name: "Close b.txt", exact: true }).click();
     await expect(f.tab("a.txt")).toHaveAttribute("aria-selected", "true");
-    const state = () => readFile(join(f.dir, "user/client-workspace-v1.json"), "utf8").then(JSON.parse);
+    const state = () => readRecoveryFixture(join(f.dir, "user/client-workspace-v1.json"), "utf8").then(JSON.parse);
     await expect.poll(async () => (await state()).views[f.root]?.preview).toBe("");
     await f.page.getByRole("treeitem", { name: "c.txt", exact: true }).click();
     await expect(f.tab("c.txt")).toHaveAccessibleDescription("Preview");
@@ -305,7 +307,7 @@ test("reopen retains missing exact targets and history excludes preview replacem
     await expect(f.page.getByRole("region", { name: "Main editor" })).toBeFocused();
     await f.page.keyboard.press("Meta+w");
     await expect(f.tabs.getByRole("tab")).toHaveText(["c.txt"]);
-    await expect.poll(async () => JSON.parse(await readFile(join(f.dir, "user/client-workspace-v1.json"), "utf8")).views[f.root].openFiles).toEqual(["c.txt"]);
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(f.dir, "user/client-workspace-v1.json"), "utf8")).views[f.root].openFiles).toEqual(["c.txt"]);
     await f.app.close();
     const restarted = await launchDesktop(join(f.dir, "user"));
     try {
@@ -511,7 +513,7 @@ test("folder moves preserve a closed batch's descendant positions and partial Tr
     await expect(f.tabs.getByRole("tab")).toHaveText(["a.txt", "one.txt", "two.txt"]);
     await expect(f.page.getByRole("textbox", { name: "moved/two.txt editor", exact: true })).toBeFocused();
     await f.page.keyboard.type("X");
-    await expect.poll(async () => JSON.parse(await readFile(join(f.dir, "user/client-workspace-v1.json"), "utf8")).drafts.find((d: any) => d.path === "moved/two.txt")?.text).toBe("twXo contents");
+    await expect.poll(async () => JSON.parse(await readRecoveryFixture(join(f.dir, "user/client-workspace-v1.json"), "utf8")).drafts.find((d: any) => d.path === "moved/two.txt")?.text).toBe("twXo contents");
     await f.choices([1]);
     await f.tab("moved/one.txt").click();
     await expect(f.page.getByRole("textbox", { name: "moved/one.txt editor", exact: true })).toBeVisible();

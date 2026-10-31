@@ -1,3 +1,4 @@
+import { readRecoveryFixture, writeRecoveryFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rename, rm, realpath, mkdir, link } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -169,14 +170,14 @@ test("renderer state cannot grant file access or overwrite approvals; native reo
     expect(await readFile(file)).toEqual(bytes);
     expect(await readFile(join(outside, "private.txt"), "utf8")).toBe("outside");
     await page.evaluate((state) => window.escode.lifecycle("persist", state), original);
-    const recoveryBytes = await readFile(join(user, "client-workspace-v1.json"));
+    const recoveryBytes = await readRecoveryFixture(join(user, "client-workspace-v1.json"));
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async (_window: unknown, options?: any) => ({
         response: options.buttons[0] === "Save" ? 1 : 0, checkboxChecked: false,
       });
     });
     await app.close();
-    await writeFile(join(user, "client-workspace-v1.json"), recoveryBytes);
+    await writeRecoveryFixture(join(user, "client-workspace-v1.json"), recoveryBytes);
     await writeFile(file, JSON.stringify([{ project: root, root }]));
     app = await launchDesktop(user, bin);
     page = await app.firstWindow();
@@ -251,7 +252,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
+          JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).drafts[0]?.text,
       )
       .toBe("recovery edits");
     await open(other);
@@ -260,7 +261,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
       .getByRole("button", { name: "repo", exact: true })
       .click();
     await expect
-      .poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).selected)
+      .poll(async () => JSON.parse(await readRecoveryFixture(join(user, "client-workspace-v1.json"), "utf8")).selected)
       .toBe(root);
     // A stale on-disk snapshot can precede queued selection writes; crash only after acknowledgement.
     await expect(page.locator("header")).toContainText(root);
@@ -272,7 +273,7 @@ test("unavailable checkout retains its tab, recovery edits and chat draft throug
     const exited = new Promise((resolve) => app.process().once("exit", resolve));
     app.process().kill("SIGKILL");
     await exited;
-    await rm(join(user, "foundation", "owner.lock")); // Fixture-owned recovery after the confirmed crash.
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1", "receipts", "owner.lock")); // Fixture-owned recovery after the confirmed crash.
     // A new repository at the same pathname must not inherit the original approval.
     execFileSync("git", ["init", root]);
     await writeFile(join(root, "a.txt"), "replacement bytes");
@@ -381,9 +382,9 @@ test("a saved secondary checkout can recover and save its buffer after restartin
       },
       { root, secondary },
     );
-    const recovery = await readFile(join(user, "client-workspace-v1.json"));
+    const recovery = await readRecoveryFixture(join(user, "client-workspace-v1.json"));
     await app.close();
-    await writeFile(join(user, "client-workspace-v1.json"), recovery);
+    await writeRecoveryFixture(join(user, "client-workspace-v1.json"), recovery);
     await writeFile(join(bin, "git"), "#!/bin/sh\nexit 127\n", { mode: 0o700 });
     app = await launchDesktop(user, bin);
     page = await app.firstWindow();
