@@ -250,3 +250,10 @@ The next message's fresh before-state is a separate target.
 
 **Summarized continuation**:
 An explicit historical-workflow choice that creates a separate chat draft and managed worktree from an eligible checkpoint. Available provider text through the selected boundary is copied with item labels into an unsent draft for review (64 KiB maximum); it is not native historical provider context and does not reconstruct tool state. Missing, unsupported, empty or oversized required history remains unavailable. Preparation starts no provider thread or turn; first Send explicitly creates a fresh conversation. Source work and client drafts remain intact.
+
+Checkpoint storage capacity is independent of inactivity retention: active chats and
+Never retain protected history until optional capture reaches its byte or work bound,
+then disclose missing file coverage. Logical expiry drops eligible file payloads;
+SQLite reuses free pages and may truncate an unblocked WAL without shrinking the
+main database. These checkpoints store file bytes in SQLite, create no Git snapshot
+objects, and grant no authority to prune project Git objects or retained worktrees.

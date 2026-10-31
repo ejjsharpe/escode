@@ -1,3 +1,4 @@
+import { checkpointLoad } from "./checkpoint-load";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -53,6 +54,8 @@ test("packaged worker durability readback and recovery write measurement", async
     await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
+    const stopLoad = await checkpointLoad(user);
+    try {
     for (const phase of ["baseline", "followup"]) {
       if (phase === "followup") {
         const db = new Chats(join(user, "durable-chats-v1"));
@@ -70,5 +73,6 @@ test("packaged worker durability readback and recovery write measurement", async
       await expect(page.getByRole("button", { name: "Save ⌘S", exact: true })).toBeEnabled();
       console.log("#127 packaged editing/Save ms", JSON.stringify({ phase, editMs, saveMs: performance.now() - saveStart }));
     }
+    } finally { await stopLoad(); }
   } finally { await app.evaluate(({ app }) => app.exit(0)).catch(() => {}); await rm(dir, { recursive: true, force: true, maxRetries: 5 }); }
 });
