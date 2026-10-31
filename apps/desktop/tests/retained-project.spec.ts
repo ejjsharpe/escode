@@ -54,13 +54,15 @@ send({id:m.id,result});});`,
       await expect(page.locator("header")).toContainText(root);
     };
     const choice = async (response: number) =>
-      app.evaluate(({ dialog }, response) => {
+      app.evaluate(({ dialog }, { response, a }) => {
         dialog.showMessageBox = async (_window: unknown, options?: any) => {
+          if (options.message !== `Save changes to ${a}/a.txt?`)
+            throw Error("Close must prompt only for the captured checkout");
           if (options.buttons[0] !== "Save")
             throw Error("Editor closure must not prompt Stop and Close");
           return { response, checkboxChecked: false };
         };
-      }, response);
+      }, { response, a });
     await open(a);
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await page.locator(".monaco-editor:visible").click();
@@ -75,7 +77,17 @@ send({id:m.id,result});});`,
       const result = (await window.escode.project("worktree-managed", a))[0];
       return { ...result, chat };
     }, a);
+    // A linked checkout shares the Project, but owns independent same-path edits.
+    await open(managed.root);
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
+    await page.locator(".monaco-editor:visible").click();
+    await page.keyboard.press("Meta+a");
+    await page.keyboard.type("dirty linked checkout");
     await open(b);
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
+    await page.locator(".monaco-editor:visible").click();
+    await page.keyboard.press("Meta+a");
+    await page.keyboard.type("dirty beta");
     const beta = await page.evaluate(async (b) => {
       const chat = await window.escode.chat("create", b, b);
       await window.escode.chat("open", b, chat.id);
@@ -93,9 +105,9 @@ send({id:m.id,result});});`,
       return { shared, scratch, draft };
     }, a);
     mixed.scratch = (await page.evaluate(readChats, null))[0];
-    const alphaTab = page
-      .getByRole("navigation", { name: "Projects", exact: true })
-      .getByRole("button", { name: /^alpha/ });
+    const alphaTab = page.locator('.project-tab button[aria-pressed]').and(
+      page.locator(`button[aria-description$=" · ${a}"]`),
+    );
     await choice(2);
     await alphaTab.click({ button: "middle" });
     await expect(page.locator("header")).toContainText(b);
@@ -116,10 +128,39 @@ send({id:m.id,result});});`,
     await writeFile(join(a, "a.txt"), "baseline");
     await open(b);
     await choice(1);
+    await expect.poll(async () => JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).drafts.length).toBe(3);
+    // Fail the actual workspace replacement after Discard, retaining all available models.
+    await app.evaluate((_, a) => {
+      const fs = process.getBuiltinModule("fs/promises") as any;
+      const rename = fs.rename;
+      fs.rename = async (...args: unknown[]) => {
+        if (String(args[1]).endsWith("/client-workspace-v1.json") &&
+            !JSON.parse(await fs.readFile(args[0], "utf8")).projects.some((p: { root: string }) => p.root === a)) {
+          fs.rename = rename;
+          throw Error("probe checkout close persistence denied");
+        }
+        return rename(...args);
+      };
+    }, a);
+    await alphaTab.click({ button: "middle" });
+    await expect(page.locator("main > [role=alert]")).toContainText("probe checkout close persistence denied");
+    await expect(alphaTab).toBeVisible();
+    await expect(page.locator("header")).toContainText(b);
+    await expect(page.locator(".monaco-editor:visible")).toContainText("dirty beta");
+    await alphaTab.click();
+    await expect(page.locator(".monaco-editor:visible")).toContainText("dirty alpha");
+    await open(b);
     await alphaTab.click({ button: "middle" });
     await expect(alphaTab).toHaveCount(0);
     await expect(page.locator("header")).toContainText(b);
     expect(await readFile(join(a, "a.txt"), "utf8")).toBe("baseline");
+    await expect(page.locator(".monaco-editor:visible")).toContainText("dirty beta");
+    await open(managed.root);
+    await expect(page.locator(".monaco-editor:visible")).toContainText("dirty linked checkout");
+    expect(await readFile(join(managed.root, "a.txt"), "utf8")).toBe("baseline");
+    await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
+    await expect.poll(() => readFile(join(managed.root, "a.txt"), "utf8")).toBe("dirty linked checkout");
+    await open(b);
     const remove = () =>
       page.evaluate(
         async ({ a, root }) => {
@@ -173,13 +214,12 @@ send({id:m.id,result});});`,
     await writeFile(join(managed.root, "ignored"), "preserve");
     expect(await remove()).toMatch(/local|changes|files/i);
     expect(await readFile(join(managed.root, "ignored"), "utf8")).toBe("preserve");
-    await app.evaluate(({ dialog }, root) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
-    }, managed.root);
-    await page.getByRole("button", { name: "Open project…" }).click();
-    await expect(page.locator(".view-nav:visible")).toContainText(a);
+    await page.locator(`.project-tab-close[aria-description$=" · ${managed.root}"]`).click();
+    await expect(page.locator("header")).toContainText("agents");
+    await page.getByRole("button", { name: "Open checkout", exact: true }).click();
+    await expect(page.locator(".view-nav:visible")).toContainText(managed.root);
     await expect(page.locator(".toolbar:visible")).toContainText("a.txt");
-    await expect(page.locator(".monaco-editor:visible")).toContainText("baseline");
+    await expect(page.locator(".monaco-editor:visible")).toContainText("dirty linked checkout");
   } finally {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
