@@ -156,4 +156,4 @@ Each slice should run its narrow gates above and typecheck; provider/native chan
 [epending]: https://github.com/ejjsharpe/escode/blob/c1dc27fe322b6564ec54868ab3e6fd3a2241df46/apps/desktop/host/vendor/codex/src/protocol.ts#L305-L350
 [ereply]: https://github.com/ejjsharpe/escode/blob/c1dc27fe322b6564ec54868ab3e6fd3a2241df46/apps/desktop/host/tools.ts#L187-L197
 [eresolved]: https://github.com/ejjsharpe/escode/blob/c1dc27fe322b6564ec54868ab3e6fd3a2241df46/apps/desktop/host/chat-service.ts#L524-L536
-[eversions]: https://github.com/ejjsharpe/escode/blob/c1dc27fe322b6564ec54868ab3e6fd3a2241df46/apps/desktop/package.json#L26-L29
+[eversions]: https://github.com/ejjsharpe/escode/blob/c1dc27fe322b6564ec54868ab3e6fd3a2241df46/apps/desktop/package.json#L22-L23
