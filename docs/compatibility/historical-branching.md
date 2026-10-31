@@ -93,3 +93,19 @@ at admission, allocation, provider response and outcome persistence, with restar
 Verification results follow below. Paid live-provider context fidelity, manual
 VoiceOver and physical power-loss survival remain unqualified. #137 retention and
 #133 restoration are separate work; this slice changes neither policy.
+
+Final #135 verification (2026-10-31): typecheck, lint, build and unsigned arm64
+package passed after merging integration `e3e015d` into this branch (`205801b`).
+The merge conflict in the shared packaged fixture was resolved by retaining both
+completion branching and restoration scenarios. Integration itself was not changed;
+`0a9c981` remains an ancestor. The pre-merge-started focused host regression run
+finished 42 passed / 1 live skip across boundaries, worktree drafts and worktrees;
+a separate combined-tip boundary run passed all 15 tests (97.67s under concurrent
+load). Combined-tip packaged before/completion branches both passed, including
+confirmation/result focus and retained composer. The extra packaged restoration
+regression initially timed out waiting for confirmation focus under concurrent
+host load; its isolated rerun passed (1/1, 10.4s). The preceding pre-merge packaged
+branch run also passed 2/2 (24.1s). Completion-branch screenshot was visually
+inspected. No production UI component, contract or dependency changed in #135.
+No known unmet automated #135 criterion remains at these confirmed seams; native
+provider fidelity and manual accessibility retain the qualification limits above.
