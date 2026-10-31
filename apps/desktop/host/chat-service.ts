@@ -1,4 +1,4 @@
-import { captureBeforeTurn } from "./checkpoints";
+import { captureTurnCheckpoint } from "./checkpoints";
 import type { Checkout } from "./project";
 import type { DraftAction } from "@escode/contracts";
 import { LiveSpool } from "./live-spool";
@@ -41,6 +41,9 @@ type Session = Omit<RuntimeSnapshot, "connected" | "busy" | "turnId" | "preparin
   requestIds: Map<string, string | number>;
   // Send remains in flight through persistence, even if the provider already completed.
   sending?: boolean;
+  completing?: Promise<void>;
+  completedTurnId?: string;
+  completion?: { chat: Readonly<SavedChat>; id: string; createdAt: number; commandId?: string };
   preparation?: { id: string; cancelled: boolean };
   checkoutIdentity?: { path: string; dev: number; ino: number };
 };
@@ -230,7 +233,7 @@ export class ChatService {
   }
   summary(project: string | null, id: string) {
     const s = this.sessions.get(id);
-    return { busy: !!((s && s.turn.phase !== "idle") || s?.sending || s?.connection.opening || this.transitions.has(id)),
+    return { busy: !!((s && s.turn.phase !== "idle") || s?.sending || s?.completing || s?.connection.opening || this.transitions.has(id)),
       needsInput: !!s?.requests.length, unavailable: !!s?.error };
   }
   snapshot(project: string | null, id: string): RuntimeSnapshot {
@@ -241,7 +244,7 @@ export class ChatService {
       chatId: id,
       threadId: s.threadId,
       connected: s.connection.status === "connected",
-      busy: s.turn.phase !== "idle",
+      busy: s.turn.phase !== "idle" || !!s.completing,
       preparing: !!s.preparation,
       turnId: s.turn.id,
       settings: s.settings,
@@ -553,6 +556,7 @@ export class ChatService {
       return;
     }
     if (message.method === "turn/started") {
+      if (s.completedTurnId === p.turn.id || s.completing || (s.turn.id && s.turn.id !== p.turn.id)) return;
       if (s.turn.phase === "stopping" && s.turn.id === p.turn.id) return;
       s.turn = { phase: "running", id: p.turn.id };
       return;
@@ -587,6 +591,16 @@ export class ChatService {
       return;
     }
     if (message.method === "turn/completed" && p.turn.id === s.turn.id) {
+      s.completedTurnId = p.turn.id;
+      const completion = s.completion;
+      s.completion = undefined;
+      if (completion) {
+        const status = p.turn.status ?? "unavailable";
+        s.completing = captureTurnCheckpoint(this.store.database, completion.chat, s.threadId, completion.commandId,
+          { id: completion.id, createdAt: completion.createdAt, turnId: p.turn.id, completion: status })
+          .then(error => { if (error) s.error = error; })
+          .finally(() => { s.completing = undefined; });
+      }
       s.turn = { phase: "idle", id: null };
       s.requests = s.requests.filter((r) => ("turnId" in r.params ? r.params.turnId : null) == null);
       for (const token of s.requestIds.keys())
@@ -649,7 +663,7 @@ export class ChatService {
     commandId?: string,
   ) {
     const s = this.session(project, id);
-    if (s.sending || s.turn.phase !== "idle") throw Error("This chat already has an active turn.");
+    if (s.sending || s.completing || s.turn.phase !== "idle") throw Error("This chat already has an active turn.");
     if (!text.trim() || text.length > 100000)
       throw Error("Enter a message under 100,000 characters.");
     s.sending = true;
@@ -697,6 +711,7 @@ export class ChatService {
       if (directoryError) throw Error(directoryError);
       if (s.preparation?.cancelled) throw Error("Preparation cancelled; reserved resources retained and may be partially prepared.");
       check();
+      s.completedTurnId = undefined;
       s.turn = { phase: "starting", id: null };
 
       s.error = null;
@@ -706,18 +721,28 @@ export class ChatService {
       });
       sendIntent = true;
       check();
-      s.error = await captureBeforeTurn(this.store.database, chat, s.threadId, commandId);
+      s.error = await captureTurnCheckpoint(this.store.database, chat, s.threadId, commandId);
       check();
       s.preparation = undefined;
       this.store.validateWorktree(chat);
       this.store.validateScratch(chat);
       this.validateCheckout(s, chat.checkout);
+      const completion = { chat, id: randomUUID(), createdAt: Date.now(), commandId };
+      s.completion = completion;
+      try {
+        await this.store.database.command("checkpoint", { body: { id: completion.id, kind: "after-turn", chatId: chat.id,
+          project: chat.project, checkout: chat.checkout, directoryIdentity: chat.directoryIdentity, threadId: s.threadId,
+          commandId: commandId ?? null, createdAt: completion.createdAt, completion: "pending", availability: "unavailable",
+          reason: "Completion not observed or capture interrupted; no automatic capture on restart", gitBase: null } });
+      } catch (error) { s.error = `Completion boundary persistence failed: ${String(error)}`; }
+      check();
       launched = true;
       const result = await s.connection.rpc.request("turn/start", {
         threadId: s.threadId,
         input: [{ type: "text", text, text_elements: [] }],
       }) as import("./vendor/codex/src/schema").V2TurnStartResponse;
       if (s.turn.phase === "starting") s.turn = { phase: "running", id: result.turn.id };
+      await s.completing;
       await this.store.update(project, id, {
         draft: "",
         ...(chat.phase ? { initialSend: "accepted" as const } : {}),

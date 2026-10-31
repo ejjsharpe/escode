@@ -79,7 +79,7 @@ test("authenticated dropped socket response recovers status after reconnect with
     async request(method: string, params: any) {
       if (method === "account/read") return { account: { type: "chatgpt" } };
       if (method === "thread/start" || method === "thread/resume") return { thread: { id: params.threadId ?? "provider" }, cwd: dir, model: "fixture", reasoningEffort: "high", approvalPolicy: "on-request", sandbox: { type: "workspaceWrite" } };
-      if (method === "turn/start") { turns++; return { turn: { id: "turn" } }; }
+      if (method === "turn/start") { turns++; return { turn: { id: `turn-${turns}` } }; }
       return {};
     }, respond() {}, close() {},
   }); });
@@ -108,7 +108,7 @@ test("authenticated dropped socket response recovers status after reconnect with
     const status = execFileSync("git", ["--no-optional-locks", "-C", dir, "status", "--porcelain"], { encoding: "utf8" });
     const sends = new DurableSend(db);
     const host = await startHost({ ...await db.ready, origin: "null", list: async () => ({ kind: "denied", message: "unused" }),
-      sendMessage: command => sends.execute(command, async () => { await service.send(command.project, command.id, command.text); }), sendStatus: id => sends.receipt(id) });
+      sendMessage: command => sends.execute(command, async () => { await service.send(command.project, command.id, command.text, undefined, command.commandId); }), sendStatus: id => sends.receipt(id) });
     let client = createHostClient(async () => host.bootstrap());
     const command = { commandId: "one", admissionEpoch: sends.admissionEpoch, project: dir, id: chat.id, expected: "state", text: "hello" };
     try {
@@ -120,7 +120,7 @@ test("authenticated dropped socket response recovers status after reconnect with
       await client.sendMessage(command);
       expect(turns).toBe(1);
       const checkpoints = await db.command("checkpoints", { commandId: chat.id });
-      expect(checkpoints).toHaveLength(1);
+      expect(checkpoints.filter((c: any) => c.kind === "before-message")).toHaveLength(1);
       expect(checkpoints[0].files["manual.txt"].content).toBe(Buffer.from("saved before turn").toString("base64"));
       expect(checkpoints[0].files["tracked.txt"].content).toBe(Buffer.from("disk bytes").toString("base64"));
       expect(checkpoints[0].files["ignored.txt"]).toBeUndefined();
@@ -130,26 +130,68 @@ test("authenticated dropped socket response recovers status after reconnect with
       expect(checkpoints[0].files.empty).toBeUndefined();
       expect(execFileSync("git", ["--no-optional-locks", "-C", dir, "status", "--porcelain"], { encoding: "utf8" })).toBe(status);
       expect(await readFile(join(dir, ".git/index"))).toEqual(index);
-      const complete = () => notify({ method: "turn/completed", params: { threadId: "provider", turn: { id: "turn", status: "completed" } } });
+      const complete = () => notify({ method: "turn/completed", params: { threadId: "provider", turn: { id: `turn-${turns}`, status: "completed" } } });
+      await writeFile(join(dir, "manual.txt"), "agent result");
       complete();
+      await expect.poll(async () => (await db.command("checkpoints", { commandId: chat.id })).find((c: any) => c.kind === "after-turn")?.availability).toBe("available");
+      const after = (await db.command("checkpoints", { commandId: chat.id })).find((c: any) => c.kind === "after-turn");
+      expect(after).toMatchObject({ turnId: "turn-1", threadId: "provider", checkout: dir, completion: "completed", commandId: "one" });
+      expect(after.files["manual.txt"].content).toBe(Buffer.from("agent result").toString("base64"));
+      complete();
+      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
       await writeFile(join(dir, "manual.txt"), "intervening manual save");
       await client.sendMessage({ ...command, commandId: "two" });
-      const fresh = await db.command("checkpoints", { commandId: chat.id });
+      const fresh = (await db.command("checkpoints", { commandId: chat.id })).filter((c: any) => c.kind === "before-message");
       expect(fresh).toHaveLength(2);
       expect(fresh[1].id).not.toBe(fresh[0].id);
       expect(fresh[1].files["manual.txt"].content).toBe(Buffer.from("intervening manual save").toString("base64"));
       complete();
+      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
       await writeFile(join(dir, "large"), Buffer.alloc(8 * 1024 * 1024 + 1));
-      await client.sendMessage({ ...command, commandId: "exhausted" });
-      expect((await db.command("checkpoints", { commandId: chat.id }))[2]).toMatchObject({ availability: "unavailable", gitBase: checkpoints[0].gitBase });
+      const exhausted = await client.sendMessage({ ...command, commandId: "exhausted" }); expect(exhausted).toMatchObject({ status: "accepted" });
+      expect((await db.command("checkpoints", { commandId: chat.id })).filter((c: any) => c.kind === "before-message")[2]).toMatchObject({ availability: "unavailable", gitBase: checkpoints[0].gitBase });
       expect(turns).toBe(3);
       complete();
+      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
       const { DatabaseSync } = await import("node:sqlite");
       const fault = new DatabaseSync(join(dir, "chats.sqlite-state-v1/state.sqlite"));
       fault.exec("CREATE TRIGGER fail_admission BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'admission failure'); END");
       await expect(client.sendMessage({ ...command, commandId: "refused" })).rejects.toThrow();
       expect(turns).toBe(3);
+      fault.exec("DROP TRIGGER fail_admission");
+      await rm(join(dir, "large"));
+      fault.exec("CREATE TRIGGER fail_completion BEFORE UPDATE ON checkpoints WHEN json_extract(NEW.body, '$.availability')='available' BEGIN SELECT RAISE(ABORT, 'result full'); END");
+      await client.sendMessage({ ...command, commandId: "result-failure" });
+      complete();
+      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+      const failed = (await db.command("checkpoints", { commandId: chat.id })).filter((c: any) => c.kind === "after-turn").at(-1);
+      expect(failed).toMatchObject({ completion: "completed", availability: "unavailable", turnId: "turn-4" });
+      expect(failed.reason).toContain("result full");
+      fault.exec("DROP TRIGGER fail_completion");
+      await client.sendMessage({ ...command, commandId: "interrupted" });
+      await service.stop(dir, chat.id);
+      notify({ method: "turn/completed", params: { threadId: "provider", turn: { id: `turn-${turns}`, status: "interrupted" } } });
+      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+      expect((await db.command("checkpoints", { commandId: chat.id })).at(-1)).toMatchObject({ completion: "interrupted", availability: "unavailable" });
+      fault.exec("CREATE TRIGGER fail_all_completion BEFORE UPDATE ON checkpoints BEGIN SELECT RAISE(ABORT, 'all result writes fail'); END");
+      await client.sendMessage({ ...command, commandId: "lost-result" });
+      complete();
+      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+      expect(service.snapshot(dir, chat.id).error).toContain("boundary persistence failed");
+      expect((await db.command("checkpoints", { commandId: chat.id })).at(-1)).toMatchObject({ completion: "pending", availability: "unavailable" });
+      fault.exec("DROP TRIGGER fail_all_completion");
+      await client.sendMessage({ ...command, commandId: "unobserved" });
+      service.close();
+      const retained = await db.command("checkpoints", { commandId: chat.id });
+      expect(retained.at(-1)).toMatchObject({ completion: "pending", availability: "unavailable" });
+      expect(retained.find((c: any) => c.id === after.id)).toEqual(after);
+      expect(await readFile(join(dir, ".git/index"))).toEqual(index);
       fault.close();
+      await db.close();
+      const reopened = new Chats(join(dir, "chats"));
+      expect(await reopened.database.command("checkpoints", { commandId: chat.id })).toEqual(retained);
+      expect(turns).toBe(7);
+      await reopened.database.close();
       expect(checkpoints[0].threadId).toBe("provider");
       expect(checkpoints[0].gitBase).toBe(execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim());
     } finally { await client.close(); await host.close(); }
