@@ -75,7 +75,7 @@ export async function startHost(options: {
   titleAction?: (action: import("@escode/contracts").TitleAction) => Promise<void>;
   chatDefaults?: (project: string | null, id: string, scope: "app" | "project", value?: import("@escode/contracts").ChatDefaults) => Promise<import("@escode/contracts").ChatDefaults>;
   chatPermissions?: (project: string | null, id: string, choice?: string) => Promise<import("@escode/contracts").PermissionChoices>;
-  chatModels?: (project: string | null, id: string, model?: string, effort?: string) => Promise<import("@escode/contracts").ModelChoices>;
+  chatModels?: (project: string | null, id: string, model?: string, effort?: string, activate?: boolean) => Promise<import("@escode/contracts").ModelChoices>;
   draftAction?: (action: import("@escode/contracts").DraftAction) => Promise<unknown>;
   clientChatStorage?: (state?: Record<string, string>) => Promise<Record<string, string>>;
   sendState?: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
@@ -259,7 +259,7 @@ export async function startHost(options: {
         }, catch: String }),
         chatDefaults: ({ project, id, scope, value }) => Effect.tryPromise({ try: async () => { if (!options.chatDefaults) throw Error("Defaults unavailable"); return options.chatDefaults(project, id, scope, value); }, catch: String }),
         chatPermissions: ({ project, id, choice }) => Effect.tryPromise({ try: async () => { if (!options.chatPermissions) throw Error("Permission controls unavailable"); return options.chatPermissions(project, id, choice); }, catch: String }),
-        chatModels: ({ project, id, model, effort }) => Effect.tryPromise({ try: async () => { if (!options.chatModels) throw Error("Model catalog unavailable"); return options.chatModels(project, id, model, effort); }, catch: String }),
+        chatModels: ({ project, id, model, effort, activate }) => Effect.tryPromise({ try: async () => { if (!options.chatModels) throw Error("Model catalog unavailable"); return options.chatModels(project, id, model, effort, activate); }, catch: String }),
         draftAction: ({ action }) => Effect.tryPromise({ try: async () => {
           if (!options.draftAction) throw Error("Draft editing unavailable");
           return Schema.decodeUnknownSync(DraftRecord)({ ...await options.draftAction(action) as object, draft: "" });

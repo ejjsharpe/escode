@@ -17,7 +17,7 @@ type ChatArguments =
   | ["permissions", string | null, string, ("supervised" | "edits" | "full")?]
   | [operation: "renameTitle", project: string | null, id: string, title: string]
   | [operation: "regenerateTitle", project: string | null, id: string]
-  | ["models", string | null, string, string?, string?]
+  | ["models", string | null, string, string?, string?, boolean?]
   | [operation: "createDraft", project: string | null, checkout?: string]
   | [operation: "archive", project: string | null, id: string, archived: boolean]
   | [operation: "context", project: string | null, id: string, target: string | null]
@@ -138,7 +138,7 @@ contextBridge.exposeInMainWorld(
       const [operation, ...args] = call;
       if (call[0] === "defaults") return hostClient.chatDefaults(call[1], call[2], call[3], call[4]);
       if (call[0] === "permissions") return hostClient.chatPermissions(call[1], call[2], call[3]);
-      if (call[0] === "models") return hostClient.chatModels(call[1], call[2], call[3], call[4]);
+      if (call[0] === "models") return hostClient.chatModels(call[1], call[2], call[3], call[4], call[5]);
       return ["archive", "createDraft", "context", "execution"].includes(operation)
       ? (async () => {
         if (call[0] === "createDraft") return hostClient.draftAction({ operation: call[0], project: call[1], ...(call[2] === undefined ? {} : { checkout: call[2] }) });

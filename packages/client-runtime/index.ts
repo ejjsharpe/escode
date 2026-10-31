@@ -103,7 +103,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     titleAction: (action: import("@escode/contracts").TitleAction) => chatQuery(client => client.titleAction({ action })),
     chatDefaults: (project: string | null, id: string, scope: "app" | "project", value?: import("@escode/contracts").ChatDefaults) => chatQuery(client => client.chatDefaults({ project, id, scope, ...(value === undefined ? {} : { value }) })),
     chatPermissions: (project: string | null, id: string, choice?: "supervised" | "edits" | "full") => chatQuery(client => client.chatPermissions({ project, id, ...(choice === undefined ? {} : { choice }) })),
-    chatModels: (project: string | null, id: string, model?: string, effort?: string) => chatQuery(client => client.chatModels({ project, id, ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }) })),
+    chatModels: (project: string | null, id: string, model?: string, effort?: string, activate?: boolean) => chatQuery(client => client.chatModels({ project, id, ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }), ...(activate === undefined ? {} : { activate }) })),
     draftAction: (action: import("@escode/contracts").DraftAction) => chatQuery(client => client.draftAction({ action })),
     sendState: (project: string | null, id: string) => chatQuery(client => client.sendState({ project, id })),
     sendMessage: (command: SendCommand) => chatQuery(client => client.sendMessage({ command })),

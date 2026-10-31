@@ -79,8 +79,30 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     expect(next).toMatchObject({ model: { model: "b", effort: "medium" }, permission: "full" });
     await page.evaluate(async id => {
       await window.escode.chat("defaults", null, id, "app", {});
-      await window.escode.chat("models", null, id, "a");
+      await window.escode.chat("models", null, id, "a", undefined, true);
     }, next.id);
+    // Reactivating the saved B chat must supersede the last edited A chat.
+    await page.getByRole("button", { name: "No project", exact: true }).click();
+    await expect(page.getByLabel("Next message model")).toHaveValue("a");
+    await page.getByLabel("Next message effort").selectOption("high");
+    await page.locator(".agent-row").filter({ hasText: "retain my text" }).click();
+    await expect(page.getByLabel("Next message model")).toHaveValue("b");
+    await expect(page.getByLabel("Next message effort")).toHaveValue("medium");
+    expect(await page.evaluate(async () => {
+      const fresh = await window.escode.chat("createDraft", null);
+      return (await window.escode.chat("models", null, fresh.id)).choice;
+    })).toEqual({ model: "b", effort: "medium" });
+    await page.getByRole("button", { name: "No project", exact: true }).click();
+    await expect(page.getByLabel("Next message model")).toHaveValue("b");
+    await expect(page.getByLabel("Next message effort")).toHaveValue("medium");
+    await page.evaluate(async id => { await window.escode.chat("send", null, id, "background validation"); }, next.id);
+    const afterBackgroundSend = await page.evaluate(async () => {
+      const draft = await window.escode.chat("createDraft", null);
+      return window.escode.chat("models", null, draft.id);
+    });
+    expect(afterBackgroundSend.choice).toEqual({ model: "b", effort: "medium" });
+    await page.evaluate(async id => { const snapshot = await window.escode.chat("open", null, id); await window.escode.chat("stop", null, id, snapshot.controlTarget); }, next.id);
+    await page.evaluate(async id => { await window.escode.chat("models", null, id, "a", undefined, true); }, next.id);
     const remembered = await page.evaluate(async () => {
       const draft = await window.escode.chat("createDraft", null);
       await window.escode.chat("draft", null, draft.id, "preserved new draft");
