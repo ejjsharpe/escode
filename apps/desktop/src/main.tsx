@@ -1,3 +1,4 @@
+import { SidebarProvider, SidebarResize } from "./sidebar";
 import { RetentionSettings } from "./retention-settings";
 import { preserveClose } from "./close-preservation";
 import { createFileActivation } from "./file-activation";
@@ -101,11 +102,13 @@ function CheckoutView({
   mode,
   onStatus,
   onBlocked,
+  navigation,
 }: {
   root: string;
   project: string;
   active: boolean;
   mode: string;
+  navigation: React.ReactNode;
   onStatus: (status: Status) => void;
   onBlocked: (root: string, blocked: boolean) => void;
 }) {
@@ -932,15 +935,14 @@ function CheckoutView({
   });
   return (
     <div className="workspace" hidden={!active || mode === "Chats"} inert={fileClosing}>
+      <SidebarResize />
       <aside aria-label={mode + " sidebar"}>
+        {navigation}
         {transferProgress && (
           <p role="status">
             Transferring captured files… Navigation and chat Stop remain available.
           </p>
         )}
-        <p className="directory">
-          {status?.branch} · {root}
-        </p>
         {checkoutError && (
           <>
             <p role="status">{checkoutError}</p>
@@ -1290,8 +1292,7 @@ function ProjectView({
     setActivity(value);
     onActivity(value);
   }, [chats, onActivity]);
-  return (
-    <section hidden={!active} aria-label={initial.project}>
+  const navigation = (
       <nav className="view-nav" aria-label="Project views">
         {["Files", "Source Control", "Chats"].map((view) => (
           <Button
@@ -1300,27 +1301,32 @@ function ProjectView({
             aria-pressed={mode === view}
             onClick={() => setMode(view)}
           >
-            {view}
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d={view === "Files" ? "M5 3h9l5 5v13H5Z M14 3v6h5" : view === "Chats" ? "M3 4h18v13H9l-6 4Z" : "M8 3v18 M4 7l4-4 4 4 M16 21V3 M12 17l4 4 4-4"} /></svg>
+            {view === "Source Control" ? "Diff" : view}
             {view === "Chats" && activity ? " · " + activity : ""}
           </Button>
         ))}
-        <Button disabled={blocked[checkout]} onClick={() => setLookup(true)}>Find file</Button>
-        <span className="directory">
+        <span className="directory" title={checkout}>
           Checkout: {initial.branch} · {checkout}
         </span>
       </nav>
+  );
+  return (
+    <section hidden={!active} aria-label={initial.project}>
         {lookup && active && <FileLookup root={checkout} project={initial.project} onClose={() => setLookup(false)} />}
         <CheckoutView
           key={checkout}
           root={checkout}
           project={initial.project}
           mode={mode}
+          navigation={navigation}
           active={active}
           onBlocked={onBlocked}
           onStatus={onStatus}
         />
       <div className="workspace" hidden={mode !== "Chats"}>
-        <aside id={sidebarId} />
+        <SidebarResize />
+        <aside id={sidebarId}>{navigation}</aside>
         <section className="content">
           <div className="chat-panel">
             <div className="chat-view">
@@ -1460,12 +1466,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
     }
   }
   return (
-    <main {...stylex.props(styles.page)} data-agents={selected === "agents"} inert={closing}>
-      <header>
-        <strong>escode</strong>
-        <span>{selected}</span>
-        <RetentionSettings />
-      </header>
+    <SidebarProvider><main {...stylex.props(styles.page)} data-agents={selected === "agents"} inert={closing}>
       <nav className="project-tabs" aria-label="Projects">
         <Button aria-pressed={selected === "agents"} onClick={() => setSelected("agents")}>
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z" /></svg>
@@ -1502,10 +1503,11 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
         <Button className="project-tab-open" aria-label="Open project…" title="Open project…" onClick={() => void open()}>
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 5v14 M5 12h14" /></svg>
         </Button>
+      <Button onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "p", metaKey: true, bubbles: true }))}>Find file</Button>
+      <header><span className="workspace-context">{selected}</span><RetentionSettings /></header>
       </nav>
       {error && <p role="alert">{error}</p>}
       {selected === "agents" && <>
-        <div className="view-nav"><Button onClick={() => setAgentsLookup(true)}>Find file</Button></div>
         <AgentsView />
         {agentsLookup && <FileLookup roots={projects} onClose={() => setAgentsLookup(false)} />}
       </>}
@@ -1524,7 +1526,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
           />
         );
       })}
-    </main>
+    </main></SidebarProvider>
   );
 }
 window.escode

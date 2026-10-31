@@ -32,7 +32,7 @@ test("approved projects reopen across repeated restarts without choosing directo
       await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
       await expect(page.locator(".monaco-editor:visible")).toContainText(root);
     }
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.evaluate(async root => {
       const chat = await window.escode.chat("create", root, root);
       await window.escode.chat("draft", root, chat.id, "original checkout composer");
@@ -529,7 +529,7 @@ createInterface({input:process.stdin}).on('line', line=>{
       excludeTurns: true,
     });
     await writeFile(join(bin, "git"), git, { mode: 0o700 });
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "Retry Git", exact: true }).click();
     await expect(page.getByRole("button", { name: "a.txt", exact: true })).toBeVisible();
   } finally {

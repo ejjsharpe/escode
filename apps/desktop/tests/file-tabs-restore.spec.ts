@@ -194,7 +194,7 @@ test("delayed conflict-view activation survives status refresh of the previous c
     await page.getByRole("button", { name: "Compare", exact: true }).click();
     await page.getByRole("button", { name: "Reload", exact: true }).click();
     await expect(page.locator(".conflict")).toHaveCount(0);
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "b.txt", exact: true }).dblclick();
     await expect(page.getByRole("combobox", { name: "File view", exact: true })).toHaveValue("untracked");
     await writeFile(join(root, "a.txt"), "A delayed external");

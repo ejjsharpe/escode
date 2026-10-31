@@ -748,3 +748,19 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .retention-settings label { display: block; margin: 12px 0; }
 .retention-settings input[type=number] { width: 90px; }
 .retention-settings :focus-visible { outline: 2px solid #b7aaf5; outline-offset: 3px; }
+
+/* One window-owned width, shared by the existing checkout and chat sidebars. */
+.sidebar-layout { display: contents; }
+.workspace, .agents .workspace { position: relative; grid-template-columns: var(--sidebar-width, 270px) minmax(0, 1fr); }
+.sidebar-resize { position: absolute; z-index: 4; left: calc(var(--sidebar-width, 270px) - 3px); top: 0; bottom: 0; width: 6px; cursor: col-resize; touch-action: none; }
+.sidebar-resize:hover, .sidebar-resize:focus-visible { background: var(--accent); outline: none; }
+.view-nav { flex-wrap: wrap; overflow: visible; padding: 0; gap: 4px; margin-bottom: 14px; flex-shrink: 0; }
+.view-nav button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 1; padding: 7px 4px; }
+.view-nav .directory { flex-basis: 100%; max-width: 100%; margin: 4px 0; }
+.project-tabs > header { margin-left: auto; padding: 0 4px 4px; min-height: 0; border: 0; background: transparent; -webkit-app-region: no-drag; }
+.workspace-context { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.agents-heading { display: none; }
+
+.project-tabs > header { flex-shrink: 0; }
+.project-tabs .retention-settings summary { white-space: nowrap; }
+.project-tabs .retention-settings form { position: fixed; top: 48px; right: 14px; }

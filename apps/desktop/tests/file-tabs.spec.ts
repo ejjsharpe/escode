@@ -98,7 +98,7 @@ test("failed and delayed opens retain the newer file and its edits", async () =>
     await expect(page.getByRole("tab", { name: "a.txt", exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".monaco-editor:visible")).toContainText("my edits");
     // A failed comparison must preserve the current editor as well.
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "a.txt", exact: true }).click();
     await expect(page.locator(".toolbar:visible")).toContainText("untracked · a.txt");
     await page.getByRole("button", { name: "binary.txt", exact: true }).click();
@@ -141,7 +141,7 @@ test("remembered comparisons retain equal and unavailable views and retry the or
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "a.txt", exact: true }).click();
     const view = page.getByRole("combobox", { name: "File view", exact: true });
     await expect(view).toHaveValue("unstaged");
@@ -157,7 +157,7 @@ test("remembered comparisons retain equal and unavailable views and retry the or
     await writeFile(join(root, "a.txt"), "baseline\n");
     await expect(page.getByText("No changes", { exact: true })).toBeVisible();
     await expect(view).toHaveValue("unstaged");
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await expect(page.getByRole("button", { name: "a.txt", exact: true })).toHaveCount(0);
     await writeFile(join(root, "a.txt"), Buffer.from([0, 1, 2]));
     await expect(page.getByRole("alert").filter({ hasText: "Comparison unavailable" })).toBeVisible();
@@ -203,7 +203,7 @@ test("normal and comparison cursor and scroll positions survive switching and re
     for (let i = 0; i < 79; i++) await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Meta+ArrowRight");
     const view = page.getByRole("combobox", { name: "File view", exact: true });
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "a.txt", exact: true }).click();
     const modified = page.getByRole("textbox", { name: "unstaged · a.txt modified", exact: true });
     await modified.focus();
@@ -270,7 +270,7 @@ test("preview browsing replaces only clean previews and Keep Open retains the sa
     await expect(tabs.getByRole("tab")).toHaveText(["b.txt", "c.txt"]);
     await file("a.txt").click();
     await expect(tabs.getByRole("tab")).toHaveText(["b.txt", "a.txt"]);
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "c.txt", exact: true }).click();
     await expect(tabs.getByRole("tab")).toHaveText(["b.txt", "c.txt"]);
     await tabs.getByRole("tab", { name: "c.txt", exact: true }).dblclick();
@@ -316,7 +316,7 @@ test("deliberate opening and edits keep files open after undo, Save and recovery
     await page.keyboard.type("edit");
     await page.keyboard.press("Meta+z");
     await file("e.txt").click();
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "e.txt", exact: true }).click();
     await page.getByRole("textbox", { name: "untracked · e.txt modified", exact: true }).focus();
     await page.keyboard.type("diff edit");

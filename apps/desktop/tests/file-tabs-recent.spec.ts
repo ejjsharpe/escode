@@ -20,7 +20,7 @@ test("recent selection preserves the editor until release and Escape preserves v
     for (const name of ["a.txt", "b.txt", "c.txt"]) await page.getByRole("treeitem", { name, exact: true }).dblclick();
     const tabs = page.getByRole("tablist", { name: "Open files" });
     const tab = (name: string) => tabs.getByRole("tab", { name, exact: true });
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "c.txt", exact: true }).dblclick();
     await page.locator(".monaco-editor:visible").last().click();
     await page.keyboard.type(" unsaved");
@@ -208,7 +208,7 @@ test("recent commit to a read-only comparison leaves meaningful focus", async ()
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.locator("aside section").filter({ has: page.getByRole("heading", { name: "staged", exact: true }) }).getByRole("button", { name: "a.txt", exact: true }).dblclick();
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await page.getByRole("treeitem", { name: "b.txt", exact: true }).dblclick();
