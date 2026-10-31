@@ -9,7 +9,7 @@ test("next message permission persists and changing a running turn never queues 
   await writeFile(join(dir, "codex"), `#!/usr/bin/env node
 const {createInterface}=require('node:readline'); const {appendFileSync}=require('node:fs');
 if(process.argv.includes('--version')) { console.log('codex-cli 0.165.0'); process.exit(0); }
-const send=x=>console.log(JSON.stringify(x));
+const send=x=>console.log(JSON.stringify(x)); let turnId;
 createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);if(!m.method||!m.id)return;
 let result={};
 if(m.method==='initialize')result={userAgent:'fixture'};
@@ -19,8 +19,8 @@ if(m.method==='configRequirements/read')result={requirements:null};
 if(m.method==='account/read')result={account:{}};
 if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:'thread'},cwd:process.cwd(),model:'a',approvalPolicy:m.params.approvalPolicy||'on-request',approvalsReviewer:'user',sandbox:m.params.sandbox==='danger-full-access'?{type:'dangerFullAccess'}:m.params.sandbox==='workspace-write'?{type:'workspaceWrite',writableRoots:[],networkAccess:false,excludeTmpdirEnvVar:false,excludeSlashTmp:false}:{type:'readOnly',networkAccess:false}};
 if(m.method==='thread/turns/list')result={data:[],nextCursor:null};
-if(m.method==='turn/start'){appendFileSync(${JSON.stringify(log)},JSON.stringify(m.params)+'\\n');result={turn:{id:'turn'}};send({method:'turn/started',params:{threadId:'thread',turn:{id:'turn'}}});}
-if(m.method==='turn/interrupt')send({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn'}}});
+if(m.method==='turn/start'){turnId=require('node:crypto').randomUUID();appendFileSync(${JSON.stringify(log)},JSON.stringify(m.params)+'\\n');result={turn:{id:turnId}};send({method:'turn/started',params:{threadId:'thread',turn:{id:turnId}}});}
+if(m.method==='turn/interrupt')send({method:'turn/completed',params:{threadId:'thread',turn:{id:m.params.turnId}}});
 if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else send({id:m.id,result});});`, { mode: 0o700 });
   let app = await launchDesktop(join(dir, "user"), dir);
   try {

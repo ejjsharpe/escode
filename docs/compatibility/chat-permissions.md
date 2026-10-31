@@ -68,3 +68,61 @@ behavior. Post-merge typecheck/build, both Electron settings scenarios and the f
 focused host suites passed. The initial post-merge typecheck caught the missing
 `existingError` prop in the manually reconciled controls; it was restored before
 these passing checks. No integration ref or root-checkout files were changed.
+
+## Fresh merger qualification (2026-10-31)
+
+Integrated approval commit `2bcfdec54cbe22c7d0fc04e27d0f17d6512cc41b`
+and archive integration `c03fe1c04053722fab95f8c9e0aa858d0341c7d2` in
+`t3/merge-approval-access-controls`. Conflicts retained both archive and permission
+bridge operations and one copy of each glossary definition. No root checkout files,
+integration refs, PRs or issues were changed.
+
+Installed `codex-cli 0.166.0` enforcement probe used `command/exec` with the exact
+three `sandboxPolicy` objects above. A disposable home-directory workspace and a
+sibling outside directory avoided temporary-directory exemptions. Python attempted
+a write to each directory and TCP connection to a listening localhost endpoint:
+
+| Policy | Workspace write | Sibling write | Local TCP |
+| --- | --- | --- | --- |
+| readOnly | EPERM | EPERM | EPERM |
+| workspaceWrite, empty writableRoots | EPERM | EPERM | EPERM |
+| dangerFullAccess | allowed | allowed | allowed |
+
+All commands exited zero and reported each operation's actual outcome. This verifies
+bounded command-executor denial/unrestricted behavior, **not** the desired workspace
+write behavior for Auto-accept edits. The command executor may resolve roots
+differently from model turns. One additional model-driven workspace-write turn was
+bounded to 55 seconds and timed out without a completion observation; it does not
+qualify writes. No mapping change is justified by assuming those seams are identical.
+External network destinations, escalation/approval delivery and custom-root runtime
+enforcement remain unqualified. Custom/managed admission remains fixture-tested.
+
+A real persistent read-only thread completed one no-tools user turn with assistant
+reply `OK`. After terminating/restarting app-server, explicit thread/resume probes
+requested each preset in sequence. Every response reported the **original**
+`on-request`, user reviewer, readOnly/networkAccess=false settings, including the
+workspace-write and danger-full-access override requests. History afterward contained
+exactly the original completed turn, with no replay. Thus saved-thread policy changes
+are **not qualified**; host response checking rejects mismatches before another Send.
+Successful same-policy resume and protocol acknowledgment do not qualify broader
+resume behavior. The three permission controls are not release-accepted by this report.
+
+Local probe scripts/results are retained at `/tmp/escode-152-enforcement.py`,
+`/tmp/escode-152-enforcement.txt`, `/tmp/escode-152-saved-resume.py`,
+`/tmp/escode-152-saved-resume.txt` and `/tmp/escode-152-turn-write.py` (temporary
+machine-local evidence, not durable repository dependencies).
+
+The combined Electron run reproduced a third-Send failure twice: its provider fixture
+reused the same turn ID, conflicting with completed-turn protection. The fixture now
+issues a UUID for each turn and completes the exact interrupted turn. The focused
+permission scenario then passed (10.6 seconds). This corrects invalid fixture behavior;
+it does not weaken host duplicate-turn protection. Post-archive-merge typecheck, lint
+and build passed; four focused host suites passed (19 tests, one opt-in live skip).
+
+Final combined Electron selection passed **10/10**: both settings scenarios, six
+title scenarios, Agents shared-context/archive/restore/preserved-draft scenario and
+Agents/local Chats user-message recency scenario. Command:
+`bun run --cwd apps/desktop smoke -- tests/permissions.spec.ts tests/models.spec.ts tests/chat-titles.spec.ts tests/agents.spec.ts --grep 'next message|chat titles|title generation|Agents restores closed|promote user messages'`.
+Final typecheck/lint and `git diff --check` passed. Latest integration tip remained
+`c03fe1c04053722fab95f8c9e0aa858d0341c7d2` and is an ancestor of this branch.
+No packaged/native accessibility qualification or full regression suite was run.
