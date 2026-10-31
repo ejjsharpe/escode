@@ -149,6 +149,8 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
       void Effect.runPromise(recover, { signal: controller.signal }).catch(value => { if (active) error(String(value)); });
       return () => { active = false; items = []; controller.abort(); };
     },
+    checkpointPoints: (project: string | null, id: string, cursor: string | null) => chatQuery(client => client.checkpointPoints({ project, id, cursor })),
+    inspectBoundary: (project: string | null, id: string, boundary: string, cursor: string | null) => chatQuery(client => client.inspectBoundary({ project, id, boundary, cursor })),
     chatHistory: (project: string | null, id: string, cursor: string | null): Promise<HistoryPage> =>
       chatQuery(client => client.chatHistory({ project, id, cursor })),
     async listDirectory(root: string, path: string): Promise<DirectoryResult> {

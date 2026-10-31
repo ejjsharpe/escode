@@ -480,6 +480,45 @@ export class ChatService {
     }
     return this.snapshot(project, id);
   }
+  async checkpointPoints(project: string | null, id: string, cursor: string | null) {
+    await this.store.get(project, id);
+    return this.store.database.command("checkpointPoints", { commandId: id, body: { cursor } }) as Promise<import("@escode/contracts").CheckpointPage>;
+  }
+  async inspectBoundary(project: string | null, id: string, boundary: string, cursor: string | null): Promise<import("@escode/contracts").BoundaryInspection> {
+    const empty = { items: [], nextCursor: null, revision: "unavailable" };
+    const unavailable = (message: string) => ({ page: empty, availability: "unavailable" as const, message });
+    const chat = await this.store.get(project, id);
+    // Discovery is metadata only; inspection never resumes or changes the live provider session.
+    const batch = await this.store.database.command("checkpointPoints", { commandId: id, body: { boundary } }) as import("@escode/contracts").CheckpointPage;
+    const point = batch.points[0];
+    if (!point) throw Error("Checkpoint boundary unavailable");
+    if (!point.threadId || point.threadId !== chat.threadId || !point.turnId) return unavailable("Provider boundary reference unavailable. File coverage is independent.");
+    const error = await this.store.validateDirectory(chat);
+    if (error) return unavailable(error);
+    let rpc: CodexConnection | undefined;
+    try {
+      rpc = await this.connect(chat.checkout, () => {}, () => {});
+      let next: string | null = null;
+      let selected: HistoryPage | undefined;
+      const seen = new Set<string | null>();
+      // Bound provider work as well as each returned page; never substitute current context.
+      for (let n = 0; n < 50; n++) {
+        if (seen.has(next)) throw Error("Repeated provider history cursor");
+        seen.add(next);
+        const raw = await rpc.request("thread/turns/list", { threadId: point.threadId, cursor: next, limit: 20, itemsView: "full", sortDirection: "asc" }) as import("./vendor/codex/src/schema").V2ThreadTurnsListResponse;
+        if (!Array.isArray(raw.data) || raw.data.length > 20) throw Error("Malformed provider history");
+        const target = raw.data.findIndex(t => t.id === point.turnId);
+        const data = target < 0 ? raw.data : raw.data.slice(0, target + (point.kind === "after-turn" ? 1 : 0));
+        const page = this.historyPage({ data, nextCursor: target < 0 ? raw.nextCursor : null }, next);
+        if (next === cursor) selected = page;
+        if (target >= 0) return selected ? { page: selected, availability: "available", message: "Read-only provider history through the selected boundary. One bounded page; earlier provider history may be incomplete." } : unavailable("History page is outside the selected boundary.");
+        next = page.nextCursor;
+        if (next === null) break;
+      }
+      return unavailable("Provider history lost, unsupported, or boundary beyond the 1,000-turn inspection limit. Retained files do not establish conversation history.");
+    } catch (failure) { return unavailable(`Provider inspection unavailable: ${String(failure)}`); }
+    finally { rpc?.close(); }
+  }
   async history(project: string | null, id: string, cursor: string | null): Promise<HistoryPage> {
     await this.store.get(project, id);
     const read = async () => {
@@ -500,6 +539,9 @@ export class ChatService {
     const page = await s.connection.rpc.request("thread/turns/list", {
       threadId: s.threadId, cursor, limit: 20, sortDirection: "asc", itemsView: "full",
     }) as import("./vendor/codex/src/schema").V2ThreadTurnsListResponse;
+    return this.historyPage(page, cursor);
+  }
+  private historyPage(page: import("./vendor/codex/src/schema").V2ThreadTurnsListResponse, cursor: string | null): HistoryPage {
     if (!page || !Array.isArray(page.data) || page.data.length > 20 ||
         !(page.nextCursor === null || (typeof page.nextCursor === "string" && page.nextCursor.length <= 4096)) ||
         (cursor !== null && cursor === page.nextCursor)) throw Error("Malformed or repeated history page. History unavailable.");

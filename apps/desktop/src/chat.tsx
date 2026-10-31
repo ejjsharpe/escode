@@ -1,3 +1,4 @@
+import { Boundaries } from "./boundaries";
 import { DraftWorktreeChoices, CheckoutBranch } from "./worktrees";
 import { useProjectChats } from "./chat-state";
 import { memory, persist } from "./workspace";
@@ -329,6 +330,7 @@ export function ChatView({
               </p>
             )}
             <div className="transcript" role="region" aria-label="Conversation history">
+              <Boundaries key={selected} project={project} id={selected} />
               {Boolean(snapshot?.settings) && (
                 <details>
                   <summary>Effective Codex settings · {(snapshot!.settings as { model?: string }).model}</summary>

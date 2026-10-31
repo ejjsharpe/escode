@@ -6,7 +6,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Fiber, Queue, Schema, Stream, Schedule } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
-import { maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult, DirectoryChange } from "@escode/contracts";
+import { CheckpointPage, BoundaryInspection, maximumFileFrameBytes, MoveResult, DraftRecord, HostQueries, LiveBatch, ChatSummaries, HistoryPage, ChatDetail, maximumFrameBytes, wireRevision, type SendCommand, type SendReceipt, type Bootstrap, type DirectoryResult, DirectoryChange } from "@escode/contracts";
 
 const fileMethods = ["readDiff", "transferAction", "trashEntries", "readFile", "saveFile", "loadWorkspace", "persistWorkspace"];
 
@@ -62,6 +62,8 @@ export async function startHost(options: {
   summaries?: () => Promise<ChatSummaries["chats"]>;
   chatSnapshot?: (project: string | null, id: string) => Promise<ChatDetail>;
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
+  checkpointPoints?: (project: string | null, id: string, cursor: string | null) => Promise<typeof CheckpointPage.Type>;
+  inspectBoundary?: (project: string | null, id: string, boundary: string, cursor: string | null) => Promise<typeof BoundaryInspection.Type>;
   history?: (project: string | null, id: string, cursor: string | null) => Promise<HistoryPage>;
   moveEntry?: (command: import("@escode/contracts").MoveEntry) => Promise<unknown>;
   ackFileOperation?: (root: string) => Promise<void>;
@@ -137,7 +139,7 @@ export async function startHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -277,6 +279,18 @@ export async function startHost(options: {
           const detail = await options.openChat(project, id);
           if (Buffer.byteLength(JSON.stringify(detail)) > maximumFrameBytes / 2) throw Error("Chat detail unavailable: capacity exhausted");
           return Schema.decodeUnknownSync(ChatDetail)(detail);
+        }, catch: String }),
+        checkpointPoints: ({ project, id, cursor }) => Effect.tryPromise({ try: async () => {
+          if (!options.checkpointPoints) throw Error("Checkpoints unavailable");
+          const result = await options.checkpointPoints(project, id, cursor);
+          if (Buffer.byteLength(JSON.stringify(result)) > maximumFrameBytes / 2) throw Error("Checkpoint capacity exhausted");
+          return Schema.decodeUnknownSync(CheckpointPage)(result);
+        }, catch: String }),
+        inspectBoundary: ({ project, id, boundary, cursor }) => Effect.tryPromise({ try: async () => {
+          if (!options.inspectBoundary) throw Error("Inspection unavailable");
+          const result = await options.inspectBoundary(project, id, boundary, cursor);
+          if (Buffer.byteLength(JSON.stringify(result)) > maximumFrameBytes / 2) throw Error("Inspection capacity exhausted");
+          return Schema.decodeUnknownSync(BoundaryInspection)(result);
         }, catch: String }),
         chatHistory: ({ project, id, cursor }) => Effect.tryPromise({ try: async () => {
           if (!options.history) throw Error("History unavailable");

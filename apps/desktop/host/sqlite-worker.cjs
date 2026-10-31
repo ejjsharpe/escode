@@ -89,7 +89,20 @@ try {
 if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body }) => {
   try {
     let value;
-    if (operation === 'checkpoints') {
+    if (operation === 'checkpointPoints') {
+      const offset = Number(body.cursor ?? 0);
+      if (!Number.isSafeInteger(offset) || offset < 0) throw Error('Invalid checkpoint cursor');
+      const rows = db.prepare(`SELECT json_extract(body,'$.id') id, json_extract(body,'$.kind') kind,
+        json_extract(body,'$.createdAt') createdAt, json_extract(body,'$.threadId') threadId,
+        json_extract(body,'$.turnId') turnId, json_extract(body,'$.commandId') commandId,
+        json_extract(body,'$.availability') availability, json_extract(body,'$.reason') reason
+        FROM checkpoints WHERE chatId=? AND (? IS NULL OR id=?) ORDER BY rowid LIMIT 21 OFFSET ?`).all(commandId, body.boundary ?? null, body.boundary ?? null, offset);
+      value = { points: rows.slice(0,20).map(row => {
+        if (!row.turnId && row.commandId) row.turnId = db.prepare("SELECT json_extract(body,'$.turnId') turnId FROM checkpoints WHERE chatId=? AND json_extract(body,'$.commandId')=? AND json_extract(body,'$.kind')='after-turn' LIMIT 1").get(commandId,row.commandId)?.turnId ?? null;
+        delete row.commandId;
+        return row;
+      }), nextCursor: rows.length > 20 ? String(offset + 20) : null };
+    } else if (operation === 'checkpoints') {
       value = db.prepare('SELECT body FROM checkpoints WHERE chatId=? ORDER BY rowid').all(commandId).map(row => JSON.parse(row.body));
     } else if (operation === 'checkpoint' || operation === 'completeCheckpoint') {
       if (!body || !body.id || !body.chatId || !['available', 'unavailable'].includes(body.availability)) throw Error('Invalid checkpoint');
