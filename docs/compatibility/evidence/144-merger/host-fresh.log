@@ -1,0 +1,10 @@
+$ node scripts/filesystem.mjs && vp test run host/chat.test.ts -t "turns, approvals and Stop stay scoped"
+
+ RUN  v5.0.5 /private/tmp/escode-144-merger/apps/desktop
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 9 skipped (10)
+   Start at  19:55:55
+   Duration  1.38s (transform 36%, import 33%, tests 31%)
+

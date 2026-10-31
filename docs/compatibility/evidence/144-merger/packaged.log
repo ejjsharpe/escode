@@ -1,0 +1,16 @@
+$ playwright test tests/conversation-layout.spec.ts tests/chat-summaries.spec.ts tests/project-drafts.spec.ts "--timeout=90000"
+
+Running 5 tests using 1 worker
+
+(node:94911) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 tests/chat-summaries.spec.ts:8:1 › fresh summaries exclude old metadata and bodies, release detail polling during navigation (7.1s)
+  ✓  2 tests/chat-summaries.spec.ts:80:1 › recent rows use last user message time and retain exact context (1.4s)
+
+  ✓  3 tests/chat-summaries.spec.ts:108:1 › thirty chats across five projects keep one list while three run (5.8s)
+  ✓  4 tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows (5.2s)
+Preparing worktree (new branch 'linked')
+  ✓  5 tests/project-drafts.spec.ts:11:1 › saved project drafts move with text, survive restart and bind exactly once from closed-project Agents (14.9s)
+
+  5 passed (34.8s)

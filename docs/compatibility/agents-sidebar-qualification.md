@@ -139,3 +139,40 @@ the changed CSS and fixture; the larger packaged run predates the CSS repair.
 No root checkout files, integration ref, issue state or PR were changed; no agents spawned.
 Saved-resume policy changes and the outstanding visual/native/manual gates prevent
 complete acceptance. Final independent code review remains with the parent.
+
+## Fresh isolated merger verification
+
+Merged `a096f7c99e12a01e594d3874e42bf34f41ad661e` without conflicts onto
+`4b875ca09ddc27493dc799a2a97d3391f331c874` in branch
+`t3/merge-agent-sidebar-144` at `/tmp/escode-144-merger`. Integration and original
+checkout remain untouched; no PR/tracker changes or further agents.
+
+Fresh evidence is retained in [evidence/144-merger](evidence/144-merger).
+PATH initially selected Bun 1.3.14, which could not parse the lockfile; initial
+build/test attempts lacked dependencies. Installation with the existing
+`/tmp/escode-bun-1.4.4/bun-darwin-aarch64/bun` and frozen lockfile succeeded.
+All successful commands below used that binary first on PATH.
+
+- Public host regression: `bun run --cwd apps/desktop test -- host/chat.test.ts -t 'turns, approvals and Stop stay scoped'`: 1 passed, 9 filtered/skipped. It checks delayed started/completed user echoes retain accepted Send recency.
+- `bun run --cwd apps/desktop test -- host/permissions.test.ts host/models.test.ts`: 2 passed.
+- Desktop build, package, typecheck and lint passed (existing lint warnings).
+- `ESCODE_PACKAGED=1 bun run --cwd apps/desktop smoke -- tests/conversation-layout.spec.ts tests/chat-summaries.spec.ts tests/project-drafts.spec.ts --timeout=90000`: 5 passed in 34.8 seconds. This covers real 200% history height/keyboard Stop, thirty-chat recency and exact context, summary isolation, draft movement and restart without repeated Send.
+
+Visual coverage now additionally captures empty No project composition at 1000×700,
+800×500 and real Electron 200% at 1200×900. The 200% needs-input check explicitly
+scrolls the permission heading into view. Inspected captures retain independent
+history and reachable Stop; empty composition scrolls and hides some settings below
+its initial visible region. The permission capture shows only part of the request,
+not simultaneous visibility of its full content/response controls. These checks do
+not establish full keyboard traversal, contrast or mockup equivalence. Production
+code was not changed by the merger; existing repair red/green logs remain above.
+
+Unresolved implementation/runtime blocker: installed-provider saved-policy resume
+returns the old policy; host rejects mismatches before submission. No unsafe fallback
+was added. Full effective-effort restart enforcement and model-turn outside-root/
+approval behavior remain unqualified. Agent-executable qualification still lacks
+complete Archived/unavailable/Files/Diff/Chats size/zoom comparisons and the combined
+No project/unavailable/Archived thirty-chat fixture. These are qualification gaps,
+not evidence that those implementations fail. User-owned VoiceOver, native keyboard,
+dialog/clipboard/window lifecycle checks remain exactly as listed above. Independent
+review follows; neither #155 nor parent #144 is accepted by this merge.

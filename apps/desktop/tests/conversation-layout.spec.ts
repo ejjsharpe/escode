@@ -30,6 +30,14 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     const empty = await page.locator(".conversation-layout").boundingBox();
     const compose = await page.locator(".chat-compose").boundingBox();
     expect(Math.abs(compose!.y + compose!.height / 2 - (empty!.y + empty!.height / 2))).toBeLessThan(100);
+    for (const [width, height, zoom] of [[1000, 700, 1], [800, 500, 1], [1200, 900, 2]]) {
+      await page.setViewportSize({ width, height });
+      await app.evaluate(({ BrowserWindow }, factor) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(factor), zoom);
+      await expect(page.getByLabel("Message Codex")).toBeInViewport();
+      await page.screenshot({ path: `test-results/empty-native-${width}-${zoom}.png` });
+    }
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
+    await page.setViewportSize({ width: 1000, height: 700 });
     await page.getByLabel("Message Codex").fill("Read this");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeEnabled();
@@ -71,6 +79,8 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     await expect(page.getByLabel("Message Codex")).toBeInViewport();
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeInViewport();
     expect((await page.getByLabel("Conversation history").boundingBox())!.height).toBeGreaterThanOrEqual(60);
+    await page.getByRole("heading", { name: "Codex requests permission" }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole("heading", { name: "Codex requests permission" })).toBeInViewport();
     await page.screenshot({ path: "test-results/conversation-native-200.png" });
     await page.getByRole("button", { name: "Stop", exact: true }).focus();
     await page.keyboard.press("Enter");
