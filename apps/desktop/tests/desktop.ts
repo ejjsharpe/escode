@@ -113,3 +113,18 @@ export async function readApprovalFixture(user: string) {
     return JSON.parse(String(row?.body ?? "[]"));
   } finally { db.close(); }
 }
+
+// Audit rendered leaf text against its nearest opaque surface; no native widget claim.
+export async function auditTextContrast(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const luminance = (color: string) => (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number).map(v => { const c = v / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; }).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
+    return Array.from(document.querySelectorAll("body *")).filter(e => !e.children.length && e.textContent?.trim() && e.getBoundingClientRect().width && e.getBoundingClientRect().height && getComputedStyle(e).visibility === "visible").flatMap(e => {
+      let parent: Element | null = e;
+      while (parent && getComputedStyle(parent).backgroundColor === "rgba(0, 0, 0, 0)") parent = parent.parentElement;
+      if (!parent) return [];
+      const fg = luminance(getComputedStyle(e).color), bg = luminance(getComputedStyle(parent).backgroundColor);
+      const ratio = (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05);
+      return ratio < 4.5 ? [{ text: e.textContent!.trim().slice(0, 100), ratio }] : [];
+    });
+  });
+}

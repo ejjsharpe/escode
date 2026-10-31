@@ -623,9 +623,9 @@ aside > .directory { margin: 0 0 16px; font-size: 11px; }
 aside h2 { font-size: 11px; font-weight: 600; letter-spacing: .04em; }
 aside > ul { margin-top: 8px; }
 .content { min-height: 0; overflow: auto; background: #131416; }
-.toolbar { min-height: 40px; border-bottom: 1px solid var(--border); background: #18191d; font-size: 12px; }
+.toolbar { flex-wrap: wrap; min-height: 40px; border-bottom: 1px solid var(--border); background: #18191d; font-size: 12px; }
 .editor { min-height: 0; }
-.toolbar > span { flex: 1; min-width: 0; }
+.toolbar > span { flex: 1 0 100px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [role="status"] { background: #1b1c20; color: #a4a3b0; font-size: 11px; padding: 6px 12px; }
 .files-tools { gap: 4px; margin: 0 0 12px; }
 .files-tools button, .files-operation-actions button {

@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { launchDesktop } from "./desktop";
+import { launchDesktop, auditTextContrast } from "./desktop";
 
 test("Files Diff Chats retain keyboard controls at desktop narrow short and native 200 percent", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-sidebar-qualification-")));
@@ -37,6 +37,8 @@ test("Files Diff Chats retain keyboard controls at desktop narrow short and nati
           return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
         });
         expect(contrast).toBeGreaterThanOrEqual(4.5);
+        if (mode !== "Chats") expect((await page.locator(".toolbar > span").boundingBox())!.height).toBeLessThan(40);
+        expect(await auditTextContrast(page)).toEqual([]);
         await page.screenshot({ path: `test-results/sidebar-${mode}-${width}-${height}-${zoom}.png` });
       }
       const resize = page.getByRole("separator", { name: "Resize sidebar", exact: true });

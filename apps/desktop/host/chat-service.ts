@@ -75,6 +75,7 @@ const matchesPermission = (choice: SavedChat["nextPermission"], approval: unknow
   const policy = permissionPolicy(choice);
   return approval === policy.approvalPolicy && !!sandbox && Object.entries(policy.sandboxPolicy ?? {}).every(([key, value]) => JSON.stringify((sandbox as Record<string, unknown>)[key]) === JSON.stringify(value));
 };
+const networkUnsupported = "Codex 0.166.0 network isolation is unsupported by the installed model-tool execution path. Restricted Send is blocked. Retain this policy and use a qualified Codex installation, or explicitly choose Full access if unrestricted networking is intended.";
 const permissionResolution = "Codex retained its saved permission policy. History and draft are available. Send is blocked: select the matching saved policy in Next message permissions (Supervised for read-only, Auto-accept edits for workspace writes, Full access for unrestricted access), or resolve the policy in Codex and reconnect.";
 export class ChatService {
   private async configured(project: string | null): Promise<import("@escode/contracts").ChatDefaults> {
@@ -123,7 +124,7 @@ export class ChatService {
         || (c.approval_policy != null && !["on-request", "never"].includes(c.approval_policy as string));
       const session = this.sessions.get(id);
       const conflict = session?.permissionConflict && (session.permissionReviewer !== "user" || !matchesPermission((choice ?? chat.nextPermission) as SavedChat["nextPermission"], effective?.approval, sandbox));
-      const message = conflict ? permissionResolution : blocked ? "Custom or managed Codex policy retained. Resolve it in Codex configuration before choosing a preset." : "";
+      const message = conflict ? permissionResolution : !blocked && rpc.installation?.version === "codex-cli 0.166.0" ? networkUnsupported : blocked ? "Custom or managed Codex policy retained. Resolve it in Codex configuration before choosing a preset." : "";
       if (!chat.nextPermission && !chat.hasSent && !chat.threadId && !blocked) {
         const defaults = await this.configured(project);
         chat.nextPermission = defaults.permission ?? "full";
@@ -262,6 +263,7 @@ export class ChatService {
         }, fail);
         this.titleConnections.set(rpc, project);
         if (expired || pending.cancelled) { this.titleConnections.delete(rpc); rpc.close(); throw Error("Title request expired"); }
+        if (rpc.installation?.version === "codex-cli 0.166.0") throw Error(networkUnsupported);
         const catalog = await rpc.request("model/list", { limit: 100 }) as { data: { model: string }[] };
         const model = ["gpt-6-luna", "gpt-5.1-codex-mini"].find(candidate => catalog.data?.some(entry => entry.model === candidate));
         if (!model) throw Error("Lightweight title model unavailable");
@@ -1199,6 +1201,9 @@ export class ChatService {
       if (s.connection.status !== "connected" || !s.connection.rpc)
         throw Error("Retry connection before sending. Work was not resent.");
       if (s.permissionConflict && (s.permissionReviewer !== "user" || !matchesPermission(capturedPermission, s.settings?.approval, s.settings?.sandbox))) throw Object.assign(Error(permissionResolution), { policyConflict: true });
+      // Installed model shell execution reached HTTPS despite the requested network denial.
+      if (s.connection.rpc.installation?.version === "codex-cli 0.166.0" &&
+        (capturedPermission ? capturedPermission !== "full" : (s.settings?.sandbox as { type?: string })?.type !== "dangerFullAccess")) throw Error(networkUnsupported);
       this.store.validateWorktree(chat);
       this.store.validateScratch(chat);
       this.validateCheckout(s, chat.checkout);

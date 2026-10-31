@@ -1,0 +1,39 @@
+$ playwright test tests/sidebar-qualification.spec.ts "--timeout=60000"
+
+Running 1 test using 1 worker
+
+(node:57254) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  1 tests/sidebar-qualification.spec.ts:8:1 › Files Diff Chats retain keyboard controls at desktop narrow short and native 200 percent (3.0s)
+
+
+  1) tests/sidebar-qualification.spec.ts:8:1 › Files Diff Chats retain keyboard controls at desktop narrow short and native 200 percent 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 6
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "ratio": 4.082412610677065,
+    +     "text": "2",
+    +   },
+    + ]
+
+      38 |         });
+      39 |         expect(contrast).toBeGreaterThanOrEqual(4.5);
+    > 40 |         expect(await auditTextContrast(page)).toEqual([]);
+         |                                               ^
+      41 |       await page.screenshot({ path: `test-results/sidebar-${mode}-${width}-${height}-${zoom}.png` });
+      42 |       }
+      43 |       const resize = page.getByRole("separator", { name: "Resize sidebar", exact: true });
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-8b2d5f46/apps/desktop/tests/sidebar-qualification.spec.ts:40:47
+
+    Error Context: test-results/sidebar-qualification-File-bc0e6-hort-and-native-200-percent/error-context.md
+
+  1 failed
+    tests/sidebar-qualification.spec.ts:8:1 › Files Diff Chats retain keyboard controls at desktop narrow short and native 200 percent 
+error: script "smoke" exited with code 1

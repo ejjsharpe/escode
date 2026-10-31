@@ -121,7 +121,7 @@ function ModelControls({ project, id, onSaving, existingError }: { project: stri
       {!model?.efforts.includes(catalog.choice.effort) && <option value={catalog.choice.effort}>{catalog.choice.effort} (unavailable)</option>}
       {model?.efforts.map(e => <option key={e} value={e}>{e}</option>)}
     </select></label>}
-    <label title="Supervised: read-only with approval. Auto-accept edits: workspace and temporary-directory writes, network blocked; broader access needs approval. Full access: no sandbox or command approval.">Permissions <select aria-label="Next message permissions" disabled={saving || !permissions || permissions.blocked} value={permissions?.blocked ? "" : permissions?.choice ?? ""} onChange={async e => {
+    <label title="Supervised: read-only with approval. Auto-accept edits: workspace and temporary-directory writes, command networking requested off (provider enforcement required); broader access needs approval. Full access: no sandbox or command approval.">Permissions <select aria-label="Next message permissions" disabled={saving || !permissions || permissions.blocked} value={permissions?.blocked ? "" : permissions?.choice ?? ""} onChange={async e => {
       setSaving(true); onSaving(true);
       try { setPermissions(await window.escode.chat("permissions", project, id, e.target.value as "supervised" | "edits" | "full")); setError(""); }
       catch (e) { setError(String(e)); } finally { setSaving(false); onSaving(false); }

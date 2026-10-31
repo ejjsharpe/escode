@@ -369,3 +369,87 @@ attempt to close after kill stalled. These interrupted experiments are retained 
 qualification and its original teardown; selected-Archived captures are visual evidence
 only, not a clean automated lifecycle pass. This additional fixture/provider shutdown
 interaction remains an agent gate. No production lifecycle workaround was introduced.
+
+## Fresh merge onto ad56bf0: network containment and completed executable checks
+
+This section supersedes earlier follow-up handoff gaps for the checks listed here.
+Branch `t3/agents-sidebar-qualification-1` merges candidate `dcd23ea` onto
+`ad56bf0` without conflicts (merge `d813c69`). Activation, explicit reconnect
+policy-conflict resolution and stale Stop fixes remain present. No integration ref,
+root checkout file, PR or tracker mutation; no subagents. No open wayfinder map was
+returned. Evidence: [155-merger](evidence/155-merger/README.md).
+
+Installed **Codex 0.166.0 cannot currently be qualified for restricted execution**.
+Fresh shell-only model turns returned exit 0 / HTTP200 for `/usr/bin/curl --noproxy
+"*" -I --max-time 5 https://example.com`, with approval **never**, workspaceWrite
+and networkAccess **false**. This removes escalation, proxy inheritance, browser,
+MCP and JavaScript fetch as explanations for this fresh result. Disabling
+unified_exec also returned HTTP200. Direct app-server command/exec instead denied
+DNS under readOnly and workspaceWrite. Effective config/read returned no custom
+permission/network overrides; thread/start returned restricted metadata. The
+installed generated schema describes turn/start sandboxPolicy as an override for
+this and subsequent turns. The prior rollout likewise records a restricted
+permission profile. Policy metadata therefore cannot establish actual isolation.
+
+The [official App Server documentation](https://learn.chatgpt.com/docs/app-server)
+and [approvals/security documentation](https://learn.chatgpt.com/docs/agent-approvals-security)
+distinguish command sandbox policy from approvals and capability-specific traffic.
+Our probe exercised commandExecution itself. This is a reproducible installed
+model-command enforcement mismatch; these checks do not identify the responsible
+upstream/local runtime component. No safe configuration workaround was established.
+
+Containment now refuses restricted task Send on exact stable 0.166.0 before Send
+intent/submission, retaining history, identity, draft and policy. Inherited
+restricted execution is also refused. Its read-only title inference is refused,
+retaining the existing fallback. The permissions surface explains unsupported
+isolation and offers explicit resolution; Full access is never selected implicitly
+as a workaround. Saved-policy conflicts retain their existing separate explicit
+resolution. Permission tooltip and glossary describe requested networking policy
+rather than an unconditional enforcement claim. Other provider versions have not
+been newly qualified. A qualified provider/runtime is still needed to deliver
+restricted execution on this installation.
+
+Executable checks completed:
+
+- Six public host checks pass (permissions and models); restricted Send refusal
+  failed before the fix, and title refusal failed before the fix. Existing saved
+  history/conflict and deliberate model-default checks remain passing.
+- Packaged combined workload, recency/context, view-switch focus/resize and
+  conversation checks pass **5/5**, after final production changes. Thirty chats
+  include five same-named projects, three live peers, No project, unavailable and
+  Archived contexts. All peers stop; Archived fixture app close and directory
+  cleanup complete successfully. The old shutdown failure is superseded by this
+  successful full scenario, not bypassed.
+- Packaged model and four emergency Stop scenarios passed within the preceding
+  **10/10** run. The final focused run follows the contrast/toolbar repairs; a
+  new all-ten run is not claimed.
+- Permission actions are traversed with actual Tab movement at 1000×700, 600×700,
+  1000×450 and Electron native 200% at 1200×900. Each receives focus in view;
+  independent history/composer scrolling and keyboard Stop pass. Additional
+  input-request text entry and Send answers traversal pass **1/1** at all four
+  sizes, with retained typed text and both requests visible in history.
+- Rendered leaf-text contrast audit found inactive Monaco line numbers at about
+  **4.08:1**. A failing assertion preceded raising that token; final sidebar
+  assertions meet **4.5:1**. Captured conversation, requests, empty, unavailable
+  and Archived states report no below-threshold text in this computed-style
+  audit. Native widgets, alpha compositing and screen-reader output are outside
+  this DOM measurement. Focus controls are checked independently of color.
+- Visual inspection included request controls at all four sizes and the retained
+  Files/Diff/Chats, Archived/unavailable captures. Narrow Files/Diff filename
+  wrapping reached **198px** before repair. A failing regression preceded toolbar
+  wrapping with a single-line ellipsized filename; the final four-size check
+  passes. Existing reference captures remain the comparison baseline. The UI
+  retains native selects/text actions and raw request detail, so pixel equivalence
+  to the mockup is not claimed. Short/zoomed requests require scrolling; actual
+  Tab navigation exposes their response controls.
+- Final build, package, typecheck, lint and whitespace checks pass, with existing
+  warnings. Request/input fixture additions have their own focused packaged pass.
+
+Remaining blockers are explicit. **Platform:** restricted network enforcement is
+unsupported on this observed installation and safely refused; provider/runtime
+repair or qualification is needed before claiming that capability. **Human:**
+actual VoiceOver announcements/navigation and native macOS keyboard, dialogs,
+clipboard and window lifecycle acceptance remain user-owned, as enumerated above.
+No known executable follow-up gate listed in this merger remains deferred. This
+bounded qualification does not constitute exhaustive accessibility or parent
+acceptance. Parent owns final review and draft PR156.

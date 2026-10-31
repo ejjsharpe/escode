@@ -1,0 +1,52 @@
+$ playwright test tests/sidebar-qualification.spec.ts tests/chat-summaries.spec.ts tests/conversation-layout.spec.ts tests/emergency-stop.spec.ts tests/models.spec.ts "--timeout=60000"
+
+Running 10 tests using 1 worker
+
+(node:54983) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   1 tests/chat-summaries.spec.ts:9:1 › fresh summaries exclude old metadata and bodies, release detail polling during navigation (7.1s)
+  ✓   2 tests/chat-summaries.spec.ts:81:1 › recent rows use last user message time and retain exact context (1.4s)
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+  ✓   3 tests/chat-summaries.spec.ts:109:1 › thirty chats across five projects keep one list while three run (6.4s)
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+contrast []
+  ✓   4 tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows (4.9s)
+#139 fault setup ms 0.6631659999984549
+#127 visible Send/emergency control ms {"phase":"baseline","sendMs":886.2100420000024,"stopMs":120.88799999999901,"controlMs":48.97095799999806}
+  ✓   5 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) (3.0s)
+#139 fault setup ms 0.5761249999995925
+#127 visible Send/emergency control ms {"phase":"followup","sendMs":900.6926669999993,"stopMs":119.70733300000211,"controlMs":52.877832999998645}
+  ✓   6 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (followup) (3.5s)
+#127 visible Send/emergency control ms {"phase":"worker-loss","sendMs":890.4388749999998,"stopMs":121.72420799999963,"controlMs":51.34937499999796}
+  ✓   7 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss) (2.3s)
+  ✓   8 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) (2.6s)
+
+  ✓   9 tests/models.spec.ts:7:1 › next message model persists and changing a running turn never queues work (13.3s)
+contrast [{"text":"2","ratio":4.082412610677065}]
+contrast [{"text":"2","ratio":4.082412610677065}]
+contrast []
+contrast [{"text":"2","ratio":4.082412610677065}]
+contrast [{"text":"2","ratio":4.082412610677065}]
+contrast []
+contrast [{"text":"2","ratio":4.082412610677065}]
+contrast [{"text":"2","ratio":4.082412610677065}]
+contrast []
+contrast [{"text":"2","ratio":4.082412610677065}]
+contrast [{"text":"2","ratio":4.082412610677065}]
+contrast []
+  ✓  10 tests/sidebar-qualification.spec.ts:8:1 › Files Diff Chats retain keyboard controls at desktop narrow short and native 200 percent (2.9s)
+
+  10 passed (47.8s)

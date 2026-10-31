@@ -291,12 +291,14 @@ explicit Send. Catalog changes require an explicit supported selection, never su
 **Next-message permissions**:
 A per-chat explicit Codex approval and sandbox choice captured before Send preparation.
 Supervised uses read-only access and user-reviewed on-request approvals; Auto-accept
-edits permits workspace and temporary-directory writes with network disabled and
+edits requests workspace and temporary-directory writes with command networking disabled and
 user-reviewed approval for broader access; Full access disables the sandbox and
 command approval. Custom or managed restrictions require resolution in Codex
 configuration before presets can replace them. A saved-policy resume conflict retains
 history and drafts and blocks Send until explicitly resolved to the retained policy.
 Editing a choice never sends work.
+
+Installed Codex 0.166.0 qualification observed shell HTTPS access under a restricted network request. escode refuses restricted Send for this version and discloses the unsupported isolation; saved policy is retained and Full access requires an explicit choice.
 
 **New chat defaults**:
 Host-owned app settings and per-project overrides for model, effort and permissions.

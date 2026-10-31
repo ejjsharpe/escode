@@ -57,3 +57,51 @@ test("saved policy conflict keeps history accessible and blocks Send until expli
     expect(turns).toBe(1);
   } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+test("Codex 0.166 restricted execution is refused without replacing saved policy", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-network-policy-"));
+  const store = new Chats(join(dir, "chats"));
+  let turns = 0;
+  const connect = async () => ({ installation: { path: "codex", version: "codex-cli 0.166.0" }, request: async (method: string) => {
+    if (method === "config/read") return { config: {} };
+    if (method === "configRequirements/read") return { requirements: null };
+    if (method === "account/read") return { account: {} };
+    if (method === "thread/start") return { thread: { id: "original" }, cwd: dir, model: "a", approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: { type: "readOnly", networkAccess: false } };
+    if (method === "thread/turns/list") return { data: [], nextCursor: null };
+    if (method === "turn/start") { turns++; return { turn: { id: "turn" } }; }
+    return {};
+  }, close() {} });
+  try {
+    const chat = await store.create(dir);
+    await store.update(dir, chat.id, { nextPermission: "supervised" });
+    const service = new ChatService(store, connect as never);
+    await service.open(dir, chat.id);
+    await expect(service.send(dir, chat.id, "retained prompt")).rejects.toThrow("network isolation");
+    expect(turns).toBe(0);
+    expect((await store.get(dir, chat.id)).nextPermission).toBe("supervised");
+  } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("unqualified read-only title execution retains the fallback without a provider turn", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-title-isolation-"));
+  const store = new Chats(join(dir, "chats"));
+  let turns = 0;
+  let closed!: () => void;
+  const finished = new Promise<void>(resolve => { closed = resolve; });
+  const titleConnect = async () => ({ installation: { path: "codex", version: "codex-cli 0.166.0" }, request: async (method: string) => {
+    if (method === "model/list") return { data: [{ model: "gpt-6-luna" }] };
+    if (method === "thread/start") return { thread: { id: "title" } };
+    if (method === "turn/start") turns++;
+    return {};
+  }, close: closed });
+  try {
+    const chat = await store.create(dir);
+    await store.titleGeneration(dir, chat.id, "Retained title fallback");
+    const before = (await store.get(dir, chat.id)).title;
+    const service = new ChatService(store, undefined, undefined, undefined, undefined, undefined, titleConnect as never);
+    await service.titleAction({ project: dir, id: chat.id });
+    await finished;
+    expect(turns).toBe(0);
+    expect((await store.get(dir, chat.id)).title).toBe(before);
+  } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
+});

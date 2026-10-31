@@ -1,3 +1,4 @@
+import { auditTextContrast } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -157,6 +158,7 @@ send({id:m.id,result});});`, { mode: 0o700 });
     for (const [width, height, zoom] of [[1000, 700, 1], [600, 700, 1], [1000, 450, 1], [1200, 900, 2]]) {
       await page.setViewportSize({ width, height });
       await app.evaluate(({ BrowserWindow }, factor) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(factor), zoom);
+      console.log("contrast", JSON.stringify(await auditTextContrast(page)));
       await page.screenshot({ path: `test-results/unavailable-${width}-${height}-${zoom}.png` });
       const footer = page.getByRole("button", { name: "Show archived chats", exact: true });
       await footer.focus();
@@ -166,6 +168,7 @@ send({id:m.id,result});});`, { mode: 0o700 });
       const recent = page.getByRole("button", { name: "Show recent chats", exact: true });
       await expect(recent).toBeFocused();
       await expect(recent).toBeInViewport();
+      console.log("contrast", JSON.stringify(await auditTextContrast(page)));
       await page.screenshot({ path: `test-results/archived-${width}-${height}-${zoom}.png` });
       await page.keyboard.press("Enter");
       await expect(page.locator(".agent-row")).toHaveCount(29);

@@ -79,7 +79,7 @@ monaco.editor.defineTheme("escode", {
   colors: {
     "editor.background": "#131416",
     "editor.foreground": "#dedee5",
-    "editorLineNumber.foreground": "#777582",
+    "editorLineNumber.foreground": "#85838f",
     "editorLineNumber.activeForeground": "#c5bddf",
     "editor.lineHighlightBackground": "#1e1f23",
     "editor.selectionBackground": "#48405f",
