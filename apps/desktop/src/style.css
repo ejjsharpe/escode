@@ -789,3 +789,7 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .agent-row .chat-row-context { font-size: 12px; color: #a4a3b0; }
 .agents .agent-row { margin-bottom: 0; border-color: transparent; border-radius: 4px; padding: 8px 12px; }
 .agents .agent-row[aria-pressed="true"] { border-color: #756b9c; }
+
+.chat-sidebar-footer { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-top: 1px solid #303138; }
+.agents aside, .chat-list { display: flex; flex-direction: column; }
+.chat-sidebar-footer button[aria-pressed="true"] { background: var(--surface-selected, #363636); }
