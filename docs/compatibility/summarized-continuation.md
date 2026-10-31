@@ -57,3 +57,14 @@ assertions were relaxed. Screenshot visually inspected. Final summarized suite
 passed **5/5 (22.37s)** including changed-content rejection and explicit
 missing/unsupported summary input. Final typecheck found an accidentally duplicated
 test block in the unrelated rewind fixture; removed it and reran the final gates.
+
+Final pre-merge boundary rerun passed **20/20 (114.38s)**; typecheck and lint
+passed after removing the duplicated test block. Integration then advanced to
+`d5032a7` (#133 packaged dirty editor). Merged it into this branch at `c6b5ad1`,
+resolving the shared fixture conflict by retaining both summary and dirty-editor
+scenarios. `0a9c981` remains an ancestor. Combined-tip typecheck, lint, build and
+unsigned package passed; combined-tip summarized host cases passed **5/5 (46.91s)**.
+Combined-tip packaged summary and dirty-editor restoration passed **2/2 (40.5s)**,
+including explicit choice/cancel/keyboard focus, preserved composer and the retained
+#133 editor scenario. No known unmet automated #136 criterion remains at these
+seams; the human/live qualification limits above remain unqualified.
