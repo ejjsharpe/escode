@@ -66,6 +66,12 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
       await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeInViewport();
       await page.screenshot({ path: `test-results/conversation-${width}-${zoom}.png` });
     }
+    await page.setViewportSize({ width: 1200, height: 900 });
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(2));
+    await expect(page.getByLabel("Message Codex")).toBeInViewport();
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeInViewport();
+    expect((await page.getByLabel("Conversation history").boundingBox())!.height).toBeGreaterThanOrEqual(60);
+    await page.screenshot({ path: "test-results/conversation-native-200.png" });
     await page.getByRole("button", { name: "Stop", exact: true }).focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);

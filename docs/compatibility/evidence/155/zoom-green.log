@@ -1,0 +1,9 @@
+$ playwright test tests/conversation-layout.spec.ts "--timeout=90000"
+
+Running 1 test using 1 worker
+
+(node:83427) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows (8.2s)
+
+  1 passed (8.8s)

@@ -1,0 +1,35 @@
+$ node scripts/filesystem.mjs && vp test run host/chat.test.ts
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-54dcf325/apps/desktop
+
+ ❯ host/chat.test.ts (10 tests | 1 failed | 1 skipped) 4500ms
+   × turns, approvals and Stop stay scoped; reconnect invalidates old callbacks without resending 789ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/chat.test.ts > turns, approvals and Stop stay scoped; reconnect invalidates old callbacks without resending
+AssertionError: expected 1793475614483 to be 1793475614458 // Object.is equality
+
+- Expected
++ Received
+
+- 1793475614458
++ 1793475614483
+
+ ❯ host/chat.test.ts:71:62
+     69|     });
+     70|     await new Promise(resolve => setTimeout(resolve, 20));
+     71|     expect((await store.get(dir, a.id)).latestUserMessageAt).toBe(sent…
+       |                                                              ^
+     72|     expect(service.checkoutActive(dir, a.id)).toBe(true);
+     73|     expect(service.checkoutActive(dir, b.id)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed | 1 skipped (10)
+   Start at  19:40:12
+   Duration  6.02s (tests 77%, import 14%, transform 9%)
+
+error: script "test" exited with code 1

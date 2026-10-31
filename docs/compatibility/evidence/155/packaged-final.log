@@ -1,0 +1,11 @@
+$ playwright test tests/conversation-layout.spec.ts tests/project-drafts.spec.ts "--timeout=90000"
+
+Running 2 tests using 1 worker
+
+(node:85639) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/conversation-layout.spec.ts:6:1 › readable conversation retains composition and keyboard Stop in constrained windows (5.0s)
+Preparing worktree (new branch 'linked')
+  ✓  2 tests/project-drafts.spec.ts:11:1 › saved project drafts move with text, survive restart and bind exactly once from closed-project Agents (15.7s)
+
+  2 passed (21.1s)
