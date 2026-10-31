@@ -65,3 +65,47 @@ host/worktrees.test.ts --maxWorkers=1` passed 29/29 across four files in 44.29s,
 including every previously failing suite. Final lint passed. Final packaged checks
 passed 3/3 after the comparison-focus adjustment; the refreshed screenshot was
 visually inspected. No known functional acceptance gap remains at these seams.
+
+## Packaged focus acceptance repair (2026-10-31)
+
+The earlier clean packaged claim above did not hold on a fresh isolated checkout.
+At integration `5700f0878ef986b4ea0621e63dde926b56050b9f`, preserving `0a9c981`,
+frozen install, build and package succeeded, but `tests/history.spec.ts` reproduced
+2 passed / 1 failed: line 59 found Saved-file inspection present but inactive.
+The comparison assertions had not been reached, so that run did not qualify them.
+
+The file discovery and comparison handlers scheduled focus in requestAnimationFrame
+immediately after setting asynchronous result state. That callback could run before
+React committed the conditional region and assigned its ref, losing the focus
+transfer. Layout effects keyed to the returned discovery/comparison state focus the
+committed regions instead. No focus assertion was removed or relaxed. The packaged
+file case now additionally uses Tab from discovery and asserts the captured-file
+button receives focus before Enter, instead of directly focusing that button.
+The existing comparison focus, historical texts, absence of today's replacement,
+Escape return and retained composer checks all execute.
+
+The isolated repair passed all 3 packaged history cases (19.9s), and the four affected
+host suites passed 29/29 (53.35s). Integration then advanced with adjacent #132 to
+`813f2d0f963526b90783d99a07304918b43f9115`. That tip was merged into this work
+branch, not the other way round. It independently contained the same layout-effect
+repair; duplicate effects from the merge were removed. The final source matches
+integration's boundary component, with the stronger Tab regression retained.
+
+Combined-tip verification: typecheck and lint passed; the authenticated host suites
+`host/durable-send.test.ts host/boundaries.test.ts host/lookup.test.ts
+host/worktrees.test.ts --maxWorkers=1` passed 29/29 (45.20s). Build and unsigned
+arm64 package passed. The final packaged history run is recorded below.
+Impeccable's mechanical detector reported no findings. The packaged comparison
+screenshot was visually inspected: the comparison has visible focus and the
+composer retains its draft; its long contents remain in the existing scroll area.
+No new product terminology or host behavior was introduced.
+
+No issue closure, PR, or merge back into integration was performed. Manual
+VoiceOver/native accessibility, paid live-provider checks, and the broad full suite
+were not rerun for this bounded focus repair. Those limits are unchanged; automated
+keyboard/focus acceptance does not claim native screen-reader qualification.
+
+Final rebuilt/repackaged combined-tip history suite: **3/3 passed (21.7s)**,
+including file discovery focus, Tab/Enter into comparison, exact historical bodies,
+Escape focus return and retained composer. No known unmet #131 automated acceptance
+criterion remains in this focused seam.
