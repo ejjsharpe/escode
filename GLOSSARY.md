@@ -96,7 +96,7 @@ The following historical-work terms describe the [accepted turn-level time-trave
 A recorded boundary before or after an agent turn, identifying its historical conversation context and the availability of captured saved working files. It is distinct from a user's Git commit and from a client's unsaved recovery draft. A before-message boundary captures saved disk contents afresh before Send dispatch, with its provider thread, exact checkout identity and Git base retained independently of file coverage; missing coverage does not authorize historical file operations. An after-turn boundary reserves a stable identity before dispatch and records the corresponding observed provider turn and completion status. Completed-turn files are captured before another Send is allowed; interruption, unobserved completion and failed capture retain unavailable coverage without replay or later-file substitution.
 
 **Conversation rewind**:
-An explicit return of an existing chat to an earlier conversation boundary, with a separate choice about restoring files. Looking through history does not rewind the conversation.
+An explicit return of an existing chat to an earlier conversation boundary, with a separate choice about restoring files. Looking through history does not rewind the conversation. Conversation-only rewind retains the escode chat identity and current files, index, unsaved edits and unsent text; native provider historical context may have a distinct provider thread identity. Confirmation does not start a turn. Unsupported boundaries remain unavailable.
 
 **File restoration**:
 An explicit replacement of an eligible worktree's saved working files with the contents of a selected turn checkpoint. Available unsaved client edits remain separately protected.
