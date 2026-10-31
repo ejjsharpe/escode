@@ -681,3 +681,20 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .file-tabs [aria-selected="true"] { background: #48405f; }
 
 .file-tabs [data-unsaved]::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; margin-left: 8px; }
+
+.recent-tabs {
+  position: fixed;
+  z-index: 30;
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #484351;
+  border-radius: 6px;
+  background: #24252b;
+}
+.recent-tabs [role="option"] { padding: 8px 12px; overflow-wrap: anywhere; }
+.recent-tabs [aria-selected="true"] { background: #48405f; }

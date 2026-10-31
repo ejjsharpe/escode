@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@base-ui/react/button";
@@ -117,6 +117,10 @@ function CheckoutView({
   const tabStrip = useRef<HTMLDivElement>(null);
   const draggedTab = useRef<string | null>(null);
   const recentFiles = useRef<string[]>(path ? [path] : []);
+  const pickerId = useId();
+  const pickerElement = useRef<HTMLDivElement>(null);
+  const pickerSession = useRef<{ files: string[]; index: number; focus: HTMLElement | null } | null>(null);
+  const [picker, setPicker] = useState<{ files: string[]; index: number } | null>(null);
   const content = useRef<HTMLElement>(null);
   const focusAfterClose = useRef(false);
   const [tabMenu, setTabMenu] = useState<{ file: string; order: string[] } | null>(null);
@@ -395,7 +399,7 @@ function CheckoutView({
   useEffect(() => {
     if (focusRequest && focusRequest.generation === presentation.current &&
       memory.views[root]?.path === focusRequest.file && container.current?.getClientRects().length)
-      editor.current?.focus();
+      (editor.current ?? content.current)?.focus();
   }, [focusRequest]);
   function trackPosition(instance: monaco.editor.ICodeEditor, file: string, selected: string) {
     const stored = memory.views[root]?.editorPositions?.[file]?.[selected];
@@ -732,6 +736,89 @@ function CheckoutView({
     };
     window.addEventListener("keydown", key, true);
     return () => window.removeEventListener("keydown", key, true);
+  });
+  function cancelPicker(restoreFocus = true) {
+    const session = pickerSession.current;
+    pickerSession.current = null;
+    setPicker(null);
+    if (restoreFocus && session)
+      (session.focus?.isConnected ? session.focus : editor.current ?? content.current)?.focus();
+  }
+  function commitPicker() {
+    const session = pickerSession.current;
+    if (!session) return;
+    cancelPicker(false);
+    const file = session.files[session.index]!;
+    if (!memory.views[root]?.openFiles?.includes(file)) return;
+    void restoreView(file).then(success => {
+      if (success) setFocusRequest({ file, generation: presentation.current });
+      else content.current?.focus();
+    });
+  }
+  useEffect(() => {
+    if (picker) {
+      pickerElement.current?.focus();
+      pickerElement.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+    }
+  }, [picker]);
+  useEffect(() => {
+    if (!active || !editorVisible || saving || fileClosing || conflict) cancelPicker(false);
+  }, [active, editorVisible, saving, fileClosing, conflict]);
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (pickerSession.current && event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation(); cancelPicker(); return;
+      }
+      if (!active || !editorVisible || closeInFlight.current || saveInFlight.current || conflict || tabMenu) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[role=dialog], [role=alertdialog], [role=menu]") ||
+        (target?.closest("input, textarea, select, [contenteditable=true]") && !target.closest(".monaco-editor"))) return;
+      if (event.ctrlKey && !event.metaKey && !event.altKey && event.key === "Tab") {
+        event.preventDefault(); event.stopPropagation();
+        const files = memory.views[root]?.openFiles ?? [];
+        if (!files.length) return;
+        const session = pickerSession.current ?? {
+          files: [...new Set([path, ...recentFiles.current, ...files])].filter(file => files.includes(file)),
+          index: 0, focus: document.activeElement as HTMLElement | null,
+        };
+        session.index = (session.index + (event.shiftKey ? session.files.length - 1 : 1)) % session.files.length;
+        pickerSession.current = session;
+        setPicker({ files: session.files, index: session.index });
+      } else if (!pickerSession.current && event.metaKey && event.altKey && !event.ctrlKey && !event.shiftKey &&
+        (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        event.preventDefault(); event.stopPropagation();
+        const files = memory.views[root]?.openFiles ?? [];
+        if (!files.length) return;
+        const next = (files.indexOf(path) + (event.key === "ArrowRight" ? 1 : files.length - 1)) % files.length;
+        const file = files[next]!;
+        const stripFocus = !!target?.closest(".file-tabs");
+        void restoreView(file).then(success => {
+          if (!success) return;
+          if (stripFocus) Array.from(tabStrip.current?.querySelectorAll<HTMLButtonElement>("[role=tab]") ?? [])
+            .find(tab => tab.title === root + "/" + file)?.focus();
+          else setFocusRequest({ file, generation: presentation.current });
+        });
+      }
+    };
+    const release = (event: KeyboardEvent) => {
+      if (event.key === "Control" && pickerSession.current) {
+        event.preventDefault(); event.stopPropagation(); commitPicker();
+      }
+    };
+    const blur = () => cancelPicker(false);
+    const focus = (event: FocusEvent) => {
+      if (pickerSession.current && !pickerElement.current?.contains(event.target as Node)) cancelPicker(false);
+    };
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("keyup", release, true);
+    window.addEventListener("blur", blur);
+    window.addEventListener("focusin", focus);
+    return () => {
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("keyup", release, true);
+      window.removeEventListener("blur", blur);
+      window.removeEventListener("focusin", focus);
+    };
   });
   function dismissTabMenu() {
     const file = tabMenu?.file;
@@ -1104,6 +1191,15 @@ function CheckoutView({
                 </span>
               ))}
             </div>
+            {picker && <div ref={pickerElement} className="recent-tabs" role="listbox" aria-label="Recent tabs"
+              aria-description="Hold Control and press Tab or Shift+Tab to select. Release Control to open. Escape cancels."
+              aria-activedescendant={pickerId + "-" + picker.index} tabIndex={-1}>
+              {picker.files.map((file, index) => <div key={file} id={pickerId + "-" + index}
+                role="option" aria-selected={index === picker.index} title={root + "/" + file}
+                aria-description={[preview === file ? "Preview" : "", tabDirty(file) ? "Unsaved" : ""].filter(Boolean).join(", ") || undefined}>
+                {file}
+              </div>)}
+            </div>}
             {tabMenu && <div role="menu" aria-label={"File tab actions for " + tabMenu.file}
               className="files-menu" onBlur={event => {
                 if (!event.currentTarget.contains(event.relatedTarget)) setTabMenu(null);
