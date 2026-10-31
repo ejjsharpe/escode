@@ -6,6 +6,8 @@ The Agents and No project concepts below describe the [agreed Agents specificati
 
 Integrated behavior and acceptance boundaries are recorded in [Agents acceptance evidence](docs/compatibility/agents-acceptance.md). The Agents workflow is accepted, including user-confirmed manual VoiceOver validation on 2026-10-29 at `0347eaf4abe355a598752dff63bb72320e425570`; this is separate from the earlier v1 confirmation.
 
+The checkout-specific tab, file lookup and project picker terms reflect the direction agreed in the [ongoing file-search interview](https://github.com/ejjsharpe/escode/issues/89). The complete navigation amendment is still being specified; README.md describes the current application behavior.
+
 ## Language
 
 The host, connection and lifecycle terms below reflect the [agreed lifecycle planning amendment](https://github.com/ejjsharpe/escode/issues/53) and [agreed device trust rules](https://github.com/ejjsharpe/escode/issues/59#issuecomment-6521010880); the macOS window close/reopen portion is implemented; remaining lifecycle and trust changes are subsequent work. The [multi-client planning decision](https://github.com/ejjsharpe/escode/issues/57) additionally distinguishes per-client unsent text and recovery drafts; it is not yet implemented.
@@ -46,14 +48,29 @@ The explicit action that stops an execution host and its active work. A remote c
 **Project**:
 A saved local Git repository whose files, source changes, and project-backed chats belong together across branch switches. Linked worktrees of the same repository share one project identity.
 
+**Checkout**:
+A working directory of a project's repository, such as its original working copy or a linked worktree. Different checkouts share the project's repository identity while retaining separate working files.
+
 **Project tab**:
-An open editor view of a project, containing Files, Source Control and Chats. Closing this view leaves the saved project and its chats available in Agents.
+An editor view of one checkout of a project, with its own Files, Source Control and checkout-scoped Chats views. Different checkouts of the same project can have separate tabs; reopening an open checkout focuses its existing tab.
+
+**Open project**:
+A project with at least one project tab open in the current desktop window.
+
+**Open checkout**:
+A checkout with a project tab open in the current desktop window.
+
+**File lookup**:
+A search for files by name and path within open checkout contexts. Its scope is the active project tab's checkout, or all open checkouts when invoked from Agents.
 
 **Agents**:
 The permanent app-wide view of chats and chat drafts across all saved projects, including projects with closed editor tabs, and No project contexts.
 
+**Project picker**:
+The searchable project-selection step for starting a chat from Agents, listing all saved projects in recent-use order and a No project choice. Projects remain selectable when their editor tabs are closed.
+
 **Chats view**:
-The view inside a project tab showing only that project's chats and chat drafts. It opens the same conversations and drafts as Agents.
+The view inside a project tab showing only chats and chat drafts attached to that tab's checkout. It opens the same conversations and drafts as Agents.
 
 **Chat**:
 A saved Codex conversation, including the user's messages and the agent's work and responses, with an optional project association. Its project association and working directory are fixed by first Send; its history is shared across clients, while unsent message text is shared across views within its owning client. Host-persisted directory identity prevents a replaced checkout from becoming the conversation’s execution context after restart. An unavailable path retains the chat and draft; Retry validates the original path without replay, while active Stop remains available.
@@ -87,10 +104,10 @@ A client’s unfinished message for a chat or chat draft, shared across that cli
 A persistent working folder owned by one No project chat. It is allocated only on first Send, starts without Git and is retained independently of the chat's running state. Host ownership and directory identity are persisted; missing, replaced or incompletely recorded folders are never reconstructed or rebound.
 
 **Original checkout**:
-The checkout through which a project was opened, shown by Files and Source Control before a chat is selected.
+The checkout through which a project was first opened. It supplies the default when no other checkout has been used.
 
 **Current checkout**:
-A project's remembered Files/Source Control checkout, using its original checkout until a different editor checkout is selected. It supplies the Current checkout choice for project-backed chat drafts, including when the project's tab is closed. Status and displayed worktree options are rebuildable host observations, refreshed through the authenticated connection; observation results never authorize a context change.
+A project's last-used editor checkout, defaulting to its original checkout until another is used. After selecting a project in Agents, it supplies the displayed, editable checkout default for a new draft even when its tab is closed.
 
 **Managed worktree**:
 A separate working copy created by escode for a project. It starts from a displayed committed local base on a unique `escode/<short-id>` branch,
@@ -114,7 +131,7 @@ check. Recovery uses a versioned host/client-owned store and authenticated host 
 that the latest keystroke survives a crash.
 
 **Files view**:
-The project-local lazy nested tree of files in the current checkout. Expansion, keyboard
+The lazy nested tree of files in a project tab's fixed checkout. Expansion, keyboard
 focus, multiple selection and scroll are remembered independently per checkout; selection
 is separate from the active document. Coalesced host notifications reconcile loaded directories;
 window focus and explicit Refresh rescan missed events and retry unavailable watches. Expanding
