@@ -17,15 +17,16 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='initialize')result={userAgent:'fixture'};
  if(m.method==='account/read')result={account:{}};
  if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:m.params.threadId??'saved-provider'},cwd:process.cwd(),model:'fixture',sandbox:{type:'readOnly'},approvalPolicy:'on-request'};
- if(m.method==='turn/start')result={turn:{id:'sent'}};
- if(m.method==='thread/turns/list')result={data:[{id:'t',items:[{id:'i',type:'agentMessage',text:m.params.cursor===null?'first saved page':'second saved page'}]}],nextCursor:m.params.cursor===null?'second':null};
+ if(m.method==='turn/start')result={turn:{id:'sent',status:'completed'}};
+ if(m.method==='thread/turns/list')result={data:[{id:'${mode === 'streaming' ? 't' : 'sent'}',items:[{id:'i',type:'agentMessage',text:m.params.cursor===null?'first saved page':'second saved page'}]}],nextCursor:m.params.cursor===null?'second':null};
+ if(m.method==='thread/turns/list' && require('node:fs').existsSync(${JSON.stringify(join(dir, 'lost-history'))}))result={data:[],nextCursor:null};
  const reply=()=>{process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');
  if(${mode === 'streaming'} && m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(()=>{for(const event of [{method:'turn/started',params:{threadId:'saved-provider',turn:{id:'t'}}},{method:'item/agentMessage/delta',params:{threadId:'saved-provider',turnId:'t',itemId:'i',delta:' live delta'}}])process.stdout.write(JSON.stringify(event)+'\\n');setTimeout(()=>{for(const event of [{method:'item/completed',params:{threadId:'saved-provider',turnId:'t',item:{id:'i',type:'agentMessage',text:'newest live body'}}},{method:'turn/completed',params:{threadId:'saved-provider',turn:{id:'t'}}}])process.stdout.write(JSON.stringify(event)+'\\n');},1200);},200);
  };
  if(m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(reply,1000);else reply();
- if(m.method==='turn/start')for(const method of ['turn/started','turn/completed'])process.stdout.write(JSON.stringify({method,params:{threadId:'saved-provider',turn:{id:'sent'}}})+'\\n');
+ if(m.method==='turn/start')for(const method of ['turn/started','turn/completed'])process.stdout.write(JSON.stringify({method,params:{threadId:'saved-provider',turn:{id:'sent',status:'completed'}}})+'\\n');
 });`, { mode: 0o700 });
-  const app = await launchDesktop(user, tools);
+  const app = await launchDesktop(user, tools, true);
   try {
     const page = await app.firstWindow();
     await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
@@ -41,6 +42,33 @@ createInterface({input:process.stdin}).on('line',line=>{
     await page.locator(".agent-row").click();
     await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
     expect(await page.evaluate(id => window.escode.chat("send", null, id, "fixture follow-up"), chatId)).toBe("");
+    if (mode === "navigation") {
+      const composer = page.getByRole("textbox", { name: "Message Codex" });
+      await composer.fill("retained unsent text");
+      await page.getByText("Historical boundaries", { exact: true }).click();
+      const load = page.getByRole("button", { name: "Load boundaries", exact: true });
+      await load.focus(); await page.keyboard.press("Enter");
+      const after = page.getByRole("button", { name: /^After turn/ }).first();
+      await expect(after).toBeVisible();
+      await after.focus(); await page.keyboard.press("Enter");
+      const inspection = page.getByRole("region", { name: "Boundary inspection", exact: true });
+      await expect(inspection).toBeFocused();
+      await expect(inspection.getByText("first saved page", { exact: true })).toBeVisible();
+      await expect(inspection.getByText(/Saved files: unavailable.*No project/)).toBeVisible();
+      await page.screenshot({ path: "test-results/boundary-inspection.png" });
+      await page.getByRole("button", { name: /^Before message/ }).first().click();
+      await expect(inspection).toBeFocused();
+      await expect(inspection.getByText("first saved page", { exact: true })).toHaveCount(0);
+      await writeFile(join(dir, "lost-history"), "lost");
+      await after.click();
+      await expect(inspection.getByText(/Provider history lost/)).toBeVisible();
+      await page.screenshot({ path: "test-results/boundary-unavailable.png" });
+      await rm(join(dir, "lost-history"));
+      await page.keyboard.press("Escape");
+      await expect(page.getByText("Historical boundaries", { exact: true })).toBeFocused();
+      await expect(inspection).not.toBeVisible();
+      await expect(composer).toHaveValue("retained unsent text");
+    }
     const next = page.getByRole("button", { name: "Next history page" });
     await next.focus(); await page.keyboard.press("Enter");
     if (mode === "streaming") {

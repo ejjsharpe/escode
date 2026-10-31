@@ -53,6 +53,15 @@ export const HistoryPage = Schema.Struct({
   nextCursor: Schema.NullOr(Schema.String),
 });
 export type HistoryPage = typeof HistoryPage.Type;
+export const CheckpointPoint = Schema.Struct({
+  id: Schema.String, kind: Schema.Literals(["before-message", "after-turn"]), createdAt: Schema.Number,
+  threadId: Schema.NullOr(Schema.String), turnId: Schema.NullOr(Schema.String),
+  availability: Schema.Literals(["available", "unavailable"]), reason: Schema.NullOr(Schema.String),
+});
+export const CheckpointPage = Schema.Struct({ points: Schema.Array(CheckpointPoint).check(Schema.isMaxLength(20)), nextCursor: Schema.NullOr(Schema.String) });
+export type CheckpointPage = typeof CheckpointPage.Type;
+export const BoundaryInspection = Schema.Struct({ page: HistoryPage, availability: Schema.Literals(["available", "unavailable"]), message: Schema.String });
+export type BoundaryInspection = typeof BoundaryInspection.Type;
 export const ChatDetail = Schema.Struct({
   project: Schema.NullOr(Schema.String), chatId: Schema.String, threadId: Schema.NullOr(Schema.String),
   controlTarget: Schema.optional(Schema.String), preparing: Schema.optional(Schema.Boolean), connected: Schema.Boolean, busy: Schema.Boolean, turnId: Schema.NullOr(Schema.String),
@@ -209,7 +218,9 @@ export const GitQueries = RpcGroup.make(
 
 export const HostQueries = Directories.merge(Files).merge(GitQueries).merge(RpcGroup.make(Rpc.make("moveEntry", { payload: { command: MoveEntry }, success: MoveResult, error: Schema.String }), Rpc.make("ackFileOperation", { payload: { root: Schema.String }, success: Schema.Void, error: Schema.String }), Rpc.make("draftAction", { payload: { action: DraftAction }, success: DraftRecord, error: Schema.String }), Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
   success: ChatSummaries, error: Schema.String, stream: true,
-}), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));
+}), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("checkpointPoints", { payload: HistoryQuery, success: CheckpointPage, error: Schema.String }),
+  Rpc.make("inspectBoundary", { payload: { ...HistoryQuery, boundary: Schema.String.check(Schema.isMaxLength(100)) }, success: BoundaryInspection, error: Schema.String }),
+  Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));
 
 // Host and renderer memory may mutate validated contract values.
 export type Mutable<T> = T extends object ? { -readonly [K in keyof T]: Mutable<T[K]> } : T;

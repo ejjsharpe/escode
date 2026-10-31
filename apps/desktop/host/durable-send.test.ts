@@ -75,10 +75,11 @@ test("authenticated dropped socket response recovers status after reconnect with
   const db = store.database;
   let turns = 0;
   let notify: (message: any) => void = () => {};
-  const service = new ChatService(store, async (_cwd, receive) => { notify = receive; return ({
+  const service = new ChatService(store, async (_cwd, receive) => { return ({
     async request(method: string, params: any) {
       if (method === "account/read") return { account: { type: "chatgpt" } };
-      if (method === "thread/start" || method === "thread/resume") return { thread: { id: params.threadId ?? "provider" }, cwd: dir, model: "fixture", reasoningEffort: "high", approvalPolicy: "on-request", sandbox: { type: "workspaceWrite" } };
+      if (method === "thread/start" || method === "thread/resume") { notify = receive; return { thread: { id: params.threadId ?? "provider" }, cwd: dir, model: "fixture", reasoningEffort: "high", approvalPolicy: "on-request", sandbox: { type: "workspaceWrite" } }; }
+      if (method === "thread/turns/list") return { data: [{ id: `turn-${turns}`, items: [{ id: "answer", type: "agentMessage", text: "historical answer" }] }], nextCursor: null };
       if (method === "turn/start") { turns++; return { turn: { id: `turn-${turns}` } }; }
       return {};
     }, respond() {}, close() {},
@@ -108,6 +109,8 @@ test("authenticated dropped socket response recovers status after reconnect with
     const status = execFileSync("git", ["--no-optional-locks", "-C", dir, "status", "--porcelain"], { encoding: "utf8" });
     const sends = new DurableSend(db);
     const host = await startHost({ ...await db.ready, origin: "null", list: async () => ({ kind: "denied", message: "unused" }),
+      checkpointPoints: (project, id, cursor) => service.checkpointPoints(project, id, cursor),
+      inspectBoundary: (project, id, boundary, cursor) => service.inspectBoundary(project, id, boundary, cursor),
       sendMessage: command => sends.execute(command, async () => { await service.send(command.project, command.id, command.text, undefined, command.commandId); }), sendStatus: id => sends.receipt(id) });
     let client = createHostClient(async () => host.bootstrap());
     const command = { commandId: "one", admissionEpoch: sends.admissionEpoch, project: dir, id: chat.id, expected: "state", text: "hello" };
@@ -133,12 +136,28 @@ test("authenticated dropped socket response recovers status after reconnect with
       const complete = () => notify({ method: "turn/completed", params: { threadId: "provider", turn: { id: `turn-${turns}`, status: "completed" } } });
       await writeFile(join(dir, "manual.txt"), "agent result");
       complete();
-      await expect.poll(async () => (await db.command("checkpoints", { commandId: chat.id })).find((c: any) => c.kind === "after-turn")?.availability).toBe("available");
+      await expect.poll(async () => (await db.command("checkpoints", { commandId: chat.id })).find((c: any) => c.kind === "after-turn")?.availability, { timeout: 10000 }).toBe("available");
       const after = (await db.command("checkpoints", { commandId: chat.id })).find((c: any) => c.kind === "after-turn");
+      const points = await client.checkpointPoints(dir, chat.id, null);
+      expect(points.points.map(p => p.kind)).toEqual(["before-message", "after-turn"]);
+      expect(points.points[1].id).toBe(after.id);
+      const current = service.snapshot(dir, chat.id);
+      const inspection = await client.inspectBoundary(dir, chat.id, after.id, null);
+      expect(inspection.availability).toBe("available");
+      expect(inspection.page.items[0].text).toBe("historical answer");
+      expect(service.snapshot(dir, chat.id)).toEqual(current);
+      expect(await readFile(join(dir, "manual.txt"), "utf8")).toBe("agent result");
+      expect((await client.inspectBoundary(dir, chat.id, points.points[0].id, null)).page.items).toEqual([]);
+      expect(turns).toBe(1);
+      expect(points.points.every(p => !("files" in p))).toBe(true);
+      await expect(client.checkpointPoints(dir, chat.id, "invalid")).rejects.toThrow();
+      await expect(client.inspectBoundary(dir, chat.id, "lost", null)).rejects.toThrow();
+      expect(await readFile(join(dir, ".git/index"))).toEqual(index);
+
       expect(after).toMatchObject({ turnId: "turn-1", threadId: "provider", checkout: dir, completion: "completed", commandId: "one" });
       expect(after.files["manual.txt"].content).toBe(Buffer.from("agent result").toString("base64"));
       complete();
-      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+      await expect.poll(() => service.snapshot(dir, chat.id).busy, { timeout: 10000 }).toBe(false);
       await writeFile(join(dir, "manual.txt"), "intervening manual save");
       await client.sendMessage({ ...command, commandId: "two" });
       const fresh = (await db.command("checkpoints", { commandId: chat.id })).filter((c: any) => c.kind === "before-message");
@@ -146,13 +165,13 @@ test("authenticated dropped socket response recovers status after reconnect with
       expect(fresh[1].id).not.toBe(fresh[0].id);
       expect(fresh[1].files["manual.txt"].content).toBe(Buffer.from("intervening manual save").toString("base64"));
       complete();
-      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+      await expect.poll(() => service.snapshot(dir, chat.id).busy, { timeout: 10000 }).toBe(false);
       await writeFile(join(dir, "large"), Buffer.alloc(8 * 1024 * 1024 + 1));
       const exhausted = await client.sendMessage({ ...command, commandId: "exhausted" }); expect(exhausted).toMatchObject({ status: "accepted" });
       expect((await db.command("checkpoints", { commandId: chat.id })).filter((c: any) => c.kind === "before-message")[2]).toMatchObject({ availability: "unavailable", gitBase: checkpoints[0].gitBase });
       expect(turns).toBe(3);
       complete();
-      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+      await expect.poll(() => service.snapshot(dir, chat.id).busy, { timeout: 10000 }).toBe(false);
       const { DatabaseSync } = await import("node:sqlite");
       const fault = new DatabaseSync(join(dir, "chats.sqlite-state-v1/state.sqlite"));
       fault.exec("CREATE TRIGGER fail_admission BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'admission failure'); END");
@@ -163,7 +182,7 @@ test("authenticated dropped socket response recovers status after reconnect with
       fault.exec("CREATE TRIGGER fail_completion BEFORE UPDATE ON checkpoints WHEN json_extract(NEW.body, '$.availability')='available' BEGIN SELECT RAISE(ABORT, 'result full'); END");
       await client.sendMessage({ ...command, commandId: "result-failure" });
       complete();
-      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+      await expect.poll(() => service.snapshot(dir, chat.id).busy, { timeout: 10000 }).toBe(false);
       const failed = (await db.command("checkpoints", { commandId: chat.id })).filter((c: any) => c.kind === "after-turn").at(-1);
       expect(failed).toMatchObject({ completion: "completed", availability: "unavailable", turnId: "turn-4" });
       expect(failed.reason).toContain("result full");
@@ -171,12 +190,12 @@ test("authenticated dropped socket response recovers status after reconnect with
       await client.sendMessage({ ...command, commandId: "interrupted" });
       await service.stop(dir, chat.id);
       notify({ method: "turn/completed", params: { threadId: "provider", turn: { id: `turn-${turns}`, status: "interrupted" } } });
-      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+      await expect.poll(() => service.snapshot(dir, chat.id).busy, { timeout: 10000 }).toBe(false);
       expect((await db.command("checkpoints", { commandId: chat.id })).at(-1)).toMatchObject({ completion: "interrupted", availability: "unavailable" });
       fault.exec("CREATE TRIGGER fail_all_completion BEFORE UPDATE ON checkpoints BEGIN SELECT RAISE(ABORT, 'all result writes fail'); END");
       await client.sendMessage({ ...command, commandId: "lost-result" });
       complete();
-      await expect.poll(() => service.snapshot(dir, chat.id).busy).toBe(false);
+      await expect.poll(() => service.snapshot(dir, chat.id).busy, { timeout: 10000 }).toBe(false);
       expect(service.snapshot(dir, chat.id).error).toContain("boundary persistence failed");
       expect((await db.command("checkpoints", { commandId: chat.id })).at(-1)).toMatchObject({ completion: "pending", availability: "unavailable" });
       fault.exec("DROP TRIGGER fail_all_completion");

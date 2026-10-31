@@ -40,6 +40,8 @@ declare global {
       sendState: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
       sendMessage: (command: import("@escode/contracts").SendCommand) => Promise<unknown>;
       sendStatus: (commandId: string) => Promise<unknown>;
+      checkpointPoints: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").CheckpointPage>;
+      inspectBoundary: (project: string | null, id: string, boundary: string, cursor: string | null) => Promise<import("@escode/contracts").BoundaryInspection>;
       chatHistory: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").HistoryPage>;
       chatSummaries: (apply: (value: import("@escode/contracts").ChatSummaries) => void, error: (message: string) => void) => () => void;
       toolStatus(): Promise<unknown>;
