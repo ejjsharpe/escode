@@ -34,7 +34,7 @@ async function fixture(run: (p: Checkout, store: Workspace, base: string) => Pro
   await store.write({
     projects: [{ project: root, root }],
     selected: root,
-    views: { [root]: { path: "folder/a.ts", directory: "folder" } },
+    views: { [root]: { path: "folder/a.ts", directory: "folder", openFiles: ["folder/a.ts", "folder/b.ts"] } },
     drafts: await Promise.all(
       ["a", "b"].map(async (name) => ({
         root,
@@ -88,6 +88,9 @@ test("restart reconciles a crash immediately after native rename, before complet
   fixture(async (p, store, base) => {
     const before = await store.read();
     before.views[p.root].files!.hideIgnored = true;
+    before.views[p.root].openFiles = ["folder/b.ts", "folder/a.ts"];
+    before.views[p.root].fileViews = { "folder/a.ts": "unstaged" };
+    before.views[p.root].editorPositions = { "folder/a.ts": { file: { line: 2, column: 3, top: 40, left: 0 } } };
     await store.write(before);
     const file = join(base, "intent.json");
     const journal = new FileOperationJournal(file);
@@ -110,6 +113,13 @@ test("restart reconciles a crash immediately after native rename, before complet
       focus: "moved/a.ts",
       scroll: 0,
     });
+    const restored = await store.read();
+    expect(restored.views[p.root].openFiles).toEqual(["moved/b.ts", "moved/a.ts"]);
+    expect(restored.views[p.root].path).toBe("moved/a.ts");
+    expect(restored.views[p.root].fileViews).toEqual({ "moved/a.ts": "unstaged" });
+    expect(restored.views[p.root].editorPositions?.["moved/a.ts"].file).toEqual({ line: 2, column: 3, top: 40, left: 0 });
+    expect(readFileSync(join(p.root, "moved/a.ts"), "utf8")).toBe("disk");
+    expect(restored.drafts[0]).toMatchObject({ text: "a unsaved", disk: { text: "disk" } });
     expect(await journal.readIntent()).toBe(null);
   }));
 test("persistence failure after mutation returns the actual outcome and restart recovers edits", async () =>
@@ -199,6 +209,8 @@ test("uncertain native outcome retains drafts and blocks mutations across a fres
     expect(() => fresh.assertIdle()).toThrow("pending reconciliation");
     await expect(fresh.ack(p.root)).rejects.toThrow("Uncertain operation");
     expect((await store.read()).drafts[0].text).toBe("a unsaved");
+    expect((await store.read()).views[p.root].openFiles).toEqual(["folder/a.ts", "folder/b.ts"]);
+    expect(readFileSync(join(p.root, "external-name/a.ts"), "utf8")).toBe("disk");
     expect(await journal.readIntent()).not.toBe(null);
     expect(existsSync(join(p.root, "folder"))).toBe(false);
   }));
@@ -475,6 +487,8 @@ test("whole batch facts protect stale navigation snapshots until renderer acknow
       const fresh = await new Workspace(join(base, "workspace.json")).read();
       expect(fresh.selected).toBe("agents");
       expect(fresh.views[p.root].files!.hideIgnored).toBe(true);
+      expect(fresh.views[p.root].openFiles).toEqual(["folder/a.ts"]);
+      expect(fresh.views[p.root].path).toBe("folder/a.ts");
       expect(fresh.drafts).toHaveLength(1);
       expect(fresh.drafts[0]).toMatchObject({
         text: "newer available text",
@@ -515,6 +529,14 @@ test("renderer acknowledgement of earlier batch facts never clears an uncertain 
     const pending = await new FileOperationJournal(join(base, "intent.json")).readIntent();
     expect(pending?.source).toBe("folder/b.ts");
     expect(pending?.completed).not.toBe(true);
+    const fresh = new FileOperations(new Workspace(join(base, "workspace.json")), join(base, "intent.json"));
+    expect(await fresh.recover(async () => p)).toContain("Uncertain file operation");
+    expect(() => fresh.assertIdle()).toThrow("pending reconciliation");
+    const retained = await store.read();
+    expect(retained.views[p.root].openFiles).toEqual(["folder/a.ts", "folder/b.ts"]);
+    expect(retained.drafts[1]).toMatchObject({ path: "folder/b.ts", text: "b unsaved", disk: { text: "second disk" } });
+    expect(readFileSync(join(p.root, "elsewhere.ts"), "utf8")).toBe("second disk");
+    expect(existsSync(join(p.root, "folder/b.ts"))).toBe(false);
   }));
 
 test("async folder copy carries dirty descendants over actual copied bytes and preserves originals across restart", async () =>
@@ -689,6 +711,10 @@ test("completed move protects late recovery snapshots until acknowledgement", as
   await fixture(async (p, store, base) => {
     const ops = new FileOperations(store, join(base, "intent.json"));
     const stale = await store.read();
+    stale.views[p.root].openFiles = ["folder/b.ts", "folder/a.ts"];
+    stale.views[p.root].fileViews = { "folder/a.ts": "unstaged" };
+    stale.views[p.root].editorPositions = { "folder/a.ts": { file: { line: 2, column: 3, top: 40, left: 0 } } };
+    await store.write(stale);
     const baseline = stale.drafts[0].disk;
     await ops.run(p, "move", "folder", "moved");
     await ops.persist(stale);
@@ -696,6 +722,11 @@ test("completed move protects late recovery snapshots until acknowledgement", as
     expect(recovered.drafts[0].path).toBe("moved/a.ts");
     expect(recovered.drafts[0].text).toBe("a unsaved");
     expect(recovered.drafts[0].disk).toEqual(baseline);
+    expect(recovered.views[p.root].openFiles).toEqual(["moved/b.ts", "moved/a.ts"]);
+    expect(recovered.views[p.root].path).toBe("moved/a.ts");
+    expect(recovered.views[p.root].fileViews).toEqual({ "moved/a.ts": "unstaged" });
+    expect(recovered.views[p.root].editorPositions?.["moved/a.ts"].file).toEqual({ line: 2, column: 3, top: 40, left: 0 });
+    expect(readFileSync(join(p.root, "moved/a.ts"), "utf8")).toBe("disk");
     await ops.ack(p.root);
     expect(await new FileOperationJournal(join(base, "intent.json")).readIntent()).toBe(null);
   });

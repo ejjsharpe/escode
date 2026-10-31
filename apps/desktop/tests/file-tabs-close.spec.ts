@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -426,4 +426,146 @@ test("native Trash does not create a reopen action or recreate its file", async 
       await rm(path, { recursive: true, force: true });
     await f.cleanup();
   }
+});
+
+
+test("known rename follows closed references and removes successful Trash history", async () => {
+  const f = await fixture();
+  const trash: string[] = [];
+  try {
+    await f.open("a.txt"); await f.open("b.txt");
+    await f.page.getByRole("combobox", { name: "File view" }).selectOption("untracked");
+    await expect(f.page.getByRole("textbox", { name: "untracked · b.txt modified", exact: true })).toBeVisible();
+    await f.page.keyboard.press("Meta+w");
+    await expect(f.tabs.getByRole("tab")).toHaveText(["a.txt"]);
+    await f.page.getByRole("treeitem", { name: "b.txt", exact: true }).click({ button: "right" });
+    await f.page.keyboard.press("Escape");
+    await f.page.getByRole("button", { name: "Rename b.txt", exact: true }).click();
+    await f.page.getByRole("textbox", { name: "Rename b.txt" }).fill("renamed.txt");
+    await f.page.keyboard.press("Enter");
+    await expect(f.page.locator(".content:visible > [role=status]")).toContainText("Moved");
+    await expect(f.page.locator(".content:visible > [role=status]")).not.toContainText("failed");
+    await f.tab("a.txt").focus();
+    await f.page.keyboard.press("Meta+Shift+t");
+    await expect(f.tabs.getByRole("tab")).toHaveText(["a.txt", "renamed.txt"]);
+    await expect(f.page.getByRole("combobox", { name: "File view" })).toHaveValue("untracked");
+    await expect(f.page.getByRole("textbox", { name: "untracked · renamed.txt modified", exact: true })).toBeFocused();
+    expect(await readFile(join(f.root, "renamed.txt"), "utf8")).toBe("b.txt");
+    await expect(readFile(join(f.root, "b.txt"))).rejects.toThrow();
+    await f.page.keyboard.press("Meta+w");
+    await expect(f.tabs.getByRole("tab")).toHaveText(["a.txt"]);
+    await f.app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+      const cp = process.getBuiltinModule("child_process") as any, execute = cp.execFileSync;
+      (globalThis as any).trashFixtures = [];
+      cp.execFileSync = (...args: any[]) => {
+        const result = execute(...args);
+        if (args[1]?.[0] === "trash") (globalThis as any).trashFixtures.push(result.toString());
+        return result;
+      };
+    });
+    await f.page.getByRole("treeitem", { name: "renamed.txt", exact: true }).click({ button: "right" });
+    await f.page.getByRole("menuitem", { name: "Move to Trash", exact: true }).click();
+    await expect(f.page.locator(".content:visible > [role=status]")).toContainText("Moved to macOS Trash");
+    trash.push(...await f.app.evaluate(() => (globalThis as any).trashFixtures as string[]));
+    expect(await readFile(trash[0], "utf8")).toBe("b.txt");
+    await f.tab("a.txt").focus();
+    await f.page.keyboard.press("Meta+Shift+t");
+    await expect(f.tabs.getByRole("tab")).toHaveText(["a.txt"]);
+  } finally {
+    trash.push(...await f.app.evaluate(() => (globalThis as any).trashFixtures ?? []).catch(() => []));
+    await f.cleanup();
+    for (const file of new Set(trash)) await rm(file, { force: true });
+  }
+});
+
+
+test("folder moves preserve a closed batch's descendant positions and partial Trash retains only failed references", async () => {
+  const f = await fixture();
+  const trash: string[] = [];
+  try {
+    await mkdir(join(f.root, "folder"));
+    await writeFile(join(f.root, "folder/one.txt"), "one contents");
+    await writeFile(join(f.root, "folder/two.txt"), "two contents");
+    await f.page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await f.open("a.txt");
+    await f.page.getByRole("treeitem", { name: "folder", exact: true }).click();
+    for (const name of ["one.txt", "two.txt"]) {
+      await f.page.getByRole("treeitem", { name, exact: true }).dblclick();
+      await expect(f.page.getByRole("textbox", { name: "folder/" + name + " editor", exact: true })).toBeFocused();
+      await f.page.keyboard.press("Meta+ArrowLeft");
+      await f.page.keyboard.press("ArrowRight");
+      await f.page.keyboard.press("ArrowRight");
+    }
+    await f.tab("folder/two.txt").click({ button: "right" });
+    await f.page.getByRole("menuitem", { name: "Close All", exact: true }).click();
+    await expect(f.tabs.getByRole("tab")).toHaveCount(0);
+    await f.page.getByRole("treeitem", { name: "folder", exact: true }).locator(":scope > .tree-row").click({ button: "right" });
+    await f.page.keyboard.press("Escape");
+    await f.page.getByRole("button", { name: "Rename folder", exact: true }).click();
+    await f.page.getByRole("textbox", { name: "Rename folder" }).fill("moved");
+    await f.page.keyboard.press("Enter");
+    await expect(f.page.locator(".content:visible > [role=status]")).toContainText("Moved");
+    await f.page.getByRole("region", { name: "Main editor" }).focus();
+    await f.page.keyboard.press("Meta+Shift+t");
+    await expect(f.tabs.getByRole("tab")).toHaveText(["a.txt", "one.txt", "two.txt"]);
+    await expect(f.page.getByRole("textbox", { name: "moved/two.txt editor", exact: true })).toBeFocused();
+    await f.page.keyboard.type("X");
+    await expect.poll(async () => JSON.parse(await readFile(join(f.dir, "user/client-workspace-v1.json"), "utf8")).drafts.find((d: any) => d.path === "moved/two.txt")?.text).toBe("twXo contents");
+    await f.choices([1]);
+    await f.tab("moved/one.txt").click();
+    await expect(f.page.getByRole("textbox", { name: "moved/one.txt editor", exact: true })).toBeVisible();
+    await f.tab("moved/two.txt").click({ button: "right" });
+    await f.page.getByRole("menuitem", { name: "Close All", exact: true }).click();
+    await expect(f.tabs.getByRole("tab")).toHaveCount(0);
+    await f.app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+      const cp = process.getBuiltinModule("child_process") as any, execute = cp.execFileSync;
+      (globalThis as any).trashFixtures = [];
+      cp.execFileSync = (...args: any[]) => {
+        if (args[1]?.[0] === "trash" && args[1].some((arg: string) => arg.endsWith("two.txt"))) throw Error("probe retained two");
+        const result = execute(...args);
+        if (args[1]?.[0] === "trash") (globalThis as any).trashFixtures.push(result.toString());
+        return result;
+      };
+    });
+    await f.page.getByRole("treeitem", { name: "one.txt", exact: true }).click({ button: "right" });
+    await f.page.keyboard.press("Escape");
+    await f.page.getByRole("treeitem", { name: "two.txt", exact: true }).click({ modifiers: ["Meta"] });
+    await f.page.getByRole("tree", { name: "Files", exact: true }).focus();
+    await f.page.keyboard.press("Meta+Backspace");
+    await expect(f.page.locator(".content:visible > [role=status]")).toContainText("probe retained two");
+    trash.push(...await f.app.evaluate(() => (globalThis as any).trashFixtures as string[]));
+    expect(await readFile(trash[0], "utf8")).toBe("one contents");
+    expect(await readFile(join(f.root, "moved/two.txt"), "utf8")).toBe("two contents");
+    await f.page.keyboard.press("Meta+Shift+t");
+    await expect(f.tabs.getByRole("tab")).toHaveText(["a.txt", "two.txt"]);
+    await expect(f.tab("moved/two.txt")).toHaveAttribute("aria-selected", "true");
+    await expect(f.page.getByRole("textbox", { name: "moved/two.txt editor", exact: true })).toBeFocused();
+  } finally {
+    trash.push(...await f.app.evaluate(() => (globalThis as any).trashFixtures ?? []).catch(() => []));
+    await f.cleanup();
+    for (const file of new Set(trash)) await rm(file, { force: true });
+  }
+});
+
+
+test("renaming an inactive recent tab preserves the close survivor", async () => {
+  const f = await fixture();
+  try {
+    await f.open("a.txt"); await f.open("b.txt"); await f.open("c.txt");
+    await f.tab("b.txt").click(); await f.tab("c.txt").click();
+    await f.page.getByRole("treeitem", { name: "b.txt", exact: true }).click({ button: "right" });
+    await f.page.keyboard.press("Escape");
+    await f.page.getByRole("button", { name: "Rename b.txt", exact: true }).click();
+    await f.page.getByRole("textbox", { name: "Rename b.txt" }).fill("renamed.txt");
+    await f.page.keyboard.press("Enter");
+    await expect(f.page.locator(".content:visible > [role=status]")).toContainText("Moved");
+    await expect(f.tab("c.txt")).toHaveAttribute("aria-selected", "true");
+    await expect(f.page.getByRole("textbox", { name: "c.txt editor", exact: true })).toBeVisible();
+    await f.tab("c.txt").focus();
+    await f.page.keyboard.press("Meta+w");
+    await expect(f.tab("renamed.txt")).toHaveAttribute("aria-selected", "true");
+    expect(await readFile(join(f.root, "renamed.txt"), "utf8")).toBe("b.txt");
+  } finally { await f.cleanup(); }
 });

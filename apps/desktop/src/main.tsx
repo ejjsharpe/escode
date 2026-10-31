@@ -949,6 +949,19 @@ function CheckoutView({
           b.model.dispose();
         }
         reconcile(memory, result.intent);
+        // Only recorded applied outcomes may change session navigation references.
+        const history = recentlyClosedFiles.get(root);
+        if (history) recentlyClosedFiles.set(root, history.flatMap(action => {
+          const files = action.files.flatMap(file =>
+            operationKind === "trash" && affected(file.path, source) ? [] :
+              [{ ...file, path: moved(file.path, source, target) }]);
+          if (!files.length) return [];
+          const active = operationKind === "trash" && affected(action.active, source)
+            ? files.at(-1)!.path : moved(action.active, source, target);
+          return [{ files, active }];
+        }));
+        recentFiles.current = recentFiles.current.flatMap(file =>
+          operationKind === "trash" && affected(file, source) ? [] : [moved(file, source, target)]);
         nextPath =
           operationKind === "move"
             ? moved(nextPath, source, target)
