@@ -10,6 +10,7 @@ import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
 import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import type { Change, Document, SaveResult, ProjectBridge } from "../host/project";
 import { affected, moved, reconcile, reconcileSave } from "../host/file-operation-state";
+import { FileLookup } from "./file-lookup";
 import { FilesTree } from "./files";
 import { AgentsView } from "./agents";
 import { ChatView } from "./chat";
@@ -45,6 +46,7 @@ declare global {
       chatSummaries: (apply: (value: import("@escode/contracts").ChatSummaries) => void, error: (message: string) => void) => () => void;
       toolStatus(): Promise<unknown>;
       project: ProjectBridge;
+      lookupFile(root: string, query: string): Promise<string>;
       listDirectory(root: string, path: string): Promise<import("@escode/contracts").DirectoryResult>;
       watchFiles(root: string, paths: string[], callback: (error?: string, ready?: boolean) => void): () => void;
       nativeFiles(files: File[]): Promise<string>;
@@ -371,7 +373,7 @@ function CheckoutView({
     if (focusRequest && focusRequest.generation === presentation.current &&
       memory.views[root]?.path === focusRequest.file && container.current?.getClientRects().length)
       editor.current?.focus();
-  }, [focusRequest]);
+  }, [focusRequest, editorVisible, active]);
   function trackPosition(instance: monaco.editor.ICodeEditor, file: string, selected: string) {
     const stored = memory.views[root]?.editorPositions?.[file]?.[selected];
     if (stored) {
@@ -422,20 +424,20 @@ function CheckoutView({
     setDiff({ original: disk.text, modified: buffers.current.get(file)!.model.getValue(),
       title: "Disk versus your edits", file });
   }
-  async function select(file: string, present = true, intent?: "preview" | "keep") {
+  async function select(file: string, present = true, intent?: "preview" | "keep", current = () => true) {
     opening.current++;
     const generation = present ? ++presentation.current : presentation.current;
     try {
       if (!buffers.current.has(file)) {
         const disk: Document = await projectCall("read", root, file);
-        if (generation !== presentation.current) return false;
+        if (generation !== presentation.current || !current()) return false;
         if (!buffers.current.has(file)) addBuffer(file, disk);
       }
       if (!present) {
         setBufferRevision((old) => old + 1);
         return true;
       }
-      if (generation !== presentation.current) return false;
+      if (generation !== presentation.current || !current()) return false;
       activateFile(file, intent);
       rememberView(file, "file");
       setDiff(null);
@@ -839,7 +841,7 @@ function CheckoutView({
   fileOpeners.set(root, async request => {
     if (request.root !== root || closeInFlight.current) return false;
     const opened = request.view === "file"
-      ? await select(request.path, true, request.intent)
+      ? await select(request.path, true, request.intent, request.current)
       : !!(await showDiff({ path: request.path, area: request.view }, false, request.intent));
     if (opened && request.intent === "keep")
       setFocusRequest({ file: request.path, generation: presentation.current });
@@ -1110,6 +1112,7 @@ function ProjectView({
       setBlocked((old) => (old[root] === value ? old : { ...old, [root]: value })),
     [],
   );
+  const [lookup, setLookup] = useState(false);
   const sidebarId = "chats-" + encodeURIComponent(checkout);
   useEffect(() => {
     const reveal = (event: Event) => {
@@ -1121,6 +1124,20 @@ function ProjectView({
     window.addEventListener("reveal-file", reveal);
     return () => window.removeEventListener("reveal-file", reveal);
   }, []);
+  useEffect(() => {
+    if (!active) setLookup(false);
+    const key = (event: KeyboardEvent) => {
+      if (!active || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "p" ||
+          event.altKey || event.shiftKey || event.repeat || blocked[checkout] ||
+          (event.target instanceof HTMLInputElement && !event.target.closest(".monaco-editor")) ||
+          document.querySelector('dialog[open], [role="dialog"], [role="menu"], .tree-edit')) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setLookup(true);
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [active, blocked, checkout]);
   const [chatStore, { chats }] = useProjectChats(initial.project);
   const [selectedChat, setSelectedChat] = useMemory(checkout, "chat", "");
   const chatNavigation = useRef(0);
@@ -1174,10 +1191,12 @@ function ProjectView({
             {view === "Chats" && activity ? " · " + activity : ""}
           </Button>
         ))}
+        <Button disabled={blocked[checkout]} onClick={() => setLookup(true)}>Find file</Button>
         <span className="directory">
           Checkout: {initial.branch} · {checkout}
         </span>
       </nav>
+        {lookup && active && <FileLookup root={checkout} project={initial.project} onClose={() => setLookup(false)} />}
         <CheckoutView
           key={checkout}
           root={checkout}

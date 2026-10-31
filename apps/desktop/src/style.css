@@ -699,3 +699,7 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .file-tab { display: flex; flex-shrink: 0; }
 .file-tabs button { white-space: nowrap; }
 .file-tabs [aria-selected="true"] { background: #48405f; }
+
+.file-lookup { overflow-wrap: anywhere; }
+.file-lookup input { box-sizing: border-box; }
+.file-lookup button + button { margin-left: 8px; }

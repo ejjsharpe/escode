@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mkdtemp, writeFile, readFile, rm, realpath } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm, realpath, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -27,6 +27,9 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     ]);
   }
   execFileSync("git", ["-C", a, "worktree", "add", "-b", "other", worktree]);
+  await mkdir(join(a, "node_modules"));
+  await writeFile(join(a, "node_modules/known.txt"), "deliberately excluded");
+  await writeFile(join(a, "binary.txt"), Buffer.from([0, 1]));
   const app = await launchDesktop(join(dir, "user"));
   try {
     const page = await app.firstWindow();
@@ -43,6 +46,40 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("alpha draft");
     await page.getByRole("button", { name: "Hide Git-ignored files", exact: true }).click();
+    await page.locator(".monaco-editor:visible").click();
+    // Lookup selection and unsupported activation preserve the current dirty editor.
+    await page.keyboard.press("Meta+p");
+    const lookup = page.getByRole("dialog", { name: "Find file", exact: true });
+    const exactPath = lookup.getByLabel("Exact file path");
+    await expect(lookup).toContainText(a);
+    await exactPath.fill("binary.txt");
+    await page.screenshot({ path: "test-results/exact-lookup-popup.png" });
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
+    await page.keyboard.press("Enter");
+    await expect(lookup.getByRole("status")).toContainText("binary");
+    await expect(exactPath).toHaveValue("binary.txt");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".monaco-editor textarea:focus")).toHaveCount(1);
+    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await expect(exactPath).toHaveValue("");
+    await exactPath.fill(join(b, "a.txt"));
+    await page.keyboard.press("Enter");
+    await expect(lookup.getByRole("status")).toContainText("outside");
+    await exactPath.fill(join(a, "node_modules/known.txt"));
+    await lookup.getByRole("button", { name: "Open file", exact: true }).click();
+    await expect(lookup).toHaveCount(0);
+    await expect(page.locator(".monaco-editor:visible")).toContainText("deliberately excluded");
+    await expect(page.getByRole("tab", { name: "node_modules/known.txt", exact: true })).not.toHaveAccessibleDescription(/Preview/);
+    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await exactPath.fill("a.txt");
+    await page.keyboard.press("Enter");
+    await expect(lookup).toHaveCount(0);
+    await expect(page.locator(".monaco-editor:visible")).toContainText("alpha draft");
+    await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveCount(2);
+    await page.getByRole("button", { name: "Close node_modules/known.txt", exact: true }).click();
+    expect(await readFile(join(a, "a.txt"), "utf8")).toBe(a);
     await open(b);
     await expect(
       page.getByRole("button", { name: "Hide Git-ignored files", exact: true }),
@@ -103,6 +140,21 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await expect(page.getByLabel("Message Codex")).toHaveValue("original message draft");
+    await expect(page.getByLabel("Message Codex")).toBeEnabled();
+    await page.getByLabel("Message Codex").focus();
+    await page.keyboard.press("Meta+p");
+    await page.getByLabel("Exact file path").fill("a.txt");
+    await page.keyboard.press("Escape");
+    await expect(page.getByLabel("Message Codex")).toBeFocused();
+    await expect(page.getByLabel("Message Codex")).toHaveValue("original message draft");
+    await page.keyboard.press("Meta+p");
+    await expect(page.getByLabel("Exact file path")).toHaveValue("");
+    await page.getByLabel("Exact file path").fill("a.txt");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog", { name: "Find file", exact: true })).toHaveCount(0);
+    await expect(page.locator(".monaco-editor textarea:focus")).toHaveCount(1);
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
     await expect(page.getByLabel("Message Codex")).toHaveValue("original message draft");
     await open(worktree);
     await expect(page.locator(".view-nav:visible")).toContainText(worktree);
@@ -170,4 +222,70 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await app.close();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("cancelled and edited lookup invocations reject delayed validation and file activation", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-lookup-races-")));
+  const root = join(dir, "repo");
+  execFileSync("git", ["init", root]);
+  await writeFile(join(root, "a.txt"), "original editor");
+  await writeFile(join(root, "slow.txt"), "delayed lookup document");
+  const app = await launchDesktop(join(dir, "user"));
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(() => {
+      const events = process.getBuiltinModule("events"), emit = events.EventEmitter.prototype.emit;
+      events.EventEmitter.prototype.emit = function(event: string, ...args: any[]) {
+        if (event === "message" && typeof (this as any).send === "function" && !(this as any).lookupDelay) {
+          const socket = this as any, send = socket.send;
+          socket.lookupDelay = true;
+          socket.send = function(...values: any[]) {
+            const state = globalThis as any;
+            if (state.lookupNeedle && Buffer.from(values[0]).toString().includes(state.lookupNeedle)) {
+              state.lookupNeedle = undefined;
+              state.releaseLookup = () => send.apply(socket, values);
+            } else return send.apply(socket, values);
+          };
+        }
+        return emit.call(this, event, ...args);
+      };
+    });
+    await page.reload();
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, root);
+    await page.getByRole("button", { name: "Open project…", exact: true }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
+    for (const needle of ['"slow.txt"', "delayed lookup document"]) {
+      await app.evaluate((_electron, needle) => {
+        (globalThis as any).lookupNeedle = needle;
+        (globalThis as any).releaseLookup = undefined;
+      }, needle);
+      await page.getByRole("button", { name: "Find file", exact: true }).click();
+      await page.getByLabel("Exact file path").fill("slow.txt");
+      await page.keyboard.press("Enter");
+      await expect.poll(() => app.evaluate(() => typeof (globalThis as any).releaseLookup)).toBe("function");
+      if (needle.includes("slow.txt")) {
+        await page.getByLabel("Exact file path").fill("a.txt");
+        await app.evaluate(() => (globalThis as any).releaseLookup());
+        // Another host query is a response barrier for the released validation.
+        await page.evaluate(root => window.escode.lookupFile(root, "a.txt"), root);
+        await expect(page.getByLabel("Exact file path")).toHaveValue("a.txt");
+      }
+      await page.keyboard.press("Escape");
+      if (!needle.includes("slow.txt")) {
+        await app.evaluate(() => (globalThis as any).releaseLookup());
+        await page.evaluate(root => window.escode.lookupFile(root, "a.txt"), root);
+      }
+      await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
+      await expect(page.locator(".monaco-editor:visible")).toContainText("original editor");
+    }
+    await page.getByRole("button", { name: "Find file", exact: true }).click();
+    await page.getByLabel("Exact file path").fill("slow.txt");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog", { name: "Find file", exact: true })).toHaveCount(0);
+    await expect(page.locator(".monaco-editor:visible")).toContainText("delayed lookup document");
+    await expect(page.getByRole("tab", { name: "slow.txt", exact: true })).not.toHaveAccessibleDescription(/Preview/);
+    await page.screenshot({ path: "test-results/exact-lookup.png" });
+  } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }
 });

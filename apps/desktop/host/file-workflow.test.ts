@@ -1,5 +1,5 @@
 import { test, expect } from "vite-plus/test";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync, symlinkSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -68,5 +68,39 @@ test("collision consent shares the mutation gate and Keep Both preserves existin
     project.close();
     foundation.close();
     rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("exact lookup accepts deliberate excluded paths only in its approved checkout and bounds input", async () => {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "escode-exact-")));
+  const root = join(base, "repo");
+  execFileSync("git", ["init", root]);
+  mkdirSync(join(root, "node_modules"));
+  writeFileSync(join(root, "node_modules/known.txt"), "deliberate");
+  const project = await Checkout.open(root);
+  const foundation = FoundationState.open(join(base, "foundation"));
+  const files = createFileWorkflow({
+    userData: join(base, "user"), workspace: new Workspace(join(base, "workspace.json"), foundation.read()),
+    foundation, projects: new Map([[root, project]]),
+    projectSessions: new Map([[project.repositoryGit.repository(), {}]]), removing: new Set(),
+    checkout: async () => project, isQuitting: () => false,
+    clipboard: { read: async () => [] }, writeClipboard: async () => {},
+    showMessageBox: async () => ({ response: 0, checkboxChecked: false }),
+  });
+  try {
+    expect(await files.hostActions.lookupFile!(root, "node_modules/known.txt")).toBe("node_modules/known.txt");
+    expect(await files.hostActions.lookupFile!(root, join(root, "node_modules/known.txt"))).toBe("node_modules/known.txt");
+    for (const query of ["../repo/node_modules/known.txt", join(base, "outside"), "x".repeat(4097), "a\0b", ""]) {
+      await expect(files.hostActions.lookupFile!(root, query)).rejects.toThrow();
+    }
+    await expect(files.hostActions.lookupFile!(base, "known.txt")).rejects.toThrow("approve");
+    symlinkSync(join(root, "node_modules"), join(root, "linked"));
+    await expect(files.hostActions.lookupFile!(root, "linked/known.txt")).rejects.toThrow();
+    renameSync(root, root + "-old");
+    mkdirSync(root);
+    await expect(files.hostActions.lookupFile!(root, "node_modules/known.txt")).rejects.toThrow();
+
+  } finally {
+    files.clearImports(); project.close(); foundation.close(); rmSync(base, { recursive: true, force: true });
   }
 });

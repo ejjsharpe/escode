@@ -411,3 +411,27 @@ test("authenticated Trash validates selections and retains partial outcomes and 
     expect(calls).toBe(1);
   } finally { const done = closed(socket); socket.close(); await done; await host.close(); }
 });
+
+test("exact lookup bounds wire payloads before filesystem dispatch", async () => {
+  let calls = 0;
+  const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
+    list: async () => ({ kind: "denied", message: "unused" }),
+    lookupFile: async (_root, query) => { calls++; return query; },
+  });
+  try {
+    const socket = await connect(host.bootstrap().url);
+    for (const [id, payload] of [
+      ["1", { root: "/repo", query: 42 }],
+      ["2", { root: "/repo", query: "x".repeat(4097) }],
+      ["3", { root: "x".repeat(4097), query: "a.txt" }],
+      ["4", { root: "/repo", query: "a.txt" }],
+    ] as const) {
+      const response = new Promise<string>(resolve => socket.once("message", data => resolve(String(data))));
+      socket.send(JSON.stringify({ _tag: "Request", id, tag: "lookupFile", payload, headers: [] }));
+      const result = await response;
+      expect(result).toContain(id === "4" ? "a.txt" : "Failure");
+    }
+    expect(calls).toBe(1);
+    const done = closed(socket); socket.close(); await done;
+  } finally { await host.close(); }
+});

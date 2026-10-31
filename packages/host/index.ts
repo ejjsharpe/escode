@@ -57,6 +57,7 @@ export async function startHost(options: {
   transferAction?: (action: import("@escode/contracts").TransferAction) => Promise<typeof import("@escode/contracts").TransferResult.Type>;
   trashEntries?: (root: string, paths: readonly string[]) => Promise<typeof import("@escode/contracts").TrashBatch.Type>;
   readDiff?: (root: string, path: string, area: typeof import("@escode/contracts").DiffArea.Type) => Promise<typeof import("@escode/contracts").DiffComparison.Type>;
+  lookupFile?: (root: string, query: string) => Promise<string>;
   readFile?: (root: string, path: string) => Promise<typeof import("@escode/contracts").FileDocument.Type>;
   saveFile?: (root: string, path: string, text: string, version: string) => Promise<typeof import("@escode/contracts").FileSaveResult.Type>;
   loadWorkspace?: () => Promise<typeof import("@escode/contracts").WorkspaceLoad.Type>;
@@ -117,7 +118,7 @@ export async function startHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "listDirectory", "watchDirectories", "chatSummaries", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -183,6 +184,9 @@ export async function startHost(options: {
         }, catch: String }),
         readDiff: ({ root, path, area }) => Effect.tryPromise({ try: async () => {
           if (!options.readDiff) throw Error("Diffs unavailable"); return options.readDiff(root, path, area);
+        }, catch: String }),
+        lookupFile: ({ root, query }) => Effect.tryPromise({ try: async () => {
+          if (!options.lookupFile) throw Error("Files unavailable"); return options.lookupFile(root, query);
         }, catch: String }),
         readFile: ({ root, path }) => Effect.tryPromise({ try: async () => {
           if (!options.readFile) throw Error("Files unavailable"); return options.readFile(root, path);

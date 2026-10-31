@@ -53,7 +53,7 @@ A working directory of a project's repository, such as its original working copy
 A checkout with a project tab open in the current desktop window.
 
 **File lookup**:
-The accepted filename/path search within the active checkout tab, or exactly the open checkout tabs from Agents. Implementation follows the [navigation specification](docs/specifications/checkout-tabs-file-lookup.md).
+The accepted filename/path search within the active checkout tab, or exactly the open checkout tabs from Agents. Local Cmd+P and Find file now accept deliberate exact paths inside the active approved checkout, opening kept-open files through the shared opener. Recursive matching and Agents scope remain subsequent slices of the [navigation specification](docs/specifications/checkout-tabs-file-lookup.md).
 
 **Project picker**:
 The searchable all-saved-project selection always opened by Agents New chat, including No project and projects with closed editor tabs. Ordered-character project-name filtering, path disambiguation and cancellation are implemented. Validated client navigation state retains recent-use ordering and each project’s last-used editor checkout across editor closure and restart. Explicit project selection or editor use updates recency; background output does not. New drafts use the remembered checkout, retaining unavailable targets without fallback.

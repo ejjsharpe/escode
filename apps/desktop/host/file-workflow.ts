@@ -1,4 +1,4 @@
-import { join, resolve, dirname, basename, extname } from "node:path";
+import { relative, isAbsolute, join, resolve, dirname, basename, extname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, realpathSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,7 @@ import type { FoundationState } from "./foundation-state";
 type HostOptions = Parameters<typeof startHost>[0];
 type FileActions = Pick<
   HostOptions,
-  "createEntry" | "readDiff" | "readFile" | "saveFile" | "watch" | "list"
+  "lookupFile" | "createEntry" | "readDiff" | "readFile" | "saveFile" | "watch" | "list"
 >;
 
 export function createFileWorkflow({
@@ -752,6 +752,17 @@ export function createFileWorkflow({
       const result = await project.diff({ path, area });
       check();
       return result;
+    },
+    lookupFile: async (root, query) => {
+      if (typeof root !== "string" || root.length > 4096 || typeof query !== "string" ||
+          !query || query.length > 4096 || query.includes("\0") || query.split("/").includes(".."))
+        throw Error("Enter an exact file path of at most 4096 characters without traversal.");
+      const path = relative(root, resolve(root, query));
+      if (!path || isAbsolute(path) || path.startsWith("../")) throw Error("Path outside active checkout.");
+      const { project, check } = await fileContext(root, path);
+      await project.read(path);
+      check();
+      return path;
     },
     readFile: async (root, path) => {
       const { project } = await fileContext(root, path);

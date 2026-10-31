@@ -1,0 +1,11 @@
+# Exact file lookup
+
+Implements the local exact-path slice of issue 109 under the accepted checkout/search and file-tab contracts. Cmd+P and Find file invoke a blank modal in Files, Source Control and checkout Chats. Scope is announced as the exact checkout path. Enter or Open file validates and activates; arrow keys and typing do not navigate. Escape/Cancel restores originating focus. Composer text stays client owned and Enter cannot Send from the popup.
+
+The authenticated host endpoint canonicalizes relative/absolute paths only within the requested approved checkout, rejects traversal and revalidates retained native checkout identity. It uses existing no-follow file reading and app-state protections, including binary, UTF-8 and 2 MiB limits. Deliberately entered excluded paths are allowed. The shared opener keeps/reuses the file tab and buffer without replacing its disk baseline; successful activation selects Files and focuses the editor. Failed validation leaves the query and prior editor intact. Invocation generations guard both validation and shared-opener completion before tab activation.
+
+Root/query strings are limited to 4096 characters in the RPC schema and workflow before path processing. The popup allows one in-flight activation; normal authenticated transport frame and 16-request admission limits remain. No enumeration, index, history, watcher or retained result set is allocated. Closing or editing invalidates pending presentation work; an already dispatched bounded host read may finish. Recursive discovery/scoring belongs to issue 110 and Agents scope to issue 111.
+
+The pinned accepted file-tab dependency is b7a005b5891f59b277c861020dadbb53e68d97e1. Merge resolution combines fixed checkout identity, independent recovery and project defaults with shared preview/Keep Open opening and safe close. It preserves both workspace validation test sets and the parent specification's testing amendments.
+
+Verification uses the owning navigation/composer journey, a distinct delayed socket-response case in that same fixture, focused workflow authority checks, and authenticated wire-payload validation. Existing file-tab, close, recovery and project tests provide their own behavior matrices. Manual VoiceOver/sign-off and live provider turns are excluded by the accepted scope.

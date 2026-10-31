@@ -164,6 +164,7 @@ export const Files = RpcGroup.make(
   Rpc.make("createEntry", { payload: { command: CreateCommand }, success: CreateReceipt, error: Schema.String }),
   Rpc.make("createState", { success: Schema.String, error: Schema.String }),
   Rpc.make("trashEntries", { payload: { root: Schema.String, paths: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(10000)) }, success: TrashBatch, error: Schema.String }),
+  Rpc.make("lookupFile", { payload: { root: Schema.String.check(Schema.isMaxLength(4096)), query: Schema.String.check(Schema.isMaxLength(4096)) }, success: Schema.String, error: Schema.String }),
   Rpc.make("readFile", { payload: { root: Schema.String, path: Schema.String }, success: FileDocument, error: Schema.String }),
   Rpc.make("saveFile", { payload: { root: Schema.String, path: Schema.String, text: Schema.String, version: Schema.String }, success: FileSaveResult, error: Schema.String }),
   Rpc.make("loadWorkspace", { success: WorkspaceLoad, error: Schema.String }),

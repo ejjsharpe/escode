@@ -70,6 +70,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     transferAction: (action: import("@escode/contracts").TransferAction) => chatQuery(client => client.transferAction({ action }), true),
     trashEntries: (root: string, paths: readonly string[]) => chatQuery(client => client.trashEntries({ root, paths }), true),
     readDiff: (root: string, path: string, area: typeof import("@escode/contracts").DiffArea.Type) => chatQuery(client => client.readDiff({ root, path, area })),
+    lookupFile: (root: string, query: string) => chatQuery(client => client.lookupFile({ root, query })),
     readFile: (root: string, path: string) => chatQuery(client => client.readFile({ root, path })),
     saveFile: (root: string, path: string, text: string, version: string) => chatQuery(client => client.saveFile({ root, path, text, version })),
     loadWorkspace: () => chatQuery(client => client.loadWorkspace()),

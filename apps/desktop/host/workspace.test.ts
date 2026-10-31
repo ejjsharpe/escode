@@ -235,6 +235,9 @@ test("client project use validates exact paths and unique MRU entries without lo
       expect(await store.read()).toEqual(state);
     }
 
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 test("ordered file identities validate before replacing client recovery", async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-open-files-"));
   try {
