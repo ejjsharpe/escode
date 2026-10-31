@@ -143,7 +143,10 @@ test('lookup ranks and highlights unloaded files, file changes converge and acti
  await expect(page.locator('header')).toContainText('agents');
  await page.keyboard.press('Escape');
  // Close the remaining tabs, then keep the command reachable with an explicit empty scope.
- for(const button of await page.locator('.project-tab-close').all()) await button.click();
+ for(let remaining=await page.locator('.project-tab-close').count();remaining>0;remaining--) {
+   await page.locator('.project-tab-close').first().click();
+   await expect(page.locator('.project-tab-close')).toHaveCount(remaining-1);
+ }
  await page.getByRole('button',{name:'Find file',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Find file',exact:true})).toContainText('No open checkouts');
  await page.keyboard.press('Escape');
