@@ -361,9 +361,13 @@ test("authenticated restoration replaces saved files only in an exact isolated w
   const identity = await stat(root);
   const chat = await store.createDraft(source, root);
   await store.update(source, chat.id, { threadId: "provider", phase: "bound", directoryIdentity: { path: root, dev: identity.dev, ino: identity.ino }, worktree: { ref: "isolated", commit: git("rev-parse", "HEAD").trim(), source, reservation: { root, branch: "isolated", commit: git("rev-parse", "HEAD").trim(), dev: identity.dev, ino: identity.ino } } });
+  await mkdir(join(root, "to-directory", "nested"), { recursive: true }); await writeFile(join(root, "to-directory", "nested", "leaf"), "historical leaf");
+  await writeFile(join(root, "to-file"), "historical file");
   await writeFile(join(root, "a.txt"), "captured"); await writeFile(join(root, "old.txt"), "captured untracked");
   await store.database.command("checkpoint", { body: { id: "restore-point", chatId: chat.id, kind: "after-turn", availability: "unavailable", completion: "pending", threadId: "provider", checkout: root, commandId: null } });
   await captureTurnCheckpoint(store.database, await store.get(source, chat.id), "provider", undefined, { id: "restore-point", turnId: "turn", completion: "completed", createdAt: Date.now() });
+  await rm(join(root, "to-directory"), { recursive: true }); await writeFile(join(root, "to-directory"), "new file");
+  await rm(join(root, "to-file")); await mkdir(join(root, "to-file")); await writeFile(join(root, "to-file", "leaf"), "new leaf");
   await writeFile(join(root, "a.txt"), "today"); await writeFile(join(root, "new.txt"), "new eligible");
   const index = await readFile(join(source, ".git", "worktrees", "isolated", "index"));
   const workspace = new Workspace(join(dir, "workspace"), await store.database.ready, store.database);
@@ -371,7 +375,7 @@ test("authenticated restoration replaces saved files only in an exact isolated w
   let forks = 0;
   const service = new ChatService(store, async () => ({ async request(method) {
     if (method === "thread/turns/list") return { data: [{ id: "turn", items: [] }], nextCursor: null };
-    if (method === "thread/fork") { forks++; if (failFiles) await mkdir(join(root, "a.txt", "collision"), { recursive: true }); return { thread: { id: "historical" } }; }
+    if (method === "thread/fork") { forks++; if (failFiles) { await mkdir(join(root, "a.txt", "collision"), { recursive: true }); await writeFile(join(root, "a.txt", "collision", ".git"), "excluded"); } return { thread: { id: "historical" } }; }
     throw Error("Unexpected provider effect");
   }, respond() {}, close() {} }));
   const original = globalThis.WebSocket;
@@ -392,6 +396,21 @@ test("authenticated restoration replaces saved files only in an exact isolated w
     await store.update(source, originalChat.id, { threadId: "provider", directoryIdentity: { path: source, dev: sourceIdentity.dev, ino: sourceIdentity.ino } });
     await store.database.command("checkpoint", { body: { ...captured, id: "original-point", chatId: originalChat.id, checkout: source, directoryIdentity: { path: source, dev: sourceIdentity.dev, ino: sourceIdentity.ino } } });
     expect((await client.rewind(source, originalChat.id, "original-point", null, null, true)).message).toContain("original checkouts");
+    await writeFile(join(source, ".git", "info", "exclude"), "to-file/protected\n");
+    const { symlink } = await import("node:fs/promises");
+    for (const collision of ["ignored", "symlink", "nested"]) {
+      const protectedPath = join(root, "to-file", collision === "nested" ? ".git" : "protected");
+      if (collision === "symlink") await symlink(join(source, "a.txt"), protectedPath);
+      else await writeFile(protectedPath, "excluded bytes");
+      expect((await client.rewind(source, chat.id, "restore-point", null, null, true)).status).toBe("unavailable");
+      expect(await readFile(join(root, "to-file", "leaf"), "utf8")).toBe("new leaf");
+      expect(forks).toBe(0);
+      await rm(protectedPath);
+    }
+    const cancelled = await client.rewind(source, chat.id, "restore-point", null, null, true);
+    expect(cancelled.status).toBe("ready");
+    expect(await readFile(join(root, "to-file", "leaf"), "utf8")).toBe("new leaf");
+    expect(forks).toBe(0);
     const savedChat = await store.get(source, chat.id);
     await store.update(source, chat.id, { worktree: undefined });
     expect((await client.rewind(source, chat.id, "restore-point", null, null, true)).status).toBe("ready");
@@ -406,6 +425,8 @@ test("authenticated restoration replaces saved files only in an exact isolated w
     const result = await client.rewind(source, chat.id, "restore-point", choice.token, "restore-command", true);
     expect(result.status).toBe("applied");
     expect(await readFile(join(root, "a.txt"), "utf8")).toBe("captured");
+    expect(await readFile(join(root, "to-directory", "nested", "leaf"), "utf8")).toBe("historical leaf");
+    expect(await readFile(join(root, "to-file"), "utf8")).toBe("historical file");
     expect(await readFile(join(root, "old.txt"), "utf8")).toBe("captured untracked");
     await expect(readFile(join(root, "new.txt"))).rejects.toThrow();
     expect(await readFile(join(source, ".git", "worktrees", "isolated", "index"))).toEqual(index);

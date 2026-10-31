@@ -1,0 +1,24 @@
+$ node scripts/filesystem.mjs && vp test run host/durable-send.test.ts "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-26c8d57f/apps/desktop
+
+ ❯ host/durable-send.test.ts (6 tests | 1 failed) 12650ms
+   × complete worker loss fails admission closed but permits captured emergency Stop 45ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/durable-send.test.ts > complete worker loss fails admission closed but permits captured emergency Stop
+Error: Stop receipt persistence failed. Emergency Stop is available for the captured target. Error: SQLite worker exited (1); storage unavailable
+ ❯ DurableSend.execute host/durable-send.ts:36:15
+
+ ❯ host/durable-send.test.ts:392:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  14:33:09
+   Duration  13.10s (tests 98%, import 2%)
+
+error: script "test" exited with code 1

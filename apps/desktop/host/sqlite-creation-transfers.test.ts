@@ -115,6 +115,15 @@ test("authenticated creation and duplicate retain outcomes, failures and copied 
     await client.ackFileOperation(root);
     fault = new DatabaseSync(join(base, "db/state.sqlite"));
     fault.exec("CREATE TRIGGER deny_result BEFORE INSERT ON client_recovery WHEN NEW.kind='fileCommands' AND json_extract(NEW.body,'$[#-1].result') IS NOT NULL BEGIN SELECT RAISE(ABORT,'result unavailable'); END");
+    const lostTransfer = { ...transfer, commandId: "lost-transfer" };
+    await expect(client.transferAction(lostTransfer)).rejects.toThrow("result unavailable");
+    fault.exec("DROP TRIGGER deny_result");
+    const uncertainTransfer = await client.transferAction(lostTransfer);
+    expect(uncertainTransfer).toMatchObject({ uncertain: true, results: [] });
+    expect(await client.transferAction(lostTransfer)).toEqual(uncertainTransfer);
+    await current.files.recover();
+    await client.ackFileOperation(root);
+    fault.exec("CREATE TRIGGER deny_result BEFORE INSERT ON client_recovery WHEN NEW.kind='fileCommands' AND json_extract(NEW.body,'$[#-1].result') IS NOT NULL BEGIN SELECT RAISE(ABORT,'result unavailable'); END");
     const lost = { ...command, commandId: "lost", name: "lost.txt" };
     await expect(client.createEntry(lost)).rejects.toThrow("result unavailable");
     expect(readFileSync(join(root, "lost.txt"), "utf8")).toBe("");

@@ -197,10 +197,12 @@ class ProjectChats {
   async stop(id: string) {
     const target = this.state.snapshots[id]?.controlTarget;
     try {
-      await window.escode.chat("stop", this.project, id, target);
-    } catch (e) {
-      if (target && String(e).includes("Emergency Stop is available"))
+      const result = await window.escode.chat("stop", this.project, id, target);
+      if (result?.reason === "emergency-stop-available" && target) {
         this.update({ emergencyTargets: { ...this.state.emergencyTargets, [id]: target } });
+        throw Error(result.message);
+      }
+    } catch (e) {
       this.report(id, e);
     } finally {
       void this.refresh();

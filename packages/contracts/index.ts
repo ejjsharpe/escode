@@ -94,7 +94,7 @@ export const SendCommand = Schema.Struct({
   expected: Schema.String, text: Schema.String.check(Schema.isMaxLength(100000)),
 });
 export type SendCommand = typeof SendCommand.Type;
-export const SendReceipt = Schema.Struct({ hostId: Schema.String, clientId: Schema.String, command: SendCommand,
+export const SendReceipt = Schema.Struct({ reason: Schema.optionalKey(Schema.Literal("emergency-stop-available")), hostId: Schema.String, clientId: Schema.String, command: SendCommand,
   status: Schema.Literals(["admitted", "dispatching", "accepted", "uncertain", "rejected"]),
   message: Schema.String,
 });
@@ -173,7 +173,7 @@ export const TransferAction = Schema.Union([
 export type TransferAction = typeof TransferAction.Type;
 export const TransferResult = Schema.Union([Schema.String, Schema.Struct({
   results: TrashBatch.fields.results, open: Schema.Array(Schema.String),
-  requiresAck: Schema.Boolean, message: Schema.String,
+  requiresAck: Schema.Boolean, message: Schema.String, uncertain: Schema.optionalKey(Schema.Boolean),
 })]);
 export const DiffComparison = Schema.Struct({ original: Schema.String, modified: Schema.String });
 export const DiffArea = Schema.Literals(["staged", "unstaged", "untracked"]);

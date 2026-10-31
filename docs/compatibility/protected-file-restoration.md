@@ -12,9 +12,9 @@ Preparation captures the selected snapshot, current eligible paths, exact direct
 identity and provider boundary/history. Confirmation rechecks that choice and
 requires an exact isolated linked worktree, matching Git root, branch/HEAD and
 source repository. App-managed reservations additionally retain their exact branch. Original checkouts, No project, shared worktrees, unavailable
-snapshots/bases, linked parents, nested repositories and path/type collisions are
-refused rather than redirected or reconstructed. This conservative collision
-refusal includes file/directory transitions requiring directory removal.
+snapshots/bases, linked parents, nested repositories and excluded-content collisions are
+refused rather than redirected or reconstructed. Covered file/directory
+transitions are applied in dependency order (see the R2 review response).
 
 Confirmation explicitly retains available unsaved text and loaded conflict
 baselines. It replaces saved edits and can remove newer eligible untracked files.

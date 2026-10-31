@@ -365,7 +365,7 @@ export function createFileWorkflow({
       mutationOrigin = undefined;
     }
   };
-  async function transferAction(action: import("@escode/contracts").TransferAction) {
+  async function transferAction(action: import("@escode/contracts").TransferAction): Promise<typeof import("@escode/contracts").TransferResult.Type> {
     const { root, operation, paths } = action;
     const project = await approvedFiles(root);
     const identity = project.repositoryGit.repository();
@@ -893,7 +893,7 @@ export function createFileWorkflow({
   };
   return {
     hostActions: { ...actions, transferAction: async (action: import("@escode/contracts").TransferAction) => action.operation === "transfer"
-      ? commands.run({ ...action, checkoutIdentity: (await approvedFiles(action.root)).checkoutIdentity() }, { results: [], open: [], requiresAck: false, message: "Transfer outcome uncertain; inspect exact targets. Transfer was not repeated." }, () => transferAction(action))
+      ? commands.run({ ...action, checkoutIdentity: (await approvedFiles(action.root)).checkoutIdentity() }, { results: [], open: [], requiresAck: false, uncertain: true, message: "Transfer outcome uncertain; inspect exact targets. Transfer was not repeated." }, () => transferAction(action))
       : transferAction(action), trashEntries, moveEntry, ackFileOperation },
     captureNativeImport,
     captureNativeClipboard,

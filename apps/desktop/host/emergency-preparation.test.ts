@@ -46,7 +46,7 @@ test("emergency Stop cancels captured preparation with all receipt writes failin
     const stop = { ...send, commandId: "stop", text: "", control: { operation: "stop" as const, target: service.snapshot(null, chat.id).controlTarget!, token: "", answer: null } };
     fault.exec("CREATE TRIGGER fail_insert BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
     fault.exec("CREATE TRIGGER fail_update BEFORE UPDATE ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
-    await expect(client.sendMessage(stop)).rejects.toThrow("Emergency Stop is available");
+    expect((await client.sendMessage(stop)).reason).toBe("emergency-stop-available");
     await expect(client.sendMessage({ ...send, commandId: "unrecorded-send" })).rejects.toThrow();
     const result = await client.sendMessage({ ...stop, commandId: "emergency", control: { ...stop.control, emergency: true } });
     expect(result.status).toBe("uncertain");

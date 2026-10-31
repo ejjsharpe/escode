@@ -1,7 +1,7 @@
 import { validateCheckpointFiles } from "./checkpoint-files";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { lstat, realpath, mkdir, writeFile, rename, unlink, symlink } from "node:fs/promises";
+import { lstat, realpath, mkdir, writeFile, rename, unlink, symlink, readdir, rmdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Chats, SavedChat } from "./chat";
@@ -30,36 +30,67 @@ export async function prepareRestoration(store: Chats, chat: Readonly<SavedChat>
   };
   await authority();
   validateCheckpointFiles(point.files);
-  const current = (await git("ls-files", "--cached", "--others", "--exclude-standard", "-z")).split("\0").filter(Boolean);
+  const current = (await git("ls-files", "--cached", "--others", "--exclude-standard", "-z")).split("\0").filter(p => p && !p.endsWith("/"));
   const paths = [...new Set([...current, ...Object.keys(point.files)])].sort();
   if (paths.length > 10000) throw Error("Restoration file capacity exhausted");
-  const checkPath = async (path: string) => {
+  const savedFile = (path: string) => Object.hasOwn(point.files, path) ? point.files[path] : null;
+  const deletions = new Set(paths.filter(path => !savedFile(path)));
+  const directories = new Set<string>();
+  const coveredDirectory = async (path: string): Promise<void> => {
+    for (const entry of await readdir(join(chat.checkout, path), { withFileTypes: true })) {
+      const child = path + "/" + entry.name;
+      if (entry.name === ".git") throw Error("Nested repository restoration unavailable");
+      if (entry.isDirectory()) await coveredDirectory(child);
+      else if (!deletions.has(child)) throw Error("Excluded restoration contents");
+    }
+    directories.add(path);
+  };
+  const checkPath = async (path: string, planning = false) => {
     if (!path || path.startsWith("/") || path.split("/").some(p => !p || p === "." || p === ".." || p === ".git")) throw Error("Invalid restoration path");
     let parent = dirname(path);
     while (parent !== ".") {
       const absolute = join(chat.checkout, parent);
       try {
         if ((await lstat(absolute)).isSymbolicLink()) throw Error("Linked restoration parent");
+        if ((await lstat(absolute)).isFile() && deletions.has(parent)) {
+          if (planning || !savedFile(path)) return;
+        }
         if (await realpath(absolute) !== absolute || !(await lstat(absolute)).isDirectory()) throw Error("Linked restoration parent");
         try { await lstat(join(absolute, ".git")); throw Error("Nested repository restoration unavailable"); }
         catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-      } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      } catch (error) { if (!["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error; }
       parent = dirname(parent);
     }
-    try { const info = await lstat(join(chat.checkout, path)); if (!info.isFile() && !info.isSymbolicLink()) throw Error("Restoration path collision"); }
+    try {
+      const info = await lstat(join(chat.checkout, path));
+      if (info.isDirectory()) {
+        if (planning && savedFile(path)) await coveredDirectory(path);
+        else if (savedFile(path)) throw Error("Restoration path collision");
+      } else if (!info.isFile() && !info.isSymbolicLink()) throw Error("Restoration path collision");
+    }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   };
-  for (const path of paths) await checkPath(path);
+  for (const path of paths) await checkPath(path, true);
   return { captured: JSON.stringify([point, paths, capturedGit]), async validate() { await validate(); await authority(); }, async apply() {
     await validate();
     await authority();
-    for (const path of paths) {
+    for (const path of paths) await checkPath(path, true);
+    for (const path of [...deletions].sort((a, b) => b.length - a.length)) {
+      await validate(); await authority(); await checkPath(path);
+      try {
+        if (!(await lstat(join(chat.checkout, path))).isDirectory()) await unlink(join(chat.checkout, path));
+      } catch (error) { if (!["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error; }
+    }
+    for (const path of [...directories].sort((a, b) => b.length - a.length)) {
+      await validate(); await authority();
+      // Only empty directories: excluded bytes are never recursively removed.
+      await rmdir(join(chat.checkout, path));
+    }
+    for (const path of paths.filter(path => savedFile(path))) {
       await validate(); await checkPath(path);
       const file = join(chat.checkout, path);
       const saved = (Object.hasOwn(point.files, path) ? point.files[path] : null) as { content: string; mode: number } | null | undefined;
-      if (!saved) {
-        try { await unlink(file); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-      } else {
+      if (saved) {
         await mkdir(dirname(file), { recursive: true });
         await checkPath(path);
         const temporary = join(dirname(file), `.escode-restore-${randomUUID()}`);

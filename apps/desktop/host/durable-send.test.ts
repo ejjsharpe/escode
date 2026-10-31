@@ -389,7 +389,7 @@ test("complete worker loss fails admission closed but permits captured emergency
     await db.close();
     let effects = 0;
     const command = { commandId: "stop", admissionEpoch: sends.admissionEpoch, project: null, id: "chat", expected: "state", text: "", control: { operation: "stop" as const, target: "captured-turn", token: "token", answer: "" } };
-    await expect(sends.execute(command, async () => { effects++; })).rejects.toThrow("Emergency Stop");
+    expect((await sends.execute(command, async () => { effects++; })).reason).toBe("emergency-stop-available");
     expect(effects).toBe(0);
     expect((await sends.execute({ ...command, control: { ...command.control, emergency: true } }, async () => { effects++; })).status).toBe("uncertain");
     expect(effects).toBe(1);

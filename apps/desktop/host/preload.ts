@@ -65,6 +65,7 @@ async function control(operation: "stop" | "answer" | "emergencyStop", project: 
   catch (error) { if (operation !== "stop") throw error; } // Stop still reaches host emergency admission on storage failure.
   const receipt = saved ? (await hostClient.sendStatus(command.commandId) ?? await hostClient.sendMessage(command)) : await hostClient.sendMessage(command);
   if (!receipt) throw Error("Control outcome unavailable; command identity retained. Refresh to inspect current work.");
+  if (receipt.reason === "emergency-stop-available") return { reason: receipt.reason, message: receipt.message };
   if (receipt.status !== "accepted") throw Error(`${operation} ${receipt.status}: ${receipt.message}`);
   localStorage.removeItem(key);
   try { await flushChatStorage(); }
@@ -77,7 +78,7 @@ async function transfer(root: string, kind: "paste" | "duplicate" | "drag-move" 
   const execute = async (action: import("@escode/contracts").TransferAction) => {
     localStorage.setItem(key, JSON.stringify(action));
     const result = await hostClient.transferAction(action);
-    if (typeof result !== "string" && !result.message.toLowerCase().includes("uncertain") && !result.results.some(r => r.persistencePending)) localStorage.removeItem(key);
+    if (typeof result !== "string" && !result.uncertain && !result.results.some(r => r.persistencePending)) localStorage.removeItem(key);
     return result;
   };
   if (saved) return execute(JSON.parse(saved));

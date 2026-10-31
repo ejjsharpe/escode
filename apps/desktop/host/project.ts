@@ -746,6 +746,7 @@ export interface ProjectBridge {
   ): Promise<{
     results: (import("./file-operations").OperationResult & { source: string })[];
     open: string[];
+    uncertain?: boolean;
     requiresAck: boolean;
     message: string;
   }>;

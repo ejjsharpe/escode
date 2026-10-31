@@ -31,7 +31,7 @@ export interface ChatBridge {
   (operation: "open", project: string | null, id: string): Promise<ChatSnapshot>;
   (operation: "send", project: string | null, id: string, text: string): Promise<string>;
   (operation: "draft", project: string | null, id: string, text: string): Promise<void>;
-  (operation: "stop" | "emergencyStop", project: string | null, id: string, target?: string): Promise<void>;
+  (operation: "stop" | "emergencyStop", project: string | null, id: string, target?: string): Promise<void | { reason: "emergency-stop-available"; message: string }>;
   (operation: "disconnect" | "resolveSend", project: string | null, id: string): Promise<void>;
   (
     operation: "answer",
