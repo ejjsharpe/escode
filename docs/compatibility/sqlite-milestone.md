@@ -163,3 +163,43 @@ additional valid 64 KiB recovery records: Send 384.800/383.385 ms, ordinary Stop
 120.332/114.862 ms, emergency Stop 45.779/31.071 ms. An overlapping earlier test
 launch during package replacement failed ENOENT; it is excluded from pass evidence.
 The final serialized build/package/test run succeeded.
+
+## Remaining worker-loss gate (2026-10-31)
+
+Isolated branch `t3/127-worker-stop`, worktree
+`/Users/elliotsharpe/.t3/worktrees/escode/t3-7e02e0ca`, starts at exact integration
+`973d3305b50abcb356632f192b27b9fafc2e1f9a`, preserving `0a9c981`.
+The integration tip was merged before reporting (already up to date).
+
+The earlier direct DurableSend worker-loss evidence did not qualify combined-app
+authorization. The packaged app now qualifies that remaining boundary: terminate
+the real worker during captured live work, fail ordinary Stop admission, explicitly
+request emergency cancellation with retained validated live authority, and reject
+an actual superseding provider turn without cancellation of that newer turn.
+Unrecorded Send/approval and wrong-project requests are rejected through the same
+authenticated renderer/host path. See emergency-stop.md for behavior and failed-run
+history. No authentication bypass or general mutation exception was introduced.
+
+Executed final checks:
+
+- Host suite: 330 passed, six skipped, 41 files, 66.45 s.
+- Targeted `host/lookup.test.ts`: 5/5 passed, 6.31 s. Merger's line-106 watcher
+  timeout was not reproduced; no lookup code or timeout was changed. Existing
+  intermittency is not asserted fixed or a regression from this change.
+- Typecheck, lint, build and unsigned arm64 package passed; frozen dependencies
+  installed without lockfile changes. Diff whitespace check passed.
+- Combined packaged emergency/worker-loss, restart and SQLite qualification:
+  7/7 passed, 15.8 s. An earlier run had 3 passes and one baseline ordinary Stop
+  timeout before fault injection; the unchanged final rerun passed all cases.
+- Packaged readback: WAL, synchronous NORMAL (1), checkpoint_fullfsync=1.
+  100 x 4 KiB recovery writes: median 0.147042 ms, p95 0.284167 ms,
+  max 3.833167 ms; database/WAL/SHM 77,928 to 514,648 bytes.
+- Packaged baseline/follow-up edit 148.003/40.266 ms, Save 358.004/254.705 ms;
+  Send 881.393/381.842 ms, Stop 123.805/117.859 ms, emergency 52.181/32.036 ms.
+  These bounded automation measurements are not speedup claims.
+
+No exact remaining worker-loss acceptance gap was found. Parent acceptance still
+owns #127 closure and #128 gating; neither issue was changed. Prior real ENOSPC
+and read-only installed-provider qualification is preserved, not rerun. Physical
+power loss, exhaustive capacity/multi-client, new manual accessibility and
+historical implementation remain outside this qualification.

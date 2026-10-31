@@ -36,6 +36,7 @@ export class DurableState {
       this.worker.postMessage({ id, operation, ...fields });
     });
   }
+  get unavailable() { return !!this.failure; }
   read(): Promise<{ chats: SavedChat[]; revision: number }> { return this.request("read"); }
   write(chats: SavedChat[], revision: number): Promise<void> { return this.request("write", { chats, revision }); }
   recoveryRead(clientId: string, kind: "workspace" | "intent" | "fileCommands" | "fileFacts" | "approvals"): Promise<{ body: unknown; revision: number }> { return this.request("recoveryRead", { clientId, kind }); }

@@ -83,3 +83,33 @@ an asserted product defect or an asserted fix.
 Environment: installed Bun 1.3.14 rejects this repository's lockfile version 2.
 Build/checks reused the integration checkout's installed dependencies via local
 node_modules symlinks; no lockfile or dependency changes were made.
+
+## Complete storage-worker loss (2026-10-31, #127)
+
+Branch `t3/127-worker-stop` starts at isolated integration `973d330`, preserving
+`0a9c981`. The packaged regression terminates the actual SQLite Worker through
+its native `terminate()` during captured live provider work. It first demonstrated
+that command-state storage reads prevented the Emergency Stop offer. The host now
+retains previously validated project/chat authority for its existing live session
+only when the worker has failed. Command-state lookup tolerates worker exit during
+that lookup; ordinary Stop then fails durable admission and offers explicit
+Emergency Stop. Cancellation rechecks the exact current session and captured
+turn/preparation target without a storage read or write. Healthy-store authority
+checks and authenticated transport remain in place. Send and approval still fail
+closed; this grants no general mutation authority and survives no host restart.
+
+Executed packaged cases prove one cancellation after worker loss, reject a target
+superseded by an actual provider turn notification, and block unrecorded Send,
+approval and wrong-project requests. Existing authenticated control tests supply
+live approval, invalid authentication, duplicate/epoch and preparation coverage.
+The deterministic provider counts effects; no live model turn was consumed.
+
+The final combined package run passed 7/7 (15.8 s): four emergency cases, SQLite
+identity restart, packaged worker readback and editing/Save measurement. Initial
+harness attempts waited for an untriggered worker request and stalled; cleanup
+was changed to explicit app exit for worker-loss cases with retrying temporary
+removal. A subsequent assertion hit multiple alert elements; it now selects the
+specific cancellation or stale-target disclosure. One combined run failed before
+fault injection waiting for ordinary Stop (only `turn` observed); unchanged final
+rerun passed. This intermittent baseline failure remains disclosed, not diagnosed
+or hidden by retries/timeouts. No timeout was increased.

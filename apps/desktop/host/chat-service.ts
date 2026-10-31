@@ -742,8 +742,15 @@ export class ChatService {
     }
     return this.snapshot(project, id);
   }
+  liveStopTarget(project: string | null, id: string) {
+    const s = this.sessions.get(id);
+    if (!s || s.project !== project || !(s.preparation || s.connection.status === "connected" && s.turn.phase !== "idle" && s.turn.id))
+      throw Error("No interruptible active work.");
+    return this.snapshot(project, id).controlTarget;
+  }
   async stop(project: string | null, id: string, target?: string) {
-    await this.store.get(project, id);
+    if (!this.store.database.unavailable) await this.store.get(project, id);
+    else this.liveStopTarget(project, id);
     const s = this.session(project, id, false);
     if (target !== undefined && target !== this.snapshot(project, id).controlTarget) throw Object.assign(Error("Stale Stop target."), { rejected: true });
     if (s.preparation) { s.preparation.cancelled = true; s.error = "Preparation cancelled; reserved resources retained and may be partially prepared."; return; }
