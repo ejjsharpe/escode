@@ -46,7 +46,7 @@ export interface ChatBridge {
     answer: unknown,
   ): Promise<void>;
 }
-function ModelControls({ project, id, onSaving }: { project: string | null; id: string; onSaving: (saving: boolean) => void }) {
+function ModelControls({ project, id, onSaving, existingError }: { project: string | null; id: string; onSaving: (saving: boolean) => void; existingError?: string | null }) {
   const [permissions, setPermissions] = useState<import("@escode/contracts").PermissionChoices | null>(null);
   const [catalog, setCatalog] = useState<import("@escode/contracts").ModelChoices | null>(null);
   const [error, setError] = useState("");
@@ -81,7 +81,7 @@ function ModelControls({ project, id, onSaving }: { project: string | null; id: 
       catch (e) { setError(String(e)); } finally { setSaving(false); onSaving(false); }
     }}><option value="" disabled>{permissions?.blocked ? "Custom / managed Codex policy" : "Inherited Codex policy"}</option><option value="supervised">Supervised</option><option value="edits">Auto-accept edits</option><option value="full">Full access</option></select></label>
     {permissions?.message && <span role="status">{permissions.message}</span>}
-    {error && <span role="alert">{error}</span>}
+    {error && !existingError && <span role="alert">{error}</span>}
   </div>;
 }
 function Request({

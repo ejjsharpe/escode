@@ -58,7 +58,7 @@ export type ChatEnvironment = {
   managedRoot: string;
 };
 const permissionPolicy = (choice: SavedChat["nextPermission"]) => {
-  if (!choice) return {};
+  if (choice === undefined) return {};
   if (!["supervised", "edits", "full"].includes(choice)) throw Error("Unsupported permission choice");
   return { approvalPolicy: choice === "full" ? "never" : "on-request", approvalsReviewer: "user",
     sandboxPolicy: choice === "full" ? { type: "dangerFullAccess" } : choice === "supervised"
@@ -73,7 +73,7 @@ export class ChatService {
     try {
       const config = await rpc.request("config/read", { includeLayers: false }) as { config?: Record<string, unknown> };
       const requirements = await rpc.request("configRequirements/read", {}) as { requirements?: unknown };
-      if (!config.config || !("requirements" in requirements)) throw Error("Permission capabilities unavailable");
+      if (!config.config || typeof config.config !== "object" || Array.isArray(config.config) || !("requirements" in requirements)) throw Error("Permission capabilities unavailable");
       const c = config.config;
       // Custom profiles, roots and managed policy require resolution in Codex configuration first.
       const effective = this.sessions.get(id)?.settings as { sandbox?: Record<string, unknown>; approval?: unknown } | undefined;
@@ -83,7 +83,8 @@ export class ChatService {
         Object.keys(sandbox).some(key => !["type", "networkAccess", "writableRoots", "excludeTmpdirEnvVar", "excludeSlashTmp"].includes(key)) ||
         (Array.isArray(sandbox.writableRoots) && sandbox.writableRoots.length > 0) ||
         (effective?.approval != null && !["on-request", "never"].includes(effective.approval as string)));
-      const blocked = !!customSession || requirements.requirements != null || ["permissions", "default_permissions", "sandbox_workspace_write", "network"].some(k => c[k] != null)
+      const blocked = !!customSession || requirements.requirements != null ||
+        (c.sandbox_mode != null && !["read-only", "workspace-write", "danger-full-access"].includes(c.sandbox_mode as string)) || ["permissions", "default_permissions", "sandbox_workspace_write", "network"].some(k => c[k] != null)
         || (c.approval_policy != null && !["on-request", "never"].includes(c.approval_policy as string));
       const message = blocked ? "Custom or managed Codex policy retained. Resolve it in Codex configuration before choosing a preset." : "";
       if (choice !== undefined) {

@@ -59,3 +59,12 @@ filesystem/network enforcement or saved-provider resume qualification is claimed
 Older Codex versions are not qualified for these new controls; unsupported effective
 responses are rejected. Configuration can change externally between inspection and
 provider execution; provider managed enforcement remains authoritative.
+
+## Integration handoff
+
+Merged integration `8ab8812` into this isolated implementation branch. Reconciled
+model-control diagnostic suppression with permissions rather than dropping either
+behavior. Post-merge typecheck/build, both Electron settings scenarios and the five
+focused host suites passed. The initial post-merge typecheck caught the missing
+`existingError` prop in the manually reconciled controls; it was restored before
+these passing checks. No integration ref or root-checkout files were changed.
