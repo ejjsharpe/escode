@@ -1,3 +1,4 @@
+import { checkpointLoad } from "./checkpoint-load";
 import { DatabaseSync } from "node:sqlite";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
@@ -39,6 +40,7 @@ createInterface({input:process.stdin}).on('line',line=>{
   }
   const app = await launchDesktop(user, tools, true);
   let fault: DatabaseSync | undefined;
+  const stopLoad = await checkpointLoad(user);
   try {
     const page = await app.firstWindow();
     await page.getByRole("button", { name: "Start without a project", exact: true }).click();
@@ -106,6 +108,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\nstop\n");
     console.log("#127 visible Send/emergency control ms", JSON.stringify({ phase, sendMs, stopMs, controlMs: performance.now() - controlStart }));
   } finally {
+    await stopLoad();
     fault?.close();
     await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); });
     if (phase.startsWith("worker-loss")) await app.evaluate(({ app }) => app.exit(0)).catch(() => {});

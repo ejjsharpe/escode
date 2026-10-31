@@ -126,13 +126,20 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
           }
         }
         db.exec('COMMIT');
+        // Free database pages remain reusable; truncate only the WAL, without waiting for readers.
+        db.exec('PRAGMA busy_timeout=0');
+        try { db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get(); }
+        finally { db.exec('PRAGMA busy_timeout=3000'); }
       } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
     } else if (operation === 'rewindRead') {
       const row = db.prepare('SELECT body FROM rewinds WHERE id=?').get(commandId);
       value = row ? JSON.parse(row.body) : null;
     } else if (operation === 'rewindWrite') {
       if (db.prepare('SELECT count(*) AS n FROM rewinds').get().n >= 1000 && !db.prepare('SELECT id FROM rewinds WHERE id=?').get(commandId)) throw Error('Rewind capacity exhausted');
-      db.prepare('INSERT INTO rewinds VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET body=excluded.body').run(commandId, JSON.stringify(body));
+      const encoded = JSON.stringify(body);
+      const used = db.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))),0) AS n FROM rewinds WHERE id<>?').get(commandId).n;
+      if (used + Buffer.byteLength(encoded) > 67108864) throw Error('Retained branch storage capacity exhausted');
+      db.prepare('INSERT INTO rewinds VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET body=excluded.body').run(commandId, encoded);
     } else if (operation === 'checkpointPoints') {
       const offset = Number(body.cursor ?? 0);
       if (!Number.isSafeInteger(offset) || offset < 0) throw Error('Invalid checkpoint cursor');
@@ -160,7 +167,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
       }
       db.prepare('INSERT INTO checkpoint_activity VALUES (?, ?) ON CONFLICT(chatId) DO UPDATE SET touched=max(touched,excluded.touched)').run(body.chatId, body.createdAt ?? Date.now());
       const encoded = JSON.stringify(body);
-      const used = db.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))),0) AS n FROM checkpoints').get().n;
+      const used = db.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))),0) AS n FROM checkpoints WHERE id<>?').get(body.id).n;
       if (used + Buffer.byteLength(encoded) > (body.availability === 'available' ? 50331648 : 67108864)) throw Error('Checkpoint storage capacity exhausted');
       if (operation === 'completeCheckpoint') db.prepare('UPDATE checkpoints SET body=? WHERE id=?').run(encoded, body.id);
       else db.prepare('INSERT INTO checkpoints VALUES (?, ?, ?)').run(body.id, body.chatId, encoded);

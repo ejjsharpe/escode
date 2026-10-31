@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { SavedChat } from "./chat";
 import type { DurableState } from "./durable-state";
 const execute = promisify(execFile);
+let capturing = 0;
 
 // Saved disk only: no editor memory, ignored untracked files, empty directories or environment.
 export async function captureTurnCheckpoint(database: DurableState, chat: Readonly<SavedChat>, threadId: string | null, commandId?: string, completion?: { id: string; turnId: string; completion: string; createdAt: number }) {
@@ -15,11 +16,15 @@ export async function captureTurnCheckpoint(database: DurableState, chat: Readon
   const deadline = Date.now() + 15000;
   let gitBase: string | null = null;
   let body: object;
+  let admitted = false;
   try {
+    if (capturing >= 2) throw Error("Checkpoint capture capacity exhausted");
+    capturing++;
+    admitted = true;
     if (completion && completion.completion !== "completed") throw Error(`Turn ${completion.completion}; completion files unavailable`);
     if (chat.project === null) throw Error("No project file coverage");
     const git = async (...args: string[]) => (await execute("git", ["-C", chat.checkout, ...args],
-      { encoding: "utf8", maxBuffer: 4 * 1024 * 1024, timeout: 15000 })).stdout;
+      { encoding: "utf8", maxBuffer: 4 * 1024 * 1024, timeout: Math.max(1, deadline - Date.now()) })).stdout;
     gitBase = (await git("rev-parse", "HEAD")).trim();
     const entries = (await git("ls-files", "--cached", "--others", "--exclude-standard", "-z")).split("\0").filter(Boolean);
     if (entries.length > 10000) throw Error("Checkpoint file count exhausted");
@@ -66,6 +71,7 @@ export async function captureTurnCheckpoint(database: DurableState, chat: Readon
     }
     body = { ...boundary, gitBase, availability: "available", files };
   } catch (error) { body = { ...boundary, gitBase, availability: "unavailable", reason: String(error) }; }
+  finally { if (admitted) capturing--; }
   try { await database.command(completion ? "completeCheckpoint" : "checkpoint", { body }); }
   catch (error) {
     // Content exhaustion must retain the same boundary with explicit missing coverage.
