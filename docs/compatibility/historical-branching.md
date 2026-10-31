@@ -70,3 +70,26 @@ remains an ancestor. The integration branch was not changed.
 Final rebuilt/repackaged history suite: **4/4 passed (28.2s)**, covering navigation,
 streaming, file inspection and historical branching. No known unmet automated #134
 criterion remains at these seams; the live/human qualification limits above remain.
+
+## Completion-boundary branching (#135)
+
+The existing authenticated branch flow now accepts available after-turn checkpoints
+as well as before-message checkpoints. Native fork's inclusive lastTurnId selects
+the completed response itself. Exact checkpoint files, recorded base and directory
+identity use the same validation and preparation path; there is no new transport,
+allocator, automatic turn, snapshot substitution or cleanup policy.
+
+Implemented from isolated integration `982d3c8`, preserving `0a9c981`, on
+`t3/spec117-chat-completion` in `/Users/elliotsharpe/.t3/worktrees/escode/t3-502b34cc`.
+TDD first reproduced rejection of a valid completion. Test setup initially lacked
+dependencies; frozen install resolved it. An old expected-base assertion in the
+expanded fixture was corrected. Real Git completion capture uses different before,
+completion, next-before and current contents and advances HEAD after capture, so
+selection must retain the historical base. Authenticated tests exercise unavailable
+and interrupted coverage, unsupported/lost history, retained client drafts/index,
+distinct chat/worktree, no automatic turn, duplicate results and reservation failures
+at admission, allocation, provider response and outcome persistence, with restart.
+
+Verification results follow below. Paid live-provider context fidelity, manual
+VoiceOver and physical power-loss survival remain unqualified. #137 retention and
+#133 restoration are separate work; this slice changes neither policy.
