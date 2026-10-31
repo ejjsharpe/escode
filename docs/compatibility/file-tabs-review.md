@@ -36,3 +36,11 @@ The baseline sender-rejection message assertion remains unchanged: bootstrap/pre
 No live provider turn, manual VoiceOver session, exhaustive desktop suite or complete parent-spec acceptance is claimed. Manual accessibility sign-off is excluded by the accepted user amendment. Recovery remains best effort and saving retains its check-before-save limits.
 
 The latest local integration was merged before completion and remained `e2007f549dcfb902395e9df82e5e121fd0f8ef8f` (already up to date). Final whitespace and conflict-marker checks passed. Only this isolated branch/worktree is changed.
+
+## Final integration qualification
+
+On 2026-10-31, the clean integration branch `implement/file-tabs-92` at `e2007f549dcfb902395e9df82e5e121fd0f8ef8f` merged `t3/fix-spec92-findings` at `cfbf9d985c4cb75386108b94515250fa6201bbb9` with `--no-ff`, without conflicts, producing merge commit `75e3c89a6b9f792c6e2dc64487dbdb3aaf34ccab`. This section qualifies the final integration; the isolated-branch statements above describe the source work.
+
+Source and regression-assertion review confirmed all four corrections: captured conflict targets for Compare/Overwrite/Reload and internal completion opening while the serialization gate remains held; current text and baseline reload for clean remembered conflict buffers while dirty recovery remains intact; the pending-opening counter with `finally` release and generation checks; and shared `validFile` validation retaining duplicate/active membership checks. The five focused regression cases cover the first three corrections; existing malformed-workspace assertions cover validation.
+
+Fresh integration checks passed: `bun run typecheck`, `bun run lint`, `bun run --cwd apps/desktop test -- host/workspace.test.ts` (9/9), merge-diff whitespace and conflict-marker scans. The source-reported 268 passing units (four skipped), 5/5 focused development tests, 21/21 packaged tests and broader 53/54 development result above were reviewed, not rerun during final integration. The cursor/scroll shutdown timeout and excluded `mutation IPC` assertion remain limits; no full-suite or complete parent acceptance is claimed. No issue, PR or other worktree was edited.
