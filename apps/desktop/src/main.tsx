@@ -114,12 +114,35 @@ function CheckoutView({
     ...new Set([...(memory.views[root]?.path ? [memory.views[root].path!] : []),
       ...memory.drafts.filter(d => d.root === root).map(d => d.path)]),
   ]);
+  const tabStrip = useRef<HTMLDivElement>(null);
+  const draggedTab = useRef<string | null>(null);
   const recentFiles = useRef<string[]>(path ? [path] : []);
   const content = useRef<HTMLElement>(null);
   const focusAfterClose = useRef(false);
   const [tabMenu, setTabMenu] = useState<{ file: string; order: string[] } | null>(null);
   const replacedPreviews = useRef<string[]>([]);
   const [preview, setPreview] = useMemory(root, "preview", "");
+  function tabLabel(file: string) {
+    const parts = file.split("/");
+    for (let count = 1; count < parts.length; count++) {
+      const suffix = parts.slice(-count).join("/");
+      if (!openFiles.some(other => other !== file && other.split("/").slice(-count).join("/") === suffix)) return suffix;
+    }
+    return file;
+  }
+  function tabDirty(file: string) {
+    const buffer = buffers.current.get(file);
+    return !!buffer && buffer.model.getValue() !== buffer.disk.text;
+  }
+  useEffect(() => {
+    const row = tabStrip.current;
+    if (!row || !active || !editorVisible) return;
+    const reveal = () => row.querySelector('[aria-selected="true"]')?.closest(".file-tab")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    reveal();
+    const observer = new ResizeObserver(reveal);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [path, openFiles, active, editorVisible]);
   function keepOpen(file: string) {
     if (memory.views[root]?.preview === file) setPreview("");
   }
@@ -981,11 +1004,31 @@ function CheckoutView({
       <section ref={content} tabIndex={-1} className="content" aria-label="Main editor">
         {mode !== "Chats" && (
           <>
-            <div className="file-tabs" role="tablist" aria-label="Open files">
+            <div ref={tabStrip} className="file-tabs" role="tablist" aria-label="Open files">
               {openFiles.map(file => (
-                <span key={file} className="file-tab">
-                <button role="tab" aria-selected={path === file}
-                  aria-description={preview === file ? "Preview" : undefined}
+                <span key={file} className="file-tab" onDragOver={event => {
+                  if (!draggedTab.current || saving || fileClosing || conflict) return;
+                  event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = "move";
+                }} onDrop={event => {
+                  const source = draggedTab.current;
+                  draggedTab.current = null;
+                  if (!source || saving || fileClosing || conflict) return;
+                  event.preventDefault(); event.stopPropagation();
+                  const order = memory.views[root]?.openFiles ?? [];
+                  const from = order.indexOf(source), to = order.indexOf(file);
+                  if (from < 0 || to < 0 || from === to) return;
+                  const next = [...order];
+                  next.splice(from, 1); next.splice(to, 0, source);
+                  keepOpen(source); setOpenFiles(next);
+                }}>
+                <button role="tab" tabIndex={path === file ? 0 : -1} aria-label={file} data-unsaved={tabDirty(file) || undefined} aria-selected={path === file}
+                  draggable={!saving && !fileClosing && !conflict}
+                  onDragStart={event => {
+                    draggedTab.current = file; event.stopPropagation();
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("application/x-escode-file-tab", file);
+                  }} onDragEnd={() => { draggedTab.current = null; }}
+                  aria-description={[preview === file ? "Preview" : "", tabDirty(file) ? "Unsaved" : ""].filter(Boolean).join(", ") || undefined}
                   style={{ fontStyle: preview === file ? "italic" : undefined }}
                   onDoubleClick={() => keepOpen(file)}
                   title={root + "/" + file} disabled={saving || fileClosing || !!conflict}
@@ -994,9 +1037,23 @@ function CheckoutView({
                   }} onKeyDown={event => {
                     if (event.shiftKey && event.key === "F10") {
                       event.preventDefault(); setTabMenu({ file, order: [...openFiles] });
+                    } else if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+                      if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+                        event.preventDefault();
+                        const index = openFiles.indexOf(file);
+                        const next = event.key === "Home" ? 0 : event.key === "End" ? openFiles.length - 1 :
+                          (index + (event.key === "ArrowRight" ? 1 : openFiles.length - 1)) % openFiles.length;
+                        tabStrip.current?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus();
+                        void restoreView(openFiles[next]!);
+                      } else if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        void restoreView(file).then(success => {
+                          if (success) setFocusRequest({ file, generation: presentation.current });
+                        });
+                      }
                     }
-                  }} onClick={() => void restoreView(file)}>{file}</button>
-                <button aria-label={"Close " + file} disabled={saving || fileClosing || !!conflict}
+                  }} onClick={() => void restoreView(file)}>{tabLabel(file)}</button>
+                <button tabIndex={-1} aria-label={"Close " + file} disabled={saving || fileClosing || !!conflict}
                   onClick={() => void closeFiles([file])}>×</button>
                 </span>
               ))}

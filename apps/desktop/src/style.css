@@ -679,3 +679,5 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .file-tab { display: flex; flex-shrink: 0; }
 .file-tabs button { white-space: nowrap; }
 .file-tabs [aria-selected="true"] { background: #48405f; }
+
+.file-tabs [data-unsaved]::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; margin-left: 8px; }
