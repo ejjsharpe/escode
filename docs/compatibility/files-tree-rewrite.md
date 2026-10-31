@@ -174,3 +174,138 @@ payload/entry limits still apply; virtualization does not increase the wire limi
 watch events converge on explicit recovery triggers, not an unconditional polling guarantee.
 The model retains previously resolved directories for the lifetime of the Files view;
 whole-checkout preloading is absent. The supplied user's exact workload was not available.
+
+## Stabilization follow-up (2026-10-31, PR #143)
+
+Verified the supplied worktree `/Users/elliotsharpe/.t3/worktrees/escode/t3-6880fb8f`,
+branch `feat/async-files-tree`, HEAD `0801c9dc9814296ab029d95675d4639c0c3dabd3`
+and clean working tree before editing. No open `wayfinder:map` issues were returned.
+Implementation, commits and pushing this draft PR were explicitly authorized.
+
+### Diagnosis and repairs
+
+- **Startup/transport product defect:** two simultaneous 20,000-entry Git status
+  replies through `startHost`/`createHostClient` reproduce `SocketCloseError: 1006`
+  in 48 ms, independently of Files mounting. `BoundedWebSocket.send` terminated
+  when a previously queued reply exceeded 1 MiB, although the RPC response budget
+  admits ordinary replies up to 2 MiB and file replies up to 32 MiB. The physical
+  output guard now checks queued bytes **plus the new write** against the existing
+  32 MiB file-frame bound. RPC per-response and unacknowledged-stream budgets,
+  incoming frame validation and admission limits remain enforced. The regression
+  test asserts both complete status replies and a subsequent Files listing; it
+  failed before the repair and passes after it. No timeout changed.
+- **Early-open destination product defect (also observed on main):** the shared
+  opener rejected all opens while a transfer held `closeInFlight`, despite file-tab
+  navigation remaining available. It now admits opens during transfer progress;
+  mutation, save and close gates remain. The Electron scenario verifies destination
+  disk text before delivery, copied unsaved text after delivery, model URI/language,
+  undo/redo, restart and external-save conflict baseline.
+- **Clipboard fixture race (also observed on main):** deleting a source immediately
+  after Cmd+X raced asynchronous host identity capture. Wait for successful Cut
+  status before deleting; also await completion of the preceding transfer before
+  capture. Partial-result, retry, destination-byte and no-extra-copy assertions remain.
+- **Recursive-copy fixture race (also observed on main):** a failure status arrives
+  before transfer reconciliation releases the renderer gate. Starting Duplicate
+  then could be rejected before native spawn (`copyRunning` stayed undefined).
+  Await disappearance of the preceding transfer's progress indicator. The repaired
+  run observed native copy for 3856 ms and visible Stop for 21 ms while copy was
+  running, and checked every destination binary file.
+- **Linked-worktree fixture:** Chats is checkout-scoped; `Chat 2` in the originating
+  checkout no longer selects a linked checkout. Open that existing linked checkout
+  through the native chooser during pending drag confirmation. Keep both checkout
+  identities, exact destination bytes and no foreign mutation assertions.
+- **Root-replacement fixture:** the directory RPC intentionally maps adapter
+  exceptions to `Directory unavailable. Refresh to retry.`. Assert that exact
+  diagnostic; retain the separate replaced/quitting context denial, empty Finder
+  targets and watch-denial checks.
+
+The initial follow-up serial development transfer/watch run passed 12/15: it
+reproduced recursive-copy, early-open and generated-checkout startup failures;
+clipboard partial results passed that run. After repairs, the same run passed
+15/15. Logs: `/tmp/escode-stabilize-focus.log`; transport red/green logs:
+`/tmp/escode-stabilize-transport-{red,green}.log`.
+
+The next complete development run passed **49/49**. Its corresponding packaged run
+passed **47/49**, exposing two additional intermittent inline cases: creation's
+shared opener scheduled Monaco focus after Files restored tree focus (product race),
+and the selected-entry fault was armed after Refresh could successfully resolve the
+cached directory (fixture race). Inline creation now activates its kept-open file
+without scheduling an editor focus request; Files retains focus ownership. The
+fault is armed before explicit Refresh. Both scenarios then passed **6/6** serial
+development repetitions. The first complete development run also exposed an asynchronous Copy Path
+fixture race; clipboard/Finder assertions now await their exact expected results.
+The earlier 47/49 development run additionally caught an overbroad diagnostic fixture
+edit: Quit still returns its specific quitting denial; only root replacement uses
+the generic directory diagnostic. That edit was corrected before the 49/49 run.
+
+Before the final inline repair, Option-drag Replace, hidden-toolbar rename,
+transfer navigation and 20,000-file startup each passed three additional serial
+packaged repetitions (**12/12**). No further product defect was established for
+those historical Option-drag/hidden-toolbar/transfer-navigation failures; finite
+passing runs do not establish their historical cause or eliminate all flakiness.
+
+A later full development pass was **48/49**: dirty-destination transfer copied
+`target baseline` instead of `source baseline`. Its initial `.nth(0)` basename
+selector raced child listing publication and could edit the root source as the
+"destination", then copy the actual destination. The fixture now selects exact
+`data-path` rows and asserts each editor model URI before typing. No byte, dirty
+collision, persistence or restart assertion was relaxed.
+
+The complete final-code development run passed **49/49**. The packaged run then
+caught a persistence fixture race: its poll dereferenced `views[root].files` before
+that view's first durable snapshot existed, throwing instead of retrying. Optional
+access now returns undefined until the same exact `b.txt` focus assertion succeeds.
+This changes readiness handling only, not the asserted restoration or disk contents.
+
+### Final results and reproducible commands
+
+These results supersede the historical qualification limits above for automated checks:
+
+| Check | Result |
+| --- | --- |
+| Eight host/model/workspace/operation files listed in the original commands | 107/107 |
+| `host/editor-transactions.test.ts` | 9/9 |
+| Complete development Electron suite, final product code | 49/49 (4.6 min) |
+| Development tree restoration after the final polling guard | 3/3 repetitions |
+| Complete packaged Electron suite, final product code and fixtures | 49/49 (2.7 min) |
+| Packaged Option Replace, hidden-toolbar rename, transfer navigation, large startup | 12/12 repetitions |
+| Development / packaged repaired inline cases | 6/6 / 6/6 repetitions |
+| Packaged exact-path dirty-destination transfer | 3/3 repetitions |
+| Typecheck, lint, build, unsigned arm64 package, whitespace | Passed |
+
+The complete development run preceded only the final fixture's optional polling access;
+that updated fixture passed all three subsequent development runs. Both complete suites
+selected all eight files without skipping or filtering failures. Repetitions were separate,
+serial runs with temporary repositories/profiles. The last package has `app.asar` SHA-256
+`cad86d3c54a7681039b168aca9122a8043c0bd27d149d0ebb52531b05d43fc78`.
+The application was not installed; the user's running app/profile was not targeted.
+No live provider turns or dependency additions were used.
+
+Use the eight-file host and complete Electron commands above. Additional commands:
+
+```sh
+bun run --cwd apps/desktop test -- host/editor-transactions.test.ts
+bun run --cwd apps/desktop smoke -- tests/files-tree.spec.ts -g 'lazy tree keyboard' --repeat-each=3
+ESCODE_PACKAGED=1 bun run --cwd apps/desktop smoke -- tests/files-drag.spec.ts tests/files-inline.spec.ts tests/files-transfer.spec.ts tests/files-watch.spec.ts -g 'Option-drag Replace|hidden selected entry renames through toolbar|pending transfer preserves its origin across navigation|generated tree loads only' --repeat-each=3
+ESCODE_PACKAGED=1 bun run --cwd apps/desktop smoke -- tests/files-inline.spec.ts -g 'inline create and rename:|restored hidden selection' --repeat-each=3
+ESCODE_PACKAGED=1 bun run --cwd apps/desktop smoke -- tests/files-transfer.spec.ts -g 'dirty destination blocks Replace' --repeat-each=3
+```
+
+Final logs are `/tmp/escode-stabilize-host.log`, `-activation.log`,
+`-complete-development.log`, `-tree-repeat-development.log`, `-accepted-packaged.log`,
+`-repeat-packaged.log`, `-inline-repeat.log`, `-qualified-repeat-packaged.log`,
+`-transfer-repeat-packaged.log`, and `-final-{typecheck,lint,build,package}.log`,
+all with the `/tmp/escode-stabilize` prefix. Earlier failed logs remain alongside them.
+
+### Remaining validation
+
+Integrated acceptance is not claimed. Manual VoiceOver must still verify logical
+navigation/selection, active-descendant announcements, wrapped labels, recycled rows,
+inline editing and reveal/focus restoration in this build. Native Finder import/drag,
+Finder reveal and Trash recovery still need their user-owned manual validation.
+Historical Option-drag/hidden-toolbar/transfer-navigation flakiness was not reproduced
+in the repeated final checks; its exact original cause remains unestablished.
+Existing capacity limits and cache/watch limitations above still apply. The physical
+socket output bound is now 32 MiB including the next write, while smaller RPC admission,
+response and stream budgets remain in force. Passing fixtures do not establish unlimited
+checkout capacity or exhaustive timing coverage.

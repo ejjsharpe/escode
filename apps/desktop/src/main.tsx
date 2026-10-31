@@ -899,7 +899,7 @@ function CheckoutView({
   }
   fileKeepers.set(root, keepOpen);
   fileOpeners.set(root, async request => {
-    if (request.root !== root || closeInFlight.current) return false;
+    if (request.root !== root || closeInFlight.current && !transferProgress) return false;
     const opened = await activation.open({ file: request.path, view: request.view, intent: request.intent, current: request.current });
     if (opened && request.intent === "keep")
       setFocusRequest({ file: request.path, current: activation.checkpoint() });
@@ -979,7 +979,7 @@ function CheckoutView({
                   throw Error("Destination has an open buffer. Close it or choose a free name.");
                 const file = await projectCall("create-entry", root, parent, name, kind);
                 setFilesRevision((n) => n + 1);
-                if (kind === "file") await open(file);
+                if (kind === "file") await activation.open({ file, intent: "keep" });
                 return file;
               }}
               transfer={async (kind, sources, parent) => {

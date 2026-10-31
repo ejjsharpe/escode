@@ -80,7 +80,7 @@ test("lazy tree keyboard, independent selection, menus, refresh and restart reco
     await expect
       .poll(
         async () =>
-          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root].files.focus,
+          JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8")).views[root]?.files?.focus,
       )
       .toBe("b.txt");
     app.process().kill("SIGKILL");

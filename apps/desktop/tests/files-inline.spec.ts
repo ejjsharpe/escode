@@ -411,7 +411,6 @@ test("restored hidden selection loads its type and refuses unavailable or missin
     );
     await resolved.press("Escape");
     await page.getByRole("button", { name: "Collapse All", exact: true }).click();
-    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByRole("treeitem", { name: "folder", exact: true })).toBeVisible();
     await app.evaluate(() => {
       const cp = process.getBuiltinModule("child_process") as any,
@@ -424,6 +423,7 @@ test("restored hidden selection loads its type and refuses unavailable or missin
         return execute(...args);
       };
     });
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await page.getByRole("button", { name: "New File", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText(root + "/folder/deep");
     await expect(page.getByRole("alert")).toContainText(
