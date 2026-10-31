@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@base-ui/react/button";
 import type { CheckpointPage, BoundaryInspection, FileInspection } from "@escode/contracts";
 
@@ -11,6 +11,8 @@ export function Boundaries({ project, id }: { project: string | null; id: string
   const [filePath, setFilePath] = useState("");
   const fileDetail = useRef<HTMLDivElement>(null);
   const fileOutput = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { if (files) fileOutput.current?.focus(); }, [files]);
+  useLayoutEffect(() => { if (file) fileDetail.current?.focus(); }, [file]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const output = useRef<HTMLDivElement>(null);
@@ -50,7 +52,6 @@ export function Boundaries({ project, id }: { project: string | null; id: string
       <p>Saved files: {point.availability}{point.reason ? ` · ${point.reason}` : ""}. This does not include unsaved editor text.</p>
       <Button disabled={busy} onClick={() => load(async () => {
         setFile(undefined); setFiles(await window.escode.inspectFiles(project, id, point.id, null, null));
-        requestAnimationFrame(() => fileOutput.current?.focus());
       })}>Inspect saved files</Button>
       {files && <div ref={fileOutput} tabIndex={-1} role="region" aria-label="Saved-file inspection">
         <p role="status">{files.message}</p>
@@ -59,7 +60,6 @@ export function Boundaries({ project, id }: { project: string | null; id: string
           <ul>{files.paths.map(path => <li key={path}><Button disabled={busy} onClick={() => load(async () => {
             setFilePath(path);
             setFile(await window.escode.inspectFiles(project, id, point.id, path, null));
-            requestAnimationFrame(() => fileDetail.current?.focus());
           })}>{path}</Button></li>)}</ul>
           {files.nextCursor && <Button disabled={busy} onClick={() => load(async () => setFiles(await window.escode.inspectFiles(project, id, point.id, null, files.nextCursor)))}>More captured files</Button>}
         </>}

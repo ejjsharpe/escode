@@ -57,7 +57,9 @@ createInterface({input:process.stdin}).on('line',line=>{
       await page.getByRole("button", { name: "Inspect saved files", exact: true }).click();
       const files = page.getByRole("region", { name: "Saved-file inspection", exact: true });
       await expect(files).toBeFocused();
-      await files.getByRole("button", { name: "saved.txt", exact: true }).focus(); await page.keyboard.press("Enter");
+      await page.keyboard.press("Tab");
+      await expect(files.getByRole("button", { name: "saved.txt", exact: true })).toBeFocused();
+      await page.keyboard.press("Enter");
       await expect(page.getByRole("region", { name: "Historical file comparison", exact: true })).toBeFocused();
       await expect(files.getByText("base saved text", { exact: true })).toBeVisible();
       await expect(files.getByText("captured saved text", { exact: true })).toBeVisible();
