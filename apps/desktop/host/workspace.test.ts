@@ -192,13 +192,20 @@ test("fresh client recovery retains ownership and rejects unsupported or other-c
     const file = join(dir, "client-workspace-v1.json");
     const owner = { hostId: "host", clientId: "client" };
     const store = new Workspace(file, owner);
-    await store.write({ projects: [], selected: "", views: {}, drafts: [{
+    await store.write({ projects: [], selected: "", views: { [dir]: {
+      openFiles: ["a"], path: "a", fileViews: { a: "unstaged" },
+      editorPositions: { a: { unstaged: { line: 3, column: 2, top: 20, left: 0 } } },
+    } }, drafts: [{
       root: dir, path: "a", text: "available edit", disk: { text: "loaded disk", version: "loaded hash" },
     }] });
     expect((await new Workspace(file, owner).read()).drafts[0]).toMatchObject({
       text: "available edit", disk: { text: "loaded disk", version: "loaded hash" },
     });
     await expect(new Workspace(file, { ...owner, clientId: "other" }).read()).rejects.toThrow("wrongly owned");
+    const other = new Workspace(join(dir, "other-client.json"), { ...owner, clientId: "other" });
+    await other.write({ projects: [], selected: "", drafts: [], views: { [dir]: { openFiles: ["b"], path: "b" } } });
+    expect((await store.read()).views[dir].openFiles).toEqual(["a"]);
+    expect((await other.read()).views[dir].openFiles).toEqual(["b"]);
     const { readFile, writeFile } = await import("node:fs/promises");
     const bytes = await readFile(file, "utf8");
     await writeFile(file, JSON.stringify({ ...JSON.parse(bytes), storageVersion: 2 }));
@@ -310,5 +317,23 @@ test("recent file metadata is bounded, exact and independent of checkout members
       await expect(store.write({ ...state, recentFiles })).rejects.toThrow("Invalid recent files");
     }
     expect((await store.read()).recentFiles).toEqual([target]);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("host approvals retain checkout identity independently of client navigation and rejected replacement approval", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-checkout-approval-"));
+  try {
+    const file = join(dir, "workspace.json"), store = new Workspace(file);
+    await store.approve(dir, dir);
+    await expect(store.validateCheckout(dir, "1:42")).rejects.toThrow("identity");
+    await store.approve(dir, dir, "1:42");
+    const restarted = new Workspace(file);
+    await restarted.validateCheckout(dir, "1:42");
+    await expect(restarted.validateCheckout(dir, "1:43")).rejects.toThrow("replaced");
+    await restarted.write({ projects: [], selected: "", drafts: [], views: {} });
+    await expect(restarted.validateCheckout(dir, "1:43")).rejects.toThrow("replaced");
+    await expect(restarted.approve(dir, dir, "1:43")).rejects.toThrow("Checkout identity changed");
+    await restarted.validateCheckout(dir, "1:42");
+    await expect(restarted.validateCheckout(dir, "1:43")).rejects.toThrow("replaced");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

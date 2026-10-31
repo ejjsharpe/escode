@@ -55,6 +55,6 @@ export function reconcile(state: WorkspaceState, intent: Intent) {
         focus: map([view.files.focus])[0] ?? source.split("/").slice(0, -1).join("/"),
       };
     }
-    if (view.change && affected(view.change.path, source)) view.change = undefined;
+    if (view.change && affected(view.change.path, source)) delete view.change;
   }
 }

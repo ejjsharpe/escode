@@ -314,6 +314,20 @@ test("cancelled and edited lookup invocations reject delayed validation and file
     await expect(page.locator(".monaco-editor:visible")).toContainText("delayed lookup document");
     await expect(page.getByRole("tab", { name: "slow.txt", exact: true })).not.toHaveAccessibleDescription(/Preview/);
     await page.screenshot({ path: "test-results/exact-lookup.png" });
+    // File-tab navigation and reopening also yield to the native lookup dialog.
+    await page.keyboard.press("Meta+w");
+    await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
+    await page.keyboard.press("Meta+p");
+    await lookup.getByRole("button", { name: "Refresh", exact: true }).focus();
+    await page.keyboard.press("Meta+Shift+t");
+    await page.keyboard.press("Control+Tab");
+    await page.keyboard.press("Meta+Alt+ArrowRight");
+    await expect(page.getByRole("listbox", { name: "Recent tabs", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Meta+Shift+t");
+    await expect(page.getByRole("tab", { name: "slow.txt", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".monaco-editor:visible")).toContainText("delayed lookup document");
     // Global activation must not resurrect a checkout closed while validation is in flight.
     const second = join(dir, "second");
     execFileSync("git", ["init", second]);

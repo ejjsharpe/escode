@@ -109,8 +109,7 @@ function validate(value: unknown): asserts value is WorkspaceState {
       throw Error("Invalid editor positions");
     if (v?.openFiles !== undefined &&
       (!Array.isArray(v.openFiles) || new Set(v.openFiles).size !== v.openFiles.length ||
-        v.openFiles.some(p => typeof p !== "string" || !p || isAbsolute(p) ||
-          p.split("/").some(c => !c || c === "." || c === ".." || c.toLowerCase() === ".git")) ||
+        v.openFiles.some(p => !validFile(p)) ||
         (v.path && !v.openFiles.includes(v.path))))
       throw Error("Invalid open files");
     if (
@@ -183,6 +182,13 @@ export class Workspace {
   async approved() {
     await this.queue;
     return this.readApprovals();
+  }
+  async validateCheckout(root: string, identity: string) {
+    const approved = (await this.approved()).find(p => p.root === root);
+    if (approved && !approved.directoryIdentity)
+      throw Error("Checkout identity was not recorded. Use Open project to approve the original directory.");
+    if (approved?.directoryIdentity && approved.directoryIdentity !== identity)
+      throw Error("Checkout directory was replaced. Restore the original directory.");
   }
   approve(project: string, root: string, directoryIdentity?: string) {
     return this.change(async () => {

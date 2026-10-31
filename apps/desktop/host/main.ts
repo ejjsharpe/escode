@@ -301,6 +301,7 @@ app.whenReady().then(async () => {
       return candidate;
     };
     const existing = projects.get(root);
+    if (existing) await workspace.validateCheckout(root, existing.checkoutIdentity());
     const associations = await Promise.all([...projectSessions.keys()].map((id) => store.list(id)));
     const linked = associations.flat().filter((c) => c.checkout === root && !c.removed);
     const saved = linked.find((c) => c.directoryIdentity) ?? linked[0];
@@ -321,6 +322,8 @@ app.whenReady().then(async () => {
     const candidate = saved || approval
       ? await Checkout.restore(root, saved?.project ?? approval!.project, helper)
       : await Checkout.open(root, helper);
+    try { await workspace.validateCheckout(root, candidate.checkoutIdentity()); }
+    catch (error) { candidate.close(); throw error; }
     if (!projectSessions.has(candidate.repositoryGit.repository())) {
       candidate.close();
       throw Error("Open this project first.");
@@ -430,7 +433,11 @@ app.whenReady().then(async () => {
       const result = await dialog.showOpenDialog(window, { properties: ["openDirectory"] });
       if (result.canceled) return null;
       const candidate = await Checkout.open(result.filePaths[0], helper);
-      const existing = projects.get(candidate.root);
+      let existing = projects.get(candidate.root);
+      if (existing) {
+        try { existing.checkoutIdentity(); }
+        catch { existing.close(); projects.delete(candidate.root); existing = undefined; }
+      }
       if (existing) candidate.close();
       const opened = existing ?? candidate;
       try {
