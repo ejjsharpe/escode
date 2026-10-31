@@ -119,7 +119,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
             WHERE json_extract(c.body,'$.availability')='available' AND (? IS NULL OR c.id=?)
             AND coalesce((SELECT touched FROM checkpoint_activity WHERE chatId=c.chatId),
               (SELECT max(json_extract(body,'$.createdAt')) FROM checkpoints WHERE chatId=c.chatId)) <= ?
-            AND NOT EXISTS (SELECT 1 FROM checkpoints pending WHERE pending.chatId=c.chatId AND json_extract(pending.body,'$.completion')='pending')
+            AND c.chatId NOT IN (SELECT pending.chatId FROM checkpoints pending WHERE json_extract(pending.body,'$.completion')='pending')
             AND c.chatId NOT IN (SELECT value FROM json_each(?))
             AND NOT EXISTS (SELECT 1 FROM submissions WHERE json_extract(body,'$.command.id')=c.chatId
               AND json_extract(body,'$.status') NOT IN ('accepted','rejected'))
