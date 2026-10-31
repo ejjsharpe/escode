@@ -223,6 +223,7 @@ app.whenReady().then(async () => {
         state: { ...(await workspace.read()), savedProjects: state.savedProjects },
         restored,
         errors,
+        acknowledgementRoots: files.acknowledgementRoots(),
       };
     }
     if (operation === "persist" && args.length === 1) {

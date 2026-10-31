@@ -19,8 +19,6 @@ import { affected, reconcile } from "./file-operation-state";
 export class FileOperations {
   private journal: FileOperationJournal;
   private pending?: Intent;
-  private factsRevision?: number;
-  private recoveredFacts: Intent[] = [];
   private savedBaselines = new Map<string, { root: string; path: string; before: Set<string>; disk: import("./project").Document }>();
   private handoff?: { root: string; facts: Intent[] };
   busy = false;
@@ -32,20 +30,17 @@ export class FileOperations {
     this.journal = new FileOperationJournal(file, owner ?? workspace.owner, workspace.database);
   }
   async recover(project: (root: string) => Promise<Checkout>) {
-    const facts = await this.workspace.database.recoveryRead(this.workspace.owner.clientId, "fileFacts");
-    this.factsRevision = facts.revision;
-    if (facts.body) {
-      const state = await this.workspace.read();
-      for (const fact of facts.body as Intent[]) {
-        const p = await project(fact.root);
-        if (p.checkoutIdentity() !== fact.checkoutIdentity) throw Error("Checkout replaced; batch evidence retained");
-        reconcile(state, fact);
-      }
-      await this.workspace.write(state);
-      this.recoveredFacts = facts.body as Intent[];
-    }
+    const facts = await this.journal.readFacts();
+    if (facts.length) this.handoff = { root: facts[0].root, facts };
     const record = await this.journal.readIntent();
-    if (!record) return "";
+    if (!record) {
+      if (facts.length) {
+        const state = await this.workspace.read();
+        for (const fact of facts) reconcile(state, fact);
+        await this.workspace.write(state);
+      }
+      return "";
+    }
     this.pending = record;
     try {
       const p = await project(record.root);
@@ -61,6 +56,7 @@ export class FileOperations {
           }
         }
         if (!record.savedDisk) throw Error("Uncertain interrupted save");
+        if (record.completed) await this.remember(record);
         const state = await this.workspace.read();
         reconcile(state, record);
         await this.workspace.write(state);
@@ -80,6 +76,8 @@ export class FileOperations {
         record.completed ||
         (record.kind === "move" && destination === record.identity && source !== record.identity)
       ) {
+        record.completed = true;
+        await this.remember(record);
         const state = await this.workspace.read();
         reconcile(state, record);
         await this.workspace.write(state);
@@ -95,6 +93,9 @@ export class FileOperations {
     }
     return `Uncertain file operation: inspect ${record.root}/${record.source} and ${record.kind === "save" ? "its last saved disk contents" : record.destination || "Finder Trash"}${record.temporary ? ` (staging: ${record.temporary})` : ""}. Available drafts retained; file mutations are blocked until the original paths can be reconciled on restart.`;
   }
+  acknowledgementRoots() {
+    return [...new Set((this.handoff?.facts ?? []).map(fact => fact.root))];
+  }
   beginBatch(root: string) {
     this.assertIdle();
     this.handoff = { root, facts: [] };
@@ -105,7 +106,9 @@ export class FileOperations {
   releaseEmptyBatch() {
     if (!this.handoff?.facts.length) this.handoff = undefined;
   }
-  persist(state: unknown) {
+  async persist(state: unknown) {
+    const facts = await this.journal.readFacts();
+    if (facts.length) this.handoff = { root: facts[0].root, facts };
     if (this.busy && this.pending?.kind !== "copy")
       throw Error("File operation is persisting recovery intent. Retry after completion.");
     // Apply facts inside the storage queue, including writes queued before a fact completed.
@@ -116,13 +119,19 @@ export class FileOperations {
         if (!draft || draft.disk.version === saved.disk.version) acknowledged.set(key, saved);
         else if (saved.before.has(draft.disk.version)) draft.disk = saved.disk;
       }
-      for (const fact of this.recoveredFacts) reconcile(snapshot, fact);
       for (const fact of this.handoff?.facts ?? []) reconcile(snapshot, fact);
       if (this.pending?.completed) reconcile(snapshot, this.pending);
     }).then(() => { for (const [key, saved] of acknowledged) if (this.savedBaselines.get(key) === saved) this.savedBaselines.delete(key); });
   }
-  private remember(intent: Intent) {
-    if (this.handoff?.root === intent.root) this.handoff.facts.push(structuredClone(intent));
+  private async remember(intent: Intent) {
+    if (!this.handoff && intent.kind === "save") return;
+    if (this.handoff?.root !== intent.root) this.handoff = { root: intent.root, facts: [] };
+    if (!this.handoff.facts.some(f => f.source === intent.source && f.destination === intent.destination && f.identity === intent.identity && f.kind === intent.kind)) {
+      this.handoff.facts.push(structuredClone(intent));
+    }
+    if (intent.kind === "move" || intent.kind === "trash")
+      this.handoff.facts = await this.journal.publishFact(intent);
+    else await this.journal.writeFacts(this.handoff.facts);
   }
   assertIdle(batchRoot?: string) {
     if (this.busy || this.pending || (this.handoff && this.handoff.root !== batchRoot))
@@ -210,9 +219,9 @@ export class FileOperations {
         }
       }
       intent.completed = true;
-      this.remember(intent);
       try {
         await this.journal.writeIntent(intent);
+        await this.remember(intent);
         const state = await this.workspace.read();
         reconcile(state, intent);
         await this.workspace.write(state);
@@ -272,9 +281,9 @@ export class FileOperations {
       const key = JSON.stringify([p.root, path]);
       this.savedBaselines.set(key, { root: p.root, path,
         before: new Set([...(this.savedBaselines.get(key)?.before ?? []), version]), disk: result.disk });
-      this.remember(intent);
       try {
         await this.journal.writeIntent(intent);
+        await this.remember(intent);
         const state = await this.workspace.read();
         reconcile(state, intent);
         await this.workspace.write(state);
@@ -301,12 +310,6 @@ export class FileOperations {
       this.busy = false;
     }
   }
-  private async writeFacts(facts: Intent[] | null) {
-    if (this.factsRevision === undefined)
-      this.factsRevision = (await this.workspace.database.recoveryRead(this.workspace.owner.clientId, "fileFacts")).revision;
-    await this.workspace.database.recoveryWrite(this.workspace.owner.clientId, "fileFacts", facts, this.factsRevision);
-    this.factsRevision++;
-  }
   async ack(root?: string) {
     if (root && this.busy) throw Error("File operation still running.");
     if (root && this.handoff?.root === root) {
@@ -317,19 +320,13 @@ export class FileOperations {
         await this.journal.writeIntent(null);
         this.pending = undefined;
       }
-      await this.writeFacts(null);
-      this.recoveredFacts = [];
-      this.handoff = undefined;
+      const remaining = (await this.journal.readFacts()).filter(fact => fact.root !== root);
+      await this.journal.writeFacts(remaining);
+      this.handoff = remaining.length ? { root: remaining[0].root, facts: remaining } : undefined;
       return;
     }
     if (root && this.pending && !this.pending.completed) throw Error("Uncertain operation retains its intent; restart to reconcile actual paths.");
-    if (root && !this.pending && this.recoveredFacts.some(f => f.root === root)) {
-      await this.writeFacts(null);
-      this.recoveredFacts = [];
-      return;
-    }
     if (root && this.pending?.root !== root) throw Error("Operation belongs to another checkout.");
-    if (this.handoff?.facts.length) await this.writeFacts([...this.recoveredFacts, ...this.handoff.facts]);
     await this.journal.writeIntent(null);
     this.pending = undefined;
   }

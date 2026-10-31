@@ -135,6 +135,16 @@ test("saved-project registration and interrupted move recovery survive together 
         app = await launchDesktop(user);
       }
     }
+    // A recovered renderer must release its handoff before the next user mutation.
+    const page = await app.firstWindow();
+    await page.getByRole("treeitem", { name: "moved", exact: true }).locator(":scope > .tree-row").click({ button: "right" });
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Rename moved", exact: true }).click();
+    await page.getByRole("textbox", { name: "Rename moved" }).fill("again");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".toolbar:visible")).toContainText("again/a.ts");
+    await expect(page.locator(".monaco-editor:visible")).toContainText("unsaved recovered text");
+    expect(await readFile(join(root, "again/a.ts"), "utf8")).toBe(disk.text);
   } finally {
     app.process().kill("SIGKILL");
     await rm(base, { recursive: true, force: true });

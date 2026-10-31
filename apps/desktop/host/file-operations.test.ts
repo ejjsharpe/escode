@@ -731,3 +731,22 @@ test("completed move protects late recovery snapshots until acknowledgement", as
     expect(await new FileOperationJournal(join(base, "intent.json")).readIntent()).toBe(null);
   });
 });
+
+test("restart retains completed batch facts against late snapshots until client acknowledgement", async () =>
+  fixture(async (p, store, base) => {
+    const file = join(base, "intent.json");
+    const stale = await store.read();
+    const ops = new FileOperations(store, file);
+    ops.beginBatch(p.root);
+    await ops.run(p, "move", "folder/a.ts", "a.ts");
+    await ops.ack();
+    await ops.run(p, "move", "folder/b.ts", "b.ts");
+    await ops.ack();
+    const fresh = new FileOperations(store, file);
+    await fresh.recover(async () => p);
+    await fresh.persist(stale);
+    expect((await store.read()).drafts.map(d => d.path)).toEqual(["a.ts", "b.ts"]);
+    expect((await store.read()).drafts.map(d => d.disk.text)).toEqual(["disk", "second disk"]);
+    await fresh.ack(p.root);
+    expect(readFileSync(join(p.root, "a.ts"), "utf8")).toBe("disk");
+  }));

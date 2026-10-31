@@ -128,7 +128,7 @@ export const WorkspaceState = Schema.Struct({
   })),
   drafts: Schema.Array(Schema.Struct({ root: Schema.String, path: Schema.String, text: Schema.String, disk: FileDocument })),
 });
-export const WorkspaceLoad = Schema.Struct({ state: WorkspaceState, errors: Schema.Array(Schema.String),
+export const WorkspaceLoad = Schema.Struct({ acknowledgementRoots: Schema.optionalKey(Schema.Array(Schema.String)), state: WorkspaceState, errors: Schema.Array(Schema.String),
   restored: Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String, branch: Schema.String,
     changes: Schema.Array(Schema.Struct({ path: Schema.String, area: Schema.Literals(["staged", "unstaged", "untracked"]) })),
     gitError: Schema.optionalKey(Schema.String), approvalRequired: Schema.optionalKey(Schema.Boolean) })) });

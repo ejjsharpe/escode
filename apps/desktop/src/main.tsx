@@ -1521,8 +1521,17 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
 }
 window.escode
   .lifecycle("load")
-  .then(({ state, restored, errors }) => {
+  .then(async ({ state, restored, errors, acknowledgementRoots }) => {
     initialize(state);
+    try {
+      if (acknowledgementRoots?.length) {
+        await persist();
+        for (const root of acknowledgementRoots)
+          await window.escode.project("file-operation-ack", root);
+      }
+    } catch (error) {
+      errors.push(`Recovery acknowledgement failed; available edits retained: ${String(error)}`);
+    }
     const root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
     if (import.meta.hot) import.meta.hot.data.root = root;
     root.render(<App restored={restored} errors={errors} />);

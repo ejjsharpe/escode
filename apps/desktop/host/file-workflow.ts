@@ -903,6 +903,7 @@ export function createFileWorkflow({
     isAppState,
     protectPath: (path: string) => protectImport(path, "operation"),
     recover: () => operations.recover(checkout),
+    acknowledgementRoots: () => operations.acknowledgementRoots(),
     persist: (state: unknown) => operations.persist(state),
   };
 }
