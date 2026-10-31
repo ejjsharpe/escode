@@ -17,6 +17,7 @@ const validate = chats => {
   }
 };
 try {
+  if (existsSync(workerData + '.recovery-pending')) throw Error('Recovered state requires external reconciliation before effects');
   const marker = workerData + '.established';
   const established = existsSync(marker);
   if (established && !existsSync(workerData)) throw Error('Missing established SQLite directory; explicit recovery required');
