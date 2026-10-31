@@ -195,11 +195,12 @@ test("acknowledged summaries stay connected beyond the directory deadline and cu
     expect(chunks).toBeGreaterThan(45);
   } finally { socket.terminate(); await host.close(); }
 }, 22000);
-test("watch streams share the query connection, report failures, and release on interrupt and disconnect", async () => {
+for (const tag of ["watchDirectories", "observeFiles"]) test(`${tag} streams share the query connection, report failures, and release on interrupt and disconnect`, async () => {
   const listeners = new Set<(error?: string) => void>();
   const host = await startHost({ hostId: "host", clientId: "client", origin: "null",
     list: async () => ({ kind: "available", listing: { entries: [{ path: "external.txt", directory: false }], ignored: [] } }),
     watch: (_root, _paths, notify) => { listeners.add(notify); return () => { listeners.delete(notify); }; },
+    observeFiles: (_root, notify) => { listeners.add(notify); return () => { listeners.delete(notify); }; },
   });
   const socket = await connect(host.bootstrap().url);
   const messages: any[] = [];
@@ -209,7 +210,7 @@ test("watch streams share the query connection, report failures, and release on 
   });
   const request = (id: string, tag: string, payload: unknown) => socket.send(JSON.stringify({ _tag: "Request", id, tag, payload, headers: [] }));
   try {
-    request("watch", "watchDirectories", { root: "/repo", paths: [""] });
+    request("watch", tag, { root: "/repo", paths: [""] });
     await expect.poll(() => messages.some((m) => m._tag === "Chunk")).toBe(true);
     expect(listeners.size).toBe(1);
     listeners.forEach((notify) => notify("EMFILE injected"));
@@ -218,7 +219,7 @@ test("watch streams share the query connection, report failures, and release on 
     await expect.poll(() => JSON.stringify(messages)).toContain("external.txt");
     socket.send(JSON.stringify({ _tag: "Interrupt", requestId: "watch" }));
     await expect.poll(() => listeners.size).toBe(0);
-    request("again", "watchDirectories", { root: "/repo", paths: [""] });
+    request("again", tag, { root: "/repo", paths: [""] });
     await expect.poll(() => listeners.size).toBe(1);
     socket.terminate();
     await expect.poll(() => listeners.size).toBe(0);

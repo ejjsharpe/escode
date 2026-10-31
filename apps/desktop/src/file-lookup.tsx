@@ -32,6 +32,8 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
   const activated = useRef(false);
   const [results, setResults] = useState<LookupRow[]>([]);
   const [selected, setSelected] = useState(0);
+  const [observationError, setObservationError] = useState("");
+  const [invalidation, setInvalidation] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("Type a filename or path. Exact paths can also be opened.");
@@ -45,23 +47,38 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
     };
   }, []);
   useEffect(() => {
+    let active = true;
+    const failures = new Map<string, string>();
+    setObservationError("");
+    const stops = scope.slice(0, 8).map(target => window.escode.observeFiles(target.root, error => {
+      if (!active) return;
+      if (error) {
+        failures.set(target.root, error.slice(0, 2048));
+        setObservationError("Live updates unavailable: " + [...failures].map(([root, message]) => `${root}: ${message}`).join("; ") + ". Results may be incomplete. Refresh or reopen to retry.");
+      }
+      generation.current++;
+      setInvalidation(value => value + 1);
+    }));
+    return () => { active = false; generation.current++; for (const stop of stops) stop(); };
+  }, [scopeKey, refresh]);
+  useEffect(() => {
     const request = ++generation.current;
     setResults([]); setSelected(0);
     setMessage(!scope.length ? "No open checkouts" : "Type a filename or path. Exact paths can also be opened.");
     if (!query.trim() || !scope.length) return;
     let stopped = false, stop: (() => void) | undefined, next = 0;
-    let rows: LookupRow[] = [], bytes = 0, capped = scope.length > 32;
+    let rows: LookupRow[] = [], bytes = 0, capped = scope.length > 8;
     const coverage: string[] = [];
     const size = (row: LookupRow) => (row.path.length + row.root.length + row.project.length) * 6 + row.positions.length * 8 + 128;
     const current = () => !stopped && request === generation.current && liveScope.current === scopeKey && !!dialog.current?.open;
     const scan = () => {
       if (!current()) return;
-      if (next >= Math.min(scope.length, 32)) {
+      if (next >= Math.min(scope.length, 8)) {
         setMessage(`${rows.length} matches${capped ? "; Partial coverage: search capped. Refine the query or Refresh." : ""}${coverage.length ? "; " + coverage.join("; ") : ""}${!rows.length && !capped && !coverage.length ? ". No eligible matches. You can still open an exact path." : ""}`);
         return;
       }
       const target = scope[next++];
-      setMessage(`Searching checkout ${next} of ${Math.min(scope.length, 32)}…`);
+      setMessage(`Searching checkout ${next} of ${Math.min(scope.length, 8)}…`);
       stop = window.escode.searchFiles(target.root, query, result => {
         if (!current()) return;
         if (result.partial) coverage.push(`Incomplete: ${target.root}. ${result.message}`);
@@ -82,7 +99,8 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
     };
     const timer = setTimeout(scan, 120);
     return () => { stopped = true; generation.current++; clearTimeout(timer); stop?.(); rows = []; };
-  }, [scopeKey, query, refresh]);
+  }, [scopeKey, query, refresh, invalidation]);
+
   useEffect(() => { document.getElementById(`lookup-result-${selected}`)?.scrollIntoView({ block: "nearest" }); }, [selected]);
   const activate = async (row?: LookupRow) => {
     if (!query || busy.current) return;
@@ -101,17 +119,15 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
         if (!inScope(target)) throw Error("Checkout is no longer open.");
         path = await window.escode.lookupFile(target.root, query);
       } else {
-        if (scope.length > 32) throw Error("Exact lookup is capped at 32 checkouts. Select a checkout and retry locally.");
+        if (scope.length > 8) throw Error("Exact lookup is capped at 8 checkouts. Select a checkout and retry locally.");
         for (const candidate of scope) {
           if (!current()) return;
           if (!inScope(candidate)) continue;
-          try {
-            const found = await window.escode.lookupFile(candidate.root, query);
-            if (target) throw Error("ambiguous");
-            target = candidate; path = found;
-          } catch (error) {
-            if (String(error).includes("ambiguous")) throw Error("Several checkouts contain this path. Choose a result or enter an absolute path.");
-          }
+          let found: string;
+          try { found = await window.escode.lookupFile(candidate.root, query); }
+          catch { continue; }
+          if (target) throw Error("Several checkouts contain this path. Choose a result or enter an absolute path.");
+          target = candidate; path = found;
         }
         if (!target) throw Error("File could not be opened in the current scope. Check the path and retry.");
       }
@@ -150,7 +166,7 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
           {roots && <small className="lookup-root">{result.project.split("/").at(-1)} · {result.branch} · {result.root}</small>}
         </div>)}
       </div>
-      <p role="status">{message}</p>
+      <p role="status">{message}{observationError && ` ${observationError}`}</p>
       <Button onClick={() => { generation.current++; setRefresh(value => value + 1); }}>Refresh</Button>
       <Button disabled={!query} onClick={() => void activate()}>Open file</Button>
       <Button onClick={() => { generation.current++; onClose(); }}>Cancel</Button>

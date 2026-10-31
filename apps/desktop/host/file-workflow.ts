@@ -19,7 +19,7 @@ import type { FoundationState } from "./foundation-state";
 type HostOptions = Parameters<typeof startHost>[0];
 type FileActions = Pick<
   HostOptions,
-  "searchFiles" | "lookupFile" | "createEntry" | "readDiff" | "readFile" | "saveFile" | "watch" | "list"
+  "observeFiles" | "searchFiles" | "lookupFile" | "createEntry" | "readDiff" | "readFile" | "saveFile" | "watch" | "list"
 >;
 
 export function createFileWorkflow({
@@ -752,6 +752,18 @@ export function createFileWorkflow({
       const result = await project.diff({ path, area });
       check();
       return result;
+    },
+    observeFiles: (root, notify) => {
+      const project = projects.get(root);
+      if (!project) throw Error("Open and approve this checkout first.");
+      const identity = project.repositoryGit.repository(), session = projectSessions.get(identity);
+      if (!session || isQuitting() || removing.has(identity)) throw Error("Project session closed.");
+      if (isAppState(root) || stateFiles.some(file => file.startsWith(root + "/"))) throw Error("App state is unavailable in Files.");
+      return project.observeFiles(error => {
+        if (projects.get(root) !== project || projectSessions.get(identity) !== session || isQuitting() || removing.has(identity))
+          notify("Originating project unavailable or app quitting.");
+        else notify(error);
+      });
     },
     searchFiles: async (root, query, signal) => {
       const { project, check } = await fileContext(root, "");

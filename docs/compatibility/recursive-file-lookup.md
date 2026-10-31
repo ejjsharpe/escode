@@ -1,6 +1,6 @@
 # Recursive checkout file lookup
 
-Implements #110 under specification #93, on the accepted exact-path baseline `5f7e897370b8254616e2196a4fd37a5a48cc7b45`. Scope remains one approved checkout; Agents, recents and automatic freshness have separate owners.
+Implements #110 under specification #93, on the accepted exact-path baseline `5f7e897370b8254616e2196a4fd37a5a48cc7b45`. Scope remains one approved checkout; Agents and recents have separate owners; #113 adds file-change freshness below.
 
 The authenticated `searchFiles` RPC enumerates independently of loaded Files rows. The existing native descriptor launcher enters the validated checkout before executing bundled ripgrep. ripgrep runs without following directory symlinks, with hidden files enabled, no parent/global ignore sources, no configuration arguments and one traversal thread. Checkout-local/nested `.gitignore`, `.ignore`, `.rgignore` and repository `info/exclude` rules apply. Fixed negative globs prune `.git`, `.svn`, `.hg`, `.jj`, `.DS_Store`, `Thumbs.db`, `node_modules`, `bower_components`, and `*.code-search` at every depth. Eligible hidden files and build/dist files remain discoverable independently of Files visibility.
 
@@ -15,9 +15,9 @@ The character scorer, item scoring, query preparation and relevance comparator a
 - Enumeration stops at 20,000 candidate paths, 4 MiB of native stdout, a 16 KiB unfinished path record, or five seconds. Only bounded path metadata is retained; no content index is built. Native stderr retained for failure detection is capped at 2048 characters.
 - Scoring charges at most 16 Mi query-by-path cells (the scorer can make both label and path passes), yields every 32 candidates and checks cancellation. A single DP matrix is bounded by the 256-by-4096 input limits. Exhausting the scoring allowance discloses partial coverage.
 - At most 100 best results and an estimated 512 KiB serialized result allowance, including positions. Retention is bounded while ranking, rather than collecting all matches. Rendering creates text runs and highlighted positions, not one element for every path character.
-- No persistent index, score cache or watcher is introduced. Candidate lists, processes, timers and inherited descriptors end with the request; renderer results end with popup closure. Refresh/reopen enumerates current files and rules.
+- No persistent index or score cache is introduced. Popup-scoped observation is described below; Candidate lists, processes, timers and inherited descriptors end with the request; renderer results end with popup closure. Refresh/reopen enumerates current files and rules.
 
-Capped enumeration/scoring/results, native errors and missing ignore coverage return partial state. Loading and unavailable states are announced; partial searches never claim exhaustive No matches. Traversal order can affect coverage at a cap; refining the query or Refresh does not promise exhaustive coverage beyond these budgets. Automatic freshness is deferred to #113/#114; wider responsiveness qualification belongs to #115.
+Capped enumeration/scoring/results, native errors and missing ignore coverage return partial state. Loading and unavailable states are announced; partial searches never claim exhaustive No matches. Traversal order can affect coverage at a cap; refining the query or Refresh does not promise exhaustive coverage beyond these budgets. Ignore-policy freshness qualification is deferred to #114; wider responsiveness qualification belongs to #115.
 
 ## Verification
 
@@ -36,3 +36,24 @@ Observed checks on 2026-10-31:
 - Existing navigation journeys: 2 passed, including delayed exact validation/read cancellation and composer preservation.
 - Shared recursive popup journey: passed in built development Electron (2.6 s), Vite development server (19.0 s while packaging also generated reload events), and packaged restricted-PATH Electron (6.5 s). These are whole-test durations, not query latency measurements or responsiveness acceptance.
 - Full unit run: 273 passed, 4 skipped, 3 failed (shutdown initialization polling and two worktree 15-second timeouts). Rerunning both affected files with `--maxWorkers=1` passed all 21 tests in 30.23 s. The broad-run failures remain recorded; no blanket full-suite pass is claimed.
+
+
+## Open-popup file-change freshness (#113)
+
+The authenticated `observeFiles(root)` stream is the reusable invalidation seam. It carries only readiness, invalidation or a bounded error, never paths or content authority. The desktop workflow admits only already approved, active project checkouts and the Checkout revalidates directory identity before and after subscription and before delivering invalidation. The existing Files-tree watch remains unchanged. Native recursive macOS filesystem observation reaches unloaded directories; symlink notifications cannot authorize discovery or activation through links.
+
+Admission is capped at 16 active recursive observations host-wide **before** creating a watcher. Each holds one native recursive subscription, one optional 500 ms timer and its disposer; no per-file/directory index or event-path collection is retained. Events coalesce into at most two invalidations per second per subscription. The wire stream has one sliding pending notification and sticky failure disclosure; ordinary socket request/frame/ack budgets still apply. Native OS event queues are managed by macOS, not an application-sized directory-watch map. No polling scan runs while idle. Each invalidation uses the existing 120 ms debounce, cancels the superseded search, and inherits the two-process/five-second/candidate/scoring/response budgets above. Continuous churn can prevent a completed fresh search; it cannot allocate an unbounded scan backlog. OS event loss remains possible, so Refresh/reopen remain explicit recovery.
+
+Observation lasts only for the popup and exact scope. Root/Refresh changes and unmount interrupt the stream; socket/client/Checkout closure release watches and timers. Refresh reinstalls the watcher and rescans after readiness so subscription setup cannot leave a missed-change gap. Errors close the failed native watcher, retain a visible incomplete-coverage warning alongside any search result, and require explicit retry. Query/scope/invalidation generations reject earlier results and activation completions; exact activation still revalidates its captured target through the existing opener and never substitutes a newly ranked row. No working-buffer, journal, approval or chat ownership changes.
+
+#114 should reuse `observeFiles` and popup invalidation, extending observation only for relevant ignore sources outside the recursive checkout (for example linked-worktree Git excludes) and owning its ignore-change corpus. This ticket does not claim that those external sources are observed. No settings interpreter or general watcher framework is added.
+
+The existing static popup journey now owns incremental external create/rename/delete under unloaded directories, root-loss disclosure, restoration plus Refresh, and an in-app create outcome followed by automatic convergence and kept-open activation. It runs unchanged in built Electron, Vite development and packaged restricted-PATH builds. The existing authenticated watcher lifecycle case is parameterized for this stream to cover interruption/disconnection and error delivery while unary work continues. One focused native observation test covers coalescing, admission exhaustion, release and Checkout closure; it adds no scorer/ignore/authority matrix. The neighboring known trailing whitespace at `tests/lookup.spec.ts:16` was removed while editing the journey.
+
+#113 observed checks on 2026-10-31 (macOS 26.3.1, Electron 45.1.0, shell Node 26.13.0, Git 2.50.1, Bun 1.4.4):
+
+- Red: the new native observation assertion failed at missing `observeFiles`; the amended popup journey failed waiting for the externally created result before implementation.
+- Green: focused lookup, authenticated transport and workflow checks: 22 passed. Existing Checkout, file-operation, workspace/recovery and shutdown regressions: 66 passed.
+- Built Electron lookup plus existing navigation/stale-activation journeys: 3 passed (21.0 s total). Same incremental lookup journey: Vite development 6.4 s; packaged restricted-PATH build 8.0 s. These are whole-journey durations, not query-latency benchmarks.
+- Typecheck, lint, desktop build, macOS directory package and whitespace check passed. Popup screenshot inspected at the harness viewport; Impeccable detector returned no findings.
+- No full-suite, prolonged load/memory/event-loop benchmark or manual VoiceOver claim. #115 retains wider responsiveness qualification, and #114 retains ignore-policy freshness. Notifications are best effort and continuous filesystem churn can delay a settled result; Refresh/reopen remain recovery.

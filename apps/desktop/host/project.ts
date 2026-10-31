@@ -22,6 +22,7 @@ export type Document = { text: string; version: string };
 export type Change = { path: string; area: "staged" | "unstaged" | "untracked" };
 export type SaveResult = ({ kind: "saved"; disk: Document } | { kind: "conflict"; disk: Document }) & { persistencePending?: boolean; message?: string };
 let activeLookups = 0;
+let activeObservations = 0;
 export class Checkout {
   readonly repositoryGit: CheckoutRepository;
   private directory: number | undefined;
@@ -166,6 +167,40 @@ export class Checkout {
       }
     }
     return dispose;
+  }
+  observeFiles(notify: (error?: string) => void) {
+    this.checkoutIdentity();
+    if (activeObservations >= 16) throw Error("Lookup observation limit reached. Refresh to retry.");
+    activeObservations++;
+    let watcher: FSWatcher | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      clearTimeout(timer);
+      watcher?.close();
+      activeObservations--;
+      this.watchDisposers.delete(dispose);
+    };
+    const failed = (error: unknown) => {
+      dispose();
+      notify(String(error).slice(0, 2048));
+    };
+    try {
+      // Notifications invalidate candidates only; discovery and activation retain no-follow authority.
+      watcher = watch(this.root, { recursive: true, persistent: false }, () => {
+        if (disposed || timer) return;
+        timer = setTimeout(() => {
+          timer = undefined;
+          try { this.checkoutIdentity(); notify(); } catch (error) { failed(error); }
+        }, 500);
+      });
+      watcher.on("error", failed);
+      this.checkoutIdentity();
+      this.watchDisposers.add(dispose);
+      return dispose;
+    } catch (error) { dispose(); throw error; }
   }
   close() {
     for (const dispose of this.watchDisposers) dispose();
