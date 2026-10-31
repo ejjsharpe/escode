@@ -9,13 +9,14 @@ import type { DurableState } from "./durable-state";
 const execute = promisify(execFile);
 
 // Saved disk only: no editor memory, ignored untracked files, empty directories or environment.
-export async function captureBeforeTurn(database: DurableState, chat: Readonly<SavedChat>, threadId: string | null, commandId?: string) {
-  const boundary = { id: randomUUID(), kind: "before-message", chatId: chat.id, project: chat.project,
-    commandId: commandId ?? null, checkout: chat.checkout, directoryIdentity: chat.directoryIdentity, threadId, createdAt: Date.now() };
+export async function captureTurnCheckpoint(database: DurableState, chat: Readonly<SavedChat>, threadId: string | null, commandId?: string, completion?: { id: string; turnId: string; completion: string; createdAt: number }) {
+  const boundary = { ...(completion ?? {}), id: completion?.id ?? randomUUID(), kind: completion ? "after-turn" : "before-message", chatId: chat.id, project: chat.project,
+    commandId: commandId ?? null, checkout: chat.checkout, directoryIdentity: chat.directoryIdentity, threadId, createdAt: completion?.createdAt ?? Date.now() };
   const deadline = Date.now() + 15000;
   let gitBase: string | null = null;
   let body: object;
   try {
+    if (completion && completion.completion !== "completed") throw Error(`Turn ${completion.completion}; completion files unavailable`);
     if (chat.project === null) throw Error("No project file coverage");
     const git = async (...args: string[]) => (await execute("git", ["-C", chat.checkout, ...args],
       { encoding: "utf8", maxBuffer: 4 * 1024 * 1024, timeout: 15000 })).stdout;
@@ -26,6 +27,7 @@ export async function captureBeforeTurn(database: DurableState, chat: Readonly<S
     let bytes = 0;
     const root = await realpath(chat.checkout);
     const identity = await stat(root);
+    if (boundary.directoryIdentity && (boundary.directoryIdentity.path !== root || boundary.directoryIdentity.dev !== identity.dev || boundary.directoryIdentity.ino !== identity.ino)) throw Error("Checkpoint checkout identity changed");
     boundary.directoryIdentity = { path: root, dev: identity.dev, ino: identity.ino };
     const nested = new Set<string>();
     for (const path of new Set(entries)) {
@@ -64,10 +66,10 @@ export async function captureBeforeTurn(database: DurableState, chat: Readonly<S
     }
     body = { ...boundary, gitBase, availability: "available", files };
   } catch (error) { body = { ...boundary, gitBase, availability: "unavailable", reason: String(error) }; }
-  try { await database.command("checkpoint", { body }); }
+  try { await database.command(completion ? "completeCheckpoint" : "checkpoint", { body }); }
   catch (error) {
     // Content exhaustion must retain the same boundary with explicit missing coverage.
-    try { await database.command("checkpoint", { body: { ...boundary, gitBase, availability: "unavailable", reason: String(error) } }); }
+    try { await database.command(completion ? "completeCheckpoint" : "checkpoint", { body: { ...boundary, gitBase, availability: "unavailable", reason: String(error) } }); }
     catch (failure) { return `File checkpoint unavailable; boundary persistence failed: ${String(failure)}`; }
     return `File checkpoint unavailable: ${String(error)}`;
   }

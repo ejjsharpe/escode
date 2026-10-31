@@ -213,7 +213,7 @@ test("setup failures retain drafts; exact input requests cannot answer another t
       method: "turn/completed",
       params: { threadId: "thread", turn: { id: "turn", status: "interrupted" } },
     });
-    expect(service.snapshot(dir, c.id).busy).toBe(false);
+    await expect.poll(() => service.snapshot(dir, c.id).busy).toBe(false);
     emit({
       id: 15,
       method: "mcpServer/elicitation/request",
@@ -272,7 +272,7 @@ createInterface({input: process.stdin}).on("line", line => {
     await service.open(dir, c.id);
     await service.send(dir, c.id, "hello");
     await expect.poll(() => service.snapshot(dir, c.id).connected, { timeout: 1000 }).toBe(false);
-    expect(service.snapshot(dir, c.id).busy).toBe(false);
+    await expect.poll(() => service.snapshot(dir, c.id).busy).toBe(false);
   } finally {
     await service.shutdown();
     await rm(dir, { recursive: true, force: true });

@@ -91,12 +91,18 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
     let value;
     if (operation === 'checkpoints') {
       value = db.prepare('SELECT body FROM checkpoints WHERE chatId=? ORDER BY rowid').all(commandId).map(row => JSON.parse(row.body));
-    } else if (operation === 'checkpoint') {
+    } else if (operation === 'checkpoint' || operation === 'completeCheckpoint') {
       if (!body || !body.id || !body.chatId || !['available', 'unavailable'].includes(body.availability)) throw Error('Invalid checkpoint');
+      if (operation === 'completeCheckpoint') {
+        const row = db.prepare('SELECT body FROM checkpoints WHERE id=?').get(body.id);
+        const prior = row && JSON.parse(row.body);
+        if (!prior || prior.completion !== 'pending' || prior.chatId !== body.chatId || prior.threadId !== body.threadId || prior.checkout !== body.checkout || prior.commandId !== body.commandId) throw Error('Completion boundary mismatch or already finalized');
+      }
       const encoded = JSON.stringify(body);
       const used = db.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))),0) AS n FROM checkpoints').get().n;
       if (used + Buffer.byteLength(encoded) > (body.availability === 'available' ? 50331648 : 67108864)) throw Error('Checkpoint storage capacity exhausted');
-      db.prepare('INSERT INTO checkpoints VALUES (?, ?, ?)').run(body.id, body.chatId, encoded);
+      if (operation === 'completeCheckpoint') db.prepare('UPDATE checkpoints SET body=? WHERE id=?').run(encoded, body.id);
+      else db.prepare('INSERT INTO checkpoints VALUES (?, ?, ?)').run(body.id, body.chatId, encoded);
     } else if (operation === 'publishFileFact') {
       if (!body || !body.completed || !['move', 'trash'].includes(body.kind)) throw Error('Invalid shared file fact');
       db.exec('BEGIN IMMEDIATE');
