@@ -4,12 +4,12 @@ Research date: 2026-10-31. **Proposal for discussion; no implementation or accep
 
 ## Recommendation
 
-Adopt **one host-owned SQLite database for authoritative application metadata, command receipts, resource reservations, client recovery records and file-operation facts**. Use conventional current-state tables with explicit transactions and a small operation state machine. Keep provider history provider-owned, project files filesystem-owned, and the bounded live-output spool separate. Do not adopt T3's application-wide event sourcing or restart continuation as part of this change.
+For the recovery and consistency requirements investigated here, adopt **one host-owned SQLite database for authoritative application metadata, command receipts, resource reservations, client recovery records and file-operation facts**. Use conventional current-state tables with explicit transactions and a small operation state machine. Keep provider history provider-owned, project files filesystem-owned, and the bounded live-output spool separate. The subsequent discussion introduces action-level time travel as a potential requirement that could change the event-sourcing recommendation; see [section 3.1](#31-discussion-follow-up-action-level-time-travel). Restart must still require explicit action before another turn.
 
 These are three independent decisions:
 
 1. **SQLite: recommend yes**, subject to packaged Electron/runtime and failure-injection qualification. The benefit is atomic changes across related application records, indexed access and removing repeated whole-store rewrites. It is not a promise of faster execution or atomic external effects.
-2. **Application-wide event sourcing: recommend no for this scope.** Receipts and operation evidence provide the recovery facts escode needs without making every state change a permanent domain event or maintaining replayable projections.
+2. **Application-wide event sourcing: recommend no for recovery alone; reconsider if action-level time travel is required.** Receipts and operation evidence provide the recovery facts escode needs without making every state change a permanent domain event or maintaining replayable projections. This is not a recommendation to adopt event sourcing later by default.
 3. **Owning complete chat history: recommend no for this scope.** SQLite can hold metadata and recovery evidence without taking ownership of every provider transcript. Keep bounded, explicitly partial history behavior; revisit complete history only for an independently accepted product requirement.
 
 The main justification is concrete: escode already has careful individual-file persistence, but its correctness spans several files and renderer storage; a growing receipt array shares a 1 MiB cap with host identity; and a hard process crash leaves a lock file that prevents reopening. SQLite removes some storage machinery, while application recovery rules still have to preserve uncertain effects, unsaved text and exact context identities. See the evidence below.
@@ -113,9 +113,23 @@ The following is design analysis based on the observed implementations, not benc
 | Disk writes | Existing full-file rewrites plus syncs; an append journal reduces rewriting but adds recovery/truncation/checkpoint design. | Changed SQL pages, indexes and WAL plus checkpoints. FULL durability has sync costs; blob updates can still be expensive. | Event append plus projection updates and outbox changes; potentially more writes, offset by batching/compaction. No inherent speed win. |
 | Multiple clients | Partition files/locks by identity and coordinate all shared operations externally. | Shared host arbitrates; rows keyed by client and revision allow transactional protection/acknowledgement. SQLite is not the network protocol. | Shared ordered event delivery helps views, but client-owned edits and authorization remain separate design problems. |
 | Maintenance/testing | Fewer runtime dependencies, more custom persistence failure states. Human-readable JSON is convenient. | Embedded SQLite compatibility, schema evolution, transaction boundaries, backup policy and fault tests. | All SQL obligations plus versioned events, deterministic replay, projector upgrades, compaction and outbox policy. |
-| Fit for this proposal | Viable short-term if no storage change is accepted; does not remove cross-file complexity cheaply. | **Best fit:** directly addresses the observed costs and consistency boundaries. | Justified only by additional accepted history/audit/workflow requirements. |
+| Fit for this proposal | Viable short-term if no storage change is accepted; does not remove cross-file complexity cheaply. | **Best fit for recovery alone:** directly addresses the observed costs and consistency boundaries. | Reconsider for additional history/audit/workflow requirements, including the proposed action-level time travel below. |
 
 Improving files is a real alternative. A correct version would preserve the current fsync discipline, use an OS-held single-host lock, introduce one clear generation commit point, bound/load records incrementally, retain uncertainty and specify safe compaction. Sharding receipts alone fixes neither atomic acknowledgement nor backup consistency. An append-only file plus indexes/checkpoints quickly becomes custom database work. Conversely, SQLite should not become a justification for an ORM, replicated database, generic job engine or complete rewrite of pure reconciliation helpers.
+
+### 3.1 Discussion follow-up: action-level time travel
+
+**Recorded 2026-10-31; potential requirement, not an accepted design.** The user raised returning to just before a specific action. The original recommendation evaluated durable recovery and connected-client catch-up, not this experience. Action-level time travel is a substantial reason to reconsider event sourcing; describing it merely as something to “defer” understates that change in scope.
+
+**Reconstructing an earlier application state and restoring real work are separate capabilities.** A sufficiently complete, retained event history with compatible replay logic can reconstruct the recorded application state at a chosen event boundary. It cannot reconstruct facts it never captured. Returning to before an agent edited a file also requires the earlier file contents or reversible changes, a defined conversation/provider state, and an explicit boundary identifying the action. A “file changed” event alone is insufficient, and one user action may span several events and external effects.
+
+**Observed T3 behavior supports this distinction.** Its checkpoint rollback selects a thread-start or provider-turn target, invokes provider conversation rollback, and separately restores a file checkpoint when requested. It rejects file restoration into a shared workspace, and rolled-back turns remain in its audit history. This is evidence for coordinated checkpoint restoration, not proof that every arbitrary event is a complete restore point. [Checkpoint rollback implementation][T-checkpoint-rollback]
+
+**Design implication:** returning to before an agent turn may be served by conventional SQLite tables plus explicit checkpoints. Inspecting or branching from individual recorded tool actions, saves and workflow changes makes an event-based model more compelling, provided those boundaries and the necessary data are captured. Conventional tables with dedicated revision history can also support time travel; event sourcing offers a common historical model at the cost of retaining compatible events, replay logic and referenced content. The requirement does not automatically justify event-sourcing preferences, drafts or every other application record.
+
+**Proposed restoration constraints:** preserve the original timeline and record a new restoration or branch. Preserve newer unsaved text, conflict baselines and other clients' or agents' work; define isolation and conflict handling before replacing files. External effects such as deployments or sent messages may be irreversible, and provider rollback/fork support must be verified. Retain uncertainty if restoration stops between effects. Neither viewing history, reconnecting nor restarting may resend prompts or resume agent work. An event log alone cannot provide an atomic rollback across SQLite, project files and providers.
+
+Before selecting the broader architecture, specify which boundaries users can choose (turns, tool actions, explicit saves), whether they can inspect, restore or branch from them, which files and conversation state are included, and how long that history must remain available. SQLite adoption, event sourcing and ownership of complete chat history remain independent decisions. The current-state proposal below remains the recovery-focused baseline pending those answers.
 
 ## 4. Proposed ownership and minimum data model
 
@@ -287,7 +301,7 @@ ELECTRON_RUN_AS_NODE=1 \
 
 The user needs to decide:
 
-1. Accept SQLite for authoritative metadata while leaving event sourcing and complete transcript ownership out of this effort?
+1. Is action-level time travel part of this effort, and at what boundaries and scope (section 3.1)? Accept SQLite for authoritative metadata independently; compare current-state tables plus checkpoints with an event-based history against that requirement, and decide complete transcript ownership separately.
 2. Adopt FULL plus qualified macOS full-flush behavior for acknowledged metadata, and separately define the project-file durability promise?
 3. Allow an explicit exact-target emergency Stop when durable receipt storage is unavailable, or fail it closed and rely on explicit host shutdown?
 4. Keep the accepted fresh-store/no-import boundary, or authorize a narrow import of current records? Specify which drafts/associations must be preserved before cutover; leave old stores/resources untouched either way.
@@ -361,6 +375,7 @@ The recommendation is therefore concrete enough for an ADR discussion, while its
 [T-config]: https://github.com/pingdotgg/t3code/blob/e5909e53c32a9d5b51caf6352d1f17fd73e86db7/apps/server/src/config.ts#L137-L165
 [T-db-storage]: https://github.com/pingdotgg/t3code/blob/e5909e53c32a9d5b51caf6352d1f17fd73e86db7/apps/server/src/persistence/DatabaseStorage.ts
 [T-dispatch]: https://github.com/pingdotgg/t3code/blob/e5909e53c32a9d5b51caf6352d1f17fd73e86db7/apps/server/src/orchestration-v2/Orchestrator.ts#L13246-L13508
+[T-checkpoint-rollback]: https://github.com/pingdotgg/t3code/blob/e5909e53c32a9d5b51caf6352d1f17fd73e86db7/apps/server/src/orchestration-v2/CheckpointRollbackService.ts#L173-L276
 [T-event-schema]: https://github.com/pingdotgg/t3code/blob/e5909e53c32a9d5b51caf6352d1f17fd73e86db7/apps/server/src/persistence/Migrations/001_OrchestrationEvents.ts
 [T-events]: https://github.com/pingdotgg/t3code/blob/e5909e53c32a9d5b51caf6352d1f17fd73e86db7/apps/server/src/orchestration-v2/EventStore.ts
 [T-foundation-atomic]: https://github.com/pingdotgg/t3code/blob/e5909e53c32a9d5b51caf6352d1f17fd73e86db7/apps/server/src/orchestration-v2/FoundationPersistence.test.ts#L1215-L1294
