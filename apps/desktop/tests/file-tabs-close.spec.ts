@@ -335,6 +335,7 @@ test("reopen keeps twenty complete actions and evicts the oldest batch", async (
     for (let i = 0; i < 20; i++) {
       await f.page.keyboard.press("Meta+Shift+t");
       await expect(f.page.getByRole("textbox", { name: "b.txt editor", exact: true })).toBeFocused();
+      await expect(f.page.getByRole("button", { name: "Close file", exact: true })).toBeEnabled();
     }
     await f.page.keyboard.press("Meta+Shift+t");
     await expect(f.tabs.getByRole("tab")).toHaveText(["b.txt"]);
