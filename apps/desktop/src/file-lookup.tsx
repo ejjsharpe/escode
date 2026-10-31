@@ -49,7 +49,7 @@ export function FileLookup({ root, project, onClose }: {
       <p id="file-lookup-scope">Active checkout: {root}</p>
       <input autoFocus aria-label="Exact file path" maxLength={4096} value={query}
         placeholder="Relative or absolute file path"
-        onChange={event => { generation.current++; setQuery(event.target.value); setMessage("Press Enter or Open file to activate. Selection does not open files."); }}
+        onChange={event => { generation.current++; setQuery(event.target.value); setMessage("Press Enter or choose Open file."); }}
         onKeyDown={event => {
           if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void activate(); }
           if (event.key === "ArrowDown" || event.key === "ArrowUp") event.preventDefault();

@@ -1129,7 +1129,7 @@ function ProjectView({
     const key = (event: KeyboardEvent) => {
       if (!active || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "p" ||
           event.altKey || event.shiftKey || event.repeat || blocked[checkout] ||
-          (event.target instanceof HTMLInputElement && !event.target.closest(".monaco-editor")) ||
+          event.target instanceof HTMLInputElement ||
           document.querySelector('dialog[open], [role="dialog"], [role="menu"], .tree-edit')) return;
       event.preventDefault();
       event.stopImmediatePropagation();

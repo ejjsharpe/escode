@@ -42,6 +42,11 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     };
     await open(a);
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("textbox", { name: "Rename a.txt", exact: true })).toBeFocused();
+    await page.keyboard.press("Meta+p");
+    await expect(page.getByRole("dialog", { name: "Find file", exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await page.locator(".monaco-editor:visible").click();
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("alpha draft");
@@ -53,6 +58,8 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     const exactPath = lookup.getByLabel("Exact file path");
     await expect(lookup).toContainText(a);
     await exactPath.fill("binary.txt");
+    await page.keyboard.press("Meta+p");
+    await expect(exactPath).toHaveValue("binary.txt");
     await page.screenshot({ path: "test-results/exact-lookup-popup.png" });
     await page.keyboard.press("ArrowDown");
     await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveText(["a.txt"]);
