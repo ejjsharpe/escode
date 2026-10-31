@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Chats } from "./chat";
 import { compareChats } from "../src/chat-order";
 
-test("legacy append order survives persistence without invented creation dates", async () => {
+test("undated chats retain saved data without invented dates and ties use descending identity", async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-order-"));
   try {
     const file = join(dir, "chats.json");
@@ -32,7 +32,7 @@ test("legacy append order survives persistence without invented creation dates",
       ]
         .sort(compareChats)
         .map((c) => c.id),
-    ).toEqual(["a", "b"]);
+    ).toEqual(["b", "a"]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

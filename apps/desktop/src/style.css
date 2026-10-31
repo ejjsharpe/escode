@@ -748,3 +748,13 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .retention-settings label { display: block; margin: 12px 0; }
 .retention-settings input[type=number] { width: 90px; }
 .retention-settings :focus-visible { outline: 2px solid #b7aaf5; outline-offset: 3px; }
+
+.agent-row { width: 100%; min-width: 0; text-align: left; display: flex; flex-direction: column; gap: 4px; }
+.agent-row .chat-row-heading { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; color: inherit; }
+.agent-row strong, .agent-row .chat-row-context { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.agent-row .chat-row-heading strong { flex: 1; }
+.agent-row svg, .agent-row time { flex-shrink: 0; }
+.agent-row time { margin-left: auto; font-size: 11px; color: #a4a3b0; }
+.agent-row .chat-row-context { font-size: 12px; color: #a4a3b0; }
+.agents .agent-row { margin-bottom: 0; border-color: transparent; border-radius: 4px; padding: 8px 12px; }
+.agents .agent-row[aria-pressed="true"] { border-color: #756b9c; }
