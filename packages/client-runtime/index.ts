@@ -71,6 +71,20 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     transferAction: (action: import("@escode/contracts").TransferAction) => chatQuery(client => client.transferAction({ action }), true),
     trashEntries: (root: string, paths: readonly string[]) => chatQuery(client => client.trashEntries({ root, paths }), true),
     readDiff: (root: string, path: string, area: typeof import("@escode/contracts").DiffArea.Type) => chatQuery(client => client.readDiff({ root, path, area })),
+    observeFiles(root: string, notify: (error?: string, ready?: boolean) => void) {
+      const controller = new AbortController();
+      const current = connect();
+      const effect = Effect.gen(function* () {
+        const client = yield* Effect.tryPromise(() => current);
+        yield* client.observeFiles({ root }).pipe(Stream.runForEach(change => Effect.sync(() => {
+          if (!controller.signal.aborted) notify(change.error, change.ready);
+        })));
+      });
+      void runQuery(current, effect, controller.signal).catch(error => {
+        if (!controller.signal.aborted) notify(String(error));
+      });
+      return () => controller.abort();
+    },
     searchFiles(root: string, query: string, apply: (result: import("@escode/contracts").LookupResult) => void, error: (message: string) => void, history?: readonly string[]) {
       const controller = new AbortController();
       const current = connect();

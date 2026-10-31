@@ -47,7 +47,7 @@ test('native discovery honors only local ignore sources and fixed prunes', async
  expect((await project.discover('output',new AbortController().signal)).results.map(r=>r.path)).toEqual(['dist/output.js']);
  for (const query of ['', 'x'.repeat(257), 'a\0b']) await expect(project.discover(query,new AbortController().signal)).rejects.toThrow('Invalid lookup');
  for (const history of [Array.from({length:201},()=> 'a'), ['../escape'], Array.from({length:20},()=> 'x'.repeat(4000))]) await expect(project.discover('',new AbortController().signal,history)).rejects.toThrow('Invalid lookup history');
- const cancel=new AbortController();cancel.abort();await expect(project.discover('txt',cancel.signal)).rejects.toThrow('cancelled');
+ const cancel=new AbortController();cancel.abort();await expect(project.discover('',cancel.signal,[])).rejects.toThrow('cancelled');await expect(project.discover('txt',cancel.signal)).rejects.toThrow('cancelled');
  const first=new AbortController(), second=new AbortController();
  const work=[project.discover('txt',first.signal),project.discover('txt',second.signal)];
  await expect(project.discover('txt',new AbortController().signal)).rejects.toThrow('busy');
@@ -55,4 +55,28 @@ test('native discovery honors only local ignore sources and fixed prunes', async
  for(let i=0;i<101;i++) writeFileSync(join(root,`cap-${i}.txt`),'text');
  const capped=await project.discover('cap',new AbortController().signal);expect(capped.partial).toBe(true);expect(capped.results).toHaveLength(100);
  } finally {if(oldGlobal===undefined) delete process.env.GIT_CONFIG_GLOBAL;else process.env.GIT_CONFIG_GLOBAL=oldGlobal;if(oldConfig===undefined) delete process.env.RIPGREP_CONFIG_PATH;else process.env.RIPGREP_CONFIG_PATH=oldConfig;project.close();rmSync(base,{recursive:true,force:true});}
+});
+
+test('recursive observation coalesces unloaded changes, bounds admission and releases on close', async () => {
+ const base=realpathSync(mkdtempSync(join(tmpdir(),'lookup-observe-'))), root=join(base,'repo');
+ execFileSync('git',['init',root]); mkdirSync(join(root,'deep'));
+ const project=await Checkout.open(root);
+ const releases: (()=>void)[]=[];
+ let notifications=0;
+ try {
+   releases.push(project.observeFiles(()=>{notifications++;}));
+   for(let i=0;i<20;i++) writeFileSync(join(root,'deep',`new-${i}.txt`),'text');
+   await expect.poll(()=>notifications).toBeGreaterThan(0);
+   expect(notifications).toBeLessThan(5);
+   for(let i=1;i<16;i++) releases.push(project.observeFiles(()=>{}));
+   expect(()=>project.observeFiles(()=>{})).toThrow('observation limit');
+   releases.splice(0).forEach(release=>release());
+   const before=notifications;
+   writeFileSync(join(root,'deep/after-close.txt'),'text');
+   await new Promise(done=>setTimeout(done,700));
+   expect(notifications).toBe(before);
+   releases.push(project.observeFiles(()=>{}));
+   project.close();
+   expect(()=>project.observeFiles(()=>{})).toThrow('closed');
+ } finally { releases.forEach(release=>release());project.close();rmSync(base,{recursive:true,force:true}); }
 });

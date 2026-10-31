@@ -1,5 +1,5 @@
 import { test, expect, _electron } from '@playwright/test';
-import { mkdtemp, realpath, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, mkdir, writeFile, rm, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -9,7 +9,7 @@ import { launchDesktop } from './desktop';
 import { createServer } from 'vite-plus';
 import electron from 'electron';
 
-test('lookup ranks and highlights unloaded files, Refresh rescans and activation keeps the file', async () => {
+test('lookup ranks and highlights unloaded files, file changes converge and activation keeps the file', async () => {
  const dir=await realpath(await mkdtemp(join(tmpdir(),'escode-lookup-'))), root=join(dir,'repo');
  execFileSync('git',['init',root]); await mkdir(join(root,'deep')); await writeFile(join(root,'deep/workbench.ts'),'unloaded editor target');
  // Static metadata fixture: full retained history, including a closed root and default-glob targets.
@@ -41,7 +41,18 @@ test('lookup ranks and highlights unloaded files, Refresh rescans and activation
  const result=page.getByRole('option',{name:'deep/workbench.ts',exact:true}); await expect(result).toBeVisible();
  await expect(result.locator('mark')).toHaveText(['w','k','b']);
  await writeFile(join(root,'workbench.ts'),'basename wins');
+ await expect(page.getByRole('option',{name:'workbench.ts',exact:true})).toBeVisible();
+ await rename(join(root,'workbench.ts'),join(root,'deep/workbench-new.ts'));
+ await expect(page.getByRole('option',{name:'workbench.ts',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('option',{name:'deep/workbench-new.ts',exact:true})).toBeVisible();
+ await rm(join(root,'deep/workbench-new.ts'));
+ await expect(page.getByRole('option',{name:'deep/workbench-new.ts',exact:true})).toHaveCount(0);
+ await rename(root,root+'-away');
+ await expect(page.getByRole('status').filter({hasText:'Live updates unavailable'})).toBeVisible();
+ await rename(root+'-away',root);
  await page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('button',{name:'Refresh',exact:true}).click();
+ await expect(page.getByRole('status').filter({hasText:'Live updates unavailable'})).toHaveCount(0);
+ await page.evaluate(async root=>{ await window.escode.project('create-entry',root,'','workbench.ts','file'); },root);
  await expect(page.getByRole('option').first()).toHaveText('workbench.ts');
  await page.screenshot({path:'test-results/recursive-lookup.png'});
  await page.getByLabel('Exact file path').focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');

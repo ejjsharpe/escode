@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld(
     chatLive: chatClient.live,
     chatHistory: hostClient.chatHistory,
     chatSummaries: hostClient.chatSummaries,
+    observeFiles: hostClient.observeFiles,
     searchFiles: hostClient.searchFiles,
     lookupFile: hostClient.lookupFile,
     listDirectory: hostClient.listDirectory,

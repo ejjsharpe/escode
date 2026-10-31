@@ -23,6 +23,7 @@ export type Document = { text: string; version: string };
 export type Change = { path: string; area: "staged" | "unstaged" | "untracked" };
 export type SaveResult = ({ kind: "saved"; disk: Document } | { kind: "conflict"; disk: Document }) & { persistencePending?: boolean; message?: string };
 let activeLookups = 0;
+let activeObservations = 0;
 export class Checkout {
   readonly repositoryGit: CheckoutRepository;
   private directory: number | undefined;
@@ -168,6 +169,40 @@ export class Checkout {
     }
     return dispose;
   }
+  observeFiles(notify: (error?: string) => void) {
+    this.checkoutIdentity();
+    if (activeObservations >= 16) throw Error("Lookup observation limit reached. Refresh to retry.");
+    activeObservations++;
+    let watcher: FSWatcher | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      clearTimeout(timer);
+      watcher?.close();
+      activeObservations--;
+      this.watchDisposers.delete(dispose);
+    };
+    const failed = (error: unknown) => {
+      dispose();
+      notify(String(error).slice(0, 2048));
+    };
+    try {
+      // Notifications invalidate candidates only; discovery and activation retain no-follow authority.
+      watcher = watch(this.root, { recursive: true, persistent: false }, () => {
+        if (disposed || timer) return;
+        timer = setTimeout(() => {
+          timer = undefined;
+          try { this.checkoutIdentity(); notify(); } catch (error) { failed(error); }
+        }, 500);
+      });
+      watcher.on("error", failed);
+      this.checkoutIdentity();
+      this.watchDisposers.add(dispose);
+      return dispose;
+    } catch (error) { dispose(); throw error; }
+  }
   close() {
     for (const dispose of this.watchDisposers) dispose();
     if (this.directory !== undefined) closeSync(this.directory);
@@ -192,9 +227,10 @@ export class Checkout {
         history.some(p => typeof p !== "string" || !p || p.length > 4096 || isAbsolute(p) || p.includes("\0") || p.split("/").some(c => !c || c === "." || c === "..")) ||
         history.reduce((n, p) => n + p.length, 0) > maximumRecentUnits) throw Error("Invalid lookup history");
       if (query.length > 256 || query.includes("\0")) throw Error("Invalid lookup query");
+      if (signal.aborted) throw Error("Lookup cancelled");
       this.checkoutIdentity();
       const recent: import("@escode/contracts").LookupResult["results"][number][] = [];
-      let cells = 0, partial = false;
+      let cells = 0, processed = 0, partial = false;
       for (const path of new Set(history)) {
         if (signal.aborted) throw Error("Lookup cancelled");
         // Default **/name globs match the target basename, not all descendants of ignored folders.
@@ -205,7 +241,7 @@ export class Checkout {
         const match = query.trim() ? scorePath(path, query) : { score: 0, positions: [] };
         if (match) recent.push({ path, ...match, recent: true });
         if (recent.length === 100) { partial = true; break; }
-        if (recent.length % 32 === 0) await new Promise<void>(done => setImmediate(done));
+        if (++processed % 32 === 0) await new Promise<void>(done => setImmediate(done));
       }
       const discovered = query.trim() ? await this.discover(query, signal) : { results: [], partial: false, message: "" };
       const seen = new Set(recent.map(r => r.path));
