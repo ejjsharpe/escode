@@ -101,6 +101,7 @@ test("restored conflict comparisons read current disk and retain the loaded reco
   const root = join(dir, "repo"), user = join(dir, "user");
   execFileSync("git", ["init", root]);
   await writeFile(join(root, "a.txt"), "loaded original");
+  await writeFile(join(root, "b.txt"), "B disk");
   const app = await launchDesktop(user);
   try {
     const page = await app.firstWindow();
@@ -124,7 +125,87 @@ test("restored conflict comparisons read current disk and retain the loaded reco
     await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
     await expect(page.locator(".conflict")).toBeVisible();
     expect(await readFile(join(root, "a.txt"), "utf8")).toBe("latest external");
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Compare", exact: true }).click();
+    await page.getByRole("button", { name: "Reload", exact: true }).click();
+    await expect(page.locator(".conflict")).toHaveCount(0);
+    await page.getByRole("treeitem", { name: "b.txt", exact: true }).dblclick();
+    await writeFile(join(root, "a.txt"), "clean latest disk");
+    await page.getByRole("tab", { name: "a.txt", exact: true }).click();
+    await expect(page.locator(".modified-in-monaco-diff-editor:visible")).toContainText("clean latest disk");
+    await expect(page.locator(".conflict")).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "a.txt", exact: true })).not.toHaveAttribute("data-unsaved", "true");
+    await page.getByRole("combobox", { name: "File view", exact: true }).selectOption("file");
+    await page.getByRole("textbox", { name: "a.txt editor", exact: true }).focus();
+    await page.keyboard.press("Meta+a");
+    await page.keyboard.type("saved after clean refresh");
+    await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
+    await expect.poll(() => readFile(join(root, "a.txt"), "utf8")).toBe("saved after clean refresh");
+    await expect(page.locator(".content:visible > p[role=status]")).toHaveText("Saved a.txt");
+    await expect(page.locator(".conflict")).toHaveCount(0);
+  } finally {
+    await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });
+    await app.close(); await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("delayed conflict-view activation survives status refresh of the previous comparison", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-conflict-race-")));
+  const root = join(dir, "repo"), user = join(dir, "user");
+  execFileSync("git", ["init", root]);
+  await writeFile(join(root, "a.txt"), "A baseline");
+  await writeFile(join(root, "b.txt"), "B comparison");
+  const app = await launchDesktop(user);
+  try {
+    const page = await app.firstWindow();
+    // Delay a real host response, keeping status observations and the renderer live.
+    await app.evaluate(() => {
+      const events = process.getBuiltinModule("events"), emit = events.EventEmitter.prototype.emit;
+      (globalThis as any).statusReplies = 0;
+      events.EventEmitter.prototype.emit = function(event: string, ...args: any[]) {
+        const socket = this as any;
+        if (event === "message" && typeof socket.send === "function" && !socket.raceProbe) {
+          socket.raceProbe = true;
+          const send = socket.send;
+          socket.send = function(...values: any[]) {
+            const text = Buffer.from(values[0]).toString();
+            if (text.includes("branch")) (globalThis as any).statusReplies++;
+            if (text.includes("A delayed external")) {
+              (globalThis as any).releaseConflict = () => send.apply(socket, values);
+              return;
+            }
+            return send.apply(socket, values);
+          };
+        }
+        return emit.call(this, event, ...args);
+      };
+    });
+    await page.reload();
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, root);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
+    await page.getByRole("textbox", { name: "a.txt editor", exact: true }).focus();
+    await page.keyboard.press("Meta+a");
+    await page.keyboard.type("A draft");
+    await writeFile(join(root, "a.txt"), "A first external");
+    await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
+    await page.getByRole("button", { name: "Compare", exact: true }).click();
+    await page.getByRole("button", { name: "Reload", exact: true }).click();
+    await expect(page.locator(".conflict")).toHaveCount(0);
+    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "b.txt", exact: true }).dblclick();
+    await expect(page.getByRole("combobox", { name: "File view", exact: true })).toHaveValue("untracked");
+    await writeFile(join(root, "a.txt"), "A delayed external");
+    await page.getByRole("tab", { name: "a.txt", exact: true }).click();
+    await expect.poll(() => app.evaluate(() => typeof (globalThis as any).releaseConflict)).toBe("function");
+    const replies = await app.evaluate(() => (globalThis as any).statusReplies);
+    await expect.poll(() => app.evaluate(() => (globalThis as any).statusReplies), { timeout: 10000 }).toBeGreaterThan(replies + 1);
+    await app.evaluate(() => (globalThis as any).releaseConflict());
+    await expect(page.getByRole("tab", { name: "a.txt", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("combobox", { name: "File view", exact: true })).toHaveValue("conflict");
+    await expect(page.locator(".modified-in-monaco-diff-editor:visible")).toContainText("A delayed external");
+    expect(await readFile(join(root, "b.txt"), "utf8")).toBe("B comparison");
   } finally {
     await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });
     await app.close(); await rm(dir, { recursive: true, force: true });

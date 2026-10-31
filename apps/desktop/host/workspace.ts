@@ -87,8 +87,7 @@ function validate(value: unknown): asserts value is WorkspaceState {
       throw Error("Invalid editor positions");
     if (v?.openFiles !== undefined &&
       (!Array.isArray(v.openFiles) || new Set(v.openFiles).size !== v.openFiles.length ||
-        v.openFiles.some(p => typeof p !== "string" || !p || isAbsolute(p) ||
-          p.split("/").some(c => !c || c === "." || c === ".." || c.toLowerCase() === ".git")) ||
+        v.openFiles.some(p => !validFile(p)) ||
         (v.path && !v.openFiles.includes(v.path))))
       throw Error("Invalid open files");
     if (

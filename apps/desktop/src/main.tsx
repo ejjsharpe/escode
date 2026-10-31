@@ -424,11 +424,17 @@ function CheckoutView({
   async function restoreView(file: string, reuseBuffer = false) {
     const selected = memory.views[root]?.fileViews?.[file] ?? "file";
     if (selected === "conflict") {
+      opening.current++;
       const generation = ++presentation.current;
       try {
         const disk = await projectCall("read", root, file);
         if (generation !== presentation.current) return false;
-        if (!buffers.current.has(file)) addBuffer(file, disk);
+        const buffer = buffers.current.get(file);
+        if (!buffer) addBuffer(file, disk);
+        else if (buffer.model.getValue() === buffer.disk.text) {
+          buffer.disk = disk;
+          if (buffer.model.getValue() !== disk.text) buffer.model.setValue(disk.text);
+        }
         activateFile(file);
         setConflict(buffers.current.get(file)!.disk.version === disk.version ? null : { path: file, disk });
         compareConflict(file, disk);
@@ -441,12 +447,13 @@ function CheckoutView({
         setComparisonError("Comparison unavailable. " + String(error));
         report(error);
         return false;
-      }
+      } finally { opening.current--; }
     }
     return selected === "file" ? select(file, true, undefined, true, reuseBuffer) : showDiff({ path: file, area: selected }, true, undefined, reuseBuffer);
   }
   function compareConflict(file: string, disk: Document) {
     presentation.current++;
+    activateFile(file);
     rememberView(file, "conflict");
     setDiff({ original: disk.text, modified: buffers.current.get(file)!.model.getValue(),
       title: "Disk versus your edits", file });
@@ -998,10 +1005,14 @@ function CheckoutView({
       } catch (error) {
         refreshError = `\nRefresh failed: ${String(error)}`;
       }
-      if (batch && "open" in batch) for (const file of batch.open) await open(file);
+      if (batch && "open" in batch) for (const file of batch.open) {
+        // Completion owns the serialization gate; external opens remain blocked.
+        if (await select(file, true, "keep"))
+          setFocusRequest({ file, generation: presentation.current });
+      }
       const failed = batch && "saves" in batch ? batch.results.find((r) => r.conflict) : undefined;
       if (failed?.conflict) {
-        await open(failed.conflict.path);
+        await select(failed.conflict.path, true, "keep");
         setConflict(failed.conflict);
       }
       const message =
@@ -1276,7 +1287,7 @@ function CheckoutView({
                 >
                   Compare
                 </Button>
-                <Button disabled={saving} onClick={() => void save(conflict.disk.version)}>
+                <Button disabled={saving} onClick={() => void save(conflict.disk.version, conflict.path)}>
                   Overwrite
                 </Button>
                 <Button disabled={saving} onClick={() => void reload()}>

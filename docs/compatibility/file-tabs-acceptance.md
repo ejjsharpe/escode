@@ -2,6 +2,8 @@
 
 This maps the twelve accepted examples in [file-editor tabs](../specifications/file-editor-tabs.md) to bounded evidence under #92. Integration `6dd051acc5608a9caae0b3c54506f88fd1a75c21` contains #94–#100 and #102; [operation reconciliation #101](file-tabs-operations.md) completes open/recently-closed path reconciliation on this branch. [Reopen #100](file-tabs-reopen.md) covers session history; [restoration #99](file-tabs-restoration.md) covers current-source and exact unavailable-target recovery. This is not full parent acceptance. Historical slice results retain their original failures and limits, even where later focused runs pass. The operation record includes this branch's checks and the sender-rejection message assertion failure reproduced against the integration renderer.
 
+[Review corrections](file-tabs-review.md) records all four findings against integrated `e2007f5`, their focused red/green regressions and final check results. It supplements the historical slice evidence without replacing mixed-run records or claiming complete parent acceptance.
+
 | Accepted scenario | Implemented evidence | Remaining qualification or implementation |
 | --- | --- | --- |
 | 1. Independent workspaces | [Foundation](file-tabs-foundation.md), `navigation.spec.ts`: checkout-specific buffers and ordered metadata; [comparisons](file-tabs-comparisons.md): per-view positions and recovery reload. | [Restoration](file-tabs-restoration.md) now records exact-checkout close/reopen/restart and unavailable identity behavior; retain its qualification limits. Fixed checkout membership belongs to #93. |
