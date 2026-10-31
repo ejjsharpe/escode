@@ -150,6 +150,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
       return () => { active = false; items = []; controller.abort(); };
     },
     checkpointPoints: (project: string | null, id: string, cursor: string | null) => chatQuery(client => client.checkpointPoints({ project, id, cursor })),
+    inspectFiles: (project: string | null, id: string, boundary: string, path: string | null, cursor: string | null) => chatQuery(client => client.inspectFiles({ project, id, boundary, path, cursor })),
     inspectBoundary: (project: string | null, id: string, boundary: string, cursor: string | null) => chatQuery(client => client.inspectBoundary({ project, id, boundary, cursor })),
     chatHistory: (project: string | null, id: string, cursor: string | null): Promise<HistoryPage> =>
       chatQuery(client => client.chatHistory({ project, id, cursor })),
