@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@base-ui/react/button";
 import { comparePathScores } from "../host/lookup-score";
+
 import { memory, openFile } from "./workspace";
 
 function highlightedPath(path: string, positions: readonly number[]) {
@@ -66,7 +67,7 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
     const request = ++generation.current;
     setResults([]); setSelected(0);
     setMessage(!scope.length ? "No open checkouts" : "Type a filename or path. Exact paths can also be opened.");
-    if (!query.trim() || !scope.length) return;
+    if (!scope.length) return;
     let stopped = false, stop: (() => void) | undefined, next = 0;
     let rows: LookupRow[] = [], bytes = 0, capped = scope.length > 8;
     const coverage: string[] = [];
@@ -75,7 +76,7 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
     const scan = () => {
       if (!current()) return;
       if (next >= Math.min(scope.length, 8)) {
-        setMessage(`${rows.length} matches${capped ? "; Partial coverage: search capped. Refine the query or Refresh." : ""}${coverage.length ? "; " + coverage.join("; ") : ""}${!rows.length && !capped && !coverage.length ? ". No eligible matches. You can still open an exact path." : ""}`);
+        setMessage(`${rows.length} matches${capped ? "; Partial coverage: search capped. Refine the query or Refresh." : ""}${coverage.length ? "; " + coverage.join("; ") : ""}${!rows.length && !capped && !coverage.length ? query.trim() ? ". No eligible matches. You can still open an exact path." : ". No recent files in this checkout scope. Type a filename or path." : ""}`);
         return;
       }
       const target = scope[next++];
@@ -85,7 +86,15 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
         if (result.partial) coverage.push(`Incomplete: ${target.root}. ${result.message}`);
         for (const resultRow of result.results) {
           const row = { ...resultRow, ...target };
-          const index = rows.findIndex(other => comparePathScores(row, other, query) < 0);
+          const compare = (a: LookupRow, b: LookupRow) => {
+            if (!!a.recent !== !!b.recent) return a.recent ? -1 : 1;
+            if (a.recent && b.recent) {
+              const history = memory.recentFiles ?? [];
+              return history.findIndex(f => f.root === a.root && f.path === a.path) - history.findIndex(f => f.root === b.root && f.path === b.path);
+            }
+            return comparePathScores(a, b, query);
+          };
+          const index = rows.findIndex(other => compare(row, other) < 0);
           if (rows.length === 100 && index < 0) { capped = true; continue; }
           rows.splice(index < 0 ? rows.length : index, 0, row); bytes += size(row);
           while (rows.length > 100 || bytes > 512 * 1024) { bytes -= size(rows.pop()!); capped = true; }
@@ -96,7 +105,7 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
         if (!current()) return;
         coverage.push(`Unavailable: ${target.root}. ${error.slice(0, 2048)}`);
         scan();
-      });
+      }, (memory.recentFiles ?? []).filter(f => f.root === target.root).map(f => f.path));
     };
     const timer = setTimeout(scan, 120);
     return () => { stopped = true; generation.current++; clearTimeout(timer); stop?.(); rows = []; };
@@ -104,12 +113,13 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
 
   useEffect(() => { document.getElementById(`lookup-result-${selected}`)?.scrollIntoView({ block: "nearest" }); }, [selected]);
   const activate = async (row?: LookupRow) => {
-    if (!query || busy.current) return;
+    if ((!query && !row) || busy.current) return;
+
     const request = ++generation.current;
     const invocationScope = scopeKey;
     const current = () => request === generation.current && liveScope.current === invocationScope && !!dialog.current?.open;
     busy.current = true;
-    setMessage("Opening exact path…");
+    setMessage("Opening file…");
     try {
       let target: LookupRoot | undefined = row, path = "";
       if (row) {
@@ -161,11 +171,17 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setSelected(index => results.length ? (index + (event.key === "ArrowDown" ? 1 : results.length - 1)) % results.length : 0); }
         }} />
       <div id="lookup-results" role="listbox" aria-label="Matching files" className="lookup-results">
-        {results.map((result, index) => <div key={result.root + ":" + result.path} id={`lookup-result-${index}`} role="option" aria-selected={index === selected}
-          onMouseDown={event => event.preventDefault()} onClick={() => void activate(result)}>
-          {highlightedPath(result.path, result.positions)}
-          {roots && <small className="lookup-root">{result.project.split("/").at(-1)} · {result.branch} · {result.root}</small>}
-        </div>)}
+        {[true, false].map(recent => {
+          const group = results.map((result, index) => ({ result, index })).filter(({ result }) => !!result.recent === recent);
+          return group.length > 0 && <div key={String(recent)} role="group" aria-label={recent ? "Recent files" : "File results"}>
+            <h3>{recent ? "Recent files" : "File results"}</h3>
+            {group.map(({ result, index }) => <div key={result.root + ":" + result.path} id={`lookup-result-${index}`} role="option" aria-selected={index === selected}
+              onMouseDown={event => event.preventDefault()} onClick={() => void activate(result)}>
+              {highlightedPath(result.path, result.positions)}
+              {roots && <small className="lookup-root">{result.project.split("/").at(-1)} · {result.branch} · {result.root}</small>}
+            </div>)}
+          </div>;
+        })}
       </div>
       <p role="status">{message}{observationError && ` ${observationError}`}</p>
       <Button onClick={() => { generation.current++; setRefresh(value => value + 1); }}>Refresh</Button>

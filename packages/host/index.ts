@@ -58,7 +58,7 @@ export async function startHost(options: {
   trashEntries?: (root: string, paths: readonly string[]) => Promise<typeof import("@escode/contracts").TrashBatch.Type>;
   readDiff?: (root: string, path: string, area: typeof import("@escode/contracts").DiffArea.Type) => Promise<typeof import("@escode/contracts").DiffComparison.Type>;
   observeFiles?: (root: string, notify: (error?: string) => void) => () => void;
-  searchFiles?: (root: string, query: string, signal: AbortSignal) => Promise<import("@escode/contracts").LookupResult>;
+  searchFiles?: (root: string, query: string, signal: AbortSignal, history?: readonly string[]) => Promise<import("@escode/contracts").LookupResult>;
   lookupFile?: (root: string, query: string) => Promise<string>;
   readFile?: (root: string, path: string) => Promise<typeof import("@escode/contracts").FileDocument.Type>;
   saveFile?: (root: string, path: string, text: string, version: string) => Promise<typeof import("@escode/contracts").FileSaveResult.Type>;
@@ -134,7 +134,7 @@ export async function startHost(options: {
           const requests = pending.get(id) ?? new Set<string | number>();
           if (!Schema.is(requestEnvelope)(data) || data.isNotification || data.discard ||
               requests.size >= 16 || requests.has(data.id)) return reject(id);
-          if (data.tag === "searchFiles" && Buffer.byteLength(JSON.stringify(data)) > 8192) return reject(id);
+          if (data.tag === "searchFiles" && Buffer.byteLength(JSON.stringify(data)) > 256 * 1024) return reject(id);
           const file = fileMethods.includes(data.tag);
           if (Buffer.byteLength(JSON.stringify(data)) > (file ? maximumFileFrameBytes : maximumFrameBytes)) return reject(id);
           if (file) { const files = fileRequests.get(id) ?? new Set(); files.add(data.id); fileRequests.set(id, files); }
@@ -203,7 +203,7 @@ export async function startHost(options: {
             return () => {};
           }))), release => Effect.sync(release),
         ), { bufferSize: 1, strategy: "sliding" }),
-        searchFiles: ({ root, query }) => Effect.tryPromise({ try: signal => { if (!options.searchFiles) throw Error("Lookup unavailable"); return options.searchFiles(root, query, signal); }, catch: String }),
+        searchFiles: ({ root, query, history }) => Effect.tryPromise({ try: signal => { if (!options.searchFiles) throw Error("Lookup unavailable"); return options.searchFiles(root, query, signal, history); }, catch: String }),
         lookupFile: ({ root, query }) => Effect.tryPromise({ try: async () => {
           if (!options.lookupFile) throw Error("Files unavailable"); return options.lookupFile(root, query);
         }, catch: String }),

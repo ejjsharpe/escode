@@ -106,10 +106,13 @@ export type DraftAction = typeof DraftAction.Type;
 export const FileDocument = Schema.Struct({ text: Schema.String, version: Schema.String });
 export const FileSaveResult = Schema.Struct({ kind: Schema.Literals(["saved", "conflict"]), disk: FileDocument,
   persistencePending: Schema.optionalKey(Schema.Boolean), message: Schema.optionalKey(Schema.String) });
+export const maximumRecentFiles = 200;
+export const maximumRecentUnits = 32768;
 export const WorkspaceState = Schema.Struct({
   projects: Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String })),
   savedProjects: Schema.optionalKey(Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String }))),
   projectUse: Schema.optionalKey(Schema.Array(Schema.Struct({ project: Schema.String, checkout: Schema.optionalKey(Schema.String) }))),
+  recentFiles: Schema.optionalKey(Schema.Array(Schema.Struct({ root: Schema.String.check(Schema.isMaxLength(4096)), path: Schema.String.check(Schema.isMaxLength(4096)) })).check(Schema.isMaxLength(maximumRecentFiles))),
   agentsChat: Schema.optionalKey(Schema.String), selected: Schema.String,
   views: Schema.Record(Schema.String, Schema.Struct({
     files: Schema.optionalKey(Schema.Struct({ expanded: Schema.Array(Schema.String), selected: Schema.Array(Schema.String),
@@ -159,7 +162,7 @@ export const TransferResult = Schema.Union([Schema.String, Schema.Struct({
 export const DiffComparison = Schema.Struct({ original: Schema.String, modified: Schema.String });
 export const DiffArea = Schema.Literals(["staged", "unstaged", "untracked"]);
 export const LookupResult = Schema.Struct({
-  results: Schema.Array(Schema.Struct({ path: Schema.String.check(Schema.isMaxLength(4096)), score: Schema.Number, positions: Schema.Array(Schema.Number).check(Schema.isMaxLength(256)) })).check(Schema.isMaxLength(100)),
+  results: Schema.Array(Schema.Struct({ path: Schema.String.check(Schema.isMaxLength(4096)), score: Schema.Number, recent: Schema.optionalKey(Schema.Boolean), positions: Schema.Array(Schema.Number).check(Schema.isMaxLength(256)) })).check(Schema.isMaxLength(100)),
   partial: Schema.Boolean, message: Schema.String.check(Schema.isMaxLength(2048)),
 });
 export type LookupResult = typeof LookupResult.Type;
@@ -170,7 +173,7 @@ export const Files = RpcGroup.make(
   Rpc.make("createEntry", { payload: { command: CreateCommand }, success: CreateReceipt, error: Schema.String }),
   Rpc.make("createState", { success: Schema.String, error: Schema.String }),
   Rpc.make("trashEntries", { payload: { root: Schema.String, paths: Schema.Array(Schema.String).check(Schema.isMinLength(1), Schema.isMaxLength(10000)) }, success: TrashBatch, error: Schema.String }),
-  Rpc.make("searchFiles", { payload: { root: Schema.String.check(Schema.isMaxLength(4096)), query: Schema.String.check(Schema.isMaxLength(256)) }, success: LookupResult, error: Schema.String }),
+  Rpc.make("searchFiles", { payload: { root: Schema.String.check(Schema.isMaxLength(4096)), query: Schema.String.check(Schema.isMaxLength(256)), history: Schema.optionalKey(Schema.Array(Schema.String.check(Schema.isMaxLength(4096))).check(Schema.isMaxLength(maximumRecentFiles))) }, success: LookupResult, error: Schema.String }),
   Rpc.make("lookupFile", { payload: { root: Schema.String.check(Schema.isMaxLength(4096)), query: Schema.String.check(Schema.isMaxLength(4096)) }, success: Schema.String, error: Schema.String }),
   Rpc.make("readFile", { payload: { root: Schema.String, path: Schema.String }, success: FileDocument, error: Schema.String }),
   Rpc.make("saveFile", { payload: { root: Schema.String, path: Schema.String, text: Schema.String, version: Schema.String }, success: FileSaveResult, error: Schema.String }),

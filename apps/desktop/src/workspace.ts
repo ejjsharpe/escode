@@ -1,3 +1,4 @@
+import { maximumRecentFiles, maximumRecentUnits } from "@escode/contracts";
 import { useRef, useState } from "react";
 import type { WorkspaceState, ViewMemory } from "../host/workspace";
 export let memory: WorkspaceState;
@@ -8,6 +9,16 @@ export function rememberProjectUse(project: string, checkout?: string) {
   const previous = memory.projectUse?.find(p => p.project === project);
   memory.projectUse = [{ project, ...(checkout ? { checkout } : previous?.checkout ? { checkout: previous.checkout } : {}) },
     ...(memory.projectUse ?? []).filter(p => p.project !== project)];
+  void persist();
+}
+export function rememberFileUse(root: string, path: string) {
+  if (!path || root.length > 4096 || path.length > 4096) return;
+  const next = [{ root, path }, ...(memory.recentFiles ?? []).filter(f => f.root !== root || f.path !== path)];
+  let units = 0;
+  memory.recentFiles = next.slice(0, maximumRecentFiles).filter(f => {
+    units += f.root.length + f.path.length;
+    return units <= maximumRecentUnits;
+  });
   void persist();
 }
 let pending: Promise<unknown> = Promise.resolve();
