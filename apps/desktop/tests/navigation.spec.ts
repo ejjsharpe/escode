@@ -86,6 +86,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await expect(page.locator(".monaco-editor:visible")).toContainText("alpha draft");
     await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab")).toHaveCount(2);
     await page.getByRole("button", { name: "Close node_modules/known.txt", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "node_modules/known.txt", exact: true })).toHaveCount(0);
     expect(await readFile(join(a, "a.txt"), "utf8")).toBe(a);
     await open(b);
     await expect(

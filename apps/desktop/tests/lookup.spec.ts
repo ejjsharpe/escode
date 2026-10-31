@@ -78,6 +78,22 @@ test('lookup ranks and highlights unloaded files, file changes converge and acti
  await page.getByRole('button',{name:'Find file',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Find file',exact:true})).toContainText('No open checkouts');
  await page.keyboard.press('Escape');
+ // Aggregate limits differ from each root's own result budget.
+ for(let index=0;index<9;index++) {
+   const bounded=join(dir,`bounded-${index}`);
+   execFileSync('git',['init',bounded]);
+   for(let file=0;file<17;file++) await writeFile(join(bounded,`cap-${file}.txt`),'bounded');
+   await open(bounded);
+ }
+ await agents.click(); await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await page.getByLabel('Exact file path').fill('cap');
+ await expect(page.getByRole('option')).toHaveCount(100);
+ await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('Partial coverage');
+ await expect(page.getByRole('option').filter({hasText:join(dir,'bounded-8')})).toHaveCount(0);
+ await page.getByRole('button',{name:'Open file',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('capped at 8 checkouts');
+ await page.keyboard.press('Escape');
+
 
  } finally {await app.close();await server?.close();await rm(dir,{recursive:true,force:true});}
 });

@@ -50,8 +50,9 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
     let active = true;
     const failures = new Map<string, string>();
     setObservationError("");
-    const stops = scope.slice(0, 8).map(target => window.escode.observeFiles(target.root, error => {
-      if (!active) return;
+    const stops = scope.slice(0, 8).map(target => window.escode.observeFiles(target.root, (error, ready) => {
+      // Readiness refreshes discovery; exact activation already validates its captured path.
+      if (!active || (ready && busy.current)) return;
       if (error) {
         failures.set(target.root, error.slice(0, 2048));
         setObservationError("Live updates unavailable: " + [...failures].map(([root, message]) => `${root}: ${message}`).join("; ") + ". Results may be incomplete. Refresh or reopen to retry.");
@@ -69,7 +70,7 @@ export function FileLookup({ root = "", project = "", roots, onClose }: {
     let stopped = false, stop: (() => void) | undefined, next = 0;
     let rows: LookupRow[] = [], bytes = 0, capped = scope.length > 8;
     const coverage: string[] = [];
-    const size = (row: LookupRow) => (row.path.length + row.root.length + row.project.length) * 6 + row.positions.length * 8 + 128;
+    const size = (row: LookupRow) => (row.path.length + row.root.length + row.project.length + (row.branch?.length ?? 0)) * 6 + row.positions.length * 8 + 128;
     const current = () => !stopped && request === generation.current && liveScope.current === scopeKey && !!dialog.current?.open;
     const scan = () => {
       if (!current()) return;
