@@ -759,7 +759,7 @@ export class ChatService {
       s.connection.status !== "connected" ||
       (("turnId" in request.params ? request.params.turnId : null) != null && (s.turn.phase === "idle" || ("turnId" in request.params ? request.params.turnId : null) !== s.turn.id))
     )
-      throw Error("Stale or mismatched live request. Reopen the originating chat.");
+      throw Object.assign(Error("Stale or mismatched live request. Reopen the originating chat."), { rejected: true });
     let result: unknown;
     if (request.method === "mcpServer/elicitation/request") {
       if (!answer || typeof answer !== "object" || Array.isArray(answer))
