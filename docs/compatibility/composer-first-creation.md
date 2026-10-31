@@ -20,3 +20,41 @@ Project and checkout edits reuse the existing authenticated draft actions and cl
 This is fixture-driven development Electron qualification, not packaged-app, installed-provider or manual VoiceOver acceptance. One intermediate project-draft rerun exceeded the default 45-second test budget; the bounded follow-up passed. Earlier focus and obsolete picker/title/locator failures were corrected, not counted as passing runs. Creation tests now await the new blank composer before changing its context; changing the still-visible previous draft had cleared its deferred-worktree choice, which the retained reservation assertion caught. Broader model/permission qualification and full parent acceptance remain with the parent effort.
 
 Based on isolated `t3/composer-first-creation` at `8ab8812`; merged integration tip `c03fe1c` without updating the integration ref. No PR or issue state was changed.
+
+## Fresh combined merger qualification
+
+The isolated `t3/merge-fresh-spec` checkout fast-forwarded from integration
+`c03fe1c04053722fab95f8c9e0aa858d0341c7d2` to composer commit
+`788e8a8f5e61546eb4fe0034abc04f7ecd5f4e62`, then merged the concurrent
+permissions integration tip `e09a0e23cc43ef504d3e6d2340506276557eaa41`
+without conflicts (merge `626db58`). No integration ref, PR or issue was changed.
+
+- Combined merged-tree typecheck, lint and build passed.
+- Focused host checks passed: 42 tests, one opt-in skipped, across
+  `project-drafts`, `worktree-drafts`, `chat-commands`, `models` and `permissions`.
+  These retain first-Send admission, reservation failures, cancelled preparation,
+  retry/no-reallocation and captured next-message settings coverage.
+- Combined Electron run with a 120-second per-test limit: 15 passed, one timed
+  out across Agents, titles, models, permissions, project drafts, scratch and
+  worktree drafts. The retained trace located the project-draft timeout at the
+  restart `app.close()` after its draft/context assertions passed. The test had
+  handled native quit confirmation only in final cleanup. Adding the same
+  confirmation handler before that restart made the unchanged scenario pass in
+  14.8 seconds (15.2-second standalone run). The earlier pre-permissions run had
+  the same timeout, with 14 other scenarios passing. Both timed-out test-owned
+  Electron processes needed termination to release worker cleanup; neither run
+  is counted as a wholly passing suite.
+- Together the final combined run and corrected standalone rerun provide passing
+  evidence for all sixteen targeted scenarios. They cover focused composer
+  defaults, original/remembered exact checkout identity, checkout-local capture,
+  unavailable/restarted draft retention, text preservation without allocation,
+  first-Send binding, read-only bound context, independent editor navigation,
+  archive/title/recency coexistence and future-only model/permission edits.
+- No production correction was required. The only follow-up change is native
+  confirmation handling in the existing Electron test. No new test seam,
+  dependency or product concept was introduced.
+
+Limits remain development Electron with controlled provider fixtures; no new
+packaged, installed-provider, manual VoiceOver or full-parent acceptance is
+claimed. Screenshots and the failed-run trace are local test artifacts, not
+committed evidence. Latest integration ancestry was rechecked before reporting.

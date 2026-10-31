@@ -177,6 +177,9 @@ send({id:m.id,result});});`,
     expect((await records()).find((chat: { id: string }) => chat.id === local.id)).toMatchObject({
       id: local.id, createdAt: local.createdAt, checkout: worktree, draft: "Move from local Chats",
     });
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+    });
     await app.close();
     app = await launchDesktop(user, dir);
     page = await app.firstWindow();
