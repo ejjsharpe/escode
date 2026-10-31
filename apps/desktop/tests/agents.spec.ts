@@ -113,12 +113,12 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await expect(page.locator(".monaco-editor:visible")).toContainText("dirty alpha");
     await expect(page.locator(".view-nav:visible")).toContainText(a);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Chat 1", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Chat 1 ·/ })).toHaveCount(0);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await rows.filter({ hasText: "alpha" }).click();
     await page.getByRole("button", { name: "Open checkout", exact: true }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await page.getByRole("button", { name: /^Chat 1 ·/ }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
     await expect(page.locator(".view-nav:visible")).toContainText(worktree);
     expect((await readFile(join(dir, "events"), "utf8")).match(/initialize/g)).toHaveLength(1);
@@ -139,7 +139,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
       .height;
     expect(await dragComposerHandle(120)).toBeGreaterThan(localHeight + 60);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await rows.filter({ hasText: "beta" }).click();
+    await rows.filter({ hasText: "beta / beta" }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("beta text");
     await expect(
       page.getByRole("navigation", { name: "Projects" }).locator("button[aria-pressed]"),
@@ -191,7 +191,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
         element.scrollTop = 0;
       });
       await page.getByText("Effective Codex settings · fixture", { exact: true }).click();
-      await expect(history.locator("details")).toHaveAttribute("open", "");
+      await expect(history.locator("details").filter({ hasText: "Effective Codex settings" })).toHaveAttribute("open", "");
       await expect(history.locator("details pre")).toContainText("workspaceWrite");
       const expanded = await panelGeometry();
       expect(expanded.documentHeight).toBeLessThanOrEqual(expanded.viewport);
@@ -281,7 +281,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     app.process().kill("SIGKILL");
     await exited;
     // Explicit recovery after this test has confirmed the crashed writer exited.
-    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
+    await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
     app = await launchDesktop(user, dir);
     page = await app.firstWindow();
     await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
@@ -362,7 +362,7 @@ test("Agents keeps an unavailable remembered selection and validates catalogue a
   }
 });
 
-test("Agents and local Chats keep newest-first order and original labels through selection and activity", async () => {
+test("Agents and local Chats promote user messages and preserve labels through selection and activity", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-chat-order-")));
   const root = join(dir, "repo"),
     user = join(dir, "user");
@@ -447,18 +447,19 @@ send({id:m.id,result});});`,
     const localRows = page.locator(".chat-list:visible li button");
     const globalRows = page.locator(".agent-row strong");
     const labels = ["Chat 3", "Chat 2", "Chat 1"];
-    await expect(localRows).toHaveText(labels);
+    await expect(localRows.locator("strong")).toHaveText(labels);
     await localRows.nth(1).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("older prompt");
-    await expect(localRows).toHaveText(labels);
+    await expect(localRows.locator("strong")).toHaveText(labels);
     await page.getByRole("button", { name: "Send message", exact: true }).click();
-    await expect(localRows).toHaveText(["Chat 3", "Chat 2 · Needs input", "Chat 1"]);
+    await expect(localRows.locator("strong")).toHaveText(["Chat 2", "Chat 3", "Chat 1"]);
+    await expect(localRows.first()).toHaveAttribute("aria-label", /Needs input/);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await expect(globalRows).toHaveText(labels);
+    await expect(globalRows).toHaveText(["Chat 2", "Chat 3", "Chat 1"]);
     await page.locator(".agent-row").filter({ hasText: "Chat 2" }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeVisible();
-    await expect(page.locator(".agent-row").nth(1)).toContainText("Needs input");
-    await expect(globalRows).toHaveText(labels);
+    await expect(page.locator(".agent-row").first()).toHaveAttribute("aria-label", /Needs input/);
+    await expect(globalRows).toHaveText(["Chat 2", "Chat 3", "Chat 1"]);
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByText("Requested information format", { exact: true }).click();
     const mcpResponse = page.getByRole("textbox", { name: "MCP response" });
@@ -493,10 +494,10 @@ send({id:m.id,result});});`,
     await expect(page.getByRole("status")).toHaveText("Ready");
     await page.locator(".agent-row").filter({ hasText: "Chat 3" }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("newer prompt");
-    await expect(page.locator(".agents [role=alert]")).toContainText("Fixture error line 199");
+    await expect(page.locator(".agents [role=alert]").first()).toContainText("Fixture error line 199");
     await page.setViewportSize({ width: 728, height: 600 });
-    await page.locator(".agents [role=alert]").scrollIntoViewIfNeeded();
-    await expect(page.locator(".agents [role=alert]")).toBeInViewport();
+    await page.locator(".agents [role=alert]").first().scrollIntoViewIfNeeded();
+    await expect(page.locator(".agents [role=alert]").first()).toBeInViewport();
     await page.getByRole("button", { name: "Send message", exact: true }).scrollIntoViewIfNeeded();
     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeInViewport({
       ratio: 1,
@@ -505,13 +506,13 @@ send({id:m.id,result});});`,
       await page.locator(".transcript:visible").evaluate((history) => history.clientHeight),
     ).toBeGreaterThanOrEqual(80);
     await page.screenshot({ path: "test-results/agents-short-window-error.png" });
-    await expect(globalRows).toHaveText(labels);
+    await expect(globalRows).toHaveText(["Chat 2", "Chat 3", "Chat 1"]);
     await page
       .getByRole("navigation", { name: "Projects" })
       .getByRole("button", { name: "repo", exact: true })
       .click();
-    await expect(localRows).toHaveText(labels);
-    await expect(localRows.nth(1)).toHaveAttribute("aria-pressed", "true");
+    await expect(localRows.locator("strong")).toHaveText(["Chat 2", "Chat 3", "Chat 1"]);
+    await expect(localRows.first()).toHaveAttribute("aria-pressed", "true");
   } finally {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
@@ -561,8 +562,8 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
   let app = await launchDesktop(user);
   try {
     let page = await app.firstWindow();
-    const rows = page.locator(".agent-row span");
-    await expect(rows).toHaveText(["Gamma", "Beta", "Alpha"]);
+    const rows = page.locator(".agent-row .chat-row-context");
+    await expect(rows).toHaveText(["Gamma / Gamma", "Beta / Beta", "Alpha / Alpha"]);
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     const picker = page.getByRole("dialog", { name: "Choose project" });
     const search = picker.getByRole("combobox", { name: "New chat project" });
@@ -578,7 +579,7 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
     await expect(options).toHaveCount(0);
     await expect(picker.getByRole("status")).toHaveText("No matching projects");
     await page.keyboard.press("Enter");
-    await expect(rows).toHaveText(["Gamma", "Beta", "Alpha"]);
+    await expect(rows).toHaveText(["Gamma / Gamma", "Beta / Beta", "Alpha / Alpha"]);
     await picker.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("button", { name: "New chat", exact: true })).toBeFocused();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
@@ -596,7 +597,7 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
     await page.screenshot({ path: "test-results/agents-project-picker.png" });
     await page.keyboard.press("Enter");
     await expect(picker).not.toBeVisible();
-    await expect(rows).toHaveText(["Alpha", "Gamma", "Beta", "Alpha"]);
+    await expect(rows).toHaveText(["Alpha / Alpha", "Gamma / Gamma", "Beta / Beta", "Alpha / Alpha"]);
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeVisible();
     await expect(page.locator(".chat-conversation")).toContainText(roots[3]);
     await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toBeVisible();
@@ -653,7 +654,7 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
     await expect(restartedPicker.getByRole("option").first()).toContainText(roots[2]);
     await restartedPicker.getByRole("option").nth(1).click();
     await expect(page.locator(".chat-conversation")).toContainText(linked);
-    await expect(page.getByRole("alert").filter({ hasText: "Checkout unavailable" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "Checkout unavailable" }).first()).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Projects" }).locator(".project-tab")).toHaveCount(0);
     await page.getByRole("textbox", { name: "Message Codex" }).fill("unavailable prompt retained");
     await page.locator(".agent-row").filter({ hasText: "Alpha" }).nth(2).click();

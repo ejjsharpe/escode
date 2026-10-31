@@ -40,6 +40,7 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     await page.getByLabel("Next message model").selectOption("b");
     expect((await readFile(log, "utf8")).trim().split("\n").map(x => JSON.parse(x))).toEqual([expect.objectContaining({ model: "a", effort: "high" })]);
     await expect(page.getByLabel("Next message effort")).toHaveValue("medium");
+    await expect(page.getByLabel("Message Codex")).toHaveValue("");
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.locator("span[role=status]")).toHaveText("Ready");
     await app.close();
