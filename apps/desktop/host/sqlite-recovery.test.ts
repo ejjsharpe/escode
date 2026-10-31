@@ -222,3 +222,108 @@ test("independent authenticated clients retain text and baselines across Save, a
     globalThis.WebSocket = originalSocket; project.close(); await db.close(); await rm(dir, { recursive: true, force: true });
   }
 });
+
+test.each(["mutation", "outcome"])("SIGKILL after native move %s retains edits and reconciles without replay", async window => {
+  const { spawn, execFileSync } = await import("node:child_process");
+  const { realpath } = await import("node:fs/promises");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-move-crash-")));
+  execFileSync("git", ["init", dir]);
+  await writeFile(join(dir, "a.txt"), "original");
+  const moduleUrl = (name: string) => JSON.stringify(join(import.meta.dirname, name + ".ts"));
+  const script = `const { DurableState } = await import(${moduleUrl("durable-state")});
+    const { Workspace, emptyWorkspace } = await import(${moduleUrl("workspace")});
+    const { FileOperations } = await import(${moduleUrl("file-operations")});
+    const { Checkout } = await import(${moduleUrl("project")});
+    const dir = ${JSON.stringify(dir)};
+    const db = new DurableState(dir + '/db');
+    const owner = await db.ready;
+    const project = await Checkout.open(dir);
+    const workspace = new Workspace(dir + '/unused', owner, db);
+    const state = emptyWorkspace();
+    const baseline = await project.read('a.txt');
+    state.drafts = [{ root: dir, path: 'a.txt', text: 'crash edit', disk: baseline }];
+    await workspace.write(state);
+    const pause = async () => { console.log(JSON.stringify(owner)); await new Promise(() => {}); };
+    ${window === "mutation" ? `const move = project.move.bind(project); project.move = (...args) => { const result = move(...args); console.log(JSON.stringify(owner)); process.kill(process.pid, "SIGSTOP"); return result; };` : `workspace.write = pause;`}
+    await new FileOperations(workspace, dir + '/intent', owner).run(project, 'move', 'a.txt', 'moved.txt');`;
+  const { build } = await import("esbuild");
+  const { copyFile } = await import("node:fs/promises");
+  await build({ stdin: { contents: script, resolveDir: import.meta.dirname }, outfile: join(dir, "child.mjs"), bundle: true, platform: "node", format: "esm" });
+  await copyFile(join(import.meta.dirname, "sqlite-worker.cjs"), join(dir, "sqlite-worker.cjs"));
+  const child = spawn(process.execPath, [join(dir, "child.mjs")], { stdio: ["ignore", "pipe", "pipe"] });
+  let db: DurableState | undefined;
+  try {
+    const owner = await new Promise<any>((resolve, reject) => {
+      let output = "", errors = "";
+      child.stderr.on("data", data => { errors += data; });
+      child.stdout.on("data", data => { output += data; if (output.includes("\n")) resolve(JSON.parse(output.trim())); });
+      child.on("error", reject);
+      child.on("exit", () => reject(Error(errors || "No acknowledgement")));
+    });
+    const exited = new Promise(resolve => child.once("exit", resolve));
+    child.kill("SIGKILL"); await exited;
+    expect(await readFile(join(dir, "moved.txt"), "utf8")).toBe("original");
+    db = new DurableState(join(dir, "db"));
+    expect(await db.ready).toMatchObject({ hostId: owner.hostId, clientId: owner.clientId });
+    const workspace = new Workspace(join(dir, "unused"), owner, db);
+    expect((await workspace.read()).drafts[0]).toMatchObject({ text: "crash edit", disk: { text: "original" } });
+    expect(await new FileOperationJournal(join(dir, "intent"), owner, db).readIntent()).toMatchObject({ kind: "move", destination: "moved.txt", ...(window === "outcome" ? { completed: true } : {}) });
+    await writeFile(join(dir, "moved.txt"), "external after crash");
+    const { Checkout } = await import("./project");
+    const { FileOperations } = await import("./file-operations");
+    const project = await Checkout.open(dir);
+    try {
+      await new FileOperations(workspace, join(dir, "intent"), owner).recover(async () => project);
+      expect((await workspace.read()).drafts[0].text).toBe("crash edit");
+      expect(await readFile(join(dir, "moved.txt"), "utf8")).toBe("external after crash");
+    } finally { project.close(); }
+  } finally { child.kill("SIGKILL"); await db?.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("authenticated move rejects failed SQLite admission and preserves descendants after failed outcome", async () => {
+  const { realpath, mkdir } = await import("node:fs/promises");
+  const { execFileSync } = await import("node:child_process");
+  const { DatabaseSync } = await import("node:sqlite");
+  const { Checkout } = await import("./project");
+  const { FileOperations } = await import("./file-operations");
+  const { startHost } = await import("@escode/host");
+  const { createHostClient } = await import("@escode/client-runtime");
+  const { default: WebSocket } = await import("ws");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-move-auth-")));
+  execFileSync("git", ["init", dir]);
+  await mkdir(join(dir, "folder"));
+  await writeFile(join(dir, "folder/a.txt"), "original");
+  const project = await Checkout.open(dir);
+  const db = new DurableState(join(dir, "db"));
+  const originalSocket = globalThis.WebSocket;
+  globalThis.WebSocket = class extends WebSocket { constructor(url: string) { super(url, { origin: "null" }); } } as unknown as typeof globalThis.WebSocket;
+  try {
+    const owner = await db.ready;
+    const workspace = new Workspace(join(dir, "unused"), owner, db);
+    const state = emptyWorkspace();
+    state.drafts = [{ root: dir, path: "folder/a.txt", text: "available descendant", disk: await project.read("folder/a.txt") }];
+    await workspace.write(state);
+    const operations = new FileOperations(workspace, join(dir, "intent"), owner);
+    const host = await startHost({ ...owner, origin: "null", list: async () => ({ kind: "denied", message: "unused" }),
+      moveEntry: async ({ source, target }) => operations.run(project, "move", source, target),
+      persistWorkspace: value => operations.persist(value),
+      loadWorkspace: async () => ({ state: await workspace.read(), restored: [], errors: [] }),
+    });
+    const client = createHostClient(async () => host.bootstrap());
+    const fault = new DatabaseSync(join(dir, "db/state.sqlite"));
+    try {
+      fault.exec("CREATE TRIGGER deny_intent BEFORE INSERT ON client_recovery WHEN NEW.kind='intent' BEGIN SELECT RAISE(ABORT,'intent unavailable'); END");
+      await expect(client.moveEntry({ root: dir, action: "move", source: "folder", target: "renamed" })).rejects.toThrow("intent unavailable");
+      expect(await readFile(join(dir, "folder/a.txt"), "utf8")).toBe("original");
+      fault.exec("DROP TRIGGER deny_intent");
+      fault.exec("CREATE TRIGGER deny_outcome BEFORE INSERT ON client_recovery WHEN NEW.kind='intent' AND json_extract(NEW.body,'$.completed')=1 BEGIN SELECT RAISE(ABORT,'outcome unavailable'); END");
+      expect(await client.moveEntry({ root: dir, action: "move", source: "folder", target: "renamed" })).toMatchObject({ applied: true, persistencePending: true });
+      expect(await readFile(join(dir, "renamed/a.txt"), "utf8")).toBe("original");
+      expect((await client.loadWorkspace()).state.drafts).toEqual(state.drafts);
+      fault.exec("DROP TRIGGER deny_outcome");
+      await operations.recover(async () => project);
+      await client.persistWorkspace(state);
+      expect((await client.loadWorkspace()).state.drafts[0]).toMatchObject({ path: "renamed/a.txt", text: "available descendant", disk: { text: "original" } });
+    } finally { fault.close(); await client.close(); await host.close(); }
+  } finally { globalThis.WebSocket = originalSocket; project.close(); await db.close(); await rm(dir, { recursive: true, force: true }); }
+});

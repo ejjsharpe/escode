@@ -27,6 +27,47 @@ export class FileOperationJournal {
       this.revision = stored.revision;
       const v = stored.body as any;
       if (v === null) return null;
+      validateIntent(v);
+      return v;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+  }
+
+  private factsRevision?: number;
+  async readFacts(): Promise<Intent[]> {
+    const stored = await this.database.recoveryRead(this.owner.clientId, "fileFacts");
+    this.factsRevision = stored.revision;
+    if (stored.body === null) return [];
+    if (!Array.isArray(stored.body)) throw Error("Invalid operation facts; retained for inspection.");
+    for (const fact of stored.body) {
+      validateIntent(fact);
+      if (!fact.completed) throw Error("Incomplete operation fact; retained for inspection.");
+    }
+    return stored.body;
+  }
+  async writeFacts(facts: Intent[]) {
+    if (this.factsRevision === undefined) await this.readFacts();
+    await this.database.recoveryWrite(this.owner.clientId, "fileFacts", facts, this.factsRevision!);
+    this.factsRevision!++;
+  }
+  writeIntent(intent: Intent | null) {
+    return this.change(() => this.replace(intent));
+  }
+  private change(edit: () => Promise<void>) {
+    const task = this.queue.then(edit);
+    this.queue = task.catch(() => {});
+    return task;
+  }
+  private async replace(value: unknown) {
+    if (this.revision === undefined) this.revision = (await this.database.recoveryRead(this.owner.clientId, "intent")).revision;
+    await this.database.recoveryWrite(this.owner.clientId, "intent", value, this.revision);
+    this.revision++;
+  }
+}
+
+function validateIntent(v: any): asserts v is Intent {
       if (
         !v ||
         !isAbsolute(v.root) ||
@@ -68,23 +109,4 @@ export class FileOperationJournal {
                 typeof v.savedDisk.version !== "string"))))
       )
         throw Error("Invalid operation journal; retained for inspection.");
-      return v;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
-    }
-  }
-  writeIntent(intent: Intent | null) {
-    return this.change(() => this.replace(intent));
-  }
-  private change(edit: () => Promise<void>) {
-    const task = this.queue.then(edit);
-    this.queue = task.catch(() => {});
-    return task;
-  }
-  private async replace(value: unknown) {
-    if (this.revision === undefined) this.revision = (await this.database.recoveryRead(this.owner.clientId, "intent")).revision;
-    await this.database.recoveryWrite(this.owner.clientId, "intent", value, this.revision);
-    this.revision++;
-  }
 }

@@ -30,6 +30,8 @@ export class FileOperations {
     this.journal = new FileOperationJournal(file, owner ?? workspace.owner, workspace.database);
   }
   async recover(project: (root: string) => Promise<Checkout>) {
+    const facts = await this.journal.readFacts();
+    if (facts.length) this.handoff = { root: facts[0].root, facts };
     const record = await this.journal.readIntent();
     if (!record) return "";
     this.pending = record;
@@ -47,6 +49,7 @@ export class FileOperations {
           }
         }
         if (!record.savedDisk) throw Error("Uncertain interrupted save");
+        if (record.completed) await this.remember(record);
         const state = await this.workspace.read();
         reconcile(state, record);
         await this.workspace.write(state);
@@ -66,6 +69,8 @@ export class FileOperations {
         record.completed ||
         (record.kind === "move" && destination === record.identity && source !== record.identity)
       ) {
+        record.completed = true;
+        await this.remember(record);
         const state = await this.workspace.read();
         reconcile(state, record);
         await this.workspace.write(state);
@@ -106,8 +111,13 @@ export class FileOperations {
       if (this.pending?.completed) reconcile(snapshot, this.pending);
     }).then(() => { for (const [key, saved] of acknowledged) if (this.savedBaselines.get(key) === saved) this.savedBaselines.delete(key); });
   }
-  private remember(intent: Intent) {
-    if (this.handoff?.root === intent.root) this.handoff.facts.push(structuredClone(intent));
+  private async remember(intent: Intent) {
+    if (!this.handoff && intent.kind === "save") return;
+    if (this.handoff?.root !== intent.root) this.handoff = { root: intent.root, facts: [] };
+    if (!this.handoff.facts.some(f => f.source === intent.source && f.destination === intent.destination && f.identity === intent.identity && f.kind === intent.kind)) {
+      this.handoff.facts.push(structuredClone(intent));
+    }
+    await this.journal.writeFacts(this.handoff.facts);
   }
   assertIdle(batchRoot?: string) {
     if (this.busy || this.pending || (this.handoff && this.handoff.root !== batchRoot))
@@ -195,9 +205,9 @@ export class FileOperations {
         }
       }
       intent.completed = true;
-      this.remember(intent);
       try {
         await this.journal.writeIntent(intent);
+        await this.remember(intent);
         const state = await this.workspace.read();
         reconcile(state, intent);
         await this.workspace.write(state);
@@ -257,9 +267,9 @@ export class FileOperations {
       const key = JSON.stringify([p.root, path]);
       this.savedBaselines.set(key, { root: p.root, path,
         before: new Set([...(this.savedBaselines.get(key)?.before ?? []), version]), disk: result.disk });
-      this.remember(intent);
       try {
         await this.journal.writeIntent(intent);
+        await this.remember(intent);
         const state = await this.workspace.read();
         reconcile(state, intent);
         await this.workspace.write(state);
@@ -296,6 +306,7 @@ export class FileOperations {
         await this.journal.writeIntent(null);
         this.pending = undefined;
       }
+      await this.journal.writeFacts([]);
       this.handoff = undefined;
       return;
     }
