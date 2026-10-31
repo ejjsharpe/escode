@@ -42,8 +42,7 @@ Final verification results are recorded below after execution. Raw logs live in
 `evidence/117-review/`. Existing manual VoiceOver/native macOS gates remain
 unperformed and user-owned; #141/#117 remain open. No paid provider, physical
 power-loss/ENOSPC or deferred exhaustive capacity/multi-client checks are claimed.
-No closure, PR or merge into integration is performed. A fresh independent Astra
-review remains subsequent work.
+No closure, PR or merge into integration is performed. Independent review results are recorded in the R3 final handoff below.
 
 Final executed results:
 
@@ -108,7 +107,7 @@ content, because an empty directory is a valid covered transition.
 
 Integration-tip reconciliation was already up to date at `37361ea`.
 No closure, PR or integration merge. #141/#117 manual native/VoiceOver gates
-remain open; fresh independent Astra R3 review remains subsequent work.
+remain open; completed independent R3 results are recorded below.
 
 Final R2 qualification (2026-10-31):
 
@@ -134,5 +133,71 @@ Final R2 qualification (2026-10-31):
   No new performance or complete #117 acceptance claim is made.
 
 Both supplied R2 findings have implemented responses and passing final checks;
-no known supplied finding remains unresolved. Independent Astra R3 review is
-still pending, and the user-owned #141/#117 gates remain open.
+no known supplied finding remains unresolved. Independent Astra R3 review is complete as recorded below; the user-owned
+#141/#117 gates remain open.
+
+
+## R3 final handoff — 2026-10-31
+
+Documentation-only handoff on `t3/document-final-review-evidence`, based on
+integration `e3e0437cc7b83b511ea449b80ba3a3b1c0272b70`, retaining `0a9c981`.
+Merging the integration tip before handoff returned already up to date.
+All six supplied R1–R3 reports were read. No open `wayfinder:map` exists;
+standalone #117 authorization applies. No application changes or new tests.
+
+The preserved [R3 Standards report](durable-state-standards-review-r3.md)
+establishes no hard documented-standard breaches and no additional actionable
+smells. The [R3 Spec report](durable-state-spec-review-r3.md) establishes no
+additional confirmed findings. All prior R1/R2 objections are closed: named
+actions, shared validation, terminal-receipt expiry, branch transitions,
+restoration transitions and structured safety outcomes. Covered restoration
+file/directory transitions now work in both directions; retained excluded-content
+collisions (including ignored contents, symlinks and nested repositories) remain
+refused. This does not certify complete acceptance.
+
+Evidence scope after the fixes:
+
+- R2 final source: **368 passed / 6 skipped**, strictly serial full host suite;
+  **9/9 packaged** checkpoint/history scenarios, with typecheck/lint/build/package
+  passing as recorded above.
+- Integration merger at `e3e0437`: **32/32 focused host** (108.30s) and
+  **9/9 packaged** (1.6m), plus typecheck/lint/build/package. Supplied logs:
+  `/tmp/escode-117-merge-{focused,packaged,typecheck,lint,build,package}.log`.
+- Independent R3 Standards: **32/32**, 163.46s; independent R3 Spec: **32/32**,
+  162.01s, plus real-Git restoration reproductions passing both directions.
+  Both used one worker without file parallelism; other workloads overlapped.
+  They are independent focused checks, not isolated full-suite runs.
+- Earlier **364 full host / 21 combined packaged / 2 loaded / 1 installed-Codex
+  UI restart/recovery** passes belong to the prior app build documented in
+  [historical qualification](historical-acceptance.md#frozen-source-final-results).
+  The 21-case combined, loaded and actual-provider journeys were not rerun after
+  the R1/R2 fixes. Do not relabel them final post-fix binary evidence.
+
+Concurrent full-suite timing reliability remains **unqualified**. The serial
+full pass is legitimate bounded qualification, not a concurrent guarantee.
+Historical failed runs above and in the historical ledger remain failures.
+This documentation task ran no broad tests, package or provider journey.
+
+### Final packaged app and human checklist
+
+The merger's unsigned arm64 packaged app is available at
+[escode.app](/Users/elliotsharpe/Projects/escode/apps/desktop/release/mac-arm64/escode.app),
+built for integration source `e3e0437cc7b83b511ea449b80ba3a3b1c0272b70`.
+The path exists at handoff; no embedded build-SHA attestation was independently
+verified here. Record the tested build and outcomes when performing these checks.
+
+Current VoiceOver/native macOS checks are **UNPERFORMED**; #141 and #117 remain
+**OPEN**. On that final packaged app:
+
+- With VoiceOver, discover and activate Historical boundaries, before/after
+  points, unavailable reasons, file comparison, rewind/branch confirmations and
+  Settings/Never; verify announced scope and consequences.
+- Verify result focus and Cancel/Escape return; exercise conflict choices and
+  confirm unsent composer text and unsaved file text remain available.
+- During historical operations, check native window close/reopen, explicit Quit
+  Save/Discard/Cancel and native dialogs, including preservation on cancellation.
+
+These human acceptance gates remain required. Physical ENOSPC/power loss and the
+explicitly deferred exhaustive capacity/multi-client/revocation matrix remain
+unperformed qualification limits. No issue writes, PR, closure or complete
+#117/#141 acceptance is claimed.
