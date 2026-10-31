@@ -53,7 +53,7 @@ export class Chats {
     const task = this.queue.then(async () => {
       if (this.failed) throw Error("Chat storage unavailable; explicit recovery required.");
       const { chats, revision } = await this.database.read();
-      const result = edit(chats);
+      const result = await edit(chats);
       try { await this.database.write(chats, revision); }
       catch (error) { this.failed = true; throw error; }
       return result;
@@ -132,6 +132,26 @@ export class Chats {
       return chat;
     });
   }
+  private reserve(chat: Readonly<SavedChat>, fields: Pick<SavedChat, "checkout"> & Partial<Pick<SavedChat, "scratch" | "worktree">>) {
+    return this.change(chats => {
+      const current = chats.find(value => value.id === chat.id && value.project === chat.project);
+      if (!current || current.phase !== "draft" || current.checkout !== chat.checkout ||
+          current.threadId !== chat.threadId || current.scratch || current.worktree?.reservation ||
+          JSON.stringify(current.worktree) !== JSON.stringify(chat.worktree))
+        throw Error("Draft context changed; inspect before preparing resources.");
+      Object.assign(current, fields);
+    });
+  }
+  // Keep returned identities recoverable even when the related chat transaction fails.
+  async prepared(project: string | null, id: string, fields: Partial<Pick<SavedChat, "threadId" | "scratch" | "worktree">>) {
+    await this.change(async chats => {
+      const previous = chats.find(chat => chat.id === id && chat.project === project);
+      if (!previous) throw Error("Unknown chat in this project.");
+      const result = { ...previous, ...fields };
+      await this.database.command("observePreparation", { previous, result });
+      Object.assign(previous, fields);
+    });
+  }
   async prepareWorktree(chat: Readonly<SavedChat>, project: Checkout, managedRoot: string) {
     const choice = chat.worktree;
     if (!choice || choice.reservation) {
@@ -141,7 +161,7 @@ export class Chats {
     const reservation = project.repositoryGit.reserveWorktree(managedRoot, choice.ref, choice.commit);
     try {
       // Persist before Git mutation: an interrupted preparation is never silently repeated.
-      await this.update(chat.project, chat.id, {
+      await this.reserve(chat, {
         checkout: reservation.root,
         worktree: { ...choice, reservation },
       });
@@ -152,7 +172,7 @@ export class Chats {
             .repositoryGit.managedWorktrees(managedRoot)
             .find((record) => record.root === result.root && record.branch === result.branch);
       if (!result.error && !identity) throw Error("Managed ownership record is missing.");
-      await this.update(chat.project, chat.id, {
+      await this.prepared(chat.project, chat.id, {
         worktree: {
           ...choice,
           reservation: {
@@ -228,7 +248,7 @@ export class Chats {
     if (chat.phase !== "draft") throw Error("Bound scratch ownership is missing.");
     const path = join(dirname(this.file), "scratch", chat.id);
     // Reserve before any allocation, including creation of the scratch parent.
-    await this.update(null, chat.id, { checkout: path, scratch: { path } });
+    await this.reserve(chat, { checkout: path, scratch: { path } });
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     if (realpathSync(dirname(path)) !== dirname(path))
       throw Error(`Scratch storage is unavailable or changed: ${dirname(path)}`);
@@ -237,7 +257,7 @@ export class Chats {
       const parent = await open(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
       try { await parent.sync(); } finally { await parent.close(); }
       const identity = lstatSync(path);
-      await this.update(null, chat.id, {
+      await this.prepared(null, chat.id, {
         scratch: { path, dev: identity.dev, ino: identity.ino },
       });
     } catch (error) {
