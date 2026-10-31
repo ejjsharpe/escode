@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import type { Checkout } from "./project";
 import { randomUUID } from "node:crypto";
 export type SavedChat = {
+  titleSource?: string;
+  titleRequest?: string;
   id: string;
   project: string | null;
   checkout: string;
@@ -309,6 +311,30 @@ export class Chats {
     const chat = (await this.list(project)).find((c) => c.id === id);
     if (!chat) throw Error("Unknown chat in this project.");
     return chat;
+  }
+  title(project: string | null, id: string, value: string, request?: string) {
+    return this.change(chats => {
+      const chat = chats.find(c => c.id === id && c.project === project);
+      if (!chat) throw Error("Unknown chat in this project.");
+      if (request !== undefined && chat.titleRequest !== request) return;
+      const title = value.trim();
+      if (!title || title.length > 256 || /[\r\n\x00-\x1f]/.test(title)) throw Error("Enter a title of 1–256 characters on one line.");
+      chat.title = title;
+      chat.titleRequest = undefined;
+    });
+  }
+  titleGeneration(project: string | null, id: string, text?: string, explicit = false) {
+    return this.change(chats => {
+      const chat = chats.find(c => c.id === id && c.project === project);
+      if (!chat) throw Error("Unknown chat in this project.");
+      if (!explicit && text !== undefined && (chat.titleSource || chat.title)) return null;
+      const source = chat.titleSource ?? text?.replace(/[\s\x00-\x1f]+/g, " ").trim().slice(0, 4000);
+      if (!source) throw Error("Send a message before regenerating its title.");
+      chat.titleSource = source;
+      chat.title ??= source.slice(0, 120);
+      chat.titleRequest = randomUUID();
+      return { source, request: chat.titleRequest, checkout: chat.checkout };
+    });
   }
   draft(project: string | null, id: string, text: string) {
     return this.update(project, id, { draft: text });

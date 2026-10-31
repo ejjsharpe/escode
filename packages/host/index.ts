@@ -73,6 +73,7 @@ export async function startHost(options: {
   moveEntry?: (command: import("@escode/contracts").MoveEntry) => Promise<unknown>;
   ackFileOperation?: (root: string) => Promise<void>;
   chatModels?: (project: string | null, id: string, model?: string, effort?: string) => Promise<import("@escode/contracts").ModelChoices>;
+  titleAction?: (action: import("@escode/contracts").TitleAction) => Promise<void>;
   draftAction?: (action: import("@escode/contracts").DraftAction) => Promise<unknown>;
   clientChatStorage?: (state?: Record<string, string>) => Promise<Record<string, string>>;
   sendState?: (project: string | null, id: string) => Promise<{ admissionEpoch: string; expected: string }>;
@@ -146,7 +147,7 @@ export async function startHost(options: {
         .pipe(Effect.andThen(Effect.sync(() => { Effect.runFork(interrupt(id, requestId)); })));
     };
     const requestEnvelope = Schema.Struct({ _tag: Schema.Literal("Request"), id: Schema.Union([Schema.String, Schema.Number]),
-      tag: Schema.Literals(["chatModels", "checkpointRetention", "observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "clientChatStorage", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "branchHistory", "inspectFiles", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
+      tag: Schema.Literals(["titleAction", "chatModels", "checkpointRetention", "observeFiles", "searchFiles", "lookupFile", "gitStatus", "worktreeOptions", "readDiff", "transferAction", "trashEntries", "createState", "createEntry", "readFile", "saveFile", "loadWorkspace", "persistWorkspace", "clientChatStorage", "listDirectory", "watchDirectories", "chatSummaries", "checkpointPoints", "rewind", "branchHistory", "inspectFiles", "inspectBoundary", "chatHistory", "openChat", "chatLive", "sendState", "sendMessage", "sendStatus", "draftAction", "moveEntry", "ackFileOperation"]), payload: Schema.Unknown,
       headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
     });
     const boundedProtocol: typeof protocol = {
@@ -251,6 +252,10 @@ export async function startHost(options: {
           await options.ackFileOperation(root);
         }, catch: String }),
         chatModels: ({ project, id, model, effort }) => Effect.tryPromise({ try: async () => { if (!options.chatModels) throw Error("Model catalog unavailable"); return options.chatModels(project, id, model, effort); }, catch: String }),
+        titleAction: ({ action }) => Effect.tryPromise({ try: async () => {
+          if (!options.titleAction) throw Error("Title editing unavailable");
+          await options.titleAction(action);
+        }, catch: String }),
         draftAction: ({ action }) => Effect.tryPromise({ try: async () => {
           if (!options.draftAction) throw Error("Draft editing unavailable");
           return Schema.decodeUnknownSync(DraftRecord)({ ...await options.draftAction(action) as object, draft: "" });

@@ -278,3 +278,10 @@ A chat's explicit Codex model and supported reasoning effort, stored in host SQL
 Each model remembers its selected effort within the chat. Send captures these choices
 before preparation; editing them during preparation or execution affects only a later
 explicit Send. Catalog changes require an explicit supported selection, never substitution.
+**Chat title**:
+Shared host-owned conversation metadata displayed in Agents and checkout-local Chats.
+First Send starts one independent ephemeral title request, with bounded first-message
+text as its fallback. Rename accepts a single line up to 256 characters. Regenerate
+uses the retained first message; results match the current persisted request identity
+so Rename or a newer request supersedes delayed output. Titles never alter transcripts
+or sent-chat recency.
