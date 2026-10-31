@@ -1,0 +1,12 @@
+$ playwright test tests/sidebar-qualification.spec.ts tests/chat-summaries.spec.ts -g "thirty chats|Files Diff Chats" "--timeout=90000"
+
+Running 2 tests using 1 worker
+
+(node:39029) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 tests/chat-summaries.spec.ts:108:1 › thirty chats across five projects keep one list while three run (8.4s)
+
+  ✓  2 tests/sidebar-qualification.spec.ts:8:1 › Files Diff Chats retain keyboard controls at desktop narrow short and native 200 percent (2.8s)
+
+  2 passed (11.5s)

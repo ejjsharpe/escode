@@ -1301,7 +1301,15 @@ function ProjectView({
             key={view}
             disabled={blocked[checkout]}
             aria-pressed={mode === view}
-            onClick={() => setMode(view)}
+            onClick={(event) => {
+              const section = event.currentTarget.closest("section");
+              setMode(view);
+              // Chats uses a separate sidebar; move focus to its visible control.
+              requestAnimationFrame(() => {
+                const buttons = section?.querySelectorAll<HTMLButtonElement>(".view-nav button[aria-pressed=true]");
+                Array.from(buttons ?? []).find(button => button.offsetParent !== null)?.focus();
+              });
+            }}
           >
             <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d={view === "Files" ? "M5 3h9l5 5v13H5Z M14 3v6h5" : view === "Chats" ? "M3 4h18v13H9l-6 4Z" : "M8 3v18 M4 7l4-4 4 4 M16 21V3 M12 17l4 4 4-4"} /></svg>
             {view === "Source Control" ? "Diff" : view}

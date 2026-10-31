@@ -116,6 +116,10 @@ test("thirty chats across five projects keep one list while three run", async ()
   await writeApprovalFixture(user, saved);
   await writeRecoveryFixture(join(user, "client-workspace-v1.json"), JSON.stringify({ projects: saved, selected: "agents", views: {}, drafts: [] }));
   const records = Array.from({ length: 30 }, (_, i) => ({ id: `chat-${i}`, project: roots[i % 5], checkout: roots[i % 5], threadId: `thread-${i}`, draft: "", hasSent: true, title: `Request ${i}`, createdAt: i + 1, latestUserMessageAt: i + 1 }));
+  // Keep all special contexts in the same capacity fixture, with three live peers.
+  Object.assign(records[27], { project: null, checkout: "", title: "No project request" });
+  Object.assign(records[28], { checkout: join(directory, "missing-checkout"), title: "Unavailable checkout with a deliberately long conversation label" });
+  Object.assign(records[29], { archived: true });
   await writeChatFixture(join(user, "chats.json"), JSON.stringify({ chats: records }));
   await writeFile(join(directory, "codex"), `#!/usr/bin/env node
 const {createInterface}=require('node:readline');
@@ -133,8 +137,9 @@ send({id:m.id,result});});`, { mode: 0o700 });
   try {
     const page = await app.firstWindow();
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await expect(page.locator(".agent-row")).toHaveCount(30);
-    await expect(page.locator(".agent-row strong").first()).toHaveText("Request 29");
+    await expect(page.locator(".agent-row")).toHaveCount(29);
+    await expect(page.locator(".agent-row").filter({ hasText: "No project request" })).toHaveAttribute("title", /No project/);
+    await expect(page.locator(".agent-row strong").first()).toContainText("Unavailable checkout");
     for (const record of records.slice(0, 3)) {
       await page.evaluate(async record => { await window.escode.chat("open", record.project, record.id); await window.escode.chat("send", record.project, record.id, "Work"); }, record);
     }
@@ -147,6 +152,23 @@ send({id:m.id,result});});`, { mode: 0o700 });
     for (const record of records.slice(0, 3)) await page.evaluate(record => new Promise<void>((resolve, reject) => { const off = window.escode.chatLive(record.project, record.id, snapshot => { off(); window.escode.chat("stop", record.project, record.id, snapshot.controlTarget).then(() => resolve(), reject); }, reject); }), record);
     await expect(page.locator('.agent-row[aria-label*="Running"]')).toHaveCount(0);
     expect(await page.locator(".agent-row strong").allTextContents()).toEqual(order);
-    await page.screenshot({ path: "/tmp/escode-147-recents.png" });
+    await page.locator(".agent-row").filter({ hasText: "Unavailable checkout" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Checkout unavailable" }).first()).toBeVisible();
+    for (const [width, height, zoom] of [[1000, 700, 1], [600, 700, 1], [1000, 450, 1], [1200, 900, 2]]) {
+      await page.setViewportSize({ width, height });
+      await app.evaluate(({ BrowserWindow }, factor) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(factor), zoom);
+      await page.screenshot({ path: `test-results/unavailable-${width}-${height}-${zoom}.png` });
+      const footer = page.getByRole("button", { name: "Show archived chats", exact: true });
+      await footer.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".agent-row")).toHaveCount(1);
+      await expect(page.locator(".agent-row strong")).toHaveText("Request 29");
+      const recent = page.getByRole("button", { name: "Show recent chats", exact: true });
+      await expect(recent).toBeFocused();
+      await expect(recent).toBeInViewport();
+      await page.screenshot({ path: `test-results/archived-${width}-${height}-${zoom}.png` });
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".agent-row")).toHaveCount(29);
+    }
   } finally { await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); }); await app.close(); await rm(directory, { recursive: true, force: true }); }
 });
