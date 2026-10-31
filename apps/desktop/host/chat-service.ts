@@ -480,6 +480,81 @@ export class ChatService {
     }
     return this.snapshot(project, id);
   }
+  private rewindChoices = new Map<string, string>();
+  async rewind(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null): Promise<import("@escode/contracts").RewindResult> {
+    const check = this.environment?.guard(project) ?? (() => {});
+    await this.environment?.authorize(project);
+    check();
+    await this.store.get(project, id);
+    const identity = JSON.stringify([project, id, boundary, token]);
+    if (commandId) {
+      const prior = await this.store.database.command("rewindRead", { commandId });
+      if (prior) { if (prior.identity !== identity) throw Error("Rewind identity conflict"); return prior.result; }
+    }
+    if (this.checkoutActive(project, id)) throw Error("Stop active work before rewinding.");
+    return this.inContext(project, id, async () => {
+      const unavailable = (message: string) => ({ status: "unavailable" as const, token: null, message });
+      const chat = await this.store.get(project, id);
+      const error = await this.store.validateDirectory(chat);
+      if (error) return unavailable(error);
+      const batch = await this.store.database.command("checkpointPoints", { commandId: id, body: { boundary } }) as import("@escode/contracts").CheckpointPage;
+      const point = batch.points[0];
+      if (!point?.turnId || !point.threadId || point.threadId !== chat.threadId) return unavailable("Provider boundary reference unavailable.");
+      let rpc: CodexConnection | undefined;
+      try {
+        rpc = await this.connect(chat.checkout, () => {}, () => {});
+        const turns: string[] = []; let cursor: string | null = null;
+        const seen = new Set<string | null>();
+        for (let n = 0; n < 50; n++) {
+          if (seen.has(cursor)) return unavailable("Repeated provider history cursor.");
+          seen.add(cursor);
+          const page = await rpc.request("thread/turns/list", { threadId: point.threadId, cursor, limit: 20, itemsView: "full", sortDirection: "asc" }) as { data: { id: string; status?: string }[]; nextCursor: string | null };
+          this.historyPage({ ...page, data: page.data.map(t => ({ ...t, items: [] })) } as any, cursor);
+          if (page.data.some(t => t.status === "inProgress")) return unavailable("Provider work is active.");
+          turns.push(...page.data.map(t => t.id)); cursor = page.nextCursor;
+          if (cursor === null) break;
+        }
+        if (cursor !== null || new Set(turns).size !== turns.length) return unavailable("Provider history exceeds rewind limits or repeats turns.");
+        const index = turns.indexOf(point.turnId) - (point.kind === "before-message" ? 1 : 0);
+        if (!turns.includes(point.turnId) || index < 0) return unavailable("Provider history lost or no supported predecessor for this boundary.");
+        const captured = JSON.stringify([project, id, point, chat.directoryIdentity, turns]);
+        if (!token && !commandId) {
+          if (this.rewindChoices.size >= 100) this.rewindChoices.clear();
+          const choice = randomUUID(); this.rewindChoices.set(choice, captured);
+          return { status: "ready", token: choice, message: "Rewind conversation only. Current saved files, staging index, unsaved edits and unsent text stay in place. Later restore points may be abandoned. No turn will start." };
+        }
+        if (!token || !commandId || this.rewindChoices.get(token) !== captured) return unavailable("Selected boundary or provider history changed. Choose again.");
+        check();
+        const changedDirectory = await this.store.validateDirectory(chat);
+        if (changedDirectory) return unavailable(changedDirectory);
+        check();
+        const result = { status: "uncertain" as const, token: null, message: "Rewind outcome uncertain. Inspect provider history; this command will never be replayed." };
+        await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result } });
+        this.rewindChoices.delete(token);
+        const session = this.sessions.get(id);
+        if (session) this.closeConnection(session);
+        try {
+          check();
+          const response = await rpc.request("thread/fork", { threadId: point.threadId, lastTurnId: turns[index] }) as { thread?: { id?: string } };
+          const threadId = response?.thread?.id;
+          if (typeof threadId !== "string" || !threadId || threadId.length > 100 || threadId === point.threadId) throw Error("Provider historical context unavailable");
+          await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result, providerThreadId: threadId } });
+          await this.store.update(project, id, { threadId });
+          const applied = { status: "applied" as const, token: null, message: "Conversation rewound. Current files and drafts retained. Send explicitly to continue." };
+          await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, providerThreadId: threadId, result: applied } });
+          return applied;
+        } catch (failure) {
+          if ((failure as { rejected?: boolean }).rejected) {
+            const rejected = unavailable("Provider historical context unavailable: " + String(failure));
+            await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result: rejected } });
+            return rejected;
+          }
+          return { ...result, message: result.message + " " + String(failure) };
+        }
+      } catch (failure) { return unavailable("Provider rewind unavailable: " + String(failure)); }
+      finally { rpc?.close(); }
+    });
+  }
   async checkpointPoints(project: string | null, id: string, cursor: string | null) {
     await this.store.get(project, id);
     return this.store.database.command("checkpointPoints", { commandId: id, body: { cursor } }) as Promise<import("@escode/contracts").CheckpointPage>;

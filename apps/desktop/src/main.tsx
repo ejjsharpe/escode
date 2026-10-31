@@ -41,6 +41,7 @@ declare global {
       sendMessage: (command: import("@escode/contracts").SendCommand) => Promise<unknown>;
       sendStatus: (commandId: string) => Promise<unknown>;
       checkpointPoints: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").CheckpointPage>;
+      rewind: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null) => Promise<import("@escode/contracts").RewindResult>;
       inspectBoundary: (project: string | null, id: string, boundary: string, cursor: string | null) => Promise<import("@escode/contracts").BoundaryInspection>;
       chatHistory: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").HistoryPage>;
       chatSummaries: (apply: (value: import("@escode/contracts").ChatSummaries) => void, error: (message: string) => void) => () => void;

@@ -6,6 +6,9 @@ export function Boundaries({ project, id }: { project: string | null; id: string
   const [points, setPoints] = useState<CheckpointPage>();
   const [point, setPoint] = useState<CheckpointPage["points"][number]>();
   const [inspection, setInspection] = useState<BoundaryInspection>();
+  const [rewind, setRewind] = useState<import("@escode/contracts").RewindResult>();
+  const confirm = useRef<HTMLDivElement>(null);
+  const rewindButton = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const output = useRef<HTMLDivElement>(null);
@@ -15,7 +18,7 @@ export function Boundaries({ project, id }: { project: string | null; id: string
     finally { setBusy(false); }
   }
   async function inspect(target: NonNullable<typeof point>, cursor: string | null) {
-    setPoint(target); setInspection(undefined);
+    setPoint(target); setInspection(undefined); setRewind(undefined);
     await load(async () => {
       setInspection(await window.escode.inspectBoundary(project, id, target.id, cursor));
       requestAnimationFrame(() => output.current?.focus());
@@ -43,6 +46,21 @@ export function Boundaries({ project, id }: { project: string | null; id: string
       <p>{point.kind === "before-message" ? "Before message" : "After turn"} · {point.id}</p>
       <p>Provider thread: {point.threadId ?? "unavailable"} · turn: {point.turnId ?? "unavailable"}</p>
       <p>Saved files: {point.availability}{point.reason ? ` · ${point.reason}` : ""}. This does not include unsaved editor text.</p>
+      <Button ref={rewindButton} disabled={busy} onClick={() => load(async () => {
+        setRewind(await window.escode.rewind(project, id, point.id, null, null));
+        requestAnimationFrame(() => confirm.current?.focus());
+      })}>Rewind conversation only…</Button>
+      {rewind && <div ref={confirm} tabIndex={-1} role="region" aria-label="Conversation rewind">
+        <p role="status">{rewind.message}</p>
+        {rewind.status === "ready" && <>
+          <Button disabled={busy} onClick={() => { setRewind(undefined); rewindButton.current?.focus(); }}>Cancel rewind</Button>
+          <Button disabled={busy} onClick={() => load(async () => {
+            setRewind(await window.escode.rewind(project, id, point.id, rewind.token, crypto.randomUUID()));
+            setInspection(undefined);
+            requestAnimationFrame(() => confirm.current?.focus());
+          })}>Confirm rewind and keep current files</Button>
+        </>}
+      </div>}
       {inspection && <><p role="status">{inspection.message}</p>
         {inspection.page.items.map(item => <article key={item.turnId + item.id}><h2>{item.type}</h2><pre>{item.text}</pre></article>)}
         <Button disabled={busy || !inspection.page.nextCursor} onClick={() => inspect(point, inspection.page.nextCursor)}>Next boundary history page</Button>

@@ -408,6 +408,7 @@ app.whenReady().then(async () => {
     chatSnapshot: async (root, id) => { await authorizeHistory(root, id); return chats.inspect(root, id); },
     openChat: async (root, id) => { await authorizeHistory(root, id); return chats.open(root, id); },
     checkpointPoints: async (root, id, cursor) => { await authorizeHistory(root, id); return chats.checkpointPoints(root, id, cursor); },
+    rewind: async (root, id, boundary, token, commandId) => { await authorizeHistory(root, id); return chats.rewind(root, id, boundary, token, commandId); },
     inspectBoundary: async (root, id, boundary, cursor) => { await authorizeHistory(root, id); return chats.inspectBoundary(root, id, boundary, cursor); },
     history: async (root, id, cursor) => { await authorizeHistory(root, id); return chats.history(root, id, cursor); },
     summaries: async () => {
