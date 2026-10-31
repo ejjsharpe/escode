@@ -25,6 +25,7 @@ export type SavedChat = {
   directoryIdentity?: { path: string; dev: number; ino: number };
   availabilityError?: string | null;
   threadId: string | null;
+  historicalPending?: boolean;
   hasSent?: boolean;
   phase?: "draft" | "bound";
   initialSend?: "preparing" | "creating" | "unaccepted" | "uncertain" | "accepted";
@@ -83,7 +84,7 @@ export class Chats {
       return chat;
     });
   }
-  createDraft(project: string | null, checkout: string, fresh = false) {
+  createDraft(project: string | null, checkout: string, fresh = false, historicalPending = false) {
     return this.change((chats) => {
       const empty = chats.find(
         (c) =>
@@ -92,6 +93,7 @@ export class Chats {
           c.checkout === checkout &&
           !c.draft &&
           !c.worktree &&
+          !c.historicalPending &&
           !c.initialSend,
       );
       if (empty && !fresh) return empty;
@@ -102,6 +104,7 @@ export class Chats {
         threadId: null,
         hasSent: false,
         phase: "draft",
+        historicalPending,
         draft: "",
         createdAt: Date.now(),
         legacyOrder: chats.length,
@@ -311,6 +314,7 @@ export class Chats {
     fields: Partial<
       Pick<
         SavedChat,
+        | "historicalPending"
         | "directoryIdentity"
         | "availabilityError"
         | "threadId"

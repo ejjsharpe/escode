@@ -71,3 +71,19 @@ verification limits, not a claim of complete parent-spec acceptance.
 One expanded host-fixture run exceeded its original 15-second test timeout while
 packaged/build work ran concurrently. The combined real-Git/SQLite/provider/SIGKILL
 fixture now has a 60-second bound; no assertions were removed or relaxed.
+
+## Integration-tip reconciliation
+
+Integration advanced to `982d3c88a2ec5b5cf71feca64adfc1e43fec1c37` with #134.
+Merged that tip into this implementation branch, preserving both workflows and
+all historical-branch fixtures. Shared RPC contracts retain a separate branching
+route and explicit restoration argument; the internal provider workflow keeps
+those modes distinct. Receipt identities distinguish restoration from historical
+branching and accept existing conversation-only identities. The unavailable UI
+now also exposes the integrated historical-branch action.
+
+Post-merge typecheck and lint pass; the combined authenticated boundary suite
+passes **9/9**, including both restoration and historical-branch SIGKILL cases.
+Build and unsigned arm64 packaging pass. Source checkout, index and recovery
+preservation checks remain in both workflows. The integration branch itself was
+not changed by this task.
