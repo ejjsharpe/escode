@@ -179,9 +179,11 @@ function CheckoutView({
   const viewRef = useRef({ path, view });
   viewRef.current = { path, view };
   const [comparisonError, setComparisonError] = useState("");
+  const [fileError, setFileError] = useState("");
   function rememberView(file: string, selected: typeof view) {
     setFileViews(old => ({ ...old, [file]: selected }));
     setComparisonError("");
+    setFileError("");
     selectedChange.current = selected === "file" || selected === "conflict" ? null : { path: file, area: selected };
   }
   const [message, setMessage] = useState("Open a local Git checkout to begin.");
@@ -441,7 +443,7 @@ function CheckoutView({
         return false;
       }
     }
-    return selected === "file" ? select(file) : showDiff({ path: file, area: selected }, true);
+    return selected === "file" ? select(file, true, undefined, true) : showDiff({ path: file, area: selected }, true);
   }
   function compareConflict(file: string, disk: Document) {
     presentation.current++;
@@ -449,14 +451,19 @@ function CheckoutView({
     setDiff({ original: disk.text, modified: buffers.current.get(file)!.model.getValue(),
       title: "Disk versus your edits", file });
   }
-  async function select(file: string, present = true, intent?: "preview" | "keep") {
+  async function select(file: string, present = true, intent?: "preview" | "keep", retain = false) {
     opening.current++;
     const generation = present ? ++presentation.current : presentation.current;
     try {
-      if (!buffers.current.has(file)) {
+      if (retain || !buffers.current.has(file)) {
         const disk: Document = await projectCall("read", root, file);
         if (generation !== presentation.current) return false;
-        if (!buffers.current.has(file)) addBuffer(file, disk);
+        const buffer = buffers.current.get(file);
+        if (!buffer) addBuffer(file, disk);
+        else if (buffer.model.getValue() === buffer.disk.text) {
+          buffer.disk = disk;
+          if (buffer.model.getValue() !== disk.text) buffer.model.setValue(disk.text);
+        }
       }
       if (!present) {
         setBufferRevision((old) => old + 1);
@@ -470,7 +477,16 @@ function CheckoutView({
       setMessage("Cmd+S to save.");
       return true;
     } catch (e) {
-      if (generation === presentation.current) report(e);
+      if (generation === presentation.current) {
+        if (retain) {
+          activateFile(file);
+          rememberView(file, "file");
+          setDiff(null);
+          setFileError("File unavailable. Available edits are retained. " + String(e));
+          setBufferRevision(old => old + 1);
+        }
+        report(e);
+      }
       return false;
     } finally { opening.current--; }
   }
@@ -989,7 +1005,7 @@ function CheckoutView({
                 void (async () => {
                   await refresh();
                   setFilesRevision((n) => n + 1);
-                  if (path) await select(path, false);
+                  if (path) await restoreView(path);
                 })().catch(report)
               }
             >
@@ -1219,6 +1235,9 @@ function CheckoutView({
               </div>
             )}
             {diff && !diff.file && !comparisonError && <Button onClick={() => void restoreView(path)}>Retry comparison</Button>}
+            {path && fileError && <div role="alert">{fileError}
+              <Button onClick={() => void restoreView(path)}>Retry file</Button>
+            </div>}
             {comparisonError && <div role="alert">{comparisonError}
               <Button onClick={() => void restoreView(path)}>Retry comparison</Button>
             </div>}

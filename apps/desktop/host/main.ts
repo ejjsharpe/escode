@@ -194,6 +194,8 @@ app.whenReady().then(async () => {
         if (!projectSessions.has(item.project)) projectSessions.set(item.project, {});
         try {
           const p = await Checkout.restore(item.root, item.project, helper);
+          try { await workspace.validateCheckout(p.root, p.checkoutIdentity()); }
+          catch (error) { p.close(); throw error; }
           projects.get(p.root)?.close();
           projects.set(p.root, p);
           restored.push(await p.status());
@@ -285,6 +287,7 @@ app.whenReady().then(async () => {
   const checkout = async (root: unknown) => {
     if (typeof root !== "string") throw Error("Invalid checkout");
     const existing = projects.get(root);
+    if (existing) await workspace.validateCheckout(root, existing.checkoutIdentity());
     const associations = await Promise.all([...projectSessions.keys()].map((id) => store.list(id)));
     const linked = associations.flat().filter((c) => c.checkout === root && !c.removed);
     const saved = linked.find((c) => c.directoryIdentity) ?? linked[0];
@@ -305,6 +308,8 @@ app.whenReady().then(async () => {
     const candidate = saved
       ? await Checkout.restore(root, saved.project!, helper)
       : await Checkout.open(root, helper);
+    try { await workspace.validateCheckout(root, candidate.checkoutIdentity()); }
+    catch (error) { candidate.close(); throw error; }
     if (!projectSessions.has(candidate.repositoryGit.repository())) {
       candidate.close();
       throw Error("Open this project first.");
@@ -397,11 +402,15 @@ app.whenReady().then(async () => {
       const result = await dialog.showOpenDialog(window, { properties: ["openDirectory"] });
       if (result.canceled) return null;
       const candidate = await Checkout.open(result.filePaths[0], helper);
-      const existing = projects.get(candidate.root);
+      let existing = projects.get(candidate.root);
+      if (existing) {
+        try { existing.checkoutIdentity(); }
+        catch { existing.close(); projects.delete(candidate.root); existing = undefined; }
+      }
       if (existing) candidate.close();
       const opened = existing ?? candidate;
       try {
-        await workspace.approve(opened.repositoryGit.repository(), opened.root);
+        await workspace.approve(opened.repositoryGit.repository(), opened.root, opened.checkoutIdentity());
       } catch (error) {
         if (!existing) opened.close();
         throw error;
