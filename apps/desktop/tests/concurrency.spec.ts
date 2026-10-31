@@ -81,7 +81,9 @@ createInterface({input:process.stdin}).on('line', line => {
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "Chat 1", exact: true }).click();
     await expect(page.getByRole("status")).toHaveText("Ready");
-    await page.getByRole("button", { name: "Retry connection / reload history" }).click();
+    await page.getByText("Chat actions", { exact: true }).click();
+    await page.getByRole("button", { name: "Reload history", exact: true }).click();
+    await page.getByText("Chat actions", { exact: true }).click();
     await page.getByRole("button", { name: "Chat 2", exact: true }).click();
     await expect
       .poll(() =>

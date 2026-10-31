@@ -1,3 +1,4 @@
+import { ConversationText } from "./conversation";
 import { ArchiveFooter } from "./archive-footer";
 import { ChatRow } from "./chat-row";
 import { Boundaries } from "./boundaries";
@@ -290,7 +291,7 @@ export function ChatView({
         {!record ? (
           <p>Create or select a saved chat to begin. Choose the current checkout or a worktree.</p>
         ) : (
-          <>
+          <div className={`conversation-layout ${!unsent || items.length ? "has-messages" : "is-empty"}`}>
             {!global && !!record.archived !== archived && <p role="status">This conversation belongs to the {record.archived ? "Archived" : "Recent"} list.</p>}
 
             {!record.archived && ["uncertain", "creating", "preparing"].includes(record.initialSend ?? "") && <p role="status">Archive is blocked until the pending or uncertain operation is resolved.</p>}
@@ -306,26 +307,17 @@ export function ChatView({
               <Button disabled={!record.archived && (working || snapshot?.busy || !!snapshot?.requests.length || record.initialSend === "uncertain" || record.initialSend === "creating" || record.initialSend === "preparing")}
                 onClick={() => void run(() => window.escode.chat("archive", project, selected, !record.archived))}>{record.archived ? "Restore chat" : "Archive chat"}</Button>
               {!record.archived && (working || snapshot?.busy || !!snapshot?.requests.length) && <p>Archive requires an idle chat without unresolved work.</p>}
-              </TitleActions>
-              <p>{project?.split("/").at(-1) ?? "No project"}</p>
-            </div>
-            <details className="execution-context">
-              <summary>{project?.split("/").at(-1) ?? "No project"} · {record?.worktree && !record.worktree.reservation ? "New worktree on first Send" : record?.checkout.split("/").at(-1) || "Scratch on first Send"}</summary>
-            <p className="directory">
-              {project === null
-                ? "Scratch folder: "
-                : record?.worktree && !record.worktree.reservation
-                  ? "Source checkout: "
-                  : "Checkout: "}
-              {record?.checkout || "Allocated on first Send"}
-            </p>
-            {record?.checkout && (project === null || record.worktree && !record.worktree.reservation) && <Button type="button" onClick={() => void run(() => navigator.clipboard.writeText(record.checkout))}>Copy execution path</Button>}
-            {project !== null &&
-              record?.checkout &&
-              (record.phase !== "draft" || !record.worktree) && (
-                <CheckoutBranch root={record.checkout} />
+              <Button disabled={working} onClick={() => void store.reconnect(selected)}>Reload history</Button>
+              <Boundaries key={selected} project={project} id={selected} />
+              {Boolean(snapshot?.settings) && (
+                <details>
+                  <summary>Effective Codex settings · {(snapshot!.settings as { model?: string }).model}</summary>
+                  <pre>{JSON.stringify(snapshot.settings, null, 2)}</pre>
+                </details>
               )}
-            </details>
+              </TitleActions>
+
+            </div>
             {record?.checkout && chats.filter((c) => c.checkout === record.checkout).length > 1 && (
               <p>These chats share files in this checkout. Their edits can interact.</p>
             )}
@@ -335,22 +327,6 @@ export function ChatView({
                   Open checkout
                 </Button>
               )}
-              <Button
-                disabled={working}
-                onClick={() => void store.reconnect(selected)}
-              >
-                Retry connection / reload history
-              </Button>
-              <Button disabled={working || snapshot?.busy} onClick={() => void window.escode.chat("resolveSend", project, selected).then(() => store.reconnect(selected))}>
-                Resolve previous Send…
-              </Button>
-              <Button
-                disabled={!(snapshot?.busy || snapshot?.preparing) || !snapshot?.controlTarget}
-                onClick={() => void store.stop(selected)}
-              >
-                Stop
-              </Button>
-              {emergencyTargets[selected] && <><Button onClick={() => void store.emergencyStop(selected)}>Emergency Stop</Button><span>Emergency Stop may not be recorded. External effects may remain; reserved resources are retained.</span></>}
               <span role="status">
                 {working && (!snapshot || (unsent && !snapshot.busy && !snapshot.requests.length))
                   ? unsent
@@ -373,6 +349,17 @@ export function ChatView({
                                 : "Disconnected"}
               </span>
             </div>
+            {(error || snapshot?.error || snapshot?.contextError || record.initialSend === "uncertain" || (!unsent && !snapshot?.connected)) && <div className="chat-recovery">
+              <Button
+                disabled={working}
+                onClick={() => void store.reconnect(selected)}
+              >
+                Retry connection / reload history
+              </Button>
+              {record.initialSend === "uncertain" && <Button disabled={working || snapshot?.busy} onClick={() => void window.escode.chat("resolveSend", project, selected).then(() => store.reconnect(selected))}>
+                Resolve previous Send…
+              </Button>}
+            </div>}
             {error && <p role="alert">{error}</p>}
             {(snapshot?.contextError || snapshot?.error) && (
               <p role="alert">{snapshot?.contextError || snapshot?.error}</p>
@@ -391,13 +378,6 @@ export function ChatView({
               </p>
             )}
             <div className="transcript" role="region" aria-label="Conversation history">
-              <Boundaries key={selected} project={project} id={selected} />
-              {Boolean(snapshot?.settings) && (
-                <details>
-                  <summary>Effective Codex settings · {(snapshot!.settings as { model?: string }).model}</summary>
-                  <pre>{JSON.stringify(snapshot.settings, null, 2)}</pre>
-                </details>
-              )}
               {(history[selected] || snapshot?.history) && (
                 <nav aria-label="History pages">
                   <Button disabled={working} onClick={() => store.history(selected, null)}>First history page</Button>
@@ -415,7 +395,7 @@ export function ChatView({
                         ? "Codex"
                         : item.type}
                   </h2>
-                  <pre>{item.text}</pre>
+                  {item.type === "agentMessage" || item.type === "userMessage" ? <ConversationText text={item.text} /> : /error|fail/i.test(item.type + " " + item.text) ? <pre role="alert">{item.text}</pre> : <details><summary>Tool activity · {item.type}</summary><pre>{item.text}</pre></details>}
                 </article>
               ))}
               {snapshot?.requests.map((request) => (
@@ -427,6 +407,23 @@ export function ChatView({
                 />
               ))}
             </div>
+            <details className="execution-context">
+              <summary>{project?.split("/").at(-1) ?? "No project"} · {record?.worktree && !record.worktree.reservation ? "New worktree on first Send" : record?.checkout.split("/").at(-1) || "Scratch on first Send"}</summary>
+            <p className="directory">
+              {project === null
+                ? "Scratch folder: "
+                : record?.worktree && !record.worktree.reservation
+                  ? "Source checkout: "
+                  : "Checkout: "}
+              {record?.checkout || "Allocated on first Send"}
+            </p>
+            {record?.checkout && (project === null || record.worktree && !record.worktree.reservation) && <Button type="button" onClick={() => void run(() => navigator.clipboard.writeText(record.checkout))}>Copy execution path</Button>}
+            {project !== null &&
+              record?.checkout &&
+              (record.phase !== "draft" || !record.worktree) && (
+                <CheckoutBranch root={record.checkout} />
+              )}
+            </details>
             <form
               className="chat-compose"
               onSubmit={(e) => {
@@ -535,7 +532,7 @@ export function ChatView({
                 }}
               />
               <ModelControls key={selected} project={project} id={selected} onSaving={setSettingsSaving} existingError={error || snapshot?.contextError} />
-              <Button
+              <div className="compose-actions"><Button
                 type="submit"
                 disabled={
                   record.archived || working || settingsSaving ||
@@ -548,9 +545,11 @@ export function ChatView({
               >
                 Send message
               </Button>
-              <p>Stop retains completed file changes. Send a new message to continue.</p>
+              {(snapshot?.busy || snapshot?.preparing || !!snapshot?.requests.length) && snapshot?.controlTarget && <Button type="button" onClick={() => void store.stop(selected)}>Stop</Button>}
+              {emergencyTargets[selected] && <><Button type="button" onClick={() => void store.emergencyStop(selected)}>Emergency Stop</Button><span>Emergency Stop may not be recorded. External effects may remain; reserved resources are retained.</span></>}
+              </div>
             </form>
-          </>
+          </div>
         )}
         {!selected && error && <p role="alert">{error}</p>}
       </>

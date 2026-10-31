@@ -82,7 +82,9 @@ send({id:m.id,result});});`,
     await expect(page.getByRole("alert")).toContainText(root);
     await rm(root, { recursive: true });
     await rename(root + "-away", root);
-    await retry.click();
+    await page.getByText("Chat actions", { exact: true }).click();
+    await page.getByRole("button", { name: "Reload history", exact: true }).click();
+    await page.getByText("Chat actions", { exact: true }).click();
     await expect(page.locator(".chat-actions [role=status]")).toHaveText("Ready");
     await expect(page.getByLabel("Conversation history")).toContainText("retained history");
     await expect(page.getByLabel("Message Codex")).toHaveValue("keep project draft");
@@ -98,7 +100,9 @@ send({id:m.id,result});});`,
     await expect(page.getByLabel("Message Codex")).toHaveValue("keep scratch draft");
     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
     await rename(scratch + "-away", scratch);
-    await retry.click();
+    await page.getByText("Chat actions", { exact: true }).click();
+    await page.getByRole("button", { name: "Reload history", exact: true }).click();
+    await page.getByText("Chat actions", { exact: true }).click();
     await expect(page.locator(".chat-actions [role=status]")).toHaveText("Ready");
     await expect(page.getByLabel("Message Codex")).toHaveValue("keep scratch draft");
     const calls = (await readFile(wire, "utf8"))
