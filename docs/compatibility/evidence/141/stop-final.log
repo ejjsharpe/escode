@@ -1,0 +1,45 @@
+$ playwright test tests/emergency-stop.spec.ts --grep superseded --trace on --output "/tmp/escode-141-stop-results"
+
+Running 1 test using 1 worker
+
+(node:1177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) (6.9s)
+
+
+  1) tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('alert').filter({ hasText: 'Stale Stop target.' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('alert').filter({ hasText: 'Stale Stop target.' }) with timeout 5000ms
+      - waiting for getByRole('alert').filter({ hasText: 'Stale Stop target.' })
+
+
+      106 |     await page.getByRole("button", { name: "Emergency Stop", exact: true }).click();
+      107 |     if (phase === "worker-loss-superseded") {
+    > 108 |       await expect(page.getByRole("alert").filter({ hasText: "Stale Stop target." })).toBeVisible();
+          |                                                                                       ^
+      109 |       expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+      110 |       return;
+      111 |     }
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/emergency-stop.spec.ts:108:87
+
+    Error Context: ../../../../../../../../tmp/escode-141-stop-results/emergency-stop-emergency-S-075d6-app-worker-loss-superseded-/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../../tmp/escode-141-stop-results/emergency-stop-emergency-S-075d6-app-worker-loss-superseded-/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../../tmp/escode-141-stop-results/emergency-stop-emergency-S-075d6-app-worker-loss-superseded-/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) 
+error: script "smoke" exited with code 1

@@ -340,19 +340,29 @@ export class ChatService {
     return chat;
   }
   async open(project: string | null, id: string) {
-    await this.store.get(project, id);
-    while (await this.cleanupCheckpoints() === 100) { /* Finish expiry before extending remaining coverage. */ }
-    await this.store.database.command("checkpointActivity", { commandId: id, body: { now: this.clock() } });
-    if (this.transitions.get(id) === project && this.sessions.get(id)?.connection.status === "connected")
+    const open = async () => {
+      const existing = this.sessions.has(id);
+      const session = this.session(project, id);
+      const epoch = session.connection.epoch;
+      try { await this.store.get(project, id); }
+      catch (error) {
+        if (!existing && this.sessions.get(id) === session) this.sessions.delete(id);
+        throw error;
+      }
+      while (await this.cleanupCheckpoints() === 100) { /* Finish expiry before extending remaining coverage. */ }
+      await this.store.database.command("checkpointActivity", { commandId: id, body: { now: this.clock() } });
+      if (session.connection.epoch !== epoch) throw Error("Project closed while loading saved chat.");
       return this.connectSession(project, id);
-    return this.inContext(project, id, () => this.connectSession(project, id));
+    };
+    if (this.transitions.get(id) === project && this.sessions.get(id)?.connection.status === "connected") return open();
+    return this.inContext(project, id, open);
   }
+
   private async connectSession(
     project: string | null,
     id: string,
     authorizedDraft?: Readonly<SavedChat>,
   ) {
-    if ((await this.store.get(project, id)).historicalPending) throw Error("Historical preparation incomplete; retained resources require inspection.");
     const s = this.session(project, id);
     if (s.connection.opening) {
       await s.connection.opening;
@@ -373,6 +383,7 @@ export class ChatService {
       let chat: Readonly<SavedChat> | undefined;
       try {
         chat = authorizedDraft ?? (await this.store.get(project, id));
+        if (chat.historicalPending) throw Error("Historical preparation incomplete; retained resources require inspection.");
         if (chat.phase === "bound" && !chat.threadId && chat.initialSend === "creating")
           throw Error(
             "Provider creation outcome is uncertain. No thread identity was returned; the saved path and prompt are retained. Retry cannot create a replacement conversation.",

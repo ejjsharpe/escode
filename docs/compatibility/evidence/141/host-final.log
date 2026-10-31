@@ -1,0 +1,57 @@
+$ node scripts/filesystem.mjs && vp test run "--maxWorkers=2"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop
+
+From /private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-worktrees-1E1ldi/repo
+ * branch            main       -> FETCH_HEAD
+Already on 'main'
+Cloning into '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-worktrees-7GNmzc/other'...
+done.
+Preparing worktree (new branch 'sibling')
+Switched to a new branch 'different'
+ ❯ host/worktrees.test.ts (17 tests | 1 failed) 87335ms
+   × creation uses the displayed commit and preserves every category of local edits; reuse discovers real metadata 15727ms
+Preparing worktree (new branch 'linked')
+Preparing worktree (new branch 'linked')
+ ❯ host/project-drafts.test.ts (14 tests | 1 failed) 5912ms
+   × context changes exclude setup and stale read/control calls cannot recreate the old session 50ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/project-drafts.test.ts > context changes exclude setup and stale read/control calls cannot recreate the old session
+Error: Unknown project/chat.
+ ❯ ChatService.session host/chat-service.ts:239:43
+    237|   private session(project: string | null, id: string, retain = true) {
+    238|     let s = this.sessions.get(id);
+    239|     if (s && s.project !== project) throw Error("Unknown project/chat.…
+       |                                           ^
+    240|     if (!s) {
+    241|       s = {
+ ❯ ChatService.open host/chat-service.ts:343:26
+ ❯ host/project-drafts.test.ts:225:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  host/worktrees.test.ts > creation uses the displayed commit and preserves every category of local edits; reuse discovers real metadata
+Error: Test timed out in 15000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ host/worktrees.test.ts:46:1
+     44|   }
+     45| }
+     46| test("creation uses the displayed commit and preserves every category …
+       | ^
+     47|   fixture(async (dir, root, p) => {
+     48|     git(root, "update-ref", "refs/remotes/origin/main", "HEAD");
+ ❯ VitestModuleRunner.directRequest ../../node_modules/.bun/@voidzero-dev+vite-plus-core@1.4.0+df38b84d380caece/node_modules/@voidzero-dev/vite-plus-core/dist/vite/node/module-runner.js:1262:59
+ ❯ VitestModuleRunner.cachedRequest ../../node_modules/.bun/@voidzero-dev+vite-plus-core@1.4.0+df38b84d380caece/node_modules/@voidzero-dev/vite-plus-core/dist/vite/node/module-runner.js:1169:73
+ ❯ VitestModuleRunner.import ../../node_modules/.bun/@voidzero-dev+vite-plus-core@1.4.0+df38b84d380caece/node_modules/@voidzero-dev/vite-plus-core/dist/vite/node/module-runner.js:1124:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 40 passed | 2 skipped (44)
+      Tests  2 failed | 360 passed | 6 skipped (368)
+   Start at  13:20:07
+   Duration  277.80s (tests 98%, import 2%)
+
+error: script "test" exited with code 1

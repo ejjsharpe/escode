@@ -1,0 +1,114 @@
+$ playwright test tests/history.spec.ts tests/checkpoints.spec.ts tests/retention.spec.ts tests/durable-state.spec.ts tests/navigation.spec.ts tests/agents-files-recovery.spec.ts tests/sqlite-qualification.spec.ts tests/emergency-stop.spec.ts --output "/tmp/escode-141-stable-results"
+
+Running 21 tests using 1 worker
+
+(node:51423) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   1 tests/agents-files-recovery.spec.ts:13:1 › saved-project registration and interrupted move recovery survive together across restart (16.9s)
+Preparing worktree (new branch 'linked')
+  ✓   2 tests/agents-files-recovery.spec.ts:155:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening (10.3s)
+{"threeSendsMs":1875.4387499999975,"checkpoints":["available","available","unavailable"]}
+  ✓   3 tests/checkpoints.spec.ts:10:1 › packaged Send captures fresh saved bytes and permits unavailable coverage (6.2s)
+  ✓   4 tests/durable-state.spec.ts:8:1 › packaged SQLite worker retains authenticated drafts and identities on restart (3.0s)
+#139 fault setup ms 1.578125
+#127 visible Send/emergency control ms {"phase":"baseline","sendMs":398.8102080000026,"stopMs":116.27724999999919,"controlMs":49.110374999996566}
+  ✓   5 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) (2.5s)
+#139 fault setup ms 0.49054199999955017
+#127 visible Send/emergency control ms {"phase":"followup","sendMs":886.0414170000004,"stopMs":122.2520829999994,"controlMs":49.6875}
+  ✓   6 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (followup) (3.7s)
+#127 visible Send/emergency control ms {"phase":"worker-loss","sendMs":884.0464580000043,"stopMs":115.31141700000444,"controlMs":47.11087499999849}
+  ✓   7 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss) (2.5s)
+  ✘   8 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) (7.0s)
+(node:60785) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘   9 tests/history.spec.ts:11:129 › saved new-format history: navigation (17.1s)
+(node:63509) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  10 tests/history.spec.ts:11:129 › saved new-format history: streaming (5.1s)
+
+  ✓  11 tests/history.spec.ts:11:129 › saved new-format history: files (3.4s)
+
+  ✓  12 tests/history.spec.ts:11:129 › saved new-format history: branch (6.5s)
+
+  ✓  13 tests/history.spec.ts:11:129 › saved new-format history: branch-after (6.5s)
+
+  ✓  14 tests/history.spec.ts:11:129 › saved new-format history: summary (8.2s)
+
+  ✓  15 tests/history.spec.ts:11:129 › saved new-format history: restoration (10.4s)
+
+  ✓  16 tests/history.spec.ts:11:129 › saved new-format history: expiry (3.3s)
+Preparing worktree (new branch 'other')
+Switched to a new branch 'changed-branch'
+  ✓  17 tests/navigation.spec.ts:8:1 › projects and checkout selections retain buffers, drafts and mode without duplicate tabs (11.1s)
+
+  ✓  18 tests/navigation.spec.ts:235:1 › cancelled and edited lookup invocations reject delayed validation and file activation (6.9s)
+  ✓  19 tests/retention.spec.ts:7:1 › packaged retention settings support keyboard editing and persisted Never (2.9s)
+#127 packaged evidence {"settings":{"journalMode":"wal","synchronous":1,"checkpointFullfsync":1},"before":114936,"after":551656,"samples":100,"medianMs":0.1449999999999818,"p95Ms":0.3052919999999517,"maxMs":4.43341700000002}
+  ✓  20 tests/sqlite-qualification.spec.ts:7:1 › packaged worker durability readback and recovery write measurement (702ms)
+#127 packaged editing/Save ms {"phase":"baseline","editMs":144.92254099999263,"saveMs":282.17854100000113,"rendererSaveMs":247.2000000178814}
+#127 packaged editing/Save ms {"phase":"followup","editMs":56.44070799999463,"saveMs":362.19841599999927,"rendererSaveMs":232.40000000596046}
+#139 native helper timings [{"operation":"git","ms":32.56904200000008},{"operation":"git","ms":22.998749999999973},{"operation":"git","ms":22.12229100000002},{"operation":"git","ms":21.85304199999996},{"operation":"git","ms":21.688416000000075},{"operation":"git","ms":21.401083999999855},{"operation":"git","ms":21.14945899999998},{"operation":"git","ms":20.960417000000007},{"operation":"git","ms":19.88104199999998},{"operation":"git","ms":19.865957999999978}]
+#139 app worker slowest requests [{"operation":"read","ms":40.53470800000002},{"operation":"recoveryRead","ms":27.90145899999993},{"operation":"recoveryRead","ms":24.366833000000042},{"operation":"recoveryRead","ms":2.984124999999949},{"operation":"recoveryWrite","ms":1.9777500000000146},{"operation":"recoveryRead","ms":1.6867500000000746},{"operation":"recoveryWrite","ms":1.4051249999999982},{"operation":"recoveryRead","ms":1.3635000000000446},{"operation":"recoveryWrite","ms":1.2867919999998776},{"operation":"recoveryRead","ms":1.1557500000001255}]
+  ✓  21 tests/sqlite-qualification.spec.ts:42:2 › packaged editing and Save baseline and loaded-store followup (2.8s)
+
+
+  1) tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('alert').filter({ hasText: 'Stale Stop target.' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('alert').filter({ hasText: 'Stale Stop target.' }) with timeout 5000ms
+      - waiting for getByRole('alert').filter({ hasText: 'Stale Stop target.' })
+
+
+      106 |     await page.getByRole("button", { name: "Emergency Stop", exact: true }).click();
+      107 |     if (phase === "worker-loss-superseded") {
+    > 108 |       await expect(page.getByRole("alert").filter({ hasText: "Stale Stop target." })).toBeVisible();
+          |                                                                                       ^
+      109 |       expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+      110 |       return;
+      111 |     }
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/emergency-stop.spec.ts:108:87
+
+    Error Context: ../../../../../../../../tmp/escode-141-stable-results/emergency-stop-emergency-S-075d6-app-worker-loss-superseded-/error-context.md
+
+  2) tests/history.spec.ts:11:129 › saved new-format history: navigation ───────────────────────────
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('region', { name: 'Conversation rewind', exact: true })
+    Expected substring: "Conversation rewound"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toContainText" getByRole('region', { name: 'Conversation rewind', exact: true }) with timeout 5000ms
+      - waiting for getByRole('region', { name: 'Conversation rewind', exact: true })
+        7 × locator resolved to <div tabindex="-1" role="region" aria-label="Conversation rewind">…</div>
+          - unexpected value "Rewind conversation only. Current saved files, staging index, unsaved edits and unsent text stay in place. Later restore points may be abandoned. No turn will start.Cancel rewindConfirm rewind and keep current files"
+
+
+      236 |       await inspection.getByRole("button", { name: "Rewind conversation only…" }).click();
+      237 |       await rewind.getByRole("button", { name: "Confirm rewind and keep current files" }).click();
+    > 238 |       await expect(rewind).toContainText("Conversation rewound");
+          |                            ^
+      239 |       await expect(rewind).toBeFocused();
+      240 |       await expect(composer).toHaveValue("retained unsent text");
+      241 |       await page.screenshot({ path: "test-results/conversation-rewind.png" });
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/history.spec.ts:238:28
+
+    Error Context: ../../../../../../../../tmp/escode-141-stable-results/history-saved-new-format-history-navigation/error-context.md
+
+  2 failed
+    tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) 
+    tests/history.spec.ts:11:129 › saved new-format history: navigation ────────────────────────────
+  19 passed (2.3m)
+error: script "smoke" exited with code 1

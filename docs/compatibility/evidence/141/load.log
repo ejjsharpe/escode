@@ -1,0 +1,52 @@
+$ playwright test tests/sqlite-qualification.spec.ts tests/emergency-stop.spec.ts --grep "editing|baseline"
+
+Running 2 tests using 1 worker
+
+(node:88769) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+#139 packaged checkpoint load {"cycle":0,"count":47,"reclaimed":47,"ms":2788.7875409999997,"databaseBytes":46268416,"walBytes":0}
+#139 fault setup ms 1.1153329999997368
+#139 packaged checkpoint load {"cycle":1,"count":47,"reclaimed":47,"ms":2837.703542,"databaseBytes":49418240,"walBytes":0}
+#139 packaged checkpoint load {"cycle":2,"count":47,"reclaimed":47,"ms":2547.8126249999996,"databaseBytes":49483776,"walBytes":0}
+#139 packaged checkpoint load {"cycle":3,"count":13,"reclaimed":13,"ms":722.1106250000012,"databaseBytes":49545216,"walBytes":0}
+  ✘  1 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) (11.0s)
+(node:90698) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+#139 packaged checkpoint load {"cycle":0,"count":47,"reclaimed":47,"ms":2824.2006250000004,"databaseBytes":46268416,"walBytes":0}
+#127 packaged editing/Save ms {"phase":"baseline","editMs":134.66525000000001,"saveMs":1505.8096669999995,"rendererSaveMs":942}
+#127 packaged editing/Save ms {"phase":"followup","editMs":79.94095900000048,"saveMs":496.33150000000023,"rendererSaveMs":448.6000000089407}
+#139 packaged checkpoint load {"cycle":1,"count":30,"reclaimed":30,"ms":2358.425708999999,"databaseBytes":49418240,"walBytes":0}
+#139 native helper timings [{"operation":"git","ms":206.69137500000033},{"operation":"list","ms":183.6083749999998},{"operation":"git","ms":163.98604200000045},{"operation":"git","ms":153.03899999999976},{"operation":"git","ms":70.70183399999996},{"operation":"git","ms":53.59712499999932},{"operation":"read","ms":52.5356670000001},{"operation":"git","ms":47.931125000000065},{"operation":"git","ms":31.00420800000029},{"operation":"read","ms":26.30491600000005}]
+#139 app worker slowest requests [{"operation":"read","ms":337.3545839999997},{"operation":"checkpoint","ms":178.58508400000028},{"operation":"expireCheckpoints","ms":170.10366699999986},{"operation":"checkpoint","ms":164.77079099999992},{"operation":"expireCheckpoints","ms":95.41508299999987},{"operation":"recoveryRead","ms":95.15370800000028},{"operation":"read","ms":52.93816699999934},{"operation":"checkpoint","ms":52.56254100000024},{"operation":"checkpoint","ms":47.785458999999946},{"operation":"recoveryRead","ms":47.39395800000011}]
+  ✓  2 tests/sqlite-qualification.spec.ts:42:2 › packaged editing and Save baseline and loaded-store followup (7.3s)
+
+
+  1) tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('button', { name: 'Emergency Stop', exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('button', { name: 'Emergency Stop', exact: true }) with timeout 5000ms
+      - waiting for getByRole('button', { name: 'Emergency Stop', exact: true })
+
+
+      82 |     }
+      83 |     await page.getByRole("button", { name: "Stop", exact: true }).click();
+    > 84 |     await expect(page.getByRole("button", { name: "Emergency Stop", exact: true })).toBeVisible();
+         |                                                                                     ^
+      85 |     expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+      86 |     if (phase.startsWith("worker-loss")) {
+      87 |       const results = await page.evaluate(async id => {
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/emergency-stop.spec.ts:84:85
+
+    Error Context: test-results/emergency-stop-emergency-S-46b9a--the-packaged-app-baseline-/error-context.md
+
+  1 failed
+    tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) 
+  1 passed (19.1s)
+error: script "smoke" exited with code 1

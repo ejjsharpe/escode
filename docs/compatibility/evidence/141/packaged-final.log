@@ -1,0 +1,225 @@
+$ playwright test tests/history.spec.ts tests/checkpoints.spec.ts tests/retention.spec.ts tests/durable-state.spec.ts tests/navigation.spec.ts tests/agents-files-recovery.spec.ts tests/sqlite-qualification.spec.ts tests/emergency-stop.spec.ts --output "/tmp/escode-141-final-results"
+
+Running 21 tests using 1 worker
+
+(node:17015) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   1 tests/agents-files-recovery.spec.ts:13:1 › saved-project registration and interrupted move recovery survive together across restart (19.8s)
+Preparing worktree (new branch 'linked')
+  ✓   2 tests/agents-files-recovery.spec.ts:155:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening (11.8s)
+{"threeSendsMs":4154.6939580000035,"checkpoints":["available","available","unavailable"]}
+  ✓   3 tests/checkpoints.spec.ts:10:1 › packaged Send captures fresh saved bytes and permits unavailable coverage (8.5s)
+  ✓   4 tests/durable-state.spec.ts:8:1 › packaged SQLite worker retains authenticated drafts and identities on restart (3.3s)
+#139 fault setup ms 0.5735419999982696
+#127 visible Send/emergency control ms {"phase":"baseline","sendMs":900.4779169999965,"stopMs":115.68358299999818,"controlMs":55.188083000000915}
+  ✓   5 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) (3.2s)
+#139 fault setup ms 0.6951670000053127
+#127 visible Send/emergency control ms {"phase":"followup","sendMs":891.5149170000004,"stopMs":120.49199999999837,"controlMs":30.192957999999635}
+  ✓   6 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (followup) (3.9s)
+#127 visible Send/emergency control ms {"phase":"worker-loss","sendMs":879.2770830000009,"stopMs":122.9808339999945,"controlMs":50.701249999998254}
+  ✓   7 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss) (2.8s)
+  ✘   8 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) (7.1s)
+(node:27001) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   9 tests/history.spec.ts:11:129 › saved new-format history: navigation (20.8s)
+
+  ✓  10 tests/history.spec.ts:11:129 › saved new-format history: streaming (9.6s)
+
+  ✓  11 tests/history.spec.ts:11:129 › saved new-format history: files (9.8s)
+
+  ✓  12 tests/history.spec.ts:11:129 › saved new-format history: branch (15.4s)
+
+  ✓  13 tests/history.spec.ts:11:129 › saved new-format history: branch-after (8.3s)
+
+  ✓  14 tests/history.spec.ts:11:129 › saved new-format history: summary (10.1s)
+
+  ✓  15 tests/history.spec.ts:11:129 › saved new-format history: restoration (19.8s)
+
+  ✘  16 tests/history.spec.ts:11:129 › saved new-format history: expiry (3.5s)
+(node:44562) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'other')
+  ✘  17 tests/navigation.spec.ts:8:1 › projects and checkout selections retain buffers, drafts and mode without duplicate tabs (2.0s)
+(node:45007) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  18 tests/navigation.spec.ts:235:1 › cancelled and edited lookup invocations reject delayed validation and file activation (552ms)
+(node:45212) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  19 tests/retention.spec.ts:7:1 › packaged retention settings support keyboard editing and persisted Never (50ms)
+(node:45263) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  20 tests/sqlite-qualification.spec.ts:7:1 › packaged worker durability readback and recovery write measurement (47ms)
+(node:45316) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  21 tests/sqlite-qualification.spec.ts:42:2 › packaged editing and Save baseline and loaded-store followup (691ms)
+
+
+  1) tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('alert').filter({ hasText: 'Stale Stop target.' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('alert').filter({ hasText: 'Stale Stop target.' }) with timeout 5000ms
+      - waiting for getByRole('alert').filter({ hasText: 'Stale Stop target.' })
+
+
+      106 |     await page.getByRole("button", { name: "Emergency Stop", exact: true }).click();
+      107 |     if (phase === "worker-loss-superseded") {
+    > 108 |       await expect(page.getByRole("alert").filter({ hasText: "Stale Stop target." })).toBeVisible();
+          |                                                                                       ^
+      109 |       expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+      110 |       return;
+      111 |     }
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/emergency-stop.spec.ts:108:87
+
+    Error Context: ../../../../../../../../tmp/escode-141-final-results/emergency-stop-emergency-S-075d6-app-worker-loss-superseded-/error-context.md
+
+  2) tests/history.spec.ts:11:129 › saved new-format history: expiry ───────────────────────────────
+
+    Error: page.evaluate: Error: Send uncertain. Error: spawnSync /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/Resources/filesystem ENOENT Message was not submitted. Prompt and any known provider identity are retained. Inspect history; work was not resent.
+
+      59 |     await expect(page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "project", exact: true })).toHaveAttribute("aria-pressed", "true");
+      60 |     const context = (mode === "files" || mode === "expiry" || mode === "branch" || mode === "branch-after" || mode === "summary") ? root : null;
+    > 61 |     const chatId = restoredChat ?? await page.evaluate(async ({ context, branching }) => {
+         |                                               ^
+      62 |       const draft = await window.escode.chat("createDraft", context);
+      63 |       await window.escode.chat("send", context, draft.id, "fixture first send");
+      64 |       if (branching) {
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/history.spec.ts:61:47
+
+    Error Context: ../../../../../../../../tmp/escode-141-final-results/history-saved-new-format-history-expiry/error-context.md
+
+  3) tests/navigation.spec.ts:8:1 › projects and checkout selections retain buffers, drafts and mode without duplicate tabs 
+
+    Error: electron.launch: Failed to launch: Error: spawn /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode ENOENT
+    Call log:
+      - <launching> /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode --inspect=0 --remote-debugging-port=0 --user-data-dir=/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-navigation-CqQI8K/user
+      - [pid=N/A] starting temporary directories cleanup
+      - [pid=N/A] finished temporary directories cleanup
+
+
+       at desktop.ts:23
+
+      21 |   delete env.ELECTRON_RUN_AS_NODE;
+      22 |   delete env.ESCODE_DEV_URL;
+    > 23 |   const runtime = await _electron.launch({
+         |                   ^
+      24 |     executablePath: packaged
+      25 |       ? resolve("release/mac-arm64/escode.app/Contents/MacOS/escode")
+      26 |       : (electron as unknown as string),
+        at launchDesktop (/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/desktop.ts:23:19)
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/navigation.spec.ts:33:15
+
+    Error Context: ../../../../../../../../tmp/escode-141-final-results/navigation-projects-and-ch-1ddb2-mode-without-duplicate-tabs/error-context.md
+
+  4) tests/navigation.spec.ts:235:1 › cancelled and edited lookup invocations reject delayed validation and file activation 
+
+    Error: electron.launch: Failed to launch: Error: spawn /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode ENOENT
+    Call log:
+      - <launching> /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode --inspect=0 --remote-debugging-port=0 --user-data-dir=/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-lookup-races-wAlhxc/user
+      - [pid=N/A] starting temporary directories cleanup
+      - [pid=N/A] finished temporary directories cleanup
+
+
+       at desktop.ts:23
+
+      21 |   delete env.ELECTRON_RUN_AS_NODE;
+      22 |   delete env.ESCODE_DEV_URL;
+    > 23 |   const runtime = await _electron.launch({
+         |                   ^
+      24 |     executablePath: packaged
+      25 |       ? resolve("release/mac-arm64/escode.app/Contents/MacOS/escode")
+      26 |       : (electron as unknown as string),
+        at launchDesktop (/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/desktop.ts:23:19)
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/navigation.spec.ts:241:15
+
+    Error Context: ../../../../../../../../tmp/escode-141-final-results/navigation-cancelled-and-e-7479d-idation-and-file-activation/error-context.md
+
+  5) tests/retention.spec.ts:7:1 › packaged retention settings support keyboard editing and persisted Never 
+
+    Error: electron.launch: Failed to launch: Error: spawn /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode ENOENT
+    Call log:
+      - <launching> /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode --inspect=0 --remote-debugging-port=0 --user-data-dir=/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-retention-ui-pw2d1v
+      - [pid=N/A] starting temporary directories cleanup
+      - [pid=N/A] finished temporary directories cleanup
+
+
+       at desktop.ts:23
+
+      21 |   delete env.ELECTRON_RUN_AS_NODE;
+      22 |   delete env.ESCODE_DEV_URL;
+    > 23 |   const runtime = await _electron.launch({
+         |                   ^
+      24 |     executablePath: packaged
+      25 |       ? resolve("release/mac-arm64/escode.app/Contents/MacOS/escode")
+      26 |       : (electron as unknown as string),
+        at launchDesktop (/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/desktop.ts:23:19)
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/retention.spec.ts:9:13
+
+    Error Context: ../../../../../../../../tmp/escode-141-final-results/retention-packaged-retenti-b0433-editing-and-persisted-Never/error-context.md
+
+  6) tests/sqlite-qualification.spec.ts:7:1 › packaged worker durability readback and recovery write measurement 
+
+    Error: electron.launch: Failed to launch: Error: spawn /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode ENOENT
+    Call log:
+      - <launching> /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode --inspect=0 --remote-debugging-port=0 --user-data-dir=/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-127-hXvkW8
+      - [pid=N/A] starting temporary directories cleanup
+      - [pid=N/A] finished temporary directories cleanup
+
+
+       at desktop.ts:23
+
+      21 |   delete env.ELECTRON_RUN_AS_NODE;
+      22 |   delete env.ESCODE_DEV_URL;
+    > 23 |   const runtime = await _electron.launch({
+         |                   ^
+      24 |     executablePath: packaged
+      25 |       ? resolve("release/mac-arm64/escode.app/Contents/MacOS/escode")
+      26 |       : (electron as unknown as string),
+        at launchDesktop (/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/desktop.ts:23:19)
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/sqlite-qualification.spec.ts:9:19
+
+    Error Context: ../../../../../../../../tmp/escode-141-final-results/sqlite-qualification-packa-5a03e--recovery-write-measurement/error-context.md
+
+  7) tests/sqlite-qualification.spec.ts:42:2 › packaged editing and Save baseline and loaded-store followup 
+
+    Error: electron.launch: Failed to launch: Error: spawn /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode ENOENT
+    Call log:
+      - <launching> /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode --inspect=0 --remote-debugging-port=0 --user-data-dir=/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-latency-imFvNz/user
+      - [pid=N/A] starting temporary directories cleanup
+      - [pid=N/A] finished temporary directories cleanup
+
+
+       at desktop.ts:23
+
+      21 |   delete env.ELECTRON_RUN_AS_NODE;
+      22 |   delete env.ESCODE_DEV_URL;
+    > 23 |   const runtime = await _electron.launch({
+         |                   ^
+      24 |     executablePath: packaged
+      25 |       ? resolve("release/mac-arm64/escode.app/Contents/MacOS/escode")
+      26 |       : (electron as unknown as string),
+        at launchDesktop (/Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/desktop.ts:23:19)
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/sqlite-qualification.spec.ts:51:15
+
+    Error Context: ../../../../../../../../tmp/escode-141-final-results/sqlite-qualification-packa-46bbc-e-and-loaded-store-followup/error-context.md
+
+  7 failed
+    tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) 
+    tests/history.spec.ts:11:129 › saved new-format history: expiry ────────────────────────────────
+    tests/navigation.spec.ts:8:1 › projects and checkout selections retain buffers, drafts and mode without duplicate tabs 
+    tests/navigation.spec.ts:235:1 › cancelled and edited lookup invocations reject delayed validation and file activation 
+    tests/retention.spec.ts:7:1 › packaged retention settings support keyboard editing and persisted Never 
+    tests/sqlite-qualification.spec.ts:7:1 › packaged worker durability readback and recovery write measurement 
+    tests/sqlite-qualification.spec.ts:42:2 › packaged editing and Save baseline and loaded-store followup 
+  14 passed (2.7m)
+error: script "smoke" exited with code 1

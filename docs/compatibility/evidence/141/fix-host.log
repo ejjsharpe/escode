@@ -1,0 +1,10 @@
+$ node scripts/filesystem.mjs && vp test run host/shutdown.test.ts host/boundaries.test.ts host/checkpoint-expiry.test.ts "--maxWorkers=1"
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop
+
+
+ Test Files  3 passed (3)
+      Tests  29 passed (29)
+   Start at  13:19:43
+   Duration  146.54s (tests 99%, import 1%)
+

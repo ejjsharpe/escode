@@ -1,0 +1,160 @@
+$ playwright test tests/history.spec.ts tests/checkpoints.spec.ts tests/retention.spec.ts tests/durable-state.spec.ts tests/navigation.spec.ts tests/agents-files-recovery.spec.ts tests/sqlite-qualification.spec.ts tests/emergency-stop.spec.ts
+
+Running 21 tests using 1 worker
+
+(node:54166) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘   1 tests/agents-files-recovery.spec.ts:13:1 › saved-project registration and interrupted move recovery survive together across restart (13.1s)
+(node:56863) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Preparing worktree (new branch 'linked')
+  ✘   2 tests/agents-files-recovery.spec.ts:155:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening (12.5s)
+(node:59451) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"threeSendsMs":1426.699917,"checkpoints":["available","available","unavailable"]}
+  ✓   3 tests/checkpoints.spec.ts:10:1 › packaged Send captures fresh saved bytes and permits unavailable coverage (15.3s)
+  ✓   4 tests/durable-state.spec.ts:8:1 › packaged SQLite worker retains authenticated drafts and identities on restart (2.5s)
+#139 fault setup ms 0.4922919999989972
+#127 visible Send/emergency control ms {"phase":"baseline","sendMs":384.7992919999997,"stopMs":118.29883300000074,"controlMs":55.43391700000211}
+  ✓   5 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (baseline) (2.4s)
+#139 fault setup ms 1.4198749999995925
+#127 visible Send/emergency control ms {"phase":"followup","sendMs":397.18170800000007,"stopMs":118.73733400000128,"controlMs":51.51837499999965}
+  ✓   6 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (followup) (2.9s)
+#127 visible Send/emergency control ms {"phase":"worker-loss","sendMs":387.5540000000001,"stopMs":114.1274169999997,"controlMs":43.76841699999932}
+  ✓   7 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss) (1.9s)
+  ✘   8 tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) (7.0s)
+(node:64291) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   9 tests/history.spec.ts:11:129 › saved new-format history: navigation (10.7s)
+
+  ✓  10 tests/history.spec.ts:11:129 › saved new-format history: streaming (6.3s)
+
+  ✓  11 tests/history.spec.ts:11:129 › saved new-format history: files (7.0s)
+
+  ✓  12 tests/history.spec.ts:11:129 › saved new-format history: branch (13.7s)
+
+  ✓  13 tests/history.spec.ts:11:129 › saved new-format history: branch-after (11.7s)
+
+  ✓  14 tests/history.spec.ts:11:129 › saved new-format history: summary (15.8s)
+
+  ✘  15 tests/history.spec.ts:11:129 › saved new-format history: restoration (45.0s)
+Worker teardown timeout of 45000ms exceeded.
+
+Failed worker ran 7 tests:
+tests/history.spec.ts:11:129 › saved new-format history: navigation
+tests/history.spec.ts:11:129 › saved new-format history: streaming
+tests/history.spec.ts:11:129 › saved new-format history: files
+tests/history.spec.ts:11:129 › saved new-format history: branch
+tests/history.spec.ts:11:129 › saved new-format history: branch-after
+tests/history.spec.ts:11:129 › saved new-format history: summary
+tests/history.spec.ts:11:129 › saved new-format history: restoration
+(node:87519) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  16 tests/history.spec.ts:11:129 › saved new-format history: expiry (3.4s)
+Preparing worktree (new branch 'other')
+Switched to a new branch 'changed-branch'
+  ✓  17 tests/navigation.spec.ts:8:1 › projects and checkout selections retain buffers, drafts and mode without duplicate tabs (15.6s)
+
+  ✓  18 tests/navigation.spec.ts:235:1 › cancelled and edited lookup invocations reject delayed validation and file activation (8.7s)
+  ✓  19 tests/retention.spec.ts:7:1 › packaged retention settings support keyboard editing and persisted Never (3.1s)
+#127 packaged evidence {"settings":{"journalMode":"wal","synchronous":1,"checkpointFullfsync":1},"before":114936,"after":551656,"samples":100,"medianMs":0.14208400000006804,"p95Ms":0.2331659999999829,"maxMs":0.9719589999999698}
+  ✓  20 tests/sqlite-qualification.spec.ts:7:1 › packaged worker durability readback and recovery write measurement (797ms)
+#127 packaged editing/Save ms {"phase":"baseline","editMs":128.78737499999988,"saveMs":1129.343832999999,"rendererSaveMs":580.7000000029802}
+#127 packaged editing/Save ms {"phase":"followup","editMs":70.84508300000016,"saveMs":365.05120899999747,"rendererSaveMs":239.8999999910593}
+#139 native helper timings [{"operation":"git","ms":161.01291600000013},{"operation":"git","ms":158.82329099999993},{"operation":"git","ms":158.25912500000004},{"operation":"git","ms":149.12462500000004},{"operation":"list","ms":140.548542},{"operation":"identity","ms":93.29370800000015},{"operation":"list","ms":69.24437500000022},{"operation":"read","ms":57.33245800000009},{"operation":"git","ms":51.04870800000026},{"operation":"git","ms":44.400082999999995}]
+#139 app worker slowest requests [{"operation":"read","ms":41.21866699999987},{"operation":"read","ms":28.285167},{"operation":"recoveryRead","ms":24.488000000000056},{"operation":"recoveryRead","ms":5.361916999999721},{"operation":"recoveryWrite","ms":4.04616599999963},{"operation":"recoveryRead","ms":1.521874999999909},{"operation":"recoveryWrite","ms":1.4229169999998703},{"operation":"recoveryRead","ms":1.3212499999999636},{"operation":"recoveryWrite","ms":1.171041999999943},{"operation":"recoveryWrite","ms":1.1263750000002801}]
+  ✓  21 tests/sqlite-qualification.spec.ts:42:2 › packaged editing and Save baseline and loaded-store followup (4.5s)
+
+
+  1) tests/agents-files-recovery.spec.ts:13:1 › saved-project registration and interrupted move recovery survive together across restart 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.toolbar:visible')
+    Expected substring: "moved/a.ts"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toContainText" locator('.toolbar:visible') with timeout 5000ms
+      - waiting for locator('.toolbar:visible')
+
+
+      75 |     for (let restart = 0; restart < 2; restart++) {
+      76 |       const page = await app.firstWindow();
+    > 77 |       await expect(page.locator(".toolbar:visible")).toContainText("moved/a.ts");
+         |                                                      ^
+      78 |       await expect(page.locator(".monaco-editor:visible")).toContainText("unsaved recovered text");
+      79 |       // Inspect renderer-persisted state before invoking load again can mask a migration loss.
+      80 |       await expect
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/agents-files-recovery.spec.ts:77:54
+
+    Error Context: test-results/agents-files-recovery-save-22c57-ive-together-across-restart/error-context.md
+
+  2) tests/agents-files-recovery.spec.ts:155:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening 
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator: getByRole('button', { name: 'Agents', exact: true })
+    Expected: "true"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveAttribute" getByRole('button', { name: 'Agents', exact: true }) with timeout 5000ms
+      - waiting for getByRole('button', { name: 'Agents', exact: true })
+
+
+      213 |     for (let restart = 0; restart < 2; restart++) {
+      214 |       const page = await app.firstWindow();
+    > 215 |       await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
+          |                                                                               ^
+      216 |         "aria-pressed",
+      217 |         "true",
+      218 |       );
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/agents-files-recovery.spec.ts:215:79
+
+    Error Context: test-results/agents-files-recovery-clos-bc707-d-linked-worktree-reopening/error-context.md
+
+  3) tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('alert').filter({ hasText: 'Stale Stop target.' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('alert').filter({ hasText: 'Stale Stop target.' }) with timeout 5000ms
+      - waiting for getByRole('alert').filter({ hasText: 'Stale Stop target.' })
+
+
+      106 |     await page.getByRole("button", { name: "Emergency Stop", exact: true }).click();
+      107 |     if (phase === "worker-loss-superseded") {
+    > 108 |       await expect(page.getByRole("alert").filter({ hasText: "Stale Stop target." })).toBeVisible();
+          |                                                                                       ^
+      109 |       expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+      110 |       return;
+      111 |     }
+        at /Users/elliotsharpe/.t3/worktrees/escode/t3-48868b2b/apps/desktop/tests/emergency-stop.spec.ts:108:87
+
+    Error Context: test-results/emergency-stop-emergency-S-075d6-app-worker-loss-superseded-/error-context.md
+
+  4) tests/history.spec.ts:11:129 › saved new-format history: restoration ──────────────────────────
+
+    Test timeout of 45000ms exceeded.
+
+    Error Context: test-results/history-saved-new-format-history-restoration/error-context.md
+
+  4 failed
+    tests/agents-files-recovery.spec.ts:13:1 › saved-project registration and interrupted move recovery survive together across restart 
+    tests/agents-files-recovery.spec.ts:155:1 › closed editor retains recovered move mappings and drafts through restart and linked-worktree reopening 
+    tests/emergency-stop.spec.ts:9:88 › emergency Stop visibly discloses uncertainty in the packaged app (worker-loss-superseded) 
+    tests/history.spec.ts:11:129 › saved new-format history: restoration ───────────────────────────
+  17 passed (4.2m)
+  1 error was not a part of any test, see above for details
+error: script "smoke" exited with code 1

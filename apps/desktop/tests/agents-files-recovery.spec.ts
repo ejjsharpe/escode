@@ -132,7 +132,7 @@ test("saved-project registration and interrupted move recovery survive together 
         const exit = new Promise((resolve) => app.process().once("exit", resolve));
         app.process().kill("SIGKILL");
         await exit;
-        await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
+        await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
         app = await launchDesktop(user);
       }
     }
@@ -242,7 +242,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
         const exited = new Promise((resolve) => app.process().once("exit", resolve));
         app.process().kill("SIGKILL");
         await exited;
-        await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"));
+        await rm(join(user, "durable-chats-v1.sqlite-state-v1/receipts/owner.lock"), { force: true });
         app = await launchDesktop(user);
       }
     }
