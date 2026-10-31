@@ -44,7 +44,7 @@ declare global {
       checkpointRetention: (days?: number | null) => Promise<number | null>;
       checkpointPoints: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").CheckpointPage>;
       rewind: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles?: boolean) => Promise<import("@escode/contracts").RewindResult>;
-      branchHistory: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null) => Promise<import("@escode/contracts").RewindResult>;
+      branchHistory: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, summarized?: boolean) => Promise<import("@escode/contracts").RewindResult>;
       inspectFiles: (project: string | null, id: string, boundary: string, path: string | null, cursor: string | null) => Promise<import("@escode/contracts").FileInspection>;
       inspectBoundary: (project: string | null, id: string, boundary: string, cursor: string | null) => Promise<import("@escode/contracts").BoundaryInspection>;
       chatHistory: (project: string | null, id: string, cursor: string | null) => Promise<import("@escode/contracts").HistoryPage>;

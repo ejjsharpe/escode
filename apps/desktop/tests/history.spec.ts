@@ -8,7 +8,7 @@ import { Chats } from "../host/chat";
 import { captureTurnCheckpoint } from "../host/checkpoints";
 import { launchDesktop } from "./desktop";
 
-for (const mode of ["navigation", "streaming", "files", "branch", "branch-after", "restoration", "expiry"] as const) test(`saved new-format history: ${mode}`, async () => {
+for (const mode of ["navigation", "streaming", "files", "branch", "branch-after", "summary", "restoration", "expiry"] as const) test(`saved new-format history: ${mode}`, async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-history-ui-")));
   const user = join(dir, "user"), root = join(dir, "project"), tools = join(dir, "tools");
   await mkdir(user); await mkdir(tools); execFileSync("git", ["init", root]);
@@ -22,7 +22,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:m.params.threadId??'saved-provider'},cwd:process.cwd(),model:'fixture',sandbox:{type:'readOnly'},approvalPolicy:'on-request'};
  if(m.method==='thread/fork')result={thread:{id:'historical-provider'}};
  if(m.method==='turn/start')result={turn:{id:'sent',status:'completed'}};
- if(m.method==='thread/turns/list')result={data:[...${(mode === "branch" || mode === "branch-after") ? "(m.params.cursor===null?[{id:'earlier',items:[]}]:[])" : "[]"},{id:${mode === 'streaming' ? "'t'" : "(m.params.cursor===null?'sent':'later')"},items:[{id:'i',type:'agentMessage',text:m.params.cursor===null?'first saved page':'second saved page'}]}],nextCursor:m.params.cursor===null?'second':null};
+ if(m.method==='thread/turns/list')result={data:[...${(mode === "branch" || mode === "branch-after" || mode === "summary") ? "(m.params.cursor===null?[{id:'earlier',items:[]}]:[])" : "[]"},{id:${mode === 'streaming' ? "'t'" : "(m.params.cursor===null?'sent':'later')"},items:[{id:'i',type:'agentMessage',text:m.params.cursor===null?'first saved page':'second saved page'}]}],nextCursor:m.params.cursor===null?'second':null};
  if(m.method==='thread/turns/list' && require('node:fs').existsSync(${JSON.stringify(join(dir, 'lost-history'))}))result={data:[],nextCursor:null};
  const reply=()=>{process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');
  if(${mode === 'streaming'} && m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(()=>{for(const event of [{method:'turn/started',params:{threadId:'saved-provider',turn:{id:'t'}}},{method:'item/agentMessage/delta',params:{threadId:'saved-provider',turnId:'t',itemId:'i',delta:' live delta'}}])process.stdout.write(JSON.stringify(event)+'\\n');setTimeout(()=>{for(const event of [{method:'item/completed',params:{threadId:'saved-provider',turnId:'t',item:{id:'i',type:'agentMessage',text:'newest live body'}}},{method:'turn/completed',params:{threadId:'saved-provider',turn:{id:'t'}}}])process.stdout.write(JSON.stringify(event)+'\\n');},1200);},200);
@@ -30,7 +30,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(reply,1000);else reply();
  if(m.method==='turn/start')for(const method of ['turn/started','turn/completed'])process.stdout.write(JSON.stringify({method,params:{threadId:'saved-provider',turn:{id:'sent',status:'completed'}}})+'\\n');
 });`, { mode: 0o700 });
-  if ((mode === "files" || mode === "expiry" || mode === "branch" || mode === "branch-after" || mode === "restoration")) {
+  if ((mode === "files" || mode === "expiry" || mode === "branch" || mode === "branch-after" || mode === "summary" || mode === "restoration")) {
     await writeFile(join(root, "saved.txt"), "base saved text");
     execFileSync("git", ["-C", root, "add", "saved.txt"]);
     execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "base"]);
@@ -57,7 +57,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "project", exact: true })).toHaveAttribute("aria-pressed", "true");
-    const context = (mode === "files" || mode === "expiry" || mode === "branch" || mode === "branch-after") ? root : null;
+    const context = (mode === "files" || mode === "expiry" || mode === "branch" || mode === "branch-after" || mode === "summary") ? root : null;
     const chatId = restoredChat ?? await page.evaluate(async ({ context, branching }) => {
       const draft = await window.escode.chat("createDraft", context);
       await window.escode.chat("send", context, draft.id, "fixture first send");
@@ -67,7 +67,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       }
       await window.escode.chat("disconnect", context, draft.id);
       return draft.id;
-    }, { context, branching: (mode === "branch" || mode === "branch-after") });
+    }, { context, branching: (mode === "branch" || mode === "branch-after" || mode === "summary") });
     if (mode === "restoration") {
       await app.evaluate(({ dialog }, isolated) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [isolated] }); }, join(dir, "isolated"));
       await page.getByRole("button", { name: "Open project…" }).click();
@@ -99,16 +99,22 @@ createInterface({input:process.stdin}).on('line',line=>{
       await page.screenshot({ path: "test-results/checkpoint-expiry.png" });
       return;
     }
-    if (mode === "branch" || mode === "branch-after") {
+    if (mode === "branch" || mode === "branch-after" || mode === "summary") {
       await page.getByRole("textbox", { name: "Message Codex" }).fill("retained branch draft");
       await page.getByText("Historical boundaries", { exact: true }).click();
       await page.getByRole("button", { name: "Load boundaries", exact: true }).click();
-      await page.getByRole("button", { name: mode === "branch-after" ? /^After turn/ : /^Before message/ }).first().click();
-      await page.getByRole("button", { name: "Branch historical chat…", exact: true }).click();
+      await page.getByRole("button", { name: (mode === "branch-after" || mode === "summary") ? /^After turn/ : /^Before message/ }).first().click();
+      await page.getByRole("button", { name: mode === "summary" ? "Create summarized continuation…" : "Branch historical chat…", exact: true }).click();
       const result = page.getByRole("region", { name: "Historical branch", exact: true });
       await expect(result).toBeFocused();
-      await expect(result).toContainText("Create a separate historical chat");
-      await result.getByRole("button", { name: "Create historical chat and worktree", exact: true }).click();
+      await expect(result).toContainText(mode === "summary" ? "does not recreate native historical provider context" : "Create a separate historical chat");
+      if (mode === "summary") {
+        await result.getByRole("button", { name: "Cancel branch", exact: true }).click();
+        await expect(page.getByRole("button", { name: "Create summarized continuation…", exact: true })).toBeFocused();
+        await page.keyboard.press("Enter");
+        await expect(result).toBeFocused();
+      }
+      await result.getByRole("button", { name: mode === "summary" ? "Create summarized draft and worktree" : "Create historical chat and worktree", exact: true }).click();
       await expect(result).toContainText("created at");
       await expect(result).toBeFocused();
       await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("retained branch draft");

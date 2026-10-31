@@ -247,3 +247,6 @@ Recovery copies retain command receipts within the consistent SQLite cut. Unreso
 Historical branches can select an available completion boundary: native provider context
 includes the completed turn, paired with that boundary's Git base and saved files.
 The next message's fresh before-state is a separate target.
+
+**Summarized continuation**:
+An explicit historical-workflow choice that creates a separate chat draft and managed worktree from an eligible checkpoint. Available provider text through the selected boundary is copied with item labels into an unsent draft for review (64 KiB maximum); it is not native historical provider context and does not reconstruct tool state. Missing, unsupported, empty or oversized required history remains unavailable. Preparation starts no provider thread or turn; first Send explicitly creates a fresh conversation. Source work and client drafts remain intact.
