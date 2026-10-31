@@ -25,7 +25,7 @@ function validate(db: DatabaseSync, expected?: Pick<DurableIdentity, "hostId" | 
     if (receipt.command?.commandId !== row.id || receipt.hostId !== owner.hostId || receipt.clientId !== owner.clientId || receipt.command.id !== association.id) throw Error("Invalid recovered command identity");
   }
   for (const row of db.prepare("SELECT * FROM client_recovery").all()) {
-    if (!row.clientId || !["workspace", "intent", "fileCommands", "fileFacts"].includes(String(row.kind)) || !Number.isSafeInteger(row.revision)) throw Error("Invalid recovered client ownership");
+    if (!row.clientId || !["workspace", "intent", "fileCommands", "fileFacts", "approvals"].includes(String(row.kind)) || !Number.isSafeInteger(row.revision)) throw Error("Invalid recovered client ownership");
     JSON.parse(String(row.body));
   }
   return { hostId: String(owner.hostId), clientId: String(owner.clientId) };
@@ -149,6 +149,14 @@ export async function reconcileRecovery(directory: string, expected: Pick<Durabl
       if (row.kind === "intent" && body) issues.push("File intent requires explicit external reconciliation");
       if (row.kind === "fileFacts" && body?.length) issues.push("File facts require explicit reconciliation");
       if (row.kind === "fileCommands" && body.some((record: { result?: unknown }) => record.result === undefined)) issues.push("Uncertain file command");
+      if (row.kind === "approvals") {
+        for (const approval of body) {
+          try {
+            const info = await stat(approval.root);
+            if (await realpath(approval.root) !== approval.root || `${info.dev}:${info.ino}` !== approval.directoryIdentity) throw Error("changed approval");
+          } catch { issues.push("Unreconciled approved root: " + approval.root); }
+        }
+      }
       if (row.kind === "workspace") {
         for (const project of [...(body.projects ?? []), ...(body.savedProjects ?? [])]) {
           try { if (await realpath(project.root) !== project.root) throw Error("changed root"); }

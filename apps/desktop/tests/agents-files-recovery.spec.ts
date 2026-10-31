@@ -1,3 +1,4 @@
+import { writeApprovalFixture, readApprovalFixture } from "./desktop";
 import { readRecoveryFixture, writeRecoveryFixture } from "./desktop";
 import { writeChatFixture, readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
@@ -27,7 +28,7 @@ test("saved-project registration and interrupted move recovery survive together 
     { project: root, root },
     { project: closed, root: closed },
   ];
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(approved));
+  await writeApprovalFixture(user, approved);
   const records = [
     {
       id: "closed-chat",
@@ -112,7 +113,7 @@ test("saved-project registration and interrupted move recovery survive together 
         }
       }, historical);
       expect(denial).toContain("Open this project first");
-      expect(JSON.parse(await readFile(join(user, "approved-projects.json"), "utf8")).map(({ project, root }: { project: string; root: string }) => ({ project, root }))).toEqual(
+      expect((await readApprovalFixture(user)).map(({ project, root }: { project: string; root: string }) => ({ project, root }))).toEqual(
         approved,
       );
       expect(
@@ -174,7 +175,7 @@ test("closed editor retains recovered move mappings and drafts through restart a
     "initial",
   ]);
   execFileSync("git", ["-C", root, "worktree", "add", "-b", "linked", linked]);
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify([{ project: root, root }]));
+  await writeApprovalFixture(user, [{ project: root, root }]);
   await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({

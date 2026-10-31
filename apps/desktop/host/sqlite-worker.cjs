@@ -98,7 +98,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
       if (!row || row.body !== JSON.stringify(previous)) throw Error('Preparation context changed');
       db.prepare('INSERT INTO preparation_results VALUES (?, ?, ?)').run(previous.id, JSON.stringify(previous), JSON.stringify(result));
     } else if (operation === 'recoveryRead' || operation === 'recoveryWrite') {
-      if (typeof clientId !== 'string' || !clientId || !['workspace', 'intent', 'fileCommands', 'fileFacts'].includes(kind)) throw Error('Invalid recovery owner');
+      if (typeof clientId !== 'string' || !clientId || !['workspace', 'intent', 'fileCommands', 'fileFacts', 'approvals'].includes(kind)) throw Error('Invalid recovery owner');
       if (operation === 'recoveryRead') {
         const row = db.prepare('SELECT body, revision FROM client_recovery WHERE clientId=? AND kind=?').get(clientId, kind);
         value = row ? { body: JSON.parse(row.body), revision: row.revision } : { body: null, revision: 0 };

@@ -1,7 +1,7 @@
 import { _electron } from "@playwright/test";
 import electron from "electron";
 import { Chats } from "../host/chat";
-import { mkdir, readFile, writeFile, stat } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { resolve } from "node:path";
 
@@ -12,23 +12,8 @@ export async function launchDesktop(
 ) {
   await mkdir(userData, { recursive: true });
   const store = new Chats(join(userData, "durable-chats-v1"));
-  const owner = await store.database.ready;
-  const seededWorkspace = (await store.database.recoveryRead(owner.clientId, "workspace")).body !== null;
+  await store.database.ready;
   await store.database.close();
-  // Seeded approvals represent a native choice in this fixture, never a runtime migration.
-  const approvalsFile = join(userData, "approved-projects.json");
-  if (seededWorkspace) {
-    try {
-      const approvals = JSON.parse(await readFile(approvalsFile, "utf8"));
-      for (const approval of approvals) {
-        if (!approval.directoryIdentity) {
-          const info = await stat(approval.root);
-          approval.directoryIdentity = `${info.dev}:${info.ino}`;
-        }
-      }
-      await writeFile(approvalsFile, JSON.stringify(approvals));
-    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-  }
   const env: Record<string, string> = {
     ...process.env,
     PATH: [tools, packaged ? "/usr/bin:/bin" : process.env.PATH].filter(Boolean).join(":"),
@@ -93,4 +78,29 @@ export async function writeRecoveryFixture(file: string, bytes: string | Uint8Ar
     const previous = await database.recoveryRead(owner.clientId, kind);
     await database.recoveryWrite(owner.clientId, kind, JSON.parse(String(bytes)), previous.revision);
   } finally { await database.close(); }
+}
+
+export async function writeApprovalFixture(user: string, approvals: { project: string; root: string; directoryIdentity?: string }[]) {
+  const store = new Chats(join(user, "durable-chats-v1"));
+  try {
+    const owner = await store.database.ready;
+    approvals = approvals.map(approval => ({ ...approval }));
+    for (const approval of approvals) {
+      if (!approval.directoryIdentity) {
+        const info = await stat(approval.root);
+        approval.directoryIdentity = `${info.dev}:${info.ino}`;
+      }
+    }
+    const previous = await store.database.recoveryRead(owner.hostId, "approvals");
+    await store.database.recoveryWrite(owner.hostId, "approvals", approvals, previous.revision);
+  } finally { await store.database.close(); }
+}
+export async function readApprovalFixture(user: string) {
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(join(user, "durable-chats-v1.sqlite-state-v1/state.sqlite"), { readOnly: true });
+  try {
+    const owner = db.prepare("SELECT hostId FROM identity").get()!;
+    const row = db.prepare("SELECT body FROM client_recovery WHERE clientId=? AND kind='approvals'").get(owner.hostId as string);
+    return JSON.parse(String(row?.body ?? "[]"));
+  } finally { db.close(); }
 }

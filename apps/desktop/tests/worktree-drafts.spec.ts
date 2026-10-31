@@ -1,3 +1,4 @@
+import { writeApprovalFixture } from "./desktop";
 import { readRecoveryFixture, writeRecoveryFixture } from "./desktop";
 import { readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
@@ -52,7 +53,7 @@ test("worktree draft prepares only on Send from closed-project Agents, retains e
   await mkdir(user);
   await symlink(process.execPath, join(dir, "node"));
   const saved = [alpha, beta].map((root) => ({ project: root, root }));
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
+  await writeApprovalFixture(user, saved);
   await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({

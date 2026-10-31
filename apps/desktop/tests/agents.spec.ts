@@ -1,3 +1,4 @@
+import { writeApprovalFixture } from "./desktop";
 import { readRecoveryFixture, writeRecoveryFixture } from "./desktop";
 import { writeChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
@@ -35,7 +36,7 @@ test("Agents restores closed saved projects and shares conversations without mov
     { project: a, root: a },
     { project: b, root: b },
   ];
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
+  await writeApprovalFixture(user, saved);
   const records = [
     {
       id: "alpha-chat",
@@ -368,7 +369,7 @@ test("Agents and local Chats keep newest-first order and original labels through
   execFileSync("git", ["init", root]);
   await mkdir(user);
   const saved = [{ project: root, root }];
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
+  await writeApprovalFixture(user, saved);
   await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({
@@ -530,7 +531,7 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
   execFileSync("git", ["-C", roots[3], "worktree", "add", "-b", "alternate", linked]);
   await mkdir(user);
   const saved = roots.map((root) => ({ project: root, root }));
-  await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
+  await writeApprovalFixture(user, saved);
   await writeRecoveryFixture(
     join(user, "client-workspace-v1.json"),
     JSON.stringify({

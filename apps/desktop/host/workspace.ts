@@ -1,8 +1,6 @@
 import type { DurableState } from "./durable-state";
 import { maximumRecentFiles, maximumRecentUnits } from "@escode/contracts";
-import { readFile } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
-import { atomicWriteJson } from "./atomic-write";
+import { isAbsolute } from "node:path";
 export type WorkspaceState = import("@escode/contracts").Mutable<import("@escode/contracts").WorkspaceState>;
 export type RecoveryDraft = WorkspaceState["drafts"][number];
 export type ViewMemory = WorkspaceState["views"][string];
@@ -149,13 +147,14 @@ function validate(value: unknown): asserts value is WorkspaceState {
 export class Workspace {
   private queue: Promise<unknown> = Promise.resolve();
   private revision?: number;
+  private approvalRevision = 0;
   constructor(private file: string, readonly owner: { hostId: string; clientId: string }, readonly database: DurableState) {}
 
   private async readApprovals(): Promise<{ project: string; root: string; directoryIdentity?: string }[]> {
     try {
-      const value = JSON.parse(
-        await readFile(join(dirname(this.file), "approved-projects.json"), "utf8"),
-      );
+      const stored = await this.database.recoveryRead(this.owner.hostId, "approvals");
+      this.approvalRevision = stored.revision;
+      const value = stored.body ?? [];
       if (
         !Array.isArray(value) ||
         value.some(
@@ -198,7 +197,7 @@ export class Workspace {
       if (!previous || directoryIdentity && !previous.directoryIdentity) {
         if (previous) previous.directoryIdentity = directoryIdentity;
         else approved.push({ project, root, ...(directoryIdentity ? { directoryIdentity } : {}) });
-        await this.replace(join(dirname(this.file), "approved-projects.json"), approved);
+        await this.database.recoveryWrite(this.owner.hostId, "approvals", approved, this.approvalRevision);
       }
     });
   }
@@ -253,6 +252,6 @@ export class Workspace {
       this.revision++;
       return;
     }
-    return atomicWriteJson(file, () => value);
+    throw Error("Unknown workspace persistence target");
   }
 }
