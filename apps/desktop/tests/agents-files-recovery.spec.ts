@@ -1,3 +1,4 @@
+import { writeChatFixture, readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import { mkdtemp, mkdir, writeFile, readFile, realpath, rename, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -42,7 +43,7 @@ test("saved-project registration and interrupted move recovery survive together 
       draft: "unapproved retained text",
     },
   ];
-  await writeFile(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
+  await writeChatFixture(join(user, "host-chats-v1.json"), JSON.stringify({ version: 1, chats: records }));
   // The fresh client workspace deliberately has no savedProjects registration yet.
   const legacy: WorkspaceState = {
     projects: [approved[0]],
@@ -114,7 +115,7 @@ test("saved-project registration and interrupted move recovery survive together 
         approved,
       );
       expect(
-        JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats.map((c: any) => c.draft),
+        JSON.parse(await readChatFixture(join(user, "host-chats-v1.json"), "utf8")).chats.map((c: any) => c.draft),
       ).toEqual(records.map((c) => c.draft));
       await page
         .getByRole("navigation", { name: "Projects" })

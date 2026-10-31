@@ -148,17 +148,17 @@ createInterface({input:process.stdin}).on('line', line => {
     await open(a);
     // Delay host reads so responses remain pending across a conversation remount.
     await app.evaluate(() => {
-      const fs = process.getBuiltinModule("fs/promises") as any;
-      const readFile = fs.readFile;
+      const fs = (process.getBuiltinModule("worker_threads") as any).Worker.prototype;
+      const readFile = fs.postMessage;
       const gate = new Promise<void>((resolve) => {
         (globalThis as any).releaseChatResponses = () => {
-          fs.readFile = readFile;
+          fs.postMessage = readFile;
           resolve();
         };
       });
-      fs.readFile = async (...args: unknown[]) => {
-        if (String(args[0]).endsWith("/host-chats-v1.json")) await gate;
-        return readFile(...args);
+      fs.postMessage = async function(this: any, ...args: unknown[]) {
+        if ((args[0] as any)?.operation === "read") await gate;
+        return readFile.apply(this, args);
       };
     });
     if(process.env.ESCODE_LOOKUP_MEASURE) await page.evaluate(root=>{
@@ -237,15 +237,15 @@ createInterface({input:process.stdin}).on('line', line => {
     await expect(page.getByRole("button", { name: "New chat on current checkout" })).toBeEnabled();
     // Gate the store's atomic replacement after opening the selected chat has settled.
     await app.evaluate(() => {
-      const fs = process.getBuiltinModule("fs/promises") as any;
-      const rename = fs.rename;
-      fs.rename = async (...args: unknown[]) => {
-        if (!String(args[1]).endsWith("/host-chats-v1.json")) return rename(...args);
-        fs.rename = rename;
+      const fs = (process.getBuiltinModule("worker_threads") as any).Worker.prototype;
+      const rename = fs.postMessage;
+      fs.postMessage = async function(this: any, ...args: unknown[]) {
+        if ((args[0] as any)?.operation !== "write") return rename.apply(this, args);
+        fs.postMessage = rename;
         await new Promise<void>((resolve) => {
           (globalThis as any).releaseChatCreate = resolve;
         });
-        return rename(...args);
+        return rename.apply(this, args);
       };
     });
     await page.getByRole("button", { name: "New chat on current checkout" }).click();

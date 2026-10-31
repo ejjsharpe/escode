@@ -1,3 +1,4 @@
+import { readChatFixture } from "./desktop";
 import { test, expect } from "@playwright/test";
 import {
   mkdtemp,
@@ -47,7 +48,7 @@ send({id:m.id,result});});`,
   );
   let app = await launchDesktop(user, dir);
   const records = async () => {
-    const saved = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+    const saved = JSON.parse(await readChatFixture(join(user, "host-chats-v1.json"), "utf8")).chats;
     return (await app.firstWindow()).evaluate(async chats => Promise.all(chats.map(async (chat: any) => ({
       ...chat, draft: await window.escode.chat("composer", chat.project, chat.id),
     }))), saved);
@@ -173,7 +174,7 @@ test("one repository offers No project and text-bearing local drafts move throug
     await expect(message).toBeVisible();
     await message.fill("move this prompt");
     const records = async () => {
-    const saved = JSON.parse(await readFile(join(user, "host-chats-v1.json"), "utf8")).chats;
+    const saved = JSON.parse(await readChatFixture(join(user, "host-chats-v1.json"), "utf8")).chats;
     return (await app.firstWindow()).evaluate(async chats => Promise.all(chats.map(async (chat: any) => ({
       ...chat, draft: await window.escode.chat("composer", chat.project, chat.id),
     }))), saved);

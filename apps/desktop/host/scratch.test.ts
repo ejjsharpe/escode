@@ -66,7 +66,7 @@ for (const failure of ["none", "connect", "create-uncertain", "accepted-lost-ack
     try {
       await service.open(null, a.id);
       expect(connections).toBe(0);
-      expect(await readdir(dir)).toEqual(["chats.json"]);
+      expect(await readdir(dir)).toEqual(["chats.json.sqlite-state-v1", "chats.json.sqlite-state-v1.established"]);
       if (failure === "none") await service.send(null, a.id, "keep prompt");
       else await expect(service.send(null, a.id, "keep prompt")).rejects.toThrow();
       const saved = await store.get(null, a.id);
@@ -363,21 +363,18 @@ test("scratch parent allocation failure retains the reservation across restart",
     await expect(restart.open(null, chat.id)).rejects.toThrow(path);
     await expect(restart.send(null, chat.id, "retained composer")).rejects.toThrow(path);
     expect(connections).toBe(0);
-    expect(await readdir(dir)).toEqual(["host-chats-v1.json"]);
+    expect(await readdir(dir)).toEqual(["host-chats-v1.json.sqlite-state-v1", "host-chats-v1.json.sqlite-state-v1.established"]);
     restart.close();
   } finally { service.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
-test("interrupted association write blocks fresh-process recovery without replacing evidence", async () => {
+test("legacy interrupted association evidence is preserved without import", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-scratch-write-")));
   const file = join(dir, "host-chats-v1.json");
-  const store = new Chats(file);
-  const chat = await store.createDraft(null, "");
   await writeFile(file + ".tmp", "interrupted reservation");
+  const store = new Chats(file);
   try {
-    const restart = new Chats(file);
-    await expect(restart.get(null, chat.id)).rejects.toThrow("explicit recovery");
-    await expect(restart.createDraft(null, "")).rejects.toThrow("explicit recovery");
+    expect(await store.all()).toEqual([]);
     expect(await readFile(file + ".tmp", "utf8")).toBe("interrupted reservation");
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
 });

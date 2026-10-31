@@ -14,7 +14,7 @@ test("desktop publishes its window only after durable identities and retains the
       try {
         const window = await app.firstWindow();
         await expect(window.getByRole("button", { name: "Open project…" })).toBeVisible();
-        const bytes = await readFile(join(user, "foundation/state.json"), "utf8");
+        const bytes = await readFile(join(user, "durable-chats-v1.sqlite-state-v1/receipts/state.json"), "utf8");
         const state = JSON.parse(bytes);
         expect(state.version).toBe(1);
         expect(state.hostId).toMatch(/^[0-9a-f-]{36}$/);
