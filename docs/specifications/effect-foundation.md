@@ -2,6 +2,10 @@
 
 Status: accepted by the user, 2026-10-30. Planning only; no implementation or runtime acceptance is implied. Decision owner: [What bounded first slice and phased plan establish the foundation while preserving accepted behaviour?](https://github.com/ejjsharpe/escode/issues/58). Destination: [Establish escode’s Effect host and client foundation](https://github.com/ejjsharpe/escode/issues/49).
 
+## Subsequent durable-state and time-travel amendment
+
+Accepted 2026-10-31: the [durable-state and turn-level time-travel specification](durable-state-and-time-travel.md) selects SQLite current-state tables, explicit checkpoints and provider-owned complete transcripts for a subsequent implementation. It adds inspect/rewind/historical branching and retention, chooses WAL `NORMAL` with its system-failure loss limit, and adds emergency Stop plus a minimal recovery-copy mechanism. It amends storage details and expands the earlier feature scope while preserving this handoff's host authority, fresh-store/no-import, client ownership and no-replay rules; it does not reopen completed foundation acceptance or claim these additions implemented.
+
 ## Prerelease delivery amendment
 
 The user subsequently approved a smaller qualification scope and confirmed that escode is not live. This amendment supersedes the original handoff's migration, broad compatibility and exhaustive qualification gates, including conflicting requirements in the pinned investigations and published specification. It does not claim those checks passed.

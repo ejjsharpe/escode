@@ -90,6 +90,23 @@ The host's metadata and activity projection for one saved chat or chat draft, sh
 **History page**:
 A bounded portion of a saved chat's provider history, loaded explicitly through the execution host. Message bodies and pages carry content revisions; choosing another page replaces the displayed portion. Unloaded or unavailable portions are disclosed. See [saved history evidence](docs/compatibility/saved-history.md).
 
+The following historical-work terms describe the [accepted turn-level time-travel specification](docs/specifications/durable-state-and-time-travel.md), not implemented behavior.
+
+**Turn checkpoint**:
+A recorded boundary before or after an agent turn, identifying its historical conversation context and the availability of captured saved working files. It is distinct from a user's Git commit and from a client's unsaved recovery draft.
+
+**Conversation rewind**:
+An explicit return of an existing chat to an earlier conversation boundary, with a separate choice about restoring files. Looking through history does not rewind the conversation.
+
+**File restoration**:
+An explicit replacement of an eligible worktree's saved working files with the contents of a selected turn checkpoint. Available unsaved client edits remain separately protected.
+
+**Historical branch**:
+A separate chat and worktree continuing from a selected turn checkpoint while preserving the original work. Its historical files and conversation context are distinct from a conversation fork that shares today's files.
+
+**Checkpoint retention**:
+The period for which inactive chats retain available file checkpoints, subject to protection of data still needed by retained branches. Retaining conversation history does not imply that every historical file state remains available.
+
 **Project-backed chat**:
 A chat associated with one project and attached to one of its checkout directories. Multiple chats may share a checkout.
 
