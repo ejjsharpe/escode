@@ -1,0 +1,31 @@
+import { mkdtemp, mkdir, writeFile, stat, realpath, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import assert from 'node:assert/strict';
+const workspace = process.cwd();
+const { DurableState } = await import(workspace + '/apps/desktop/host/durable-state.ts');
+const { captureTurnCheckpoint } = await import(workspace + '/apps/desktop/host/checkpoints.ts');
+const root = await realpath(await mkdtemp(join(tmpdir(), 'spec140-package-')));
+const db = new DurableState(join(root, 'source'));
+try {
+ const owner = await db.ready;
+ const repo = join(root,'repo'); await mkdir(repo); await mkdir(join(root,'spool'));
+ const git = (...args) => execFileSync('git', ['-C',repo,...args],{encoding:'utf8'}).trim();
+ git('init'); await writeFile(join(repo,'saved'),'base'); git('add','saved'); git('-c','user.name=Test','-c','user.email=test@example.com','commit','-m','base');
+ const info = await stat(repo);
+ const chat = {id:'chat',project:repo,checkout:repo,draft:'',threadId:null,directoryIdentity:{path:repo,dev:info.dev,ino:info.ino}};
+ await db.write([chat],0); await writeFile(join(repo,'saved'),'checkpoint'); await captureTurnCheckpoint(db,chat,null);
+ const [point] = await db.command('checkpoints',{commandId:'chat'});
+ await db.command('rewindWrite',{commandId:'branch',body:{checkpoint:point,result:{status:'applied'}}});
+ const exe = workspace + '/apps/desktop/release/mac-arm64/escode.app/Contents/MacOS/escode';
+ const admin = workspace + '/apps/desktop/release/mac-arm64/escode.app/Contents/Resources/app.asar/dist/host/recovery-admin.cjs';
+ const run = (...args) => JSON.parse(execFileSync(exe,[admin,...args],{env:{...process.env,ELECTRON_RUN_AS_NODE:'1'},encoding:'utf8'}));
+ assert.equal(run('copy',join(root,'source'),join(root,'copy'),join(root,'spool')).complete,true);
+ run('recover',join(root,'copy'),join(root,'recovered'),owner.hostId,owner.clientId);
+ await writeFile(join(repo,'saved'),'newer');
+ assert.equal(run('reconcile',join(root,'recovered'),owner.hostId,owner.clientId).ready,true);
+ assert.equal(await readFile(join(repo,'saved'),'utf8'),'newer');
+ assert.equal((await db.command('checkpoints',{commandId:'chat'}))[0].files.saved.content,Buffer.from('checkpoint').toString('base64'));
+ console.log('Packaged copy/recover/reconcile: complete retained checkpoint and branch coverage, newer disk preserved; no provider thread used.');
+} finally { await db.close(); await rm(root,{recursive:true,force:true}); }

@@ -1,7 +1,7 @@
 # SQLite recovery copy (#126)
 
-The administrative host utility captures the current SQLite store, its external
-foundation receipt journal, and published live-spool indexes and referenced chunks.
+The administrative host utility captures the current SQLite store, including command
+receipts, and published live-spool indexes and referenced chunks.
 It excludes provider history and current project files. Since #128, checkpoint metadata and saved contents reside within the consistent SQLite copy.
 No legacy import, scheduled backup, command replay or turn continuation is provided.
 
@@ -24,18 +24,14 @@ not from an untrusted export.
    establishment markers, receipts and spool. Do not replace a live database or
    remove its WAL. Do not delete an existing owner lock to force a copy; a crash
    lock needs investigation against the preserved original first.
-2. Run `copy`. It exclusively acquires the receipt journal's existing writer lock
-   for the whole capture. An active application writer therefore rejects the
-   operation. Independent SQLite writes remain supported: the Node SQLite online
-   backup API produces a consistent cut while writes continue. The fenced journal
-   is copied byte-for-byte and checked against the SQLite owner. Temporary owner
-   lock creation/removal is the only source write by this utility.
-3. Inspect `manifest.json`: SHA-256 inventories the database, receipt journal and
-   captured spool files. Missing/corrupt required spool data marks it incomplete.
-   Published spool indexes have their own cut and may be newer than SQLite.
+2. Run `copy`. The SQLite online backup API produces a consistent cut while writes
+   continue. Checkpoints, retained branch snapshots and expiry share this cut.
+3. Inspect `manifest.json`: SHA-256 inventories SQLite and captured spool files.
+   Missing required checkpoint/spool content marks it incomplete. Git bases and
+   roots remain external requirements. See [checkpoint coverage](checkpoint-recovery-copy.md).
 4. Run `recover` to validate format, owners, identities, integrity and checksums,
    preserving both original and export. It creates a separate database and retains
-   the external receipt bytes without rewriting unresolved evidence. A sibling
+   unresolved SQLite evidence without rewriting outcomes. A sibling
    `.recovery-pending` marker blocks application startup.
 5. Run `reconcile`. The production adapter uses installed Codex through the ordinary
    validated app-server protocol. It reads account status without token refresh and

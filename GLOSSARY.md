@@ -240,7 +240,7 @@ incomplete. Recovery validates a separate copy and quarantines it until exact
 roots, file baselines, provider identities and uncertain operations are reconciled;
 it does not undo external effects, replay commands or resume live requests.
 
-Recovery copies retain command receipts within the consistent SQLite cut. Unresolved receipts and missing required content retain quarantine; admission epoch rotation is not reconciliation. The administrative provider inspector reads exact saved thread and checkout identities without resuming work.
+Recovery copies retain checkpoint contents, historical branch snapshots and command receipts within the consistent SQLite cut. Their inventory distinguishes expired coverage from retained snapshots. Exact checkout identities and Git bases remain required external dependencies, checked without substitution. Recovery compares retained availability with the preserved original SQLite authority so an older copy cannot revive subsequently expired points; unavailable original authority retains quarantine. Unresolved receipts and missing required content retain quarantine; admission epoch rotation is not reconciliation. The administrative provider inspector reads exact saved thread and checkout identities without resuming work.
 
 - **Boundary inspection**: Read-only, bounded browsing of provider-owned conversation history through a recorded before-message or after-turn boundary. It leaves the live conversation, composer and files unchanged. Provider history availability is independent of saved-file coverage; retained files cannot establish complete conversation history.
 

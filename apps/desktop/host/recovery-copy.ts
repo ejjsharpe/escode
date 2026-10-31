@@ -62,6 +62,8 @@ async function checkpointExternals(points: ReturnType<typeof checkpointCoverage>
       if (!identity || root !== identity.path || info.dev !== identity.dev || info.ino !== identity.ino) throw Error("changed root");
       const result = await promisify(execFile)("git", ["-C", root, "rev-parse", "--verify", point.gitBase + "^{commit}"], { timeout: 15000 });
       if (result.stdout.trim() !== point.gitBase) throw Error("changed base");
+      const objects = await promisify(execFile)("git", ["-C", root, "rev-list", "--objects", "--missing=print", point.gitBase], { timeout: 15000, maxBuffer: 16 * 1024 * 1024 });
+      if (objects.stdout.split("\n").some(line => line.startsWith("?"))) throw Error("missing base objects");
     } catch { issues.push(reference + "/external-root-or-git-base"); }
   }
   return issues;
@@ -197,6 +199,10 @@ export async function reconcileRecovery(directory: string, expected: Pick<Durabl
       }
     }
     if (db.prepare("SELECT body FROM submissions").all().some(row => ["admitted", "dispatching", "uncertain"].includes(JSON.parse(String(row.body)).status))) issues.push("Unresolved SQLite submission evidence");
+    for (const row of db.prepare("SELECT id, body FROM rewinds").all()) {
+      const operation = JSON.parse(String(row.body));
+      if (!operation.result || operation.result.status === "uncertain") issues.push("Uncertain historical operation: " + row.id);
+    }
     if (db.prepare("SELECT count(*) AS n FROM preparation_results").get()!.n !== 0) issues.push("Uncertain preparation result");
   } finally { db.close(); }
   const report = { ready: issues.length === 0, issues, files, message: "Current disk hashes are observations; recovered edits and baselines remain unchanged. No provider work was resumed." };
