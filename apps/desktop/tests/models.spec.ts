@@ -49,6 +49,14 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     await expect(page.getByLabel("Next message model")).toHaveValue("b");
     await expect(page.getByLabel("Next message effort")).toHaveValue("medium");
     expect((await readFile(log, "utf8")).trim().split("\n")).toHaveLength(1);
+    await page.getByLabel("Message Codex").fill("explicit follow-up");
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByLabel("Message Codex")).toHaveValue("");
+    const turns = (await readFile(log, "utf8")).trim().split("\n").map(x => JSON.parse(x));
+    expect(turns).toHaveLength(2);
+    expect(turns[1]).toMatchObject({ model: "b", effort: "medium" });
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await expect(page.locator("span[role=status]")).toHaveText("Ready");
     await page.screenshot({ path: "test-results/models.png" });
   } finally { await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); }); await app.close(); await rm(dir, { recursive: true, force: true }); }
 });

@@ -14,7 +14,11 @@ scenario skipped. Durable Send suite: six passed on isolated rerun following one
 combined-run reconnect timeout. Typecheck, lint (four existing warnings), build pass.
 Electron fixture coverage exercises differing effort sets/defaults, remembered effort,
 preserved unsent text, changes during preparation/running, exact captured provider
-command and restart without replay. Installed Codex 0.166.0 model/list returned real
+command and restart without replay, followed by an explicit resumed Send using the retained choices.
+Post-merge Electron smoke passed against integration tip `18df68f`; the controls
+were visually inspected in the composer. Concurrent combined host runs also hit
+existing reconnect/captured-checkout test timeouts; isolated reruns are recorded
+in the task handoff. Installed Codex 0.166.0 model/list returned real
 models and supported/default effort through the existing protocol adapter.
 
 Limits: permissions (#152) and defaults surfaces/precedence (#153) remain separate.
