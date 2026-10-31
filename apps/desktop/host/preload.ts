@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld(
     sendStatus: hostClient.sendStatus,
     chatLive: chatClient.live,
     checkpointPoints: hostClient.checkpointPoints,
+    inspectFiles: hostClient.inspectFiles,
     inspectBoundary: hostClient.inspectBoundary,
     chatHistory: hostClient.chatHistory,
     chatSummaries: hostClient.chatSummaries,

@@ -102,6 +102,9 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         delete row.commandId;
         return row;
       }), nextCursor: rows.length > 20 ? String(offset + 20) : null };
+    } else if (operation === 'inspectCheckpoint') {
+      const row = db.prepare('SELECT body FROM checkpoints WHERE chatId=? AND id=?').get(commandId, body.boundary);
+      value = row ? JSON.parse(row.body) : null;
     } else if (operation === 'checkpoints') {
       value = db.prepare('SELECT body FROM checkpoints WHERE chatId=? ORDER BY rowid').all(commandId).map(row => JSON.parse(row.body));
     } else if (operation === 'checkpoint' || operation === 'completeCheckpoint') {

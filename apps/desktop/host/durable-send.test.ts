@@ -74,12 +74,14 @@ test("authenticated dropped socket response recovers status after reconnect with
   const store = new Chats(join(dir, "chats"));
   const db = store.database;
   let turns = 0;
+  const providerCalls: string[] = [];
   let notify: (message: any) => void = () => {};
   const service = new ChatService(store, async (_cwd, receive) => { return ({
     async request(method: string, params: any) {
+      providerCalls.push(method);
       if (method === "account/read") return { account: { type: "chatgpt" } };
       if (method === "thread/start" || method === "thread/resume") { notify = receive; return { thread: { id: params.threadId ?? "provider" }, cwd: dir, model: "fixture", reasoningEffort: "high", approvalPolicy: "on-request", sandbox: { type: "workspaceWrite" } }; }
-      if (method === "thread/turns/list") return { data: [{ id: `turn-${turns}`, items: [{ id: "answer", type: "agentMessage", text: "historical answer" }] }], nextCursor: null };
+      if (method === "thread/turns/list") return { data: [{ id: `turn-${turns}`, items: [{ id: "answer", type: "agentMessage", text: "historical answer" }, { id: "change", type: "fileChange", changes: [{ path: "manual.txt", kind: { type: "update" }, diff: "+agent result" }] }] }], nextCursor: null };
       if (method === "turn/start") { turns++; return { turn: { id: `turn-${turns}` } }; }
       return {};
     }, respond() {}, close() {},
@@ -111,6 +113,7 @@ test("authenticated dropped socket response recovers status after reconnect with
     const host = await startHost({ ...await db.ready, origin: "null", list: async () => ({ kind: "denied", message: "unused" }),
       checkpointPoints: (project, id, cursor) => service.checkpointPoints(project, id, cursor),
       inspectBoundary: (project, id, boundary, cursor) => service.inspectBoundary(project, id, boundary, cursor),
+      inspectFiles: (project, id, boundary, path, cursor) => service.inspectFiles(project, id, boundary, path, cursor),
       sendMessage: command => sends.execute(command, async () => { await service.send(command.project, command.id, command.text, undefined, command.commandId); }), sendStatus: id => sends.receipt(id) });
     let client = createHostClient(async () => host.bootstrap());
     const command = { commandId: "one", admissionEpoch: sends.admissionEpoch, project: dir, id: chat.id, expected: "state", text: "hello" };
@@ -142,9 +145,29 @@ test("authenticated dropped socket response recovers status after reconnect with
       expect(points.points.map(p => p.kind)).toEqual(["before-message", "after-turn"]);
       expect(points.points[1].id).toBe(after.id);
       const current = service.snapshot(dir, chat.id);
+      const callsBeforeFiles = [...providerCalls];
+      const changes = await client.inspectFiles(dir, chat.id, after.id, null, null);
+      expect(changes.availability).toBe("available");
+      expect(changes.paths).toContain("manual.txt");
+      const detail = await client.inspectFiles(dir, chat.id, after.id, "manual.txt", null);
+      expect(detail.before).toBe(null);
+      expect(detail.after).toBe("agent result");
+      expect((await client.inspectFiles(dir, chat.id, points.points[0].id, "manual.txt", null)).after).toBe("saved before turn");
+      expect((await client.inspectFiles(dir, chat.id, after.id, "ignored.txt", null)).availability).toBe("unavailable");
+      expect((await client.inspectFiles(dir, chat.id, after.id, "nested/secret", null)).availability).toBe("unavailable");
+      await expect(client.inspectFiles(dir, chat.id, "missing", null, null)).rejects.toThrow();
+      await expect(client.inspectFiles(dir, chat.id, after.id, null, "bad")).rejects.toThrow();
+      expect(detail.message).toContain("recorded Git base");
+      await db.command("checkpoint", { body: { ...after, id: "lost-base", gitBase: "0".repeat(40) } });
+      expect((await client.inspectFiles(dir, chat.id, "lost-base", "manual.txt", null)).availability).toBe("unavailable");
+      await db.command("checkpoint", { body: { ...after, id: "lost-snapshot", availability: "unavailable", reason: "Snapshot expired", files: undefined } });
+      expect((await client.inspectFiles(dir, chat.id, "lost-snapshot", null, null)).message).toContain("Snapshot expired");
+      await expect(client.inspectFiles(dir, chat.id, after.id, "../secret", null)).rejects.toThrow();
+      expect(providerCalls).toEqual(callsBeforeFiles);
       const inspection = await client.inspectBoundary(dir, chat.id, after.id, null);
       expect(inspection.availability).toBe("available");
       expect(inspection.page.items[0].text).toBe("historical answer");
+      expect(inspection.page.items.find(item => item.type === "fileChange")?.text).toContain("+agent result");
       expect(service.snapshot(dir, chat.id)).toEqual(current);
       expect(await readFile(join(dir, "manual.txt"), "utf8")).toBe("agent result");
       expect((await client.inspectBoundary(dir, chat.id, points.points[0].id, null)).page.items).toEqual([]);

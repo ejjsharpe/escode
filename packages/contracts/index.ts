@@ -60,6 +60,13 @@ export const CheckpointPoint = Schema.Struct({
 });
 export const CheckpointPage = Schema.Struct({ points: Schema.Array(CheckpointPoint).check(Schema.isMaxLength(20)), nextCursor: Schema.NullOr(Schema.String) });
 export type CheckpointPage = typeof CheckpointPage.Type;
+export const FileInspection = Schema.Struct({
+  availability: Schema.Literals(["available", "unavailable"]), message: Schema.String,
+  paths: Schema.Array(Schema.String).check(Schema.isMaxLength(20)), nextCursor: Schema.NullOr(Schema.String),
+  before: Schema.NullOr(Schema.String.check(Schema.isMaxLength(131072))), after: Schema.NullOr(Schema.String.check(Schema.isMaxLength(131072))),
+  beforeMode: Schema.NullOr(Schema.Number), afterMode: Schema.NullOr(Schema.Number),
+});
+export type FileInspection = typeof FileInspection.Type;
 export const BoundaryInspection = Schema.Struct({ page: HistoryPage, availability: Schema.Literals(["available", "unavailable"]), message: Schema.String });
 export type BoundaryInspection = typeof BoundaryInspection.Type;
 export const ChatDetail = Schema.Struct({
@@ -219,6 +226,7 @@ export const GitQueries = RpcGroup.make(
 export const HostQueries = Directories.merge(Files).merge(GitQueries).merge(RpcGroup.make(Rpc.make("moveEntry", { payload: { command: MoveEntry }, success: MoveResult, error: Schema.String }), Rpc.make("ackFileOperation", { payload: { root: Schema.String }, success: Schema.Void, error: Schema.String }), Rpc.make("draftAction", { payload: { action: DraftAction }, success: DraftRecord, error: Schema.String }), Rpc.make("sendState", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String }, success: SendState, error: Schema.String }), Rpc.make("sendMessage", { payload: { command: SendCommand }, success: SendReceipt, error: Schema.String }), Rpc.make("sendStatus", { payload: { commandId: Schema.String }, success: Schema.NullOr(SendReceipt), error: Schema.String }), Rpc.make("chatSummaries", {
   success: ChatSummaries, error: Schema.String, stream: true,
 }), Rpc.make("chatLive", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: LiveBatch, error: Schema.String, stream: true }), Rpc.make("openChat", { payload: { project: Schema.NullOr(Schema.String), id: Schema.String.check(Schema.isMaxLength(100)) }, success: ChatDetail, error: Schema.String }), Rpc.make("checkpointPoints", { payload: HistoryQuery, success: CheckpointPage, error: Schema.String }),
+  Rpc.make("inspectFiles", { payload: { ...HistoryQuery, boundary: Schema.String.check(Schema.isMaxLength(100)), path: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4096))) }, success: FileInspection, error: Schema.String }),
   Rpc.make("inspectBoundary", { payload: { ...HistoryQuery, boundary: Schema.String.check(Schema.isMaxLength(100)) }, success: BoundaryInspection, error: Schema.String }),
   Rpc.make("chatHistory", { payload: HistoryQuery, success: HistoryPage, error: Schema.String })));
 
