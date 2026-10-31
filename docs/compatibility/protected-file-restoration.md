@@ -89,8 +89,9 @@ not changed by this task.
 
 Final rebuilt/repackaged combined-tip history suite: **5/5 passed (40.2s)**,
 including historical branching and protected restoration. The merged restoration
-result screenshot was visually inspected. The remaining qualification and
-conservative collision-refusal limits above are unchanged.
+result screenshot was visually inspected. The remaining qualification and excluded-content collision refusals above remain;
+covered file/directory transitions are supported after the
+[R2 fix and R3 review](durable-state-review-fixes.md#r3-final-handoff--2026-10-31).
 
 ## Packaged dirty editor gate — 2026-10-31
 

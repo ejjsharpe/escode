@@ -288,5 +288,7 @@ No identified internal gap remains from this qualification. Current-build manual
 VoiceOver and native macOS lifecycle/dialog checks above are **unperformed and
 user-owned**. Physical ENOSPC/power-loss and the explicitly deferred exhaustive
 multi-client/revocation/full-capacity matrix remain unperformed. Final independent
-Astra reviews are subsequent work; this implementation task performs no closure,
+R3 reviews are complete; see the [post-fix final handoff](durable-state-review-fixes.md#r3-final-handoff--2026-10-31)
+for their findings, exact rerun scope and final packaged-app human checklist.
+This implementation task performs no closure,
 PR, or merge into integration, and does not claim complete parent acceptance.
