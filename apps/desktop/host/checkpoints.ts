@@ -50,7 +50,7 @@ export async function captureTurnCheckpoint(database: DurableState, chat: Readon
       const file = join(root, path);
       let info;
       try { info = await lstat(file); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") { files[path] = null; continue; } throw error; }
+      catch (error) { if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) { files[path] = null; continue; } throw error; }
       if (await realpath(dirname(file)) !== dirname(file)) throw Error("Linked checkpoint parent");
       if (info.isDirectory()) continue; // Includes tracked submodules; never descend into nested repositories.
       if (!info.isFile() && !info.isSymbolicLink()) throw Error("Unsupported checkpoint file");

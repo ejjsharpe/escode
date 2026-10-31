@@ -1,0 +1,304 @@
+$ node scripts/filesystem.mjs && vp test run host/checkpoint-expiry.test.ts host/boundaries.test.ts host/historical-files.test.ts
+
+ RUN  v5.0.5 /Users/elliotsharpe/.t3/worktrees/escode/t3-86f143e0/apps/desktop
+
+ ❯ host/boundaries.test.ts (20 tests | 17 failed) 66374ms
+   × historical branch none 2301ms
+   × historical branch provider-response 1856ms
+   × historical branch outcome 1308ms
+   × historical branch final-outcome 1316ms
+   × historical branch allocation 1337ms
+   × historical branch intent 1293ms
+   × completion historical branch none 2693ms
+   × completion historical branch provider-response 2724ms
+   × completion historical branch outcome 3300ms
+   × completion historical branch final-outcome 2906ms
+   × completion historical branch allocation 2655ms
+   × completion historical branch intent 2668ms
+   × summarized reservation intent 2686ms
+   × summarized reservation allocation 2662ms
+   × summarized reservation outcome 2620ms
+   × summarized reservation final-outcome 2647ms
+   × explicit summarized branch preserves files without native fork or automatic turn 2689ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 17 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  host/boundaries.test.ts > historical branch none
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-YBUsfS/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/17]⎯
+
+ FAIL  host/boundaries.test.ts > historical branch provider-response
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-XoXN1n/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/17]⎯
+
+ FAIL  host/boundaries.test.ts > historical branch outcome
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-xe9NnK/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/17]⎯
+
+ FAIL  host/boundaries.test.ts > historical branch final-outcome
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-O7NQit/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/17]⎯
+
+ FAIL  host/boundaries.test.ts > historical branch allocation
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-UBJ9nc/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/17]⎯
+
+ FAIL  host/boundaries.test.ts > historical branch intent
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-ay8VHa/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/17]⎯
+
+ FAIL  host/boundaries.test.ts > completion historical branch none
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-ZAhAjj/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/17]⎯
+
+ FAIL  host/boundaries.test.ts > completion historical branch provider-response
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-uGSmDN/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/17]⎯
+
+ FAIL  host/boundaries.test.ts > completion historical branch outcome
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-RntIK0/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/17]⎯
+
+ FAIL  host/boundaries.test.ts > completion historical branch final-outcome
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-2ud6AN/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/17]⎯
+
+ FAIL  host/boundaries.test.ts > completion historical branch allocation
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-JxjngS/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/17]⎯
+
+ FAIL  host/boundaries.test.ts > completion historical branch intent
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-NqAwLR/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/17]⎯
+
+ FAIL  host/boundaries.test.ts > summarized reservation intent
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-UuC5Tq/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/17]⎯
+
+ FAIL  host/boundaries.test.ts > summarized reservation allocation
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-o8dmS1/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/17]⎯
+
+ FAIL  host/boundaries.test.ts > summarized reservation outcome
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-WOK7PL/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/17]⎯
+
+ FAIL  host/boundaries.test.ts > summarized reservation final-outcome
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-pAG6RP/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/17]⎯
+
+ FAIL  host/boundaries.test.ts > explicit summarized branch preserves files without native fork or automatic turn
+AssertionError: expected 'Saved-file comparison unavailable: Er…' to contain 'Method not found'
+
+Expected: "Method not found"
+Received: "Saved-file comparison unavailable: Error: Error: ENOTDIR: not a directory, lstat '/private/var/folders/n4/62rjd1sj31s9v1gv1x74fr000000gn/T/escode-branch-HEqU7g/repo/bar/child'. Current files were not substituted."
+
+ ❯ runHistoricalBranch host/boundaries.test.ts:206:99
+    204|     missingHistory = false;
+    205|     unsupportedHistory = true;
+    206|     expect((await client.branchHistory(root, chat.id, boundary, null, …
+       |                                                                                                   ^
+    207|     unsupportedHistory = false;
+    208|     const invalid = await client.branchHistory(root, chat.id, "complet…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/17]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  17 failed | 12 passed (29)
+   Start at  14:17:18
+   Duration  67.08s (tests 98%, import 1%)
+
+error: script "test" exited with code 1

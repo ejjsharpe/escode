@@ -6,11 +6,10 @@ export function Boundaries({ project, id }: { project: string | null; id: string
   const [points, setPoints] = useState<CheckpointPage>();
   const [point, setPoint] = useState<CheckpointPage["points"][number]>();
   const [inspection, setInspection] = useState<BoundaryInspection>();
-  const [summarized, setSummarized] = useState(false);
+  const [action, setAction] = useState<import("@escode/contracts").HistoricalAction>("rewind");
+  const summarized = action === "summarized", branching = action === "branch" || summarized, restoreFiles = action === "restore";
   const summaryButton = useRef<HTMLButtonElement>(null);
-  const [branching, setBranching] = useState(false);
   const [rewind, setRewind] = useState<import("@escode/contracts").RewindResult>();
-  const [restoreFiles, setRestoreFiles] = useState(false);
   const restoreButton = useRef<HTMLButtonElement>(null);
   const confirm = useRef<HTMLDivElement>(null);
   const branchButton = useRef<HTMLButtonElement>(null);
@@ -61,16 +60,16 @@ export function Boundaries({ project, id }: { project: string | null; id: string
       <p>Provider thread: {point.threadId ?? "unavailable"} · turn: {point.turnId ?? "unavailable"}</p>
       <p>Saved files: {point.availability}{point.reason ? ` · ${point.reason}` : ""}. This does not include unsaved editor text.</p>
       <Button ref={rewindButton} disabled={busy} onClick={() => load(async () => {
-        setSummarized(false); setRestoreFiles(false); setBranching(false); setRewind(await window.escode.rewind(project, id, point.id, null, null));
+        setAction("rewind"); setRewind(await window.escode.rewind(project, id, point.id, null, null));
       })}>Rewind conversation only…</Button>
       <Button ref={branchButton} disabled={busy} onClick={() => load(async () => {
-        setSummarized(false); setRestoreFiles(false); setBranching(true); setRewind(await window.escode.branchHistory(project, id, point.id, null, null));
+        setAction("branch"); setRewind(await window.escode.branchHistory(project, id, point.id, null, null));
       })}>Branch historical chat…</Button>
       <Button ref={restoreButton} disabled={busy} onClick={() => load(async () => {
-        setSummarized(false); setBranching(false); setRestoreFiles(true); setRewind(await window.escode.rewind(project, id, point.id, null, null, true));
+        setAction("restore"); setRewind(await window.escode.rewind(project, id, point.id, null, null, true));
       })}>Rewind and restore saved files…</Button>
       <Button ref={summaryButton} disabled={busy} onClick={() => load(async () => {
-        setSummarized(true); setRestoreFiles(false); setBranching(true);
+        setAction("summarized");
         setRewind(await window.escode.branchHistory(project, id, point.id, null, null, true));
       })}>Create summarized continuation…</Button>
       <p>Summarized continuation copies available historical text into an unsent draft in a separate historical worktree. It does not recreate native historical provider context. Missing history remains unavailable.</p>

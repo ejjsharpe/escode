@@ -109,6 +109,8 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         const recovery = db.prepare('SELECT kind, body FROM client_recovery').all().some(row => {
           const saved = JSON.parse(row.body);
           if (row.kind === 'approvals' || row.kind === 'chatClient') return false; // Authority and composer/command identities do not depend on historical file bytes.
+          // Completed transfer results retain deduplication; intent/fileFacts separately protect unresolved effects.
+          if (row.kind === 'fileCommands') return !Array.isArray(saved) || saved.some(record => !record.result || (record.result.status !== 'accepted' && record.result.status !== 'rejected' && !Array.isArray(record.result.results)) || record.result.status === 'uncertain');
           return row.kind === 'workspace' ? !!saved?.drafts?.length : saved != null && JSON.stringify(saved) !== '{}' && JSON.stringify(saved) !== '[]';
         });
         const uncertain = db.prepare("SELECT 1 FROM rewinds WHERE json_extract(body,'$.result.status')='uncertain' LIMIT 1").get();

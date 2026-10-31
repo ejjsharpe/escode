@@ -63,7 +63,14 @@ test("background expiry protects recovery, active and uncertain evidence and ret
     await store.database.command("rewindWrite", { commandId: "branch", body: { checkpoint: point, result: { status: "uncertain" } } });
     expect(await expire()).toBe(0);
     await store.database.command("rewindWrite", { commandId: "branch", body: { checkpoint: point, result: { status: "applied" } } });
+    await store.database.recoveryWrite("client", "fileCommands", [{ command: { commandId: "pending" } }], 0);
+    expect(await expire()).toBe(0);
+    await store.database.recoveryWrite("client", "fileCommands", [{ command: { commandId: "pending" }, result: { status: "uncertain" } }], 1);
+    expect(await expire()).toBe(0);
+    const receipts = [{ command: { commandId: "created" }, result: { status: "accepted" } }, { command: { commandId: "transferred" }, result: { results: [], open: [], requiresAck: false, message: "" } }];
+    await store.database.recoveryWrite("client", "fileCommands", receipts, 2);
     expect(await expire()).toBe(1);
+    expect((await store.database.recoveryRead("client", "fileCommands")).body).toEqual(receipts);
     expect((await store.database.command("rewindRead", { commandId: "branch" })).checkpoint.files.a.content).toBe("YQ==");
     expect((await store.database.command("inspectCheckpoint", { commandId: chat.id, body: { boundary: point.id } })).files).toBeUndefined();
     expect((await store.get(null, chat.id)).checkout).toBe(dir);
@@ -190,4 +197,26 @@ test("authenticated policy changes settle elapsed coverage and preserve activity
     await service.cleanupCheckpoints();
     expect((await inspect("never")).availability).toBe("unavailable");
   } finally { await client.close(); await host.close(); service.close(); await store.database.close(); globalThis.WebSocket = original; await rm(dir, { recursive: true, force: true }); }
+});
+
+test("successful durable creation and transfer receipts survive restart without blocking expiry", async () => {
+  const { DurableFiles } = await import("./durable-files");
+  const { copyFile } = await import("node:fs/promises");
+  const dir = await mkdtemp(join(tmpdir(), "escode-expiry-completed-"));
+  let store = new Chats(join(dir, "state"));
+  try {
+    const chat = await store.createDraft(null, dir);
+    const commands = new DurableFiles(store.database, "client", "epoch");
+    await commands.run({ commandId: "create", admissionEpoch: "epoch" }, { status: "uncertain" }, async () => {
+      await writeFile(join(dir, "created"), "saved"); return { status: "accepted" };
+    });
+    await commands.run({ commandId: "transfer", admissionEpoch: "epoch" }, { results: [] as { applied: boolean }[], requiresAck: false }, async () => {
+      await copyFile(join(dir, "created"), join(dir, "copied")); return { results: [{ applied: true }], requiresAck: false };
+    });
+    await store.database.command("checkpoint", { body: { id: "old", chatId: chat.id, kind: "before-message", createdAt: 1, availability: "available", files: { saved: { mode: 33188, content: "YQ==" } } } });
+    await store.database.close(); store = new Chats(join(dir, "state"));
+    expect(await store.database.command("expireCheckpoints", { body: { now: 40 * 86400000, active: [] } })).toBe(1);
+    expect((await store.database.recoveryRead("client", "fileCommands")).body).toHaveLength(2);
+    expect(await readFile(join(dir, "copied"), "utf8")).toBe("saved");
+  } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
 });
