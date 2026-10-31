@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { launchDesktop } from "./desktop";
 
-test("emergency Stop visibly discloses uncertainty in the packaged app", async () => {
+for (const phase of ["baseline", "followup"]) test(`emergency Stop visibly discloses uncertainty in the packaged app (${phase})`, async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-history-ui-"));
   const user = join(dir, "user"), tools = join(dir, "tools");
   await mkdir(user); await mkdir(tools);
@@ -29,28 +29,43 @@ createInterface({input:process.stdin}).on('line',line=>{
  } else reply();
 });`, { mode: 0o700 });
 
+  if (phase === "followup") {
+    const { Chats } = await import("../host/chat");
+    const { emptyWorkspace } = await import("../host/workspace");
+    const store = new Chats(join(user, "durable-chats-v1"));
+    try { for (let i = 0; i < 32; i++) await store.database.recoveryWrite("measurement-" + i, "workspace", { ...emptyWorkspace(), measurement: "x".repeat(65536) }, 0); }
+    finally { await store.database.close(); }
+  }
   const app = await launchDesktop(user, tools, true);
   let fault: DatabaseSync | undefined;
   try {
     const page = await app.firstWindow();
     await page.getByRole("button", { name: "Start without a project", exact: true }).click();
     await page.getByRole("textbox", { name: "Message Codex" }).fill("run");
+    const sendStart = performance.now();
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect.poll(() => readFile(join(dir, "effects"), "utf8").catch(() => "")).toBe("turn\n");
     // Provider receipt precedes settled Send; wait before capturing the live target.
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("");
     await expect(page.getByRole("status").filter({ hasText: /^Running$/ })).toBeVisible();
+    const sendMs = performance.now() - sendStart;
+    const stopStart = performance.now();
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await expect.poll(() => readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+    const stopMs = performance.now() - stopStart;
     fault = new DatabaseSync(join(user, "durable-chats-v1.sqlite-state-v1/state.sqlite"));
     fault.exec("CREATE TRIGGER deny_stop BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
     fault.exec("CREATE TRIGGER deny_results BEFORE UPDATE ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.getByRole("button", { name: "Emergency Stop", exact: true })).toBeVisible();
-    expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\n");
+    expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+    const controlStart = performance.now();
     await page.getByRole("button", { name: "Emergency Stop", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText("Cancellation requested.");
     await expect(page.getByText(/Emergency Stop result is not durable/)).toBeVisible();
     await expect(page.getByText(/External effects may remain/)).toBeVisible();
-    expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");
+    expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\nstop\n");
+    console.log("#127 visible Send/emergency control ms", JSON.stringify({ phase, sendMs, stopMs, controlMs: performance.now() - controlStart }));
   } finally {
     fault?.close();
     await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); });

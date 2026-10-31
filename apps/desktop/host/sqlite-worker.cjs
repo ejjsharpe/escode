@@ -8,7 +8,7 @@ const validate = chats => {
   if (!Array.isArray(chats) || Buffer.byteLength(JSON.stringify(chats)) > 1024 * 1024) throw Error('Invalid draft storage or capacity exhausted');
   const ids = new Set();
   for (const chat of chats) {
-    if (!chat || typeof chat.id !== 'string' || !chat.id || ids.has(chat.id) ||
+    if (!chat || typeof chat.id !== 'string' || !chat.id || chat.id.length > 256 || ids.has(chat.id) ||
         !(chat.project === null || typeof chat.project === 'string') || typeof chat.checkout !== 'string' ||
         typeof chat.draft !== 'string' || !(chat.threadId === null || typeof chat.threadId === 'string') ||
         (chat.phase !== undefined && !['draft', 'bound'].includes(chat.phase)) ||
@@ -63,12 +63,24 @@ try {
     }
     db.exec('DELETE FROM preparation_results; COMMIT');
     identity[0].revision = db.prepare('SELECT revision FROM identity').get().revision;
-  } catch (error) { db.exec('ROLLBACK'); throw error; }
+  } catch (error) { try { db.exec('ROLLBACK'); } catch { /* SQLite may already roll back on ENOSPC. */ } throw error; }
   validate(db.prepare('SELECT body FROM chats').all().map(row => JSON.parse(row.body)));
   db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA checkpoint_fullfsync=ON');
   const settings = { journalMode: db.prepare('PRAGMA journal_mode').get().journal_mode, synchronous: db.prepare('PRAGMA synchronous').get().synchronous, checkpointFullfsync: db.prepare('PRAGMA checkpoint_fullfsync').get().checkpoint_fullfsync };
   if (settings.journalMode !== 'wal' || settings.synchronous !== 1 || settings.checkpointFullfsync !== 1) throw Error('SQLite durability settings unavailable');
   db.exec('CREATE TABLE IF NOT EXISTS client_recovery (clientId TEXT NOT NULL, kind TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(clientId, kind))');
+  // Admission counts protected metadata across every table; exceeding it rolls back the whole mutation.
+  const storageBytes = `(SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM chats) +
+    (SELECT coalesce(sum(length(CAST(body AS BLOB))+length(CAST(association AS BLOB))),0) FROM submissions) +
+    (SELECT coalesce(sum(length(CAST(previous AS BLOB))+length(CAST(result AS BLOB))),0) FROM preparation_results) +
+    (SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM client_recovery)`;
+  for (const table of ['chats', 'submissions', 'preparation_results', 'client_recovery']) {
+    for (const event of ['INSERT', 'UPDATE']) db.exec(`CREATE TEMP TRIGGER bound_${table}_${event} AFTER ${event} ON ${table}
+      BEGIN SELECT CASE WHEN ${storageBytes} > 67108864 OR
+      (SELECT count(DISTINCT clientId) FROM client_recovery) > 256 OR
+      (SELECT count(*) FROM client_recovery) > 1280
+      THEN RAISE(ABORT, 'Aggregate metadata capacity exhausted') END; END`);
+  }
   db.exec(`UPDATE submissions SET body=json_set(body, '$.status', 'uncertain', '$.message', 'Host restarted; inspect provider history. Work was not resent.') WHERE json_extract(body, '$.status') IN ('admitted', 'dispatching')`);
   parentPort.postMessage({ id: 0, value: { ...identity[0], settings } });
 } catch (e) { parentPort.postMessage({ id: 0, error: String(e) }); db?.close(); process.exitCode = 1; }
@@ -90,7 +102,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
           db.prepare("INSERT INTO client_recovery VALUES (?, 'fileFacts', ?, ?) ON CONFLICT(clientId,kind) DO UPDATE SET revision=excluded.revision, body=excluded.body").run(owner.clientId, (row?.revision ?? 0) + 1, encoded);
         }
         db.exec('COMMIT');
-      } catch (error) { db.exec('ROLLBACK'); throw error; }
+      } catch (error) { try { db.exec('ROLLBACK'); } catch { /* SQLite may already roll back on ENOSPC. */ } throw error; }
     } else if (operation === 'observePreparation') {
       validate([previous]); validate([result]);
       if (previous.id !== result.id || previous.project !== result.project || previous.checkout !== result.checkout) throw Error('Preparation identity changed');
@@ -98,7 +110,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
       if (!row || row.body !== JSON.stringify(previous)) throw Error('Preparation context changed');
       db.prepare('INSERT INTO preparation_results VALUES (?, ?, ?)').run(previous.id, JSON.stringify(previous), JSON.stringify(result));
     } else if (operation === 'recoveryRead' || operation === 'recoveryWrite') {
-      if (typeof clientId !== 'string' || !clientId || !['workspace', 'intent', 'fileCommands', 'fileFacts'].includes(kind)) throw Error('Invalid recovery owner');
+      if (typeof clientId !== 'string' || !clientId || clientId.length > 256 || !['workspace', 'intent', 'fileCommands', 'fileFacts', 'approvals'].includes(kind)) throw Error('Invalid recovery owner');
       if (operation === 'recoveryRead') {
         const row = db.prepare('SELECT body, revision FROM client_recovery WHERE clientId=? AND kind=?').get(clientId, kind);
         value = row ? { body: JSON.parse(row.body), revision: row.revision } : { body: null, revision: 0 };
@@ -111,7 +123,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
           if ((current?.revision ?? 0) !== revision) throw Error('Recovery storage changed; reopen before retrying');
           db.prepare('INSERT INTO client_recovery VALUES (?, ?, ?, ?) ON CONFLICT(clientId,kind) DO UPDATE SET revision=excluded.revision, body=excluded.body').run(clientId, kind, revision + 1, encoded);
           db.exec('COMMIT');
-        } catch (e) { db.exec('ROLLBACK'); throw e; }
+        } catch (e) { try { db.exec('ROLLBACK'); } catch { /* SQLite may already roll back on ENOSPC. */ } throw e; }
       }
     }
     else if (operation === 'read') value = { chats: db.prepare('SELECT body FROM chats ORDER BY rowid').all().map(row => JSON.parse(row.body)), revision: db.prepare('SELECT revision FROM identity').get().revision };
@@ -126,11 +138,12 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         db.exec('DELETE FROM preparation_results WHERE result=(SELECT body FROM chats WHERE chats.id=preparation_results.id)');
         db.exec('UPDATE identity SET revision=revision+1');
         db.exec('COMMIT');
-      } catch (e) { db.exec('ROLLBACK'); throw e; }
+      } catch (e) { try { db.exec('ROLLBACK'); } catch { /* SQLite may already roll back on ENOSPC. */ } throw e; }
     } else if (operation === 'status') {
       const row = db.prepare('SELECT body FROM submissions WHERE id=?').get(commandId);
       value = row ? JSON.parse(row.body) : null;
     } else if (operation === 'admit') {
+      if (typeof command.commandId !== 'string' || command.commandId.length > 256) throw Error('Invalid command identity capacity');
       db.exec('BEGIN IMMEDIATE');
       try {
         const row = db.prepare('SELECT body FROM submissions WHERE id=?').get(command.commandId);
@@ -148,7 +161,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
           value = { fresh: true, receipt: admitted };
         }
         db.exec('COMMIT');
-      } catch (e) { db.exec('ROLLBACK'); throw e; }
+      } catch (e) { try { db.exec('ROLLBACK'); } catch { /* SQLite may already roll back on ENOSPC. */ } throw e; }
     } else if (operation === 'outcome') {
       db.exec('BEGIN IMMEDIATE');
       try {
@@ -156,7 +169,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         if (!row || JSON.stringify(JSON.parse(row.body).command) !== JSON.stringify(receipt.command)) throw Error('Missing or changed submission');
         db.prepare('UPDATE submissions SET body=? WHERE id=?').run(JSON.stringify(receipt), receipt.command.commandId);
         db.exec('COMMIT');
-      } catch (e) { db.exec('ROLLBACK'); throw e; }
+      } catch (e) { try { db.exec('ROLLBACK'); } catch { /* SQLite may already roll back on ENOSPC. */ } throw e; }
     } else throw Error('Unknown SQLite operation');
     parentPort.postMessage({ id, value });
   } catch (e) { parentPort.postMessage({ id, error: String(e) }); }

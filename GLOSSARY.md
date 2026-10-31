@@ -237,4 +237,4 @@ incomplete. Recovery validates a separate copy and quarantines it until exact
 roots, file baselines, provider identities and uncertain operations are reconciled;
 it does not undo external effects, replay commands or resume live requests.
 
-Recovery copies retain the fenced current receipt journal alongside the SQLite cut. Unresolved receipts and missing required content retain quarantine; receipt rotation is not reconciliation. The administrative provider inspector reads exact saved thread and checkout identities without resuming work.
+Recovery copies retain command receipts within the consistent SQLite cut. Unresolved receipts and missing required content retain quarantine; admission epoch rotation is not reconciliation. The administrative provider inspector reads exact saved thread and checkout identities without resuming work.

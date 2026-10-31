@@ -15,7 +15,6 @@ import { FileOperations } from "./file-operations";
 import { affected } from "./file-operation-state";
 import { Checkout, limit } from "./project";
 import type { Workspace } from "./workspace";
-import type { FoundationState } from "./foundation-state";
 
 type HostOptions = Parameters<typeof startHost>[0];
 type FileActions = Pick<
@@ -26,7 +25,7 @@ type FileActions = Pick<
 export function createFileWorkflow({
   userData,
   workspace,
-  foundation,
+  admissionEpoch,
   projects,
   projectSessions,
   removing,
@@ -38,7 +37,7 @@ export function createFileWorkflow({
 }: {
   userData: string;
   workspace: Workspace;
-  foundation: FoundationState;
+  admissionEpoch: string;
   projects: Map<string, Checkout>;
   projectSessions: Map<string, object>;
   removing: Set<string>;
@@ -48,12 +47,12 @@ export function createFileWorkflow({
   clipboard: Pick<typeof electronClipboard, "read">;
   writeClipboard: (data: Record<string, string>) => Promise<void>;
 }) {
-  const commands = new DurableFiles(workspace.database, workspace.owner.clientId, foundation.admissionEpoch);
+  const commands = new DurableFiles(workspace.database, workspace.owner.clientId, admissionEpoch);
   let mutationOrigin: string | undefined;
   const operations = new FileOperations(
     workspace,
     join(userData, "client-file-operation-v1.json"),
-    foundation.read(),
+    workspace.owner,
   );
   mkdirSync(userData, { recursive: true, mode: 0o700 });
   const stateFiles = [

@@ -309,3 +309,19 @@ test("host approvals retain checkout identity independently of client navigation
     await expect(restarted.validateCheckout(dir, "1:43")).rejects.toThrow("replaced");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("fresh SQLite approvals preserve and ignore superseded approval bytes", async () => {
+  const { writeFile, readFile } = await import("node:fs/promises");
+  const dir = await mkdtemp(join(tmpdir(), "escode-approval-cutover-"));
+  try {
+    const legacy = join(dir, "approved-projects.json");
+    await writeFile(legacy, "preserved old bytes");
+    const store = new Workspace(join(dir, "workspace.json"));
+    expect(await store.approved()).toEqual([]);
+    await store.approve(dir, dir, "1:2");
+    expect(await new Workspace(join(dir, "workspace.json")).approved()).toEqual([
+      { project: dir, root: dir, directoryIdentity: "1:2" },
+    ]);
+    expect(await readFile(legacy, "utf8")).toBe("preserved old bytes");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

@@ -1,3 +1,4 @@
+import { DurableState } from "./durable-state";
 import { test, expect } from "vite-plus/test";
 import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -110,4 +111,25 @@ test("acknowledged drafts survive abrupt process death without new identities", 
     expect(await store.database.ready).toMatchObject({ hostId: identity.hostId, clientId: identity.clientId });
     expect(await store.get(null, "crash-draft")).toMatchObject({ draft: "retained" });
   } finally { child.kill("SIGKILL"); await store?.database.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("aggregate recovery admission preserves existing rows when owner capacity is exhausted", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-owner-bound-"));
+  const db = new DurableState(join(dir, "db"));
+  try {
+    for (let i = 0; i < 256; i++) await db.recoveryWrite("owner-" + i, "workspace", { text: "retained" }, 0);
+    await expect(db.recoveryWrite("overflow", "workspace", {}, 0)).rejects.toThrow("capacity");
+    expect((await db.recoveryRead("owner-0", "workspace")).body).toEqual({ text: "retained" });
+  } finally { await db.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("aggregate payload capacity rejects growth without deleting protected recovery", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-byte-bound-"));
+  const db = new DurableState(join(dir, "db"));
+  try {
+    for (let i = 0; i < 4; i++) await db.recoveryWrite("owner-" + i, "workspace", { text: "x".repeat(15 * 1024 * 1024) }, 0);
+    await expect(db.recoveryWrite("overflow", "workspace", { text: "x".repeat(5 * 1024 * 1024) }, 0)).rejects.toThrow("capacity");
+    expect((await db.recoveryRead("overflow", "workspace")).revision).toBe(0);
+    expect((await db.recoveryRead("owner-0", "workspace")).revision).toBe(1);
+  } finally { await db.close(); await rm(dir, { recursive: true, force: true }); }
 });

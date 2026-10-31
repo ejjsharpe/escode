@@ -136,8 +136,9 @@ test("renderer state cannot grant file access or overwrite approvals; native reo
       { root, outside },
     );
     expect(denied).toEqual({ required: true, outside: true, state: true, alias: true });
-    const file = join(user, "approved-projects.json"),
-      bytes = await readFile(file);
+    const file = join(user, "approved-projects.json");
+    await writeFile(file, "preserved legacy approvals");
+    const bytes = await readFile(file);
     await link(file, join(root, "approval-alias.json"));
     expect(
       await page.evaluate(
