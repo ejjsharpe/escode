@@ -16,6 +16,10 @@ test("active checkpoints exhaust without eviction; expiry reclaims WAL and capac
     await db.command("checkpoint", { body: { id: "overflow", chatId: "active", createdAt: 1, availability: "unavailable", reason: "capacity exhausted" } });
     await db.command("rewindWrite", { commandId: "branch", body: { checkpoint: point, result: { status: "applied" } } });
     expect(await db.command("expireCheckpoints", { body: { now: 31 * 86400000, active: ["active"] } })).toBe(0);
+    await db.command("checkpointRetention", { body: { days: null } });
+    expect(await db.command("expireCheckpoints", { body: { now: 31 * 86400000, active: [] } })).toBe(0);
+    await expect(db.command("checkpoint", { body: { ...point, id: "never-overflow" } })).rejects.toThrow("capacity exhausted");
+    await db.command("checkpointRetention", { body: { days: 30 } });
     const before = (await stat(join(dir, "db", "state.sqlite"))).size;
     expect(await db.command("expireCheckpoints", { body: { now: 31 * 86400000, active: [] } })).toBe(47);
     expect((await db.command("rewindRead", { commandId: "branch" })).checkpoint.files.a.content).toBe(point.files.a.content);
