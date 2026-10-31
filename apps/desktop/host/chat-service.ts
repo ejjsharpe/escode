@@ -58,6 +58,33 @@ export type ChatEnvironment = {
   managedRoot: string;
 };
 export class ChatService {
+  async models(project: string | null, id: string, model?: string, effort?: string): Promise<import("@escode/contracts").ModelChoices> {
+    await this.environment?.authorize(project);
+    const chat = await this.store.get(project, id);
+    const rpc = await this.connect(chat.worktree?.source || chat.checkout || process.cwd(), () => {}, () => {});
+    try {
+      const models: import("@escode/contracts").ModelChoices["models"][number][] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < 20; page++) {
+        const result = await rpc.request("model/list", { cursor, limit: 100 }) as import("./vendor/codex/src/schema").V2ModelListResponse;
+        if (!Array.isArray(result.data)) throw Error("Invalid Codex model catalog");
+        models.push(...result.data.filter(m => !m.hidden).map(m => ({ model: m.model, name: m.displayName, efforts: m.supportedReasoningEfforts.map((e: { reasoningEffort: string }) => e.reasoningEffort), defaultEffort: m.defaultReasoningEffort })));
+        cursor = result.nextCursor ?? null;
+        if (!cursor) break;
+      }
+      if (cursor) throw Error("Model catalog exceeds page limit");
+      let choice = chat.nextModel;
+      if (model !== undefined) {
+        const selected = models.find(m => m.model === model);
+        if (!selected) throw Error("Unavailable model; choose another model explicitly.");
+        const chosen = effort ?? choice?.remembered[model] ?? selected.defaultEffort;
+        if (!selected.efforts.includes(chosen)) throw Error("Unsupported effort; choose a supported effort explicitly.");
+        choice = { model, effort: chosen, remembered: { ...choice?.remembered, [model]: chosen } };
+        await this.store.update(project, id, { nextModel: choice });
+      }
+      return { models, choice: choice ? { model: choice.model, effort: choice.effort } : null };
+    } finally { rpc.close(); }
+  }
   private sessions = new Map<string, Session>();
   private revisions = new Map<string, number>();
   private revision(id: string) { return this.revisions.get(id) ?? 0; }
@@ -1001,6 +1028,7 @@ export class ChatService {
       throw Error("Enter a message under 100,000 characters.");
     s.sending = true;
     s.preparation = { id: randomUUID(), cancelled: false };
+    let capturedModel: SavedChat["nextModel"];
     let launched = false;
     let sendIntent = false;
     let chat: Readonly<SavedChat> | undefined;
@@ -1015,6 +1043,12 @@ export class ChatService {
       };
       check();
       chat = Object.freeze(await this.store.get(project, id));
+      capturedModel = chat.nextModel;
+      if (capturedModel) {
+        const catalog = await this.models(project, id);
+        if (!catalog.models.some(m => m.model === capturedModel!.model && m.efforts.includes(capturedModel!.effort)))
+          throw Error("Saved model or effort unavailable; choose supported settings explicitly.");
+      }
       if (chat.removed) throw Error("Checkout was removed. This chat cannot run.");
       await this.store.draft(project, id, text);
       if (expected !== undefined) {
@@ -1075,6 +1109,7 @@ export class ChatService {
       if (!chat.hasSent) void this.initialTitle(project, id, text).catch(() => {});
       const result = await s.connection.rpc.request("turn/start", {
         threadId: s.threadId,
+        ...(capturedModel ? { model: capturedModel.model, effort: capturedModel.effort } : {}),
         input: [{ type: "text", text, text_elements: [] }],
       }) as import("./vendor/codex/src/schema").V2TurnStartResponse;
       if (s.turn.phase === "starting") s.turn = { phase: "running", id: result.turn.id };

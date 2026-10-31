@@ -280,3 +280,8 @@ text as its fallback. Rename accepts a single line up to 256 characters. Regener
 uses the retained first message; results match the current persisted request identity
 so Rename or a newer request supersedes delayed output. Titles never alter transcripts
 or sent-chat recency.
+**Next-message model and effort**:
+A chat's explicit Codex model and supported reasoning effort, stored in host SQLite.
+Each model remembers its selected effort within the chat. Send captures these choices
+before preparation; editing them during preparation or execution affects only a later
+explicit Send. Catalog changes require an explicit supported selection, never substitution.
