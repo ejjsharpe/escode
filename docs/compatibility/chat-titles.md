@@ -22,12 +22,13 @@ bounded initial provider-history page; absent history reports unavailability.
 
 - TDD: the first Electron test failed because seeded shared titles were absent.
 - `tests/chat-titles.spec.ts`: controlled provider success, initial failure, empty
-  output and delay; useful fallbacks; Send reaches Ready while the title is delayed;
+  output, failed completion with partial text and delay; useful fallbacks; Send reaches Ready while the title is delayed;
   late results after Rename and after a newer Regenerate; unchanged creation recency;
   exactly one task `turn/start`; shared project/Agents labels and long manual titles
   surviving restart. Fixtures use isolated directories and user data.
-- Targeted host regressions: 47 passed, two existing opt-in skips across chat,
-  project drafts, scratch, SQLite controls and command admission.
+- Full host suite with two workers: 382 passed, six skipped (44 files passed,
+  two skipped). Targeted chat, project-draft, scratch, SQLite-control and command
+  admission regressions also passed: 47 passed, two skipped.
 - Typecheck, lint and desktop build pass. Screenshot reviewed from the actual
   Electron title fixture (`test-results/chat-titles.png`, generated locally).
 - Installed Codex 0.166.0 catalog inspection returned `gpt-6-luna`. No real title
@@ -36,8 +37,16 @@ bounded initial provider-history page; absent history reports unavailability.
 ## Limits
 
 No packaged-app, live paid inference or manual VoiceOver qualification was performed.
-The broad Agents run reported a legacy fixture ordering mismatch, project-picker
-restart timeout and short-window composer visibility failure. Its obsolete ordinal
-expectation for a newly sent chat was updated to the first-message fallback. Those
-remaining failures are not claimed resolved or proven pre-existing by this ticket.
+The initial broad Agents run reported a legacy fixture ordering mismatch,
+project-picker restart timeout and short-window composer visibility failure. After
+merging integration tip `769633c`, the focused activity regression passes the
+short-window checks and reaches an unrelated strict alert-locator failure (two
+matching error elements). The other broad scenarios were not rerun after merging.
+Its obsolete ordinal expectation for a newly sent chat was updated to the
+first-message fallback. A completely passing Agents regression suite is not claimed.
 Other #144 frame/composer/menu work remains with its owning tickets.
+
+Integration handoff: implementation began at `237ff32` in a clean isolated worktree.
+The latest local integration tip `769633c` was merged; the CSS append conflict was
+resolved by retaining both the shared sidebar rules and compact title actions.
+The integration branch and issue states were not modified by this ticket.

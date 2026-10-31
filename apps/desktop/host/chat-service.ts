@@ -128,7 +128,10 @@ export class ChatService {
             const item = event.params?.item as { type?: string; text?: string } | undefined;
             if (item?.type === "agentMessage" && typeof item.text === "string") output = item.text.slice(0, 512);
           }
-          if (event.method === "turn/completed") finish(output);
+          if (event.method === "turn/completed") {
+            if ((event.params?.turn as { status?: string } | undefined)?.status === "completed") finish(output);
+            else fail(Error("Title turn did not complete successfully"));
+          }
           if (event.method === "error") fail(Error("Title generation failed"));
         }, fail);
         this.titleConnections.set(rpc, project);

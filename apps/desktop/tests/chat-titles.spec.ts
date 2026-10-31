@@ -45,7 +45,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line',line=>
   } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
-for (const initialMode of ['success', 'failure', 'empty', 'delay']) test(`title generation (${initialMode}) retains fallback and protects newer names`, async () => {
+for (const initialMode of ['success', 'failure', 'empty', 'delay', 'turn-failed']) test(`title generation (${initialMode}) retains fallback and protects newer names`, async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'escode-title-generation-')));
   const user = join(dir, 'user');
   await mkdir(user);
@@ -80,7 +80,7 @@ createInterface({input:process.stdin}).on('line',line=>{
   if(title&&mode==='failure'){send({id:m.id,error:{code:-1,message:'unavailable'}});return;}
   const done=()=>{
    if(title)send({method:'item/completed',params:{threadId:thread,turnId:'turn',item:{id:'answer',type:'agentMessage',text:mode==='empty'?'':mode==='new'?'Improve checkout navigation':'Fix sidebar chat titles'}}});
-   send({method:'turn/completed',params:{threadId:thread,turn:{id:'turn',status:'completed'}}});
+   send({method:'turn/completed',params:{threadId:thread,turn:{id:'turn',status:title&&mode==='turn-failed'?'failed':'completed'}}});
   };
   if(title&&mode==='delay'){
    const timer=setInterval(()=>{if(existsSync(${JSON.stringify(join(dir, 'release'))})){clearInterval(timer);done();}},20);
