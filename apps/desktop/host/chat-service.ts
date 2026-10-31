@@ -312,6 +312,8 @@ export class ChatService {
     return chat;
   }
   open(project: string | null, id: string) {
+    if (this.transitions.get(id) === project && this.sessions.get(id)?.connection.status === "connected")
+      return this.connectSession(project, id);
     return this.inContext(project, id, () => this.connectSession(project, id));
   }
   private async connectSession(
@@ -476,7 +478,7 @@ export class ChatService {
   }
   async history(project: string | null, id: string, cursor: string | null): Promise<HistoryPage> {
     await this.store.get(project, id);
-    return this.inContext(project, id, async () => {
+    const read = async () => {
       await this.connectSession(project, id);
       const s = this.session(project, id);
       const chat = await this.store.get(project, id);
@@ -485,7 +487,9 @@ export class ChatService {
       if (!chat.threadId) return { items: [], nextCursor: null, revision: "empty" };
       if (s.threadId !== chat.threadId) throw Error("History provider binding changed");
       return this.readHistory(s, cursor);
-    });
+    };
+    if (this.transitions.get(id) === project && this.sessions.get(id)?.connection.status === "connected") return read();
+    return this.inContext(project, id, read);
   }
   private async readHistory(s: Session, cursor: string | null): Promise<HistoryPage> {
     if (!s.connection.rpc) throw Error("History unavailable. Retry connection.");

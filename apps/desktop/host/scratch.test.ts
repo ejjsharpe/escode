@@ -396,3 +396,34 @@ test("a stale draft cannot reserve scratch resources after its context changed",
     expect(await readdir(dir)).not.toContain("scratch");
   } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+test("opening a scratch chat during first Send retains its live session without replay", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-scratch-reconnect-")));
+  const store = new Chats(join(dir, "chats"));
+  let release!: () => void;
+  let turns = 0;
+  const service = new ChatService(store, async cwd => ({
+    async request(method: string) {
+      if (method === "account/read") return { account: {} };
+      if (method === "thread/start") return { thread: { id: "provider" }, cwd, model: "fixture", approvalPolicy: "on-request", sandbox: { type: "workspaceWrite" } };
+      if (method === "thread/turns/list") return { data: [], nextCursor: null };
+      if (method === "turn/start") {
+        turns++;
+        await new Promise<void>(resolve => { release = resolve; });
+        return { turn: { id: "turn" } };
+      }
+      return {};
+    }, respond() {}, close() {},
+  }));
+  const chat = await store.createDraft(null, "");
+  const sending = service.send(null, chat.id, "first");
+  try {
+    await expect.poll(() => turns).toBe(1);
+    await expect(service.open(null, chat.id)).resolves.toMatchObject({ busy: true });
+    await expect(service.history(null, chat.id, null)).resolves.toMatchObject({ items: [] });
+    expect(turns).toBe(1);
+  } finally {
+    release?.(); await sending; service.close(); await store.database.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -142,6 +142,7 @@ for (const failure of [
         expect(saved.worktree?.reservation?.ino).toBeGreaterThan(0);
         const recovered = new Chats(file);
         expect(await recovered.prepareWorktree(saved, project, managed)).toEqual(saved);
+        await recovered.database.ready;
         await recovered.database.close();
       }
       if (failure === "cancelled") {

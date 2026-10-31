@@ -61,6 +61,7 @@ try {
       }
     }
     db.exec('DELETE FROM preparation_results; COMMIT');
+    identity[0].revision = db.prepare('SELECT revision FROM identity').get().revision;
   } catch (error) { db.exec('ROLLBACK'); throw error; }
   validate(db.prepare('SELECT body FROM chats').all().map(row => JSON.parse(row.body)));
   db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA checkpoint_fullfsync=ON');
@@ -78,7 +79,6 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
       const row = db.prepare('SELECT body FROM chats WHERE id=?').get(previous.id);
       if (!row || row.body !== JSON.stringify(previous)) throw Error('Preparation context changed');
       db.prepare('INSERT INTO preparation_results VALUES (?, ?, ?)').run(previous.id, JSON.stringify(previous), JSON.stringify(result));
-
     } else if (operation === 'read') value = { chats: db.prepare('SELECT body FROM chats ORDER BY rowid').all().map(row => JSON.parse(row.body)), revision: db.prepare('SELECT revision FROM identity').get().revision };
     else if (operation === 'write') {
       validate(chats);
