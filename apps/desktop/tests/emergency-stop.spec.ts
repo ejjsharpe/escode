@@ -37,6 +37,9 @@ createInterface({input:process.stdin}).on('line',line=>{
     await page.getByRole("textbox", { name: "Message Codex" }).fill("run");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect.poll(() => readFile(join(dir, "effects"), "utf8").catch(() => "")).toBe("turn\n");
+    // Provider receipt precedes settled Send; wait before capturing the live target.
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("");
+    await expect(page.getByRole("status").filter({ hasText: /^Running$/ })).toBeVisible();
     fault = new DatabaseSync(join(user, "durable-chats-v1.sqlite-state-v1/state.sqlite"));
     fault.exec("CREATE TRIGGER deny_stop BEFORE INSERT ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
     fault.exec("CREATE TRIGGER deny_results BEFORE UPDATE ON submissions BEGIN SELECT RAISE(ABORT, 'disk full'); END");
@@ -44,6 +47,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect(page.getByRole("button", { name: "Emergency Stop", exact: true })).toBeVisible();
     expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\n");
     await page.getByRole("button", { name: "Emergency Stop", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Cancellation requested.");
     await expect(page.getByText(/Emergency Stop result is not durable/)).toBeVisible();
     await expect(page.getByText(/External effects may remain/)).toBeVisible();
     expect(await readFile(join(dir, "effects"), "utf8")).toBe("turn\nstop\n");

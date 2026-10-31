@@ -35,3 +35,51 @@ survive host restart; restart never replays it. These checks inject real SQLite
 statement failures, not physical disk exhaustion or power loss. A wholly unavailable
 storage worker may also prevent chat authority reads; this evidence qualifies receipt
 write failure, not recovery of a failed execution host.
+
+## Integration qualification follow-up (2026-10-31)
+
+Isolated branch `t3/issue-125-qualification`, worktree
+`/private/tmp/escode-125-qualification`, starts at integration
+`d7fd5586a4f428438ca3a58ff00c429d66c0b5bf`; `0a9c981` remains an ancestor.
+Integration was merged again before reporting (already up to date).
+
+The merger's retained `test-results/.../error-context.md` contains only
+`Test timeout of 45000ms exceeded.` It has no failing operation or cleanup stack.
+That exact timeout/cleanup stall was **not reproduced or conclusively diagnosed**.
+No timeout was increased and no product behavior was changed.
+
+A fresh unsigned arm64 build/package reproduced a different intermittent failure:
+the final effects assertion expected `turn\nstop\n` but received `turn\n` after
+both uncertainty disclosures appeared. An unchanged rerun passed in 3.5 seconds.
+The fixture previously injected faults immediately after the provider received
+`turn/start`, before proving Send had settled. That permits a race with Send
+completion and target snapshots; attribution of the observed failure to that race
+is an inference, since the initial run did not retain the full alert text.
+The regression now waits for the empty composer and visible Running status before
+fault injection, and requires `Cancellation requested.` in the alert in addition
+to uncertainty/external-effects disclosure and exactly one interrupt. Thus a stale
+rejection or failed cancellation can no longer satisfy the disclosure assertions.
+
+Checks in this worktree:
+
+- Fresh renderer/host build and unsigned macOS arm64 package: passed.
+- Packaged visible receipt-write-failure test: five consecutive runs passed
+  (14.4 seconds total), with normal cleanup and the existing 45-second timeout.
+- Final combined packaged SQLite restart and visible emergency Stop: 2 passed
+  (5.4 seconds).
+- Focused SQLite controls/crash, emergency preparation, chat commands and
+  preparation: 24 tests passed across five files.
+- TypeScript no-emit check, lint and `git diff --check`: passed.
+
+The focused authenticated tests retain the captured-target, supersession,
+authority, no unrecorded non-Stop effects, preparation reservation and prior
+command evidence coverage described above. No definite unmet #125 acceptance
+criterion was found for receipt-write failure. Complete-worker failure remains
+unqualified: authority reads can fail before cancellation. This does not establish
+physical full-disk behavior, live Codex behavior or human VoiceOver acceptance.
+The earlier merger timeout remains an unresolved qualification limit, rather than
+an asserted product defect or an asserted fix.
+
+Environment: installed Bun 1.3.14 rejects this repository's lockfile version 2.
+Build/checks reused the integration checkout's installed dependencies via local
+node_modules symlinks; no lockfile or dependency changes were made.
