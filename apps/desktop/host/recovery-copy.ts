@@ -1,6 +1,8 @@
 import { DatabaseSync, backup } from "node:sqlite";
 import { mkdir, lstat, readFile, readdir, writeFile, copyFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import type { DurableIdentity } from "./durable-state";
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -30,6 +32,41 @@ function validate(db: DatabaseSync, expected?: Pick<DurableIdentity, "hostId" | 
   return { hostId: String(owner.hostId), clientId: String(owner.clientId) };
 }
 
+// Read only the consistent SQLite cut, including snapshots retained by branch operations.
+function checkpointCoverage(db: DatabaseSync) {
+  const points = db.prepare("SELECT id, body FROM checkpoints").all().map(row => ({ reference: "checkpoint/" + row.id, point: JSON.parse(String(row.body)) }));
+  for (const row of db.prepare("SELECT id, body FROM rewinds").all()) {
+    const record = JSON.parse(String(row.body));
+    if (record.checkpoint) points.push({ reference: "branch/" + row.id, point: record.checkpoint });
+  }
+  const missing: string[] = [];
+  for (const { reference, point } of points) {
+    if (point.availability !== "available") continue;
+    if (!point.files || typeof point.files !== "object" || Array.isArray(point.files)) missing.push(reference + "/files");
+    else for (const [path, file] of Object.entries(point.files)) {
+      const entry = file as { mode: number; content: string } | null;
+      if (!path || path.startsWith("/") || path.split("/").some(part => ["..", ".git", ""].includes(part)) ||
+        (entry !== null && (![0o100644, 0o100755, 0o120000].includes(entry.mode) || typeof entry.content !== "string" || Buffer.from(entry.content, "base64").toString("base64") !== entry.content))) missing.push(reference + "/files/" + path);
+    }
+    if (typeof point.gitBase !== "string" || !/^[a-f0-9]{40,64}$/.test(point.gitBase)) missing.push(reference + "/gitBase");
+  }
+  return { points, missing };
+}
+async function checkpointExternals(points: ReturnType<typeof checkpointCoverage>["points"]) {
+  const issues: string[] = [];
+  const { realpath, stat } = await import("node:fs/promises");
+  for (const { reference, point } of points) {
+    if (point.availability !== "available") continue;
+    try {
+      const root = await realpath(point.checkout), info = await stat(root), identity = point.directoryIdentity;
+      if (!identity || root !== identity.path || info.dev !== identity.dev || info.ino !== identity.ino) throw Error("changed root");
+      const result = await promisify(execFile)("git", ["-C", root, "rev-parse", "--verify", point.gitBase + "^{commit}"], { timeout: 15000 });
+      if (result.stdout.trim() !== point.gitBase) throw Error("changed base");
+    } catch { issues.push(reference + "/external-root-or-git-base"); }
+  }
+  return issues;
+}
+
 // Administrative host utility; never exposed as a client-selected filesystem path.
 export async function createRecoveryCopy(source: string, destination: string, spool: string) {
   await regular(source + ".established");
@@ -39,10 +76,10 @@ export async function createRecoveryCopy(source: string, destination: string, sp
   try { await backup(db, join(destination, "state.sqlite"), { rate: 16 }); }
   finally { db.close(); }
   const copied = new DatabaseSync(join(destination, "state.sqlite"), { readOnly: true });
-  let owner;
-  try { owner = validate(copied); } finally { copied.close(); }
+  let owner, checkpoints;
+  try { owner = validate(copied); checkpoints = checkpointCoverage(copied); } finally { copied.close(); }
   const files: Record<string, string> = { "state.sqlite": hash(await regular(join(destination, "state.sqlite"))) };
-  const missing: string[] = [];
+  const missing: string[] = [...checkpoints.missing, ...await checkpointExternals(checkpoints.points)];
   await mkdir(join(destination, "spool"), { mode: 0o700 });
   try {
     const names = await readdir(spool);
@@ -64,8 +101,8 @@ export async function createRecoveryCopy(source: string, destination: string, sp
     }
   } catch { missing.push("live-spool-v1"); }
 
-  const manifest = { version: 1, ...owner, complete: missing.length === 0, missing, files,
-    coverage: "SQLite consistent cut including command receipts; individually captured spool indexes/chunks; checkpoint metadata and saved file contents in SQLite; no provider history or current project files. Spool may be newer than SQLite." };
+  const manifest = { version: 1, ...owner, original: source, complete: missing.length === 0, missing, files, checkpoints: checkpoints.points.map(({ reference, point }) => ({ reference, availability: point.availability, gitBase: point.gitBase, checkout: point.checkout })),
+    coverage: "SQLite consistent cut including command receipts; individually captured spool indexes/chunks; checkpoint and retained branch snapshots in SQLite; exact Git bases and checkout identities are required external dependencies, validated but not archived; no provider history or current project files. Spool may be newer than SQLite." };
   await writeFile(join(destination, "manifest.json"), JSON.stringify(manifest, null, 2), { mode: 0o600, flag: "wx" });
   return manifest;
 }
@@ -100,6 +137,23 @@ export async function reconcileRecovery(directory: string, expected: Pick<Durabl
   const files: { root: string; path: string; current: string | null; baseline: string }[] = [];
   try {
     validate(db, expected);
+    const checkpoints = checkpointCoverage(db);
+    for (const { reference, point } of checkpoints.points) {
+      if (point.threadId && !await inspectProvider(point.threadId, point.checkout)) issues.push("Uncertain checkpoint provider context: " + reference);
+    }
+    issues.push(...checkpoints.missing, ...await checkpointExternals(checkpoints.points));
+    // An older cut must not regain coverage subsequently expired by the original authority.
+    try {
+      await regular(join(manifest.original, "state.sqlite"));
+      const original = new DatabaseSync(join(manifest.original, "state.sqlite"), { readOnly: true });
+      try {
+        validate(original, expected);
+        const current = checkpointCoverage(original).points;
+        for (const { reference, point } of checkpoints.points) {
+          if (point.availability === "available" && !current.some(item => item.reference === reference && item.point.availability === "available")) issues.push("Expired or retired original coverage: " + reference);
+        }
+      } finally { original.close(); }
+    } catch { issues.push("Original checkpoint authority unavailable for expiry reconciliation"); }
     for (const row of db.prepare("SELECT body FROM chats").all()) {
       const chat = JSON.parse(String(row.body));
       if (chat.checkout) {

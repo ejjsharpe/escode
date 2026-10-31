@@ -121,3 +121,58 @@ test("missing referenced spool chunks are explicitly incomplete", async () => {
     expect((await sends.receipt("uncertain"))?.status).toBe("uncertain");
   } finally { await chats.database.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+test("retained checkpoint coverage reports missing required content instead of certifying the copy", async () => {
+  const { mkdir } = await import("node:fs/promises");
+  const dir = await mkdtemp(join(tmpdir(), "escode-copy-checkpoint-"));
+  const chats = new Chats(join(dir, "chats"));
+  try {
+    await chats.database.ready;
+    await mkdir(join(dir, "spool"));
+    await chats.database.command("checkpoint", { body: { id: "missing", chatId: "chat", availability: "available", checkout: dir, gitBase: "0".repeat(40) } });
+    const copy = await createRecoveryCopy(join(dir, "chats.sqlite-state-v1"), join(dir, "copy"), join(dir, "spool"));
+    expect(copy.complete).toBe(false);
+    expect(copy.missing).toContain("checkpoint/missing/files");
+  } finally { await chats.database.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("copy includes concurrent captures and retained branch bytes, and refuses newer expiry or a lost exact Git base", async () => {
+  const { mkdir, writeFile, stat, realpath } = await import("node:fs/promises");
+  const { execFileSync } = await import("node:child_process");
+  const { captureTurnCheckpoint } = await import("./checkpoints");
+  const { reconcileRecovery } = await import("./recovery-copy");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-copy-git-")));
+  const chats = new Chats(join(dir, "chats"));
+  const git = (...args: string[]) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
+  try {
+    const owner = await chats.database.ready;
+    git("init");
+    await writeFile(join(dir, "saved"), "base");
+    git("add", "saved");
+    git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "base");
+    const info = await stat(dir);
+    const chat = { ...await chats.createDraft(null, dir), project: dir, directoryIdentity: { path: dir, dev: info.dev, ino: info.ino } };
+    await chats.database.write([chat], (await chats.database.read()).revision);
+    await writeFile(join(dir, "saved"), "captured");
+    await captureTurnCheckpoint(chats.database, chat, null);
+    const [point] = await chats.database.command("checkpoints", { commandId: chat.id });
+    await chats.database.command("rewindWrite", { commandId: "branch", body: { checkpoint: point, result: { status: "applied" } } });
+    await mkdir(join(dir, "spool"));
+    const capturing = captureTurnCheckpoint(chats.database, chat, null);
+    const copy = await createRecoveryCopy(join(dir, "chats.sqlite-state-v1"), join(dir, "copy"), join(dir, "spool"));
+    await capturing;
+    expect(copy.complete).toBe(true);
+    expect(copy.checkpoints).toContainEqual(expect.objectContaining({ reference: "branch/branch", gitBase: git("rev-parse", "HEAD") }));
+    await recoverCopy(join(dir, "copy"), join(dir, "recovered"), owner);
+    await writeFile(join(dir, "saved"), "newer external work");
+    expect((await reconcileRecovery(join(dir, "recovered"), owner, async () => true)).ready).toBe(true);
+    await recoverCopy(join(dir, "copy"), join(dir, "expired"), owner);
+    await chats.database.command("expireCheckpoints", { body: { now: Date.now() + 31 * 86400000, active: [] } });
+    expect((await reconcileRecovery(join(dir, "expired"), owner, async () => true)).issues).toContain("Expired or retired original coverage: checkpoint/" + point.id);
+    expect((await chats.database.command("rewindRead", { commandId: "branch" })).checkpoint.files.saved.content).toBe(Buffer.from("captured").toString("base64"));
+    await recoverCopy(join(dir, "copy"), join(dir, "lost-base"), owner);
+    await rm(join(dir, ".git"), { recursive: true });
+    expect((await reconcileRecovery(join(dir, "lost-base"), owner, async () => true)).issues).toContain("branch/branch/external-root-or-git-base");
+    expect(await readFile(join(dir, "saved"), "utf8")).toBe("newer external work");
+  } finally { await chats.database.close(); await rm(dir, { recursive: true, force: true }); }
+});
