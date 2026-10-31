@@ -51,15 +51,21 @@ test("packaged worker durability readback and recovery write measurement", async
   const app = await launchDesktop(user, undefined, true);
   try {
     const page = await app.firstWindow();
-    await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
-    await page.getByRole("button", { name: "Open project…" }).click();
-    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await app.evaluate(() => {
       const { Worker } = process.getBuiltinModule("node:worker_threads");
+      const native = process.getBuiltinModule("node:child_process");
+      const exec = native.execFileSync;
+      (globalThis as any).__nativeTimings = [];
+      native.execFileSync = (function (this: any, ...args: any[]) {
+        const start = performance.now();
+        try { return (exec as any).apply(this, args); }
+        finally { (globalThis as any).__nativeTimings.push({ operation: args[1]?.[0], ms: performance.now() - start }); }
+      }) as typeof exec;
       const original = Worker.prototype.postMessage;
       const samples: { operation: string; ms: number }[] = [];
       (globalThis as any).__storageTimings = samples;
       Worker.prototype.postMessage = function (message: any, ...rest: any[]) {
+        if (message.operation === "recoveryRead" || message.operation === "recoveryWrite") (globalThis as any).__hostStorageWorker = this;
         const start = performance.now();
         const listener = (reply: any) => {
           if (reply.id !== message.id) return;
@@ -70,7 +76,10 @@ test("packaged worker durability readback and recovery write measurement", async
         return original.call(this, message, ...rest);
       };
     });
-    const stopLoad = await checkpointLoad(user);
+    await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
+    const stopLoad = await checkpointLoad(user, app);
     try {
     for (const phase of ["baseline", "followup"]) {
       if (phase === "followup") {
@@ -110,6 +119,7 @@ test("packaged worker durability readback and recovery write measurement", async
     }
     } finally {
       await stopLoad();
+      console.log("#139 native helper timings", JSON.stringify(await app.evaluate(() => (globalThis as any).__nativeTimings.sort((a: any, b: any) => b.ms - a.ms).slice(0, 10))));
       console.log("#139 app worker slowest requests", JSON.stringify(await app.evaluate(() =>
         (globalThis as any).__storageTimings.sort((a: any, b: any) => b.ms - a.ms).slice(0, 10))));
     }

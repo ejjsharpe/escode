@@ -20,13 +20,22 @@ export async function launchDesktop(
   };
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ESCODE_DEV_URL;
-  return _electron.launch({
+  const runtime = await _electron.launch({
     executablePath: packaged
       ? resolve("release/mac-arm64/escode.app/Contents/MacOS/escode")
       : (electron as unknown as string),
     args: [...(packaged ? [] : ["."]), `--user-data-dir=${userData}`],
     env,
   });
+  if (process.env.ESCODE_CHECKPOINT_LOAD) await runtime.evaluate(() => {
+    const { Worker } = process.getBuiltinModule("node:worker_threads");
+    const original = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message: any, ...rest: any[]) {
+      if (message.operation === "recoveryRead" || message.operation === "recoveryWrite") (globalThis as any).__hostStorageWorker = this;
+      return original.call(this, message, ...rest);
+    };
+  });
+  return runtime;
 }
 
 // Serializable browser-side fixture reader; production lists never fetch composers.

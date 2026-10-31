@@ -40,11 +40,12 @@ createInterface({input:process.stdin}).on('line',line=>{
   }
   const app = await launchDesktop(user, tools, true);
   let fault: DatabaseSync | undefined;
-  const stopLoad = await checkpointLoad(user);
+  let stopLoad = async () => {};
   try {
     const page = await app.firstWindow();
     await page.getByRole("button", { name: "Start without a project", exact: true }).click();
     await page.getByRole("textbox", { name: "Message Codex" }).fill("run");
+    stopLoad = await checkpointLoad(user, app);
     const sendStart = performance.now();
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect.poll(() => readFile(join(dir, "effects"), "utf8").catch(() => "")).toBe("turn\n");

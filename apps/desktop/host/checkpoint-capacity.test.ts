@@ -21,11 +21,15 @@ test("active checkpoints exhaust without eviction; expiry reclaims WAL and capac
     await expect(db.command("checkpoint", { body: { ...point, id: "never-overflow" } })).rejects.toThrow("capacity exhausted");
     await db.command("checkpointRetention", { body: { days: 30 } });
     const before = (await stat(join(dir, "db", "state.sqlite"))).size;
+    const cleanupStart = performance.now();
     expect(await db.command("expireCheckpoints", { body: { now: 31 * 86400000, active: [] } })).toBe(47);
+    const cleanupMs = performance.now() - cleanupStart;
+    console.log("#139 full-store cleanup ms", cleanupMs);
+    expect(cleanupMs).toBeLessThan(300);
     expect((await db.command("rewindRead", { commandId: "branch" })).checkpoint.files.a.content).toBe(point.files.a.content);
     expect((await stat(join(dir, "db", "state.sqlite-wal"))).size).toBe(0);
     await db.command("checkpoint", { body: { ...point, id: "reused" } });
-    const measured = { elapsedMs: performance.now() - started, databaseBytesBefore: before, databaseBytesAfter: (await stat(join(dir, "db", "state.sqlite"))).size };
+    const measured = { cleanupMs, elapsedMs: performance.now() - started, databaseBytesBefore: before, databaseBytesAfter: (await stat(join(dir, "db", "state.sqlite"))).size };
     if (process.env.ESCODE_CAPACITY_REPORT) await writeFile(process.env.ESCODE_CAPACITY_REPORT, JSON.stringify(measured));
   } finally { await db.close(); await rm(dir, { recursive: true, force: true }); }
 });
