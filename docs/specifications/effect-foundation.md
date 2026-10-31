@@ -4,6 +4,8 @@ Status: accepted by the user, 2026-10-30. Planning only; no implementation or ru
 
 ## Subsequent durable-state and time-travel amendment
 
+The later [execution architecture amendment](execution-architecture.md) supersedes this document's exclusion of T3's event store and restart continuation, its transient-only execution replay policy and conflicting delivery limits. It selects a fresh store, retained execution/content facts, transactional follow-up work and T3 restart policy. All unaffected host/client, filesystem and recovery obligations remain; the older phase requirements below describe their original implementation scope.
+
 Accepted 2026-10-31: the [durable-state and turn-level time-travel specification](durable-state-and-time-travel.md) selects SQLite current-state tables, explicit checkpoints and provider-owned complete transcripts for a subsequent implementation. It adds inspect/rewind/historical branching and retention, chooses WAL `NORMAL` with its system-failure loss limit, and adds emergency Stop plus a minimal recovery-copy mechanism. It amends storage details and expands the earlier feature scope while preserving this handoff's host authority, fresh-store/no-import, client ownership and no-replay rules; it does not reopen completed foundation acceptance or claim these additions implemented.
 
 ## Prerelease delivery amendment

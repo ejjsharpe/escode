@@ -1,5 +1,7 @@
 # Preserve recovery through versioned generations and bounded history
 
+Subsequent amendment, 2026-10-31: [ADR 0004](0004-execution-events-and-t3-recovery.md) and the [execution specification](../specifications/execution-architecture.md) supersede the exclusion of retained execution/content events and restart continuation. Earlier decisions below remain historical context; unaffected recovery obligations remain applicable.
+
 Accepted 2026-10-30 through the [foundation handoff decision](https://github.com/ejjsharpe/escode/issues/58). Preserve original host/context/provider identities and client-owned recovery using versioned, durably published storage generations, command admission/dispatch receipts and independent per-client operation acknowledgements; use bounded epoch-scoped replay plus immutable paged transcript chunks and a host-owned quota-limited spool. This avoids replacing escode recovery with T3’s event-store assumptions or retaining unbounded growing transcripts, at the cost of explicit migration, receipt expiry, history-unavailability and quota handling.
 
 External provider/filesystem effects cannot participate in the storage transaction: lost results retain uncertainty, reconnect/restart never replay commands, and restoring a backup cannot undo effects or revive admission epochs. Legacy writer exclusion, crash publication and measured memory/delivery/disk limits are mandatory implementation gates in the [accepted specification](../specifications/effect-foundation.md); no durability or bounded-memory runtime pass is claimed here.

@@ -14,7 +14,18 @@ The host, connection and lifecycle terms below reflect the [agreed lifecycle pla
 The escode runtime on one machine that owns its projects, files, saved chats and agent execution. Its work can continue without an open client connection or view.
 
 **Provider session**:
-A live connection between an execution host and a provider for a chat, distinct from the saved conversation. Replacing this session does not restore its old live requests or start another turn automatically.
+A live connection between an execution host and a provider for a chat, distinct from the saved conversation. Replacing this session does not itself restore old live requests or submit a turn; restart continuation is a separate action.
+
+The following terms describe the [execution architecture amendment](docs/specifications/execution-architecture.md), not implemented behavior.
+
+**Execution**:
+One tracked episode of host-owned work with an originating command, target and known or uncertain outcome. A restart continuation is a new execution linked to the interrupted one.
+
+**Recorded conversation content**:
+The messages and tool activity escode has observed and retained for a chat, with any known gaps. It is distinct from the provider's native continuation context.
+
+**Restart continuation**:
+A new system-origin request to continue eligible work in its saved native conversation after host restart. It retains the source execution's identity as its cause rather than resending the interrupted command.
 
 **Client connection**:
 An authenticated link through which a client controls an execution host and receives updates. Losing the link does not by itself stop host-owned work.

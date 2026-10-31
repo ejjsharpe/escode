@@ -6,6 +6,8 @@ Implementation specification: [Specification: durable state and turn-level time 
 
 ## Decisions and authority
 
+Subsequent amendment, 2026-10-31: the [execution architecture specification](execution-architecture.md) supersedes current-state-only execution authority, exclusion of retained normalized conversation content and blanket no automatic continuation below. Provider-native context, file checkpoints, historical operations and client recovery remain separate obligations. The original scope statements below are retained as the prior decision, not conflicting requirements for the new architecture.
+
 Adopt one execution-host-owned SQLite database for authoritative application metadata. Use conventional current-state tables, explicit transactions, command receipts, operation records and retained turn checkpoints. Complete conversation history remains provider-owned. These are three independent decisions: SQLite adoption does not require application-wide event sourcing or ownership of complete transcripts.
 
 The [architecture decision](../adr/0003-sqlite-and-turn-checkpoints.md) amends [ADR 0002](../adr/0002-versioned-recovery-and-history.md). The existing [foundation specification](effect-foundation.md) still owns host authority, authentication, exact identities, client-owned edits, command uncertainty and no automatic replay/continuation. Its fresh-store/no-import policy remains: do not delete or import existing stores or external resources. This agreement authorizes no import exception.
