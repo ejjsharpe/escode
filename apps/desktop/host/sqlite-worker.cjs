@@ -45,9 +45,23 @@ try {
     db.exec('COMMIT');
   }
   if (db.prepare('PRAGMA user_version').get().user_version === 1) db.exec('BEGIN IMMEDIATE; CREATE TABLE submissions (id TEXT PRIMARY KEY, body TEXT NOT NULL, association TEXT NOT NULL); PRAGMA user_version=2; COMMIT');
-  if (db.prepare('PRAGMA user_version').get().user_version !== 2 || db.prepare('PRAGMA quick_check').get().quick_check !== 'ok') throw Error('Unsupported or corrupt SQLite storage');
+  if (db.prepare('PRAGMA user_version').get().user_version === 2) db.exec('BEGIN IMMEDIATE; CREATE TABLE preparation_results (id TEXT PRIMARY KEY, previous TEXT NOT NULL, result TEXT NOT NULL); PRAGMA user_version=3; COMMIT');
+  if (db.prepare('PRAGMA user_version').get().user_version !== 3 || db.prepare('PRAGMA quick_check').get().quick_check !== 'ok') throw Error('Unsupported or corrupt SQLite storage');
   const identity = db.prepare('SELECT * FROM identity').all();
   if (identity.length !== 1 || !/^[0-9a-f-]{36}$/.test(identity[0].hostId) || !/^[0-9a-f-]{36}$/.test(identity[0].clientId) || !Number.isSafeInteger(identity[0].revision)) throw Error('Invalid established SQLite identities');
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const record of db.prepare('SELECT * FROM preparation_results').all()) {
+      const row = db.prepare('SELECT body FROM chats WHERE id=?').get(record.id);
+      if (!row || (row.body !== record.previous && row.body !== record.result)) throw Error('Preparation result conflicts with saved context; explicit recovery required');
+      validate([JSON.parse(record.result)]);
+      if (row.body === record.previous) {
+        db.prepare('UPDATE chats SET body=? WHERE id=?').run(record.result, record.id);
+        db.exec('UPDATE identity SET revision=revision+1');
+      }
+    }
+    db.exec('DELETE FROM preparation_results; COMMIT');
+  } catch (error) { db.exec('ROLLBACK'); throw error; }
   validate(db.prepare('SELECT body FROM chats').all().map(row => JSON.parse(row.body)));
   db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA checkpoint_fullfsync=ON');
   const settings = { journalMode: db.prepare('PRAGMA journal_mode').get().journal_mode, synchronous: db.prepare('PRAGMA synchronous').get().synchronous, checkpointFullfsync: db.prepare('PRAGMA checkpoint_fullfsync').get().checkpoint_fullfsync };
@@ -55,10 +69,17 @@ try {
   db.exec(`UPDATE submissions SET body=json_set(body, '$.status', 'uncertain', '$.message', 'Host restarted; inspect provider history. Work was not resent.') WHERE json_extract(body, '$.status') IN ('admitted', 'dispatching')`);
   parentPort.postMessage({ id: 0, value: { ...identity[0], settings } });
 } catch (e) { parentPort.postMessage({ id: 0, error: String(e) }); db?.close(); process.exitCode = 1; }
-if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt }) => {
+if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result }) => {
   try {
     let value;
-    if (operation === 'read') value = { chats: db.prepare('SELECT body FROM chats ORDER BY rowid').all().map(row => JSON.parse(row.body)), revision: db.prepare('SELECT revision FROM identity').get().revision };
+    if (operation === 'observePreparation') {
+      validate([previous]); validate([result]);
+      if (previous.id !== result.id || previous.project !== result.project || previous.checkout !== result.checkout) throw Error('Preparation identity changed');
+      const row = db.prepare('SELECT body FROM chats WHERE id=?').get(previous.id);
+      if (!row || row.body !== JSON.stringify(previous)) throw Error('Preparation context changed');
+      db.prepare('INSERT INTO preparation_results VALUES (?, ?, ?)').run(previous.id, JSON.stringify(previous), JSON.stringify(result));
+
+    } else if (operation === 'read') value = { chats: db.prepare('SELECT body FROM chats ORDER BY rowid').all().map(row => JSON.parse(row.body)), revision: db.prepare('SELECT revision FROM identity').get().revision };
     else if (operation === 'write') {
       validate(chats);
       db.exec('BEGIN IMMEDIATE');
@@ -67,6 +88,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         db.exec('DELETE FROM chats');
         const insert = db.prepare('INSERT INTO chats VALUES (?, ?)');
         for (const chat of chats) insert.run(chat.id, JSON.stringify(chat));
+        db.exec('DELETE FROM preparation_results WHERE result=(SELECT body FROM chats WHERE chats.id=preparation_results.id)');
         db.exec('UPDATE identity SET revision=revision+1');
         db.exec('COMMIT');
       } catch (e) { db.exec('ROLLBACK'); throw e; }

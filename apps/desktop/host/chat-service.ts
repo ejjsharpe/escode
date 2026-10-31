@@ -403,7 +403,7 @@ export class ChatService {
           (!resume || result.thread.id === chat.threadId)
         ) {
           s.threadId = result.thread.id;
-          await this.store.update(project, id, { threadId: s.threadId });
+          await this.store.prepared(project, id, { threadId: s.threadId });
         }
         if (
           result.cwd !== chat.checkout ||

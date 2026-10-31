@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
 import { Checkout } from "./project";
 import { Chats } from "./chat";
 import { ChatService } from "./chat-service";
@@ -91,11 +92,9 @@ for (const failure of [
         });
       }
       if (failure === "lost-persistence") {
-        const update = store.update.bind(store);
-        vi.spyOn(store, "update").mockImplementation(async (...args) => {
-          if (args[2].worktree?.reservation?.dev !== undefined) throw Error("disk failure");
-          return update(...args);
-        });
+        const fault = new DatabaseSync(join(file + ".sqlite-state-v1", "state.sqlite"));
+        fault.exec("CREATE TRIGGER fail_preparation BEFORE INSERT ON chats WHEN json_extract(NEW.body, '$.worktree.reservation.dev') IS NOT NULL BEGIN SELECT RAISE(ABORT, 'disk failure'); END");
+        fault.close();
       }
       if (failure === "cancelled") {
         const prepare = store.prepareWorktree.bind(store);
@@ -124,12 +123,11 @@ for (const failure of [
       else {
         expect(saved.worktree?.reservation?.root).toBe(saved.checkout);
         await expect(service.context(root, chat.id, null, "")).rejects.toThrow(
-          "prepared resources",
+          failure === "lost-persistence" ? "storage unavailable" : "prepared resources",
         );
         if (failure === "occupied")
           expect(readFileSync(join(saved.checkout, "valuable"), "utf8")).toBe("retain");
         if (
-          failure === "lost-persistence" ||
           failure === "occupied" ||
           failure === "replaced-directory"
         ) {
@@ -139,6 +137,12 @@ for (const failure of [
           );
         }
         expect((await new Chats(file).get(root, chat.id)).checkout).toBe(saved.checkout);
+      }
+      if (failure === "lost-persistence") {
+        expect(saved.worktree?.reservation?.ino).toBeGreaterThan(0);
+        const recovered = new Chats(file);
+        expect(await recovered.prepareWorktree(saved, project, managed)).toEqual(saved);
+        await recovered.database.close();
       }
       if (failure === "cancelled") {
         expect(connections).toBe(0);
