@@ -6,6 +6,8 @@ export function Boundaries({ project, id }: { project: string | null; id: string
   const [points, setPoints] = useState<CheckpointPage>();
   const [point, setPoint] = useState<CheckpointPage["points"][number]>();
   const [inspection, setInspection] = useState<BoundaryInspection>();
+  const [summarized, setSummarized] = useState(false);
+  const summaryButton = useRef<HTMLButtonElement>(null);
   const [branching, setBranching] = useState(false);
   const [rewind, setRewind] = useState<import("@escode/contracts").RewindResult>();
   const [restoreFiles, setRestoreFiles] = useState(false);
@@ -59,23 +61,28 @@ export function Boundaries({ project, id }: { project: string | null; id: string
       <p>Provider thread: {point.threadId ?? "unavailable"} · turn: {point.turnId ?? "unavailable"}</p>
       <p>Saved files: {point.availability}{point.reason ? ` · ${point.reason}` : ""}. This does not include unsaved editor text.</p>
       <Button ref={rewindButton} disabled={busy} onClick={() => load(async () => {
-        setRestoreFiles(false); setBranching(false); setRewind(await window.escode.rewind(project, id, point.id, null, null));
+        setSummarized(false); setRestoreFiles(false); setBranching(false); setRewind(await window.escode.rewind(project, id, point.id, null, null));
       })}>Rewind conversation only…</Button>
       <Button ref={branchButton} disabled={busy} onClick={() => load(async () => {
-        setRestoreFiles(false); setBranching(true); setRewind(await window.escode.branchHistory(project, id, point.id, null, null));
+        setSummarized(false); setRestoreFiles(false); setBranching(true); setRewind(await window.escode.branchHistory(project, id, point.id, null, null));
       })}>Branch historical chat…</Button>
       <Button ref={restoreButton} disabled={busy} onClick={() => load(async () => {
-        setBranching(false); setRestoreFiles(true); setRewind(await window.escode.rewind(project, id, point.id, null, null, true));
+        setSummarized(false); setBranching(false); setRestoreFiles(true); setRewind(await window.escode.rewind(project, id, point.id, null, null, true));
       })}>Rewind and restore saved files…</Button>
+      <Button ref={summaryButton} disabled={busy} onClick={() => load(async () => {
+        setSummarized(true); setRestoreFiles(false); setBranching(true);
+        setRewind(await window.escode.branchHistory(project, id, point.id, null, null, true));
+      })}>Create summarized continuation…</Button>
+      <p>Summarized continuation copies available historical text into an unsent draft in a separate historical worktree. It does not recreate native historical provider context. Missing history remains unavailable.</p>
       {rewind && <div ref={confirm} tabIndex={-1} role="region" aria-label={branching ? "Historical branch" : "Conversation rewind"}>
         <p role="status">{rewind.message}</p>
         {restoreFiles && rewind.status === "unavailable" && <p>Choose conversation-only rewind to keep current files, or Branch historical chat for a separate worktree when available.</p>}
         {rewind.status === "ready" && <>
-          <Button disabled={busy} onClick={() => { setRewind(undefined); (branching ? branchButton : restoreFiles ? restoreButton : rewindButton).current?.focus(); }}>{branching ? "Cancel branch" : "Cancel rewind"}</Button>
+          <Button disabled={busy} onClick={() => { setRewind(undefined); (summarized ? summaryButton : branching ? branchButton : restoreFiles ? restoreButton : rewindButton).current?.focus(); }}>{branching ? "Cancel branch" : "Cancel rewind"}</Button>
           <Button disabled={busy} onClick={() => load(async () => {
-            setRewind(await (branching ? window.escode.branchHistory(project, id, point.id, rewind.token, crypto.randomUUID()) : window.escode.rewind(project, id, point.id, rewind.token, crypto.randomUUID(), restoreFiles)));
+            setRewind(await (branching ? window.escode.branchHistory(project, id, point.id, rewind.token, crypto.randomUUID(), summarized) : window.escode.rewind(project, id, point.id, rewind.token, crypto.randomUUID(), restoreFiles)));
             setInspection(undefined);
-          })}>{branching ? "Create historical chat and worktree" : restoreFiles ? "Confirm restoration and retain unsaved edits" : "Confirm rewind and keep current files"}</Button>
+          })}>{summarized ? "Create summarized draft and worktree" : branching ? "Create historical chat and worktree" : restoreFiles ? "Confirm restoration and retain unsaved edits" : "Confirm rewind and keep current files"}</Button>
         </>}
       </div>}
       <Button disabled={busy} onClick={() => load(async () => {

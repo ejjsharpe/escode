@@ -151,7 +151,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     },
     checkpointPoints: (project: string | null, id: string, cursor: string | null) => chatQuery(client => client.checkpointPoints({ project, id, cursor })),
     rewind: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles?: boolean) => chatQuery(client => client.rewind({ project, id, boundary, token, commandId, restoreFiles: restoreFiles ?? false })),
-    branchHistory: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null) => chatQuery(client => client.branchHistory({ project, id, boundary, token, commandId })),
+    branchHistory: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, summarized?: boolean) => chatQuery(client => client.branchHistory({ project, id, boundary, token, commandId, summarized: summarized ?? false })),
     inspectFiles: (project: string | null, id: string, boundary: string, path: string | null, cursor: string | null) => chatQuery(client => client.inspectFiles({ project, id, boundary, path, cursor })),
     inspectBoundary: (project: string | null, id: string, boundary: string, cursor: string | null) => chatQuery(client => client.inspectBoundary({ project, id, boundary, cursor })),
     chatHistory: (project: string | null, id: string, cursor: string | null): Promise<HistoryPage> =>
