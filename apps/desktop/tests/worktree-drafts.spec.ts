@@ -115,7 +115,7 @@ send({id:m.id,result});});`,
     expect((await records())[0]).toMatchObject({ id: original.id, createdAt: original.createdAt });
     await page.locator('.project-tab > button').first().click();
     await expect(page.getByRole("button", { name: "Chat 1", exact: true })).toHaveCount(0);
-    await expect(page.locator('.view-nav .directory')).toContainText(beta);
+    await expect(page.locator('.view-nav:visible .directory')).toContainText(beta);
     await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
     await expect(message()).toHaveValue("Retain this draft");
     await writeFile(join(worktree, "original-untracked"), "retain original");
@@ -126,7 +126,8 @@ send({id:m.id,result});});`,
     await page.screenshot({ path: "test-results/escode-35-draft.png" });
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: beta }).click();
+    await expect(message()).toHaveValue("");
+    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(beta);
     await expect(page.locator(".agent-row").filter({ hasText: "Chat 2" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -157,7 +158,7 @@ send({id:m.id,result});});`,
     await page.getByRole("button", { name: "Open checkout", exact: true }).click();
     await expect(page.locator("header")).toContainText(prepared.checkout);
     await page.getByRole("button", { name: "Chats · Running", exact: true }).click();
-    await page.getByRole("button", { name: "Chat 1 · Running", exact: true }).click();
+    await page.locator(".chat-list:visible .agent-row").filter({ hasText: "Retain this draft" }).click();
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeEnabled({ timeout: 15000 });
     await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
     await page.getByRole("button", { name: "Agents", exact: true }).click();

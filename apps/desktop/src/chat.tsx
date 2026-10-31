@@ -5,7 +5,7 @@ import { DraftWorktreeChoices, CheckoutBranch } from "./worktrees";
 import { useProjectChats } from "./chat-state";
 import { memory, persist } from "./workspace";
 import { compareChats } from "./chat-order";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@base-ui/react/button";
 import type { SavedChat } from "../host/chat";
@@ -270,8 +270,16 @@ export function ChatView({
   const scopedChats = global ? chats : chats.filter(c => c.checkout === checkout && (c.phase !== "draft" || !c.worktree));
   const record = scopedChats.find((c) => c.id === selected);
   const unsent = record?.phase === "draft";
+  const composer = useRef<HTMLTextAreaElement>(null);
   const error = errors[selected] || errors[""] || "";
   const working = !!pending[selected];
+  const focused = useRef("");
+  useEffect(() => {
+    if (record?.phase === "draft" && !working && focused.current !== record.id) {
+      composer.current?.focus();
+      focused.current = record.id;
+    }
+  }, [record?.id, working]);
   const draft = drafts[selected] ?? "";
   useEffect(() => {
     if (!selected) return;
@@ -345,6 +353,8 @@ export function ChatView({
               </TitleActions>
               <p>{project?.split("/").at(-1) ?? "No project"}</p>
             </div>
+            <details className="execution-context">
+              <summary>{project?.split("/").at(-1) ?? "No project"} · {record?.worktree && !record.worktree.reservation ? "New worktree on first Send" : record?.checkout.split("/").at(-1) || "Scratch on first Send"}</summary>
             <p className="directory">
               {project === null
                 ? "Scratch folder: "
@@ -353,14 +363,16 @@ export function ChatView({
                   : "Checkout: "}
               {record?.checkout || "Allocated on first Send"}
             </p>
-            {record?.checkout && chats.filter((c) => c.checkout === record.checkout).length > 1 && (
-              <p>These chats share files in this checkout. Their edits can interact.</p>
-            )}
+            {record?.checkout && (project === null || record.worktree && !record.worktree.reservation) && <Button type="button" onClick={() => void run(() => navigator.clipboard.writeText(record.checkout))}>Copy execution path</Button>}
             {project !== null &&
               record?.checkout &&
               (record.phase !== "draft" || !record.worktree) && (
                 <CheckoutBranch root={record.checkout} />
               )}
+            </details>
+            {record?.checkout && chats.filter((c) => c.checkout === record.checkout).length > 1 && (
+              <p>These chats share files in this checkout. Their edits can interact.</p>
+            )}
             <div className="chat-actions">
               {global && project && record?.checkout && !record.removed && (record.phase !== "draft" || !record.worktree) && (
                 <Button onClick={() => window.dispatchEvent(new CustomEvent("open-checkout", { detail: { project, id: record.id } }))}>
@@ -467,7 +479,7 @@ export function ChatView({
               }}
             >
               {unsent && !record?.scratch && !record?.worktree?.reservation && (
-                <label>
+                <label className="draft-context">
                   Project context
                   <select
                     aria-label="Project context"
@@ -476,6 +488,7 @@ export function ChatView({
                     onChange={(e) => void changeContext(e.target.value || null)}
                   >
                     <option value="">No project</option>
+                    {project && !targets.some(t => t.project === project) && <option value={project}>{project} · Unavailable</option>}
                     {targets
                       .filter((t) => t.project !== null)
                       .map((t) => (
@@ -556,6 +569,7 @@ export function ChatView({
               )}
               <label htmlFor={sidebarId + "-message"}>Message Codex</label>
               <textarea
+                ref={composer}
                 disabled={working}
                 id={sidebarId + "-message"}
                 maxLength={100000}

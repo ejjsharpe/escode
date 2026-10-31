@@ -6,87 +6,7 @@ import { ChatRow } from "./chat-row";
 import { compareChats } from "./chat-order";
 import { ChatView } from "./chat";
 import { useChatSummaries } from "./chat-state";
-import { memory, persist, flush, rememberProjectUse } from "./workspace";
-
-function ProjectPicker({ targets, create, dismiss, error }: {
-  targets: { project: string | null; checkout: string }[];
-  create: (project: string | null) => Promise<void>;
-  dismiss: () => void;
-  error: string;
-}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const submitting = useRef(false);
-  const choices = [...targets.filter(t => t.project !== null), { project: null, checkout: "" }]
-    .filter(t => {
-      const label = (t.project?.split("/").at(-1) ?? "No project").toLowerCase();
-      let position = 0;
-      for (const character of query.trim().toLowerCase()) {
-        const found = label.indexOf(character, position);
-        if (found < 0) return false;
-        position = found + 1;
-      }
-      return true;
-    });
-  const active = Math.min(selected, choices.length - 1);
-  useEffect(() => {
-    const origin = document.activeElement;
-    const popup = dialog.current!;
-    popup.showModal();
-    return () => { popup.close(); if (origin instanceof HTMLElement) origin.focus(); };
-  }, []);
-  useEffect(() => {
-    dialog.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
-  }, [active, query]);
-  const choose = async (project: string | null) => {
-    if (submitting.current) return;
-    submitting.current = true;
-    setBusy(true);
-    try { await create(project); }
-    finally { submitting.current = false; setBusy(false); }
-  };
-  return (
-    <dialog ref={dialog} className="project-picker" aria-labelledby="project-picker-title"
-      onCancel={event => { event.preventDefault(); if (!busy) dismiss(); }}
-      onClick={event => {
-        if (event.target !== event.currentTarget || busy) return;
-        const box = event.currentTarget.getBoundingClientRect();
-        if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dismiss();
-      }}>
-      <h2 id="project-picker-title">Choose project</h2>
-      <input role="combobox" aria-label="New chat project" aria-expanded="true"
-        aria-controls="project-picker-results" aria-autocomplete="list"
-        aria-activedescendant={active >= 0 ? `project-choice-${active}` : undefined}
-        autoFocus value={query} disabled={busy} placeholder="Search saved projects…"
-        onChange={event => { setQuery(event.target.value); setSelected(0); }}
-        onKeyDown={event => {
-          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-            event.preventDefault();
-            setSelected(Math.max(0, Math.min(choices.length - 1, active + (event.key === "ArrowDown" ? 1 : -1))));
-          } else if (event.key === "Enter") {
-            event.preventDefault();
-            if (active >= 0) void choose(choices[active].project);
-          }
-        }} />
-      <ul id="project-picker-results" role="listbox" aria-label="Saved projects">
-        {choices.map((target, index) => (
-          <li role="option" id={`project-choice-${index}`} key={target.project ?? "no-project"}
-            aria-selected={index === active} aria-disabled={busy}
-            onMouseDown={event => event.preventDefault()}
-            onClick={() => void choose(target.project)}>
-            <strong>{target.project?.split("/").at(-1) ?? "No project"}</strong>
-            {target.project && <small>{target.project}</small>}
-          </li>
-        ))}
-      </ul>
-      <p role="status">{busy ? "Creating draft…" : choices.length ? `${choices.length} choices · All saved projects` : "No matching projects"}</p>
-      {error && <p role="alert">{error}</p>}
-      <Button disabled={busy} onClick={dismiss}>Cancel</Button>
-    </dialog>
-  );
-}
+import { memory, persist, flush } from "./workspace";
 
 export function AgentsView() {
   const { chats: catalogue, error: summaryError } = useChatSummaries();
@@ -95,22 +15,29 @@ export function AgentsView() {
   const [selected, setSelected] = useState(memory.agentsChat ?? "");
   const [error, setError] = useState("");
   const [targets, setTargets] = useState<{ project: string | null; checkout: string }[]>([]);
-  const [picking, setPicking] = useState(false);
+  const creating = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [targetError, setTargetError] = useState("");
-  const dismissPicker = () => { setPicking(false); };
-  const create = async (project: string | null) => {
+
+  const create = async (project?: string | null) => {
+    if (creating.current) return;
+    creating.current = true;
+    setBusy(true);
     try {
       await flush();
+      if (project === undefined) {
+        const available = await window.escode.chat("targets");
+        const editor = memory.projectUse?.find(use => use.checkout && available.some(t => t.project === use.project));
+        project = editor?.project ?? available.find(t => t.project !== null)?.project ?? null;
+      }
       const draft = await window.escode.chat("createDraft", project);
-      if (project) rememberProjectUse(project);
       memory.agentsChat = draft.id;
       await persist();
       setTargets(await window.escode.chat("targets"));
       setSelected(draft.id);
-      dismissPicker();
     } catch (e) {
       setError(String(e));
-    }
+    } finally { creating.current = false; setBusy(false); }
   };
   useEffect(() => {
     let live = true;
@@ -147,12 +74,14 @@ export function AgentsView() {
       <div className="workspace">
         <SidebarResize />
         <aside aria-label="Agents chats">
-          <Button onClick={() => { setError(""); setPicking(true); }}>New chat</Button>
+          <Button disabled={busy} onClick={() => {
+            setError("");
+            void create();
+          }}>New chat</Button>
           <Button onClick={() => void create(null)}>No project</Button>
           {!targets.length && (
             <Button onClick={() => void create(null)}>Start without a project</Button>
           )}
-          {picking && <ProjectPicker targets={targets} create={create} dismiss={dismissPicker} error={error || targetError} />}
           {chats === null && <p role="status">Loading chats…</p>}
           {chats?.length === 0 && <p>No saved chats. Start without a project or open a project.</p>}
           <ul>
@@ -163,7 +92,6 @@ export function AgentsView() {
                 fallbackTitle={`Chat ${catalogue.filter(chat => chat.project === c.project).findIndex(chat => chat.id === c.id) + 1}`}
                 selected={selected === c.id}
                 select={() => {
-                  if (c.project) rememberProjectUse(c.project);
                   memory.agentsChat = c.id;
                   void persist();
                   setSelected(c.id);
