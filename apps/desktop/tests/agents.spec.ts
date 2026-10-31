@@ -518,11 +518,14 @@ send({id:m.id,result});});`,
   }
 });
 
-test("global creation keeps newest-first rows through live summaries", async () => {
+test("Agents picker retains deliberate project recency and checkout defaults across restart", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-create-order-")));
   const user = join(dir, "user");
   const roots = ["Alpha", "Beta", "Gamma", "nested/Alpha"].map((name) => join(dir, name));
   for (const root of roots) execFileSync("git", ["init", root]);
+  execFileSync("git", ["-C", roots[3], "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial"]);
+  const linked = join(dir, "linked");
+  execFileSync("git", ["-C", roots[3], "worktree", "add", "-b", "alternate", linked]);
   await mkdir(user);
   const saved = roots.map((root) => ({ project: root, root }));
   await writeFile(join(user, "approved-projects.json"), JSON.stringify(saved));
@@ -552,9 +555,9 @@ test("global creation keeps newest-first rows through live summaries", async () 
         })),
     }),
   );
-  const app = await launchDesktop(user);
+  let app = await launchDesktop(user);
   try {
-    const page = await app.firstWindow();
+    let page = await app.firstWindow();
     const rows = page.locator(".agent-row span");
     await expect(rows).toHaveText(["Gamma", "Beta", "Alpha"]);
     await page.getByRole("button", { name: "New chat", exact: true }).click();
@@ -596,6 +599,49 @@ test("global creation keeps newest-first rows through live summaries", async () 
     await expect(page.getByRole("combobox", { name: "Project context", exact: true })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Projects" }).locator(".project-tab")).toHaveCount(0);
     await page.screenshot({ path: "test-results/agents-creation-order.png" });
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await expect(options.first()).toContainText(roots[3]);
+    await page.keyboard.press("Escape");
+    const composer = page.getByRole("textbox", { name: "Message Codex" });
+    await composer.fill("captured original prompt");
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, linked);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await expect(page.locator(".view-nav:visible")).toContainText(linked);
+    await page.getByRole("button", { name: "Close Alpha project" }).click();
+    await expect(page.getByRole("navigation", { name: "Projects" }).locator(".project-tab")).toHaveCount(0);
+    await expect(composer).toHaveValue("captured original prompt");
+    await expect(page.locator(".chat-conversation")).toContainText(roots[3]);
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".chat-conversation")).toContainText(linked);
+    await composer.fill("captured alternate prompt");
+    // Use another project deliberately, without opening an editor or changing checkout defaults.
+    await page.locator(".agent-row").filter({ hasText: "Gamma" }).click();
+    await app.close();
+    await rm(linked, { recursive: true, force: true });
+    app = await launchDesktop(user);
+    page = await app.firstWindow();
+    const restartedPicker = page.getByRole("dialog", { name: "Choose project" });
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await expect(restartedPicker.getByRole("option").nth(0)).toContainText(roots[2]);
+    await expect(restartedPicker.getByRole("option").nth(1)).toContainText(roots[3]);
+    await page.waitForTimeout(1200); // One summary refresh must not reorder deliberate use.
+    await expect(restartedPicker.getByRole("option").first()).toContainText(roots[2]);
+    await restartedPicker.getByRole("option").nth(1).click();
+    await expect(page.locator(".chat-conversation")).toContainText(linked);
+    await expect(page.getByRole("alert").filter({ hasText: "Checkout unavailable" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Projects" }).locator(".project-tab")).toHaveCount(0);
+    await page.getByRole("textbox", { name: "Message Codex" }).fill("unavailable prompt retained");
+    await page.locator(".agent-row").filter({ hasText: "Alpha" }).nth(2).click();
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("captured original prompt");
+    await expect(page.locator(".chat-conversation")).toContainText(roots[3]);
+    await page.locator(".agent-row").filter({ hasText: "Alpha" }).nth(1).click();
+    await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("captured alternate prompt");
+    await expect(page.locator(".chat-conversation")).toContainText(linked);
+
   } finally {
     await app.evaluate(({ dialog }) => {
       dialog.showMessageBox = async (_window: unknown, options?: any) => ({

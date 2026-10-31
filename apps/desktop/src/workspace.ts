@@ -4,6 +4,12 @@ export let memory: WorkspaceState;
 export function initialize(state: WorkspaceState) {
   memory = state;
 }
+export function rememberProjectUse(project: string, checkout?: string) {
+  const previous = memory.projectUse?.find(p => p.project === project);
+  memory.projectUse = [{ project, ...(checkout ? { checkout } : previous?.checkout ? { checkout: previous.checkout } : {}) },
+    ...(memory.projectUse ?? []).filter(p => p.project !== project)];
+  void persist();
+}
 let pending: Promise<unknown> = Promise.resolve();
 let failure: unknown;
 let scheduled: ReturnType<typeof setTimeout> | undefined;

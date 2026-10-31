@@ -219,3 +219,20 @@ test("checkout approvals retain the native directory identity independently of c
     ]);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+
+test("client project use validates exact paths and unique MRU entries without losing acknowledged state", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "escode-project-use-"));
+  try {
+    const store = new Workspace(join(dir, "workspace.json"));
+    const state = { projects: [], selected: "agents", views: {}, drafts: [],
+      projectUse: [{ project: dir, checkout: join(dir, "closed-worktree") }] };
+    await store.write(state);
+    expect(await new Workspace(join(dir, "workspace.json")).read()).toEqual(state);
+    for (const projectUse of ["bad", [{ project: "relative" }], [{ project: dir, checkout: "relative" }],
+      [state.projectUse[0], state.projectUse[0]]]) {
+      await expect(store.write({ ...state, projectUse })).rejects.toThrow("Invalid project use");
+      expect(await store.read()).toEqual(state);
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
