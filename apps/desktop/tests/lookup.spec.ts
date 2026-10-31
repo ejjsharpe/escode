@@ -102,6 +102,17 @@ test('lookup ranks and highlights unloaded files, file changes converge and acti
  await restarted.getByRole('button',{name:'Find file',exact:true}).click();
  await expect(restarted.getByRole('group',{name:'Recent files'}).getByRole('option')).toHaveText(['node_modules/known.txt']);
  await restarted.keyboard.press('Escape');
+ // The same history journey owns Agents scope: each open root contributes its exact target.
+ await restarted.getByRole('button',{name:'Agents',exact:true}).click();
+ await restarted.getByRole('button',{name:'Find file',exact:true}).click();
+ const recent=restarted.getByRole('group',{name:'Recent files'}).getByRole('option');
+ await expect(recent.filter({hasText:'node_modules/known.txt'})).toHaveCount(2);
+ await expect(recent.filter({hasText:second}).first()).toContainText('node_modules/known.txt');
+ await expect(recent.filter({hasText:root}).first()).toContainText('node_modules/known.txt');
+ await restarted.getByLabel('Exact file path').fill('closed-only');
+ await expect(restarted.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('0 matches');
+ await expect(restarted.getByRole('option')).toHaveCount(0);
+ await restarted.keyboard.press('Escape');
  await restarted.getByRole('navigation',{name:'Projects'}).locator('button[aria-pressed]').filter({hasText:'repo'}).click();
  await expect(restarted.locator('header')).toContainText(root);
  await restarted.getByRole('button',{name:'Find file',exact:true}).click();
@@ -137,6 +148,11 @@ test('lookup ranks and highlights unloaded files, file changes converge and acti
  await expect(page.locator('.monaco-editor:visible')).toContainText('linked editor target');
  await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
  await agents.click(); await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await expect(recent.filter({hasText:'node_modules/known.txt'})).toHaveCount(2);
+ await expect(recent.filter({hasText:linked})).toHaveCount(0);
+ await page.getByLabel('Exact file path').fill('known');
+ await expect(recent).toHaveCount(2);
+ await expect(page.getByRole('group',{name:'File results'})).toHaveCount(0);
  await page.getByLabel('Exact file path').fill(join(linked,'deep/workbench.ts'));
  await page.getByRole('button',{name:'Open file',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('could not');
