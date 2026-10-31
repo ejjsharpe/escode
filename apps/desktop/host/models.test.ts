@@ -34,15 +34,17 @@ test("saved chat activation supplies defaults and supersedes delayed activation 
   const store = new Chats(join(dir, "chats"));
   let release: (() => void) | undefined;
   let delay = false;
-  const connect = async () => ({ request: async () => {
+  const calls: string[] = [];
+  const connect = async () => ({ request: async (method: string) => {
+    calls.push(method);
     if (delay) { delay = false; await new Promise<void>(resolve => { release = resolve; }); }
-    return { data: ["a", "b"].map(model => ({ model, displayName: model, supportedReasoningEfforts: [{ reasoningEffort: "low" }], defaultReasoningEffort: "low" })), nextCursor: null };
+    return { data: ["a", "b"].map(model => ({ model, displayName: model, supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "high" }], defaultReasoningEffort: "low" })), nextCursor: null };
   }, close() {} });
   try {
     const service = new ChatService(store, connect as never);
     const background = await store.create(dir), foreground = await store.create(dir);
     await service.models(dir, background.id, "b");
-    await service.models(dir, foreground.id, "a");
+    await service.models(dir, foreground.id, "a", "high");
     await service.models(dir, background.id, undefined, undefined, true);
     const activated = await store.create(dir);
     expect((await service.models(dir, activated.id)).choice).toEqual({ model: "b", effort: "low" });
@@ -57,6 +59,7 @@ test("saved chat activation supplies defaults and supersedes delayed activation 
     while (!release) await new Promise(resolve => setTimeout(resolve, 1));
     (release as () => void)(); await read;
     const draft = await store.create(dir);
-    expect((await service.models(dir, draft.id)).choice).toEqual({ model: "a", effort: "low" });
+    expect((await service.models(dir, draft.id)).choice).toEqual({ model: "a", effort: "high" });
+    expect(calls.every(method => method === "model/list")).toBe(true);
   } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
 });

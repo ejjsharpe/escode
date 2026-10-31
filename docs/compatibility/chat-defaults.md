@@ -51,3 +51,25 @@ configured precedence, per-model memory and restart/draft preservation. Build,
 typecheck, lint and diff whitespace checks passed; lint retains existing warnings.
 This follow-up uses the controllable provider fixture; installed-provider and manual
 native/accessibility qualification were not rerun.
+
+### Combined activation merge verification
+
+Merged activation commit `43b09704422d79ecac9bd2b21d4979e11a003c3d`
+onto integration baseline `747ee26`, retaining saved-policy conflict resolution
+and stale Stop recovery. No further production defect was found. Strengthened the
+host delayed-activation regression to distinguish effort as well as model and
+assert that activation/catalog access sends only `model/list`.
+
+Checks on the combined branch: host models, permissions, reconnect and SQLite
+controls: 10 passed; strengthened models rerun: 2 passed. Electron models and
+permissions: 2 passed. Fresh build, typecheck, lint and package passed. Packaged
+models plus four emergency Stop variants: 5 passed, including worker loss and
+superseded targets. Initial checks failed because this isolated checkout lacked
+dependencies and a packaged executable; frozen dependency installation and a fresh
+package resolved these setup failures. No application workaround was required.
+
+The final integration merge check found `integration/agents-sidebar-144` still at
+`747ee26` (already included). Concurrent qualification work not yet committed to
+that ref is outside this snapshot. Installed-provider qualification, native/VoiceOver
+and broader visual gates were not rerun here; parent qualification retains those
+limits. No integration ref, tracker or PR was changed.
