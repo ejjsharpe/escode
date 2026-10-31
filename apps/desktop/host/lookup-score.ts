@@ -408,15 +408,30 @@ export interface IItemAccessor<T> {
 }
 
 export type RankedPath = NonNullable<ReturnType<typeof scorePath>> & { path: string };
-const pathAccessor: IItemAccessor<RankedPath> = {
+type LookupPath = { path: string; score: number; positions: readonly number[]; itemScore?: IItemScore };
+const pathAccessor: IItemAccessor<LookupPath> = {
  getItemLabel: item => item.path.slice(item.path.lastIndexOf('/') + 1),
  getItemDescription: item => item.path.includes('/') ? item.path.slice(0,item.path.lastIndexOf('/')) : undefined,
  getItemPath: item => item.path,
 };
-export function comparePathScores(itemA: RankedPath, itemB: RankedPath, input: string): number {
+// Wire rows retain enough positions to reuse the same comparator without rescoring.
+function lookupItemScore(item: LookupPath): IItemScore {
+  if (item.itemScore) return item.itemScore;
+  const offset = item.path.lastIndexOf('/') + 1;
+  const labelMatch: IMatch[] = [], descriptionMatch: IMatch[] = [];
+  for (const position of item.positions) {
+    const ranges = position >= offset ? labelMatch : descriptionMatch;
+    const start = position >= offset ? position - offset : position;
+    const previous = ranges.at(-1);
+    if (previous?.end === start) previous.end++;
+    else ranges.push({ start, end: start + 1 });
+  }
+  return { score: item.score, labelMatch, descriptionMatch };
+}
+export function comparePathScores(itemA: LookupPath, itemB: LookupPath, input: string): number {
 	const query = prepareQuery(input), accessor = pathAccessor;
-	const itemScoreA = itemA.itemScore;
-	const itemScoreB = itemB.itemScore;
+	const itemScoreA = lookupItemScore(itemA);
+	const itemScoreB = lookupItemScore(itemB);
 
 	const scoreA = itemScoreA.score;
 	const scoreB = itemScoreB.score;

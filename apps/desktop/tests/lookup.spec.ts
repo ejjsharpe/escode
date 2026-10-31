@@ -30,10 +30,12 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  const env: Record<string,string>={...process.env,ESCODE_DEV_URL:server?.resolvedUrls!.local[0] ?? ''};delete env.ELECTRON_RUN_AS_NODE;
  const launch=()=>server ? _electron.launch({executablePath:electron as unknown as string,args:['.',`--user-data-dir=${join(dir,'user')}`],env}) : launchDesktop(join(dir,'user'));
  let app=await launch();
- try { const page=await app.firstWindow();
+ try { let page=await app.firstWindow();
  await app.evaluate(({dialog},root)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[root]});},root);
  await page.getByRole('button',{name:'Open project…',exact:true}).click();
  await page.getByRole('button',{name:'Hide Git-ignored files',exact:true}).click();
+
+ await expect(page.getByRole('treeitem',{name:'deep',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Find file',exact:true}).click();
  await page.getByLabel('Exact file path').fill('closed-only');
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('No eligible matches');
@@ -141,5 +143,64 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await expect(restarted.getByRole('option',{name:'node_modules/known.txt',exact:true})).toHaveCount(1);
  await restarted.getByLabel('Exact file path').press('Enter');
  await expect(restarted.locator('.monaco-editor:visible')).toContainText('ignored familiar file');
+ page=restarted;
+ // Multi-root ownership: linked worktrees remain distinct, closed tabs stay outside scope.
+ execFileSync('git',['-C',root,'add','.']);
+ execFileSync('git',['-C',root,'-c','user.name=Test','-c','user.email=test@example.com','commit','-m','fixture']);
+ const linked=join(dir,'linked'), missing=join(dir,'missing');
+ execFileSync('git',['-C',root,'worktree','add','-b','linked',linked]);
+ await writeFile(join(linked,'deep/workbench.ts'),'linked editor target');
+ execFileSync('git',['init',missing]);
+ const open=async(root:string)=>{
+   await app.evaluate(({dialog},root)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[root]});},root);
+   await page.getByRole('button',{name:'Open project…',exact:true}).click();
+   await expect(page.locator('header')).toContainText(root);
+ };
+ await open(linked); await open(missing);
+ await rm(missing,{recursive:true});
+ const agents=page.getByRole('button',{name:'Agents',exact:true});
+ await agents.click(); await page.keyboard.press('Meta+p');
+ await page.getByLabel('Exact file path').fill('wkb');
+ await expect(page.getByRole('option')).toHaveCount(4);
+ await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('Unavailable');
+ const linkedRow=page.getByRole('option').filter({hasText:linked}).filter({hasText:'deep/workbench.ts'});
+ await expect(linkedRow).toContainText('repo');
+ await page.screenshot({path:'test-results/agents-lookup.png'});
+ await linkedRow.click();
+ await expect(page.locator('header')).toContainText(linked);
+ await expect(page.locator('.monaco-editor:visible')).toContainText('linked editor target');
+ await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
+ await agents.click(); await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await page.getByLabel('Exact file path').fill(join(linked,'deep/workbench.ts'));
+ await page.getByRole('button',{name:'Open file',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('could not');
+ await expect(page.locator('header')).toContainText('agents');
+ await page.keyboard.press('Escape');
+ // Close the remaining tabs, then keep the command reachable with an explicit empty scope.
+ for(let remaining=await page.locator('.project-tab-close').count();remaining>0;remaining--) {
+   await page.locator('.project-tab-close').first().click();
+   await expect(page.locator('.project-tab-close')).toHaveCount(remaining-1);
+ }
+ await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Find file',exact:true})).toContainText('No open checkouts');
+ await page.keyboard.press('Escape');
+ // Aggregate limits differ from each root's own result budget.
+ for(let index=0;index<9;index++) {
+   const bounded=join(dir,`bounded-${index}`);
+   execFileSync('git',['init',bounded]);
+   for(let file=0;file<17;file++) await writeFile(join(bounded,`cap-${file}.txt`),'bounded');
+   await open(bounded);
+ }
+ await agents.click(); await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await page.getByLabel('Exact file path').fill('cap');
+ await expect(page.getByRole('option')).toHaveCount(100);
+ await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('Partial coverage');
+ await expect(page.getByRole('option').filter({hasText:join(dir,'bounded-8')})).toHaveCount(0);
+ await page.getByRole('button',{name:'Open file',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('capped at 8 checkouts');
+ await page.keyboard.press('Escape');
+
+
+
  } finally {await app.close();await server?.close();await rm(dir,{recursive:true,force:true});}
 });

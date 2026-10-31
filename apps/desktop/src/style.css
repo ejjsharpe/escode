@@ -707,3 +707,5 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .lookup-results { max-height: 300px; overflow: auto; }
 .lookup-results [role="option"] { padding: 6px 8px; overflow-wrap: anywhere; cursor: pointer; }
 .lookup-results mark { background: transparent; color: inherit; font-weight: 700; text-decoration: underline; }
+
+.lookup-root { display: block; color: #b8b5c2; font-size: 12px; margin-top: 3px; }

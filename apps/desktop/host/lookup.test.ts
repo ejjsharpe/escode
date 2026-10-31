@@ -17,6 +17,7 @@ test('pinned filename/path scorer contract and positions', () => {
   expect(scorePath('foo-bar.ts','fb')!.score).toBeGreaterThan(scorePath('fzzb.ts','fb')!.score);
   expect(scorePath('src/workbench.ts', 'wkb')?.positions).toEqual([4, 7, 8]);
   expect(comparePathScores({path:'workbench.ts',...scorePath('workbench.ts','wkb')!}, {path:'deep/workbench.ts',...scorePath('deep/workbench.ts','wkb')!}, 'wkb')).toBeLessThan(0);
+  expect(comparePathScores({path:'workbench.ts',score:131289,positions:[0,3,4]}, {path:'deep/workbench.ts',score:131289,positions:[5,8,9]}, 'wkb')).toBeLessThan(0);
   expect(scorePath('src/workbench.ts', 'wrok')).toBeUndefined();
   expect(scorePath('src/workbench.ts', 'src wkb')).toBeDefined();
   expect(scorePath('src/workbench.ts', 'src missing')).toBeUndefined();
