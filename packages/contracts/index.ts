@@ -164,6 +164,7 @@ export const LookupResult = Schema.Struct({
 });
 export type LookupResult = typeof LookupResult.Type;
 export const Files = RpcGroup.make(
+  Rpc.make("observeFiles", { payload: { root: Schema.String.check(Schema.isMaxLength(4096)) }, success: DirectoryChange, stream: true }),
   Rpc.make("readDiff", { payload: { root: Schema.String, path: Schema.String, area: DiffArea }, success: DiffComparison, error: Schema.String }),
   Rpc.make("transferAction", { payload: { action: TransferAction }, success: TransferResult, error: Schema.String }),
   Rpc.make("createEntry", { payload: { command: CreateCommand }, success: CreateReceipt, error: Schema.String }),

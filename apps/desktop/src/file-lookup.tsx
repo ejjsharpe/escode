@@ -23,6 +23,8 @@ export function FileLookup({ root, project, onClose }: {
   const activated = useRef(false);
   const [results, setResults] = useState<import("@escode/contracts").LookupResult["results"]>([]);
   const [selected, setSelected] = useState(0);
+  const [observationError, setObservationError] = useState("");
+  const [invalidation, setInvalidation] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("Type a filename or path. Exact paths can also be opened.");
@@ -35,6 +37,17 @@ export function FileLookup({ root, project, onClose }: {
       if (!activated.current && origin.current instanceof HTMLElement && origin.current.isConnected) origin.current.focus();
     };
   }, []);
+  useEffect(() => {
+    let active = true;
+    setObservationError("");
+    const stop = window.escode.observeFiles(root, error => {
+      if (!active) return;
+      if (error) setObservationError(`Live updates unavailable: ${error}. Results may be incomplete. Refresh or reopen to retry.`);
+      generation.current++;
+      setInvalidation(value => value + 1);
+    });
+    return () => { active = false; generation.current++; stop(); };
+  }, [root, refresh]);
   useEffect(() => {
     setResults([]); setSelected(0);
     if (!query.trim()) return;
@@ -49,7 +62,7 @@ export function FileLookup({ root, project, onClose }: {
       }, error => { if (request === generation.current) setMessage(`Search unavailable: ${error}. Refresh to retry or open an exact path.`); });
     }, 120);
     return () => { clearTimeout(timer); stop?.(); };
-  }, [root, query, refresh]);
+  }, [root, query, refresh, invalidation]);
   useEffect(() => { document.getElementById(`lookup-result-${selected}`)?.scrollIntoView({ block: "nearest" }); }, [selected]);
   const activate = async (target = query) => {
     if (!query || busy.current) return;
@@ -92,7 +105,7 @@ export function FileLookup({ root, project, onClose }: {
           {highlightedPath(result.path, result.positions)}
         </div>)}
       </div>
-      <p role="status">{message}</p>
+      <p role="status">{message}{observationError && ` ${observationError}`}</p>
       <Button onClick={() => { generation.current++; setRefresh(value => value + 1); }}>Refresh</Button>
       <Button disabled={!query} onClick={() => void activate()}>Open file</Button>
       <Button onClick={() => { generation.current++; onClose(); }}>Cancel</Button>
