@@ -1,3 +1,4 @@
+import { prepareRestoration } from "./restore-checkpoint";
 import { applyHistoricalFiles } from "./historical-files";
 import { captureTurnCheckpoint } from "./checkpoints";
 import type { Checkout } from "./project";
@@ -502,18 +503,18 @@ export class ChatService {
   }
   private rewindChoices = new Map<string, string>();
   async branchHistory(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null) {
-    return this.rewind(project, id, boundary, token, commandId, true);
+    return this.rewind(project, id, boundary, token, commandId, false, true);
   }
-  async rewind(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, branching = false): Promise<import("@escode/contracts").RewindResult> {
+  async rewind(project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles = false, branching = false): Promise<import("@escode/contracts").RewindResult> {
     const check = this.environment?.guard(project) ?? (() => {});
     await this.environment?.authorize(project);
     check();
     await this.store.get(project, id);
     await this.cleanupCheckpoints();
-    const identity = JSON.stringify([project, id, boundary, token, branching]);
+    const identity = JSON.stringify(branching ? [project, id, boundary, token, true] : restoreFiles ? [project, id, boundary, token, true, "restore-files"] : [project, id, boundary, token]);
     if (commandId) {
       const prior = await this.store.database.command("rewindRead", { commandId });
-      if (prior) { if (prior.identity !== identity) throw Error("Rewind identity conflict"); return prior.result; }
+      if (prior) { if (prior.identity !== identity && !(!branching && !restoreFiles && prior.identity === JSON.stringify([project, id, boundary, token, false]))) throw Error("Rewind identity conflict"); return prior.result; }
     }
     if (this.checkoutActive(project, id)) throw Error("Stop active work before rewinding.");
     return this.inContext(project, id, async () => {
@@ -526,13 +527,14 @@ export class ChatService {
       if (!point?.turnId || !point.threadId || point.threadId !== chat.threadId) return unavailable("Provider boundary reference unavailable.");
       let snapshot: any;
       if (branching) {
-        if (!project || !this.environment || point.kind !== "before-message") return unavailable("Historical branching requires a project before-message checkpoint.");
+        if (!project || !this.environment) return unavailable("Historical branching requires a project checkpoint.");
         const coverage = await this.inspectFiles(project, id, boundary, null, null);
         if (coverage.availability !== "available") return unavailable(coverage.message);
         snapshot = await this.store.database.command("inspectCheckpoint", { commandId: id, body: { boundary } });
       }
       let rpc: CodexConnection | undefined;
       try {
+        const restoration = restoreFiles ? await prepareRestoration(this.store, chat, boundary, check) : null;
         rpc = await this.connect(chat.checkout, () => {}, () => {});
         const turns: string[] = []; let cursor: string | null = null;
         const seen = new Set<string | null>();
@@ -548,17 +550,18 @@ export class ChatService {
         if (cursor !== null || new Set(turns).size !== turns.length) return unavailable("Provider history exceeds rewind limits or repeats turns.");
         const index = turns.indexOf(point.turnId) - (point.kind === "before-message" ? 1 : 0);
         if (!turns.includes(point.turnId) || index < 0) return unavailable("Provider history lost or no supported predecessor for this boundary.");
-        const captured = JSON.stringify([project, id, point, chat.directoryIdentity, turns, branching, branching ? createHash("sha256").update(JSON.stringify(snapshot)).digest("hex") : null]);
+        const captured = JSON.stringify([project, id, point, chat.directoryIdentity, turns, branching, branching ? createHash("sha256").update(JSON.stringify(snapshot)).digest("hex") : null, restoration?.captured]);
         if (!token && !commandId) {
           if (this.rewindChoices.size >= 100) this.rewindChoices.clear();
           const choice = randomUUID(); this.rewindChoices.set(choice, captured);
-          return { status: "ready", token: choice, message: branching ? "Create a separate historical chat and managed worktree. Captured files become uncommitted changes at the recorded base. Source files and drafts stay in place. No turn starts." : "Rewind conversation only. Current saved files, staging index, unsaved edits and unsent text stay in place. Later restore points may be abandoned. No turn will start." };
+          return { status: "ready", token: choice, message: branching ? "Create a separate historical chat and managed worktree. Captured files become uncommitted changes at the recorded base. Source files and drafts stay in place. No turn starts." : restoration ? "Restore saved files and rewind conversation. Saved edits will be replaced; newer eligible untracked files may be removed. Keep available unsaved text and loaded conflict baselines; saving later may conflict. Staging index stays current, not historical. Ignored untracked files, nested repositories, empty directories and environment are excluded. Later restore points may be abandoned. Provider/filesystem effects may partially succeed and will never replay. External writers can race restoration. No turn will start." : "Rewind conversation only. Current saved files, staging index, unsaved edits and unsent text stay in place. Later restore points may be abandoned. No turn will start." };
         }
         if (!token || !commandId || this.rewindChoices.get(token) !== captured) return unavailable("Selected boundary or provider history changed. Choose again.");
         check();
         const changedDirectory = await this.store.validateDirectory(chat);
         if (changedDirectory) return unavailable(changedDirectory);
         check();
+        await restoration?.validate();
         const result = { status: "uncertain" as const, token: null, message: branching ? "Historical preparation uncertain. Reserved resources are retained; inspect them externally. This command will never be replayed." : "Rewind outcome uncertain. Inspect provider history; this command will never be replayed." };
         await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result } });
         this.rewindChoices.delete(token);
@@ -586,7 +589,8 @@ export class ChatService {
           if (typeof threadId !== "string" || !threadId || threadId.length > 100 || threadId === point.threadId) throw Error("Provider historical context unavailable");
           await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, result, providerThreadId: threadId, ...(branching ? { checkpoint: snapshot, childId: child!.id } : {}) } });
           await this.store.update(project, child?.id ?? id, { threadId, ...(branching ? { phase: "bound" as const, historicalPending: false } : {}) });
-          const applied = { status: "applied" as const, token: null, message: branching ? `Historical chat ${child!.id} created at ${child!.checkout}. Open it in Chats; Send explicitly to continue.` : "Conversation rewound. Current files and drafts retained. Send explicitly to continue." };
+          await restoration?.apply();
+          const applied = { status: "applied" as const, token: null, message: branching ? `Historical chat ${child!.id} created at ${child!.checkout}. Open it in Chats; Send explicitly to continue.` : restoration ? "Conversation and saved files restored. Unsaved text and baselines retained; saving may conflict. Send explicitly to continue." : "Conversation rewound. Current files and drafts retained. Send explicitly to continue." };
           await this.store.database.command("rewindWrite", { commandId, body: { identity, captured, providerThreadId: threadId, result: applied, ...(branching ? { checkpoint: snapshot, childId: child!.id } : {}) } });
           return applied;
         } catch (failure) {

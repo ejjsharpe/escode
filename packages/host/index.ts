@@ -63,7 +63,7 @@ export async function startHost(options: {
   chatSnapshot?: (project: string | null, id: string) => Promise<ChatDetail>;
   openChat?: (project: string | null, id: string) => Promise<ChatDetail>;
   checkpointPoints?: (project: string | null, id: string, cursor: string | null) => Promise<typeof CheckpointPage.Type>;
-  rewind?: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null) => Promise<RewindResult>;
+  rewind?: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null, restoreFiles?: boolean) => Promise<RewindResult>;
   branchHistory?: (project: string | null, id: string, boundary: string, token: string | null, commandId: string | null) => Promise<RewindResult>;
   inspectFiles?: (project: string | null, id: string, boundary: string, path: string | null, cursor: string | null) => Promise<import("@escode/contracts").FileInspection>;
   inspectBoundary?: (project: string | null, id: string, boundary: string, cursor: string | null) => Promise<typeof BoundaryInspection.Type>;
@@ -289,9 +289,9 @@ export async function startHost(options: {
           if (Buffer.byteLength(JSON.stringify(result)) > maximumFrameBytes / 2) throw Error("Checkpoint capacity exhausted");
           return Schema.decodeUnknownSync(CheckpointPage)(result);
         }, catch: String }),
-        rewind: ({ project, id, boundary, token, commandId }) => Effect.tryPromise({ try: async () => {
+        rewind: ({ project, id, boundary, token, commandId, restoreFiles }) => Effect.tryPromise({ try: async () => {
           if (!options.rewind) throw Error("Rewind unavailable");
-          return Schema.decodeUnknownSync(RewindResult)(await options.rewind(project, id, boundary, token, commandId));
+          return Schema.decodeUnknownSync(RewindResult)(await options.rewind(project, id, boundary, token, commandId, restoreFiles));
         }, catch: String }),
         branchHistory: ({ project, id, boundary, token, commandId }) => Effect.tryPromise({ try: async () => {
           if (!options.branchHistory) throw Error("Historical branching unavailable");

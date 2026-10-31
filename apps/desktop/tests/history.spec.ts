@@ -1,12 +1,14 @@
 import { test, expect } from "@playwright/test";
-import { mkdtemp, mkdir, writeFile, rm, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, realpath, stat, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
+import { Chats } from "../host/chat";
+import { captureTurnCheckpoint } from "../host/checkpoints";
 import { launchDesktop } from "./desktop";
 
-for (const mode of ["navigation", "streaming", "files", "branch", "expiry"] as const) test(`saved new-format history: ${mode}`, async () => {
+for (const mode of ["navigation", "streaming", "files", "branch", "branch-after", "restoration", "expiry"] as const) test(`saved new-format history: ${mode}`, async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-history-ui-")));
   const user = join(dir, "user"), root = join(dir, "project"), tools = join(dir, "tools");
   await mkdir(user); await mkdir(tools); execFileSync("git", ["init", root]);
@@ -20,7 +22,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:m.params.threadId??'saved-provider'},cwd:process.cwd(),model:'fixture',sandbox:{type:'readOnly'},approvalPolicy:'on-request'};
  if(m.method==='thread/fork')result={thread:{id:'historical-provider'}};
  if(m.method==='turn/start')result={turn:{id:'sent',status:'completed'}};
- if(m.method==='thread/turns/list')result={data:[...${mode === "branch" ? "(m.params.cursor===null?[{id:'earlier',items:[]}]:[])" : "[]"},{id:${mode === 'streaming' ? "'t'" : "(m.params.cursor===null?'sent':'later')"},items:[{id:'i',type:'agentMessage',text:m.params.cursor===null?'first saved page':'second saved page'}]}],nextCursor:m.params.cursor===null?'second':null};
+ if(m.method==='thread/turns/list')result={data:[...${(mode === "branch" || mode === "branch-after") ? "(m.params.cursor===null?[{id:'earlier',items:[]}]:[])" : "[]"},{id:${mode === 'streaming' ? "'t'" : "(m.params.cursor===null?'sent':'later')"},items:[{id:'i',type:'agentMessage',text:m.params.cursor===null?'first saved page':'second saved page'}]}],nextCursor:m.params.cursor===null?'second':null};
  if(m.method==='thread/turns/list' && require('node:fs').existsSync(${JSON.stringify(join(dir, 'lost-history'))}))result={data:[],nextCursor:null};
  const reply=()=>{process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');
  if(${mode === 'streaming'} && m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(()=>{for(const event of [{method:'turn/started',params:{threadId:'saved-provider',turn:{id:'t'}}},{method:'item/agentMessage/delta',params:{threadId:'saved-provider',turnId:'t',itemId:'i',delta:' live delta'}}])process.stdout.write(JSON.stringify(event)+'\\n');setTimeout(()=>{for(const event of [{method:'item/completed',params:{threadId:'saved-provider',turnId:'t',item:{id:'i',type:'agentMessage',text:'newest live body'}}},{method:'turn/completed',params:{threadId:'saved-provider',turn:{id:'t'}}}])process.stdout.write(JSON.stringify(event)+'\\n');},1200);},200);
@@ -28,11 +30,26 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(reply,1000);else reply();
  if(m.method==='turn/start')for(const method of ['turn/started','turn/completed'])process.stdout.write(JSON.stringify({method,params:{threadId:'saved-provider',turn:{id:'sent',status:'completed'}}})+'\\n');
 });`, { mode: 0o700 });
-  if ((mode === "files" || mode === "branch" || mode === "expiry")) {
+  if ((mode === "files" || mode === "expiry" || mode === "branch" || mode === "branch-after" || mode === "restoration")) {
     await writeFile(join(root, "saved.txt"), "base saved text");
     execFileSync("git", ["-C", root, "add", "saved.txt"]);
     execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "base"]);
     await writeFile(join(root, "saved.txt"), "captured saved text");
+  }
+  let restoredChat: string | undefined;
+  if (mode === "restoration") {
+    const isolated = join(dir, "isolated");
+    execFileSync("git", ["-C", root, "worktree", "add", "-qb", "isolated", isolated]);
+    const store = new Chats(join(user, "durable-chats-v1"));
+    const chat = await store.createDraft(root, isolated); restoredChat = chat.id;
+    const identity = await stat(isolated);
+    const commit = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    await store.update(root, chat.id, { threadId: "saved-provider", phase: "bound", directoryIdentity: { path: isolated, dev: identity.dev, ino: identity.ino }, worktree: { source: root, ref: "isolated", commit, reservation: { root: isolated, branch: "isolated", commit, dev: identity.dev, ino: identity.ino } } });
+    await writeFile(join(isolated, "saved.txt"), "captured saved text");
+    await store.database.command("checkpoint", { body: { id: "restoration", chatId: chat.id, kind: "after-turn", completion: "pending", threadId: "saved-provider", checkout: isolated, commandId: null, availability: "unavailable" } });
+    await captureTurnCheckpoint(store.database, await store.get(root, chat.id), "saved-provider", undefined, { id: "restoration", turnId: "sent", completion: "completed", createdAt: Date.now() });
+    await writeFile(join(isolated, "saved.txt"), "today saved text");
+    await store.database.close();
   }
   const app = await launchDesktop(user, tools, true);
   try {
@@ -40,8 +57,8 @@ createInterface({input:process.stdin}).on('line',line=>{
     await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "project", exact: true })).toHaveAttribute("aria-pressed", "true");
-    const context = (mode === "files" || mode === "branch" || mode === "expiry") ? root : null;
-    const chatId = await page.evaluate(async ({ context, branching }) => {
+    const context = (mode === "files" || mode === "expiry" || mode === "branch" || mode === "branch-after") ? root : null;
+    const chatId = restoredChat ?? await page.evaluate(async ({ context, branching }) => {
       const draft = await window.escode.chat("createDraft", context);
       await window.escode.chat("send", context, draft.id, "fixture first send");
       if (branching) {
@@ -50,7 +67,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       }
       await window.escode.chat("disconnect", context, draft.id);
       return draft.id;
-    }, { context, branching: mode === "branch" });
+    }, { context, branching: (mode === "branch" || mode === "branch-after") });
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await page.locator(".agent-row").click();
     await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
@@ -70,11 +87,11 @@ createInterface({input:process.stdin}).on('line',line=>{
       await page.screenshot({ path: "test-results/checkpoint-expiry.png" });
       return;
     }
-    if (mode === "branch") {
+    if (mode === "branch" || mode === "branch-after") {
       await page.getByRole("textbox", { name: "Message Codex" }).fill("retained branch draft");
       await page.getByText("Historical boundaries", { exact: true }).click();
       await page.getByRole("button", { name: "Load boundaries", exact: true }).click();
-      await page.getByRole("button", { name: /^Before message/ }).first().click();
+      await page.getByRole("button", { name: mode === "branch-after" ? /^After turn/ : /^Before message/ }).first().click();
       await page.getByRole("button", { name: "Branch historical chat…", exact: true }).click();
       const result = page.getByRole("region", { name: "Historical branch", exact: true });
       await expect(result).toBeFocused();
@@ -83,7 +100,30 @@ createInterface({input:process.stdin}).on('line',line=>{
       await expect(result).toContainText("created at");
       await expect(result).toBeFocused();
       await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("retained branch draft");
-      await page.screenshot({ path: "test-results/historical-branch.png" });
+      await page.screenshot({ path: `test-results/historical-${mode}.png` });
+      return;
+    }
+    if (mode === "restoration") {
+      const composer = page.getByRole("textbox", { name: "Message Codex" });
+      await composer.fill("retained unsent text");
+      await page.getByText("Historical boundaries", { exact: true }).click();
+      await page.getByRole("button", { name: "Load boundaries", exact: true }).click();
+      await page.getByRole("button", { name: /^After turn/ }).first().click();
+      const button = page.getByRole("button", { name: "Rewind and restore saved files…" });
+      await button.click();
+      const choice = page.getByRole("region", { name: "Conversation rewind", exact: true });
+      await expect(choice).toBeFocused();
+      await expect(choice).toContainText("Saved edits will be replaced");
+      await expect(choice).toContainText("untracked files may be removed");
+      await choice.getByRole("button", { name: "Cancel rewind" }).click();
+      await expect(button).toBeFocused();
+      await button.click();
+      await choice.getByRole("button", { name: "Confirm restoration and retain unsaved edits" }).click();
+      await expect(choice).toContainText("Conversation and saved files restored");
+      await expect(choice).toBeFocused();
+      expect(await readFile(join(dir, "isolated", "saved.txt"), "utf8")).toBe("captured saved text");
+      await expect(composer).toHaveValue("retained unsent text");
+      await page.screenshot({ path: "test-results/protected-restoration.png" });
       return;
     }
     if (mode === "files") {
@@ -138,6 +178,12 @@ createInterface({input:process.stdin}).on('line',line=>{
       await page.screenshot({ path: "test-results/boundary-unavailable.png" });
       await rm(join(dir, "lost-history"));
       await after.click();
+      await inspection.getByRole("button", { name: "Rewind and restore saved files…" }).click();
+      const restoration = page.getByRole("region", { name: "Conversation rewind", exact: true });
+      await expect(restoration).toBeFocused();
+      await expect(restoration).toContainText("No project");
+      await expect(restoration).toContainText("conversation-only rewind");
+      await expect(restoration.getByRole("button", { name: "Confirm restoration and retain unsaved edits" })).toHaveCount(0);
       await inspection.getByRole("button", { name: "Rewind conversation only…" }).click();
       const rewind = page.getByRole("region", { name: "Conversation rewind", exact: true });
       await expect(rewind).toBeFocused();
