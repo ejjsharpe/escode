@@ -73,13 +73,28 @@ export class ChatService {
       this.transitions.delete(id);
     }
   }
+  private activityWrites = new WeakMap<Session, number>();
+  private cleanupBlocked = false;
+  private cleanupTimer: ReturnType<typeof setInterval>;
   constructor(
     private store: Chats,
     private connect = connectCodex,
     private spool: Pick<LiveSpool, "read" | "write"> = new LiveSpool(store.spoolDirectory),
     private previewSettings?: (cwd: string) => Promise<RuntimeSnapshot["settings"]>,
     private environment?: ChatEnvironment,
-  ) {}
+    private clock = Date.now,
+  ) {
+    this.cleanupTimer = setInterval(() => { void this.cleanupCheckpoints().catch(() => {}); }, 60000);
+    this.cleanupTimer.unref();
+  }
+  async cleanupCheckpoints() {
+    if (this.cleanupBlocked) return 0;
+    const active = [...new Set([...this.sessions.keys(), ...this.transitions.keys()])].filter(id => {
+      const session = this.sessions.get(id);
+      return this.transitions.has(id) || !!session && (session.turn.phase !== "idle" || !!session.completing || !!session.sending);
+    });
+    return this.store.database.command("expireCheckpoints", { body: { now: this.clock(), active } });
+  }
   async expectation(project: string | null, id: string) {
     const chat = await this.store.get(project, id);
     await this.environment?.authorize(project);
@@ -316,7 +331,10 @@ export class ChatService {
     this.sessions.delete(id);
     return chat;
   }
-  open(project: string | null, id: string) {
+  async open(project: string | null, id: string) {
+    await this.store.get(project, id);
+    while (await this.cleanupCheckpoints() === 100) { /* Finish expiry before extending remaining coverage. */ }
+    await this.store.database.command("checkpointActivity", { commandId: id, body: { now: this.clock() } });
     if (this.transitions.get(id) === project && this.sessions.get(id)?.connection.status === "connected")
       return this.connectSession(project, id);
     return this.inContext(project, id, () => this.connectSession(project, id));
@@ -491,6 +509,7 @@ export class ChatService {
     await this.environment?.authorize(project);
     check();
     await this.store.get(project, id);
+    await this.cleanupCheckpoints();
     const identity = JSON.stringify([project, id, boundary, token, branching]);
     if (commandId) {
       const prior = await this.store.database.command("rewindRead", { commandId });
@@ -584,10 +603,12 @@ export class ChatService {
   }
   async checkpointPoints(project: string | null, id: string, cursor: string | null) {
     await this.store.get(project, id);
+    await this.cleanupCheckpoints();
     return this.store.database.command("checkpointPoints", { commandId: id, body: { cursor } }) as Promise<import("@escode/contracts").CheckpointPage>;
   }
   async inspectFiles(project: string | null, id: string, boundary: string, path: string | null, cursor: string | null): Promise<import("@escode/contracts").FileInspection> {
     const chat = await this.store.get(project, id);
+    await this.cleanupCheckpoints();
     const offset = Number(cursor ?? 0);
     if (!Number.isSafeInteger(offset) || offset < 0 || (path !== null && (!path || path.startsWith("/") || path.split("/").some(p => p === ".." || p === ".git")))) throw Error("Invalid file inspection target");
     const result: import("@escode/contracts").Mutable<import("@escode/contracts").FileInspection> = { availability: "unavailable", message: "", paths: [], nextCursor: null, before: null, after: null, beforeMode: null, afterMode: null };
@@ -724,6 +745,14 @@ export class ChatService {
   private event(s: Session, message: WireMessage) {
     const p = message.params;
     if (!p || p.threadId !== s.threadId) return;
+    if (message.method?.startsWith("turn/") || message.method?.startsWith("item/")) {
+      const now = this.clock();
+      if (now - (this.activityWrites.get(s) ?? -Infinity) >= 60000) {
+        this.activityWrites.set(s, now);
+        void this.store.database.command("checkpointActivity", { commandId: s.chatId, body: { now } })
+          .catch(() => { this.cleanupBlocked = true; });
+      }
+    }
     if (message.method === "serverRequest/resolved") {
       for (const [token, id] of s.requestIds)
         if (id === p.requestId) {
@@ -913,6 +942,7 @@ export class ChatService {
       });
       sendIntent = true;
       check();
+      await this.store.database.command("checkpointActivity", { commandId: id, body: { now: this.clock() } });
       s.error = await captureTurnCheckpoint(this.store.database, chat, s.threadId, commandId);
       check();
       s.preparation = undefined;
@@ -1092,6 +1122,7 @@ export class ChatService {
     );
   }
   close() {
+    clearInterval(this.cleanupTimer);
     for (const s of this.sessions.values()) this.closeConnection(s);
   }
 }
