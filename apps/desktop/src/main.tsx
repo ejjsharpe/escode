@@ -114,7 +114,12 @@ function CheckoutView({
     ...new Set([...(memory.views[root]?.path ? [memory.views[root].path!] : []),
       ...memory.drafts.filter(d => d.root === root).map(d => d.path)]),
   ]);
+  const recentFiles = useRef<string[]>(path ? [path] : []);
+  const content = useRef<HTMLElement>(null);
+  const focusAfterClose = useRef(false);
+  const [tabMenu, setTabMenu] = useState<{ file: string; order: string[] } | null>(null);
   function activateFile(file: string) {
+    recentFiles.current = [file, ...recentFiles.current.filter(p => p !== file)];
     setOpenFiles(old => {
       if (old.includes(file)) return old;
       const next = [...old];
@@ -179,7 +184,7 @@ function CheckoutView({
       }
       setStatus(value);
       onStatus(value);
-      if (selectedChange.current && !opening.current) {
+      if (selectedChange.current && !opening.current && !closeInFlight.current) {
         await showDiff(selectedChange.current);
       }
     } finally { statusRefreshing.current = false; }
@@ -320,6 +325,15 @@ function CheckoutView({
       if (!buffer) modified.dispose();
     };
   }, [diff, path, view, editorVisible]);
+  useEffect(() => {
+    if (fileClosing || !focusAfterClose.current || !active || !editorVisible) return;
+    const frame = requestAnimationFrame(() => {
+      focusAfterClose.current = false;
+      if (path && editor.current) editor.current.focus();
+      else content.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [fileClosing, path, diff, bufferRevision, active, editorVisible]);
   function trackPosition(instance: monaco.editor.ICodeEditor, file: string, selected: string) {
     const stored = memory.views[root]?.editorPositions?.[file]?.[selected];
     if (stored) {
@@ -410,6 +424,11 @@ function CheckoutView({
         version ?? b.disk.version,
       );
       if (result.kind === "conflict") {
+        if (target !== path) {
+          activateFile(target);
+          rememberView(target, "file");
+          setDiff(null);
+        }
         setConflict({ path: target, disk: result.disk });
         setMessage("Disk changed. Compare, overwrite this disk version, or reload.");
       } else {
@@ -418,7 +437,7 @@ function CheckoutView({
           return false;
         }
         b.disk = result.disk;
-        setDirty(b.model.getValue() !== b.disk.text);
+        if (target === viewRef.current.path) setDirty(b.model.getValue() !== b.disk.text);
         setConflict(null);
         if (viewRef.current.view === "conflict") compareConflict(target, result.disk);
         await record(target, b);
@@ -504,61 +523,98 @@ function CheckoutView({
       return false;
     } finally { opening.current--; }
   }
-  async function closeFile(file: string, dispose = true, discards?: (() => () => void)[]) {
+  async function prepareFileClose(file: string, discards: (() => () => void)[]) {
     const b = buffers.current.get(file);
-    if (!b || saveInFlight.current || closeInFlight.current) return false;
+    if (!b || b.model.getValue() === b.disk.text) return true;
+    const choice = await window.escode.lifecycle("dirty", root + "/" + file);
+    if (choice === 2) return false;
+    if (choice === 1) {
+      discards.push(() => {
+        memory.drafts = memory.drafts.filter(d => d.root !== root || d.path !== file);
+        return () => b.model.setValue(b.disk.text);
+      });
+      return true;
+    }
+    if (await save(undefined, file)) return true;
+    window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
+    return false;
+  }
+  async function closeFiles(files: string[]) {
+    if (saveInFlight.current || closeInFlight.current || conflict) return false;
+    const targets = new Set(files.filter(file => memory.views[root]?.openFiles?.includes(file)));
+    if (!targets.size) return true;
     closeInFlight.current = true;
+    presentation.current++;
     setFileClosing(true);
     editor.current?.updateOptions({ readOnly: true });
+    const activeFile = memory.views[root]?.path ?? "";
     try {
-      if (b.model.getValue() !== b.disk.text) {
-        const choice = await window.escode.lifecycle("dirty", root + "/" + file);
-        if (choice === 2) return false;
-        if (choice === 1 && discards) {
-          discards.push(() => {
-            memory.drafts = memory.drafts.filter((d) => d.root !== root || d.path !== file);
-            return () => b.model.setValue(b.disk.text);
-          });
-          return true;
-        }
-        if (choice === 0 && !(await save(undefined, file))) {
-          setPath(file);
-          window.dispatchEvent(new CustomEvent("reveal-file", { detail: { project, root } }));
-          return false;
-        }
-      }
-      // Remove the durable draft before disposing the only in-memory copy.
+      const discards: (() => () => void)[] = [];
+      for (const file of targets) if (!(await prepareFileClose(file, discards))) return false;
+      await persist();
+      const previous = memory.views[root];
       const drafts = memory.drafts;
-      memory.drafts = drafts.filter((d) => d.root !== root || d.path !== file);
+      const remaining = (previous?.openFiles ?? []).filter(file => !targets.has(file));
+      const survivor = targets.has(activeFile)
+        ? recentFiles.current.find(file => remaining.includes(file)) ?? remaining[0] ?? ""
+        : activeFile;
+      for (const discard of discards) discard();
+      memory.drafts = memory.drafts.filter(d => d.root !== root || !targets.has(d.path));
+      memory.views[root] = { ...previous, openFiles: remaining, path: survivor };
       try {
         await persist();
       } catch (error) {
-        memory.drafts = [
-          ...memory.drafts.filter((d) => d.root !== root || d.path !== file),
-          ...drafts.filter((d) => d.root === root && d.path === file),
-        ];
-        report(error);
-        return false;
+        memory.views[root] = previous;
+        memory.drafts = [...memory.drafts.filter(d => d.root !== root || !targets.has(d.path)),
+          ...drafts.filter(d => d.root === root && targets.has(d.path))];
+        void persist();
+        throw error;
       }
-      if (!dispose) {
-        b.model.setValue(b.disk.text);
-        return true;
-      }
-      setOpenFiles(old => old.filter(p => p !== file));
-      buffers.current.delete(file);
-      b.model.dispose();
-      if (path === file) {
-        setPath("");
+      setOpenFiles(remaining);
+      recentFiles.current = recentFiles.current.filter(file => !targets.has(file));
+      if (targets.has(activeFile)) {
+        setPath(survivor);
         setDiff(null);
+        selectedChange.current = null;
         setConflict(null);
         setDirty(false);
+        if (survivor) await restoreView(survivor);
+      }
+      for (const file of targets) {
+        buffers.current.get(file)?.model.dispose();
+        buffers.current.delete(file);
       }
       return true;
+    } catch (error) {
+      report(error);
+      return false;
     } finally {
       closeInFlight.current = false;
       setFileClosing(false);
       editor.current?.updateOptions({ readOnly: false });
+      focusAfterClose.current = true;
     }
+  }
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (!active || !editorVisible || !event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.key.toLowerCase() !== "w") return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[role=dialog], [role=alertdialog], [role=menu]") ||
+        (target?.closest("input, textarea, select, [contenteditable=true]") && !target.closest(".monaco-editor"))) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!closeInFlight.current && !saveInFlight.current && !conflict) void closeFiles(path ? [path] : []);
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  });
+  function dismissTabMenu() {
+    const file = tabMenu?.file;
+    setTabMenu(null);
+    requestAnimationFrame(() => {
+      const tabs = content.current?.querySelectorAll<HTMLButtonElement>("[role=tab]");
+      Array.from(tabs ?? []).find(tab => tab.title === root + "/" + file)?.focus();
+    });
   }
   async function fileOperation(
     kind: "move" | "trash" | "paste" | "duplicate" | "drag-move" | "drag-copy" | "import",
@@ -741,7 +797,7 @@ function CheckoutView({
     }
   }
   fileOpeners.set(root, async request => {
-    if (request.root !== root) return false;
+    if (request.root !== root || closeInFlight.current) return false;
     // shortcut: both intents retain tabs in this foundation slice; preview replacement belongs to the preview slice.
     return request.view === "file"
       ? select(request.path)
@@ -753,8 +809,13 @@ function CheckoutView({
     project,
     close: async (discards) => {
       if (closeInFlight.current) return false;
-      for (const file of buffers.current.keys()) if (!(await closeFile(file, false, discards))) return false;
-      return true;
+      if (saveInFlight.current) return false;
+      closeInFlight.current = true;
+      setFileClosing(true);
+      try {
+        for (const file of buffers.current.keys()) if (!(await prepareFileClose(file, discards))) return false;
+        return true;
+      } finally { closeInFlight.current = false; setFileClosing(false); }
     },
   });
   return (
@@ -866,16 +927,48 @@ function CheckoutView({
           </>
         )}
       </aside>
-      <section className="content" aria-label="Main editor">
+      <section ref={content} tabIndex={-1} className="content" aria-label="Main editor">
         {mode !== "Chats" && (
           <>
             <div className="file-tabs" role="tablist" aria-label="Open files">
               {openFiles.map(file => (
-                <button key={file} role="tab" aria-selected={path === file}
+                <span key={file} className="file-tab">
+                <button role="tab" aria-selected={path === file}
                   title={root + "/" + file} disabled={saving || fileClosing || !!conflict}
-                  onClick={() => void restoreView(file)}>{file}</button>
+                  onContextMenu={event => {
+                    event.preventDefault(); setTabMenu({ file, order: [...openFiles] });
+                  }} onKeyDown={event => {
+                    if (event.shiftKey && event.key === "F10") {
+                      event.preventDefault(); setTabMenu({ file, order: [...openFiles] });
+                    }
+                  }} onClick={() => void restoreView(file)}>{file}</button>
+                <button aria-label={"Close " + file} disabled={saving || fileClosing || !!conflict}
+                  onClick={() => void closeFiles([file])}>×</button>
+                </span>
               ))}
             </div>
+            {tabMenu && <div role="menu" aria-label={"File tab actions for " + tabMenu.file}
+              className="files-menu" onBlur={event => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setTabMenu(null);
+              }} onKeyDown={event => {
+                if (event.key === "Escape") { event.preventDefault(); dismissTabMenu(); }
+                if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+                  event.preventDefault();
+                  const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+                  const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                  items[event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 :
+                    (index + (event.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+                }
+              }}>
+              {["Close", "Close Others", "Close to the Right", "Close All"].map((action, index) =>
+                <button key={action} role="menuitem" autoFocus={index === 0} onClick={() => {
+                  const { file, order } = tabMenu;
+                  const files = action === "Close" ? [file] : action === "Close Others" ? order.filter(p => p !== file) :
+                    action === "Close to the Right" ? order.slice(order.indexOf(file) + 1) : order;
+                  dismissTabMenu();
+                  void closeFiles(files);
+                }}>{action}</button>)}
+            </div>}
             <div className="toolbar">
               <span>
                 {diff?.title || (path && view !== "file" ? view + " · " + path : path) || "No file selected"}
@@ -901,7 +994,7 @@ function CheckoutView({
                 </Button>
               )}
               {path && (
-                <Button disabled={saving || fileClosing} onClick={() => void closeFile(path)}>
+                <Button disabled={saving || fileClosing} onClick={() => void closeFiles([path])}>
                   Close file
                 </Button>
               )}
