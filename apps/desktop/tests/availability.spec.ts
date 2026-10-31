@@ -315,6 +315,11 @@ test("a saved secondary checkout can recover and save its buffer after restartin
     }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.getByRole("treeitem", { name: "a.txt", exact: true })).toBeVisible();
+    await app.evaluate(({ dialog }, checkout) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [checkout] });
+    }, secondary);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await expect(page.locator("header")).toContainText(secondary);
     // Seed an acknowledged recovery draft through the public persistence contract.
     await page.evaluate(
       async ({ root, secondary }) => {
@@ -322,7 +327,8 @@ test("a saved secondary checkout can recover and save its buffer after restartin
         await window.escode.chat("draft", root, chat.id, "secondary chat draft");
         const disk = await window.escode.project("read", secondary, "a.txt");
         const { state } = await window.escode.lifecycle("load");
-        state.views[root] = { mode: "Files", checkout: secondary, roots: [root, secondary] };
+        state.views[root] = { mode: "Files" };
+        state.selected = secondary;
         state.views[secondary] = { path: "a.txt" };
         state.drafts = [
           { root: secondary, path: "a.txt", text: "secondary recovered edits", disk },

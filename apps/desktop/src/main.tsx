@@ -838,24 +838,15 @@ function ProjectView({
   initial,
   active,
   onActivity,
+  onStatus,
 }: {
   initial: Status;
   active: boolean;
   onActivity: (activity: string) => void;
+  onStatus: (status: Status) => void;
 }) {
-  const [mode, setMode] = useMemory(initial.project, "mode", "Files");
-  const [checkout, setCheckout] = useMemory(initial.project, "checkout", initial.root);
-  const [roots, setRoots] = useMemory(initial.project, "roots", [initial.root]);
-  const [branches, setBranches] = useState<Record<string, string>>({
-    [initial.root]: initial.branch,
-  });
-  const onStatus = React.useCallback(
-    (value: Status) =>
-      setBranches((old) =>
-        old[value.root] === value.branch ? old : { ...old, [value.root]: value.branch },
-      ),
-    [],
-  );
+  const checkout = initial.root;
+  const [mode, setMode] = useMemory(checkout, "mode", "Files");
   const [activity, setActivity] = useState("");
   const [blocked, setBlocked] = useState<Record<string, boolean>>({});
   const onBlocked = React.useCallback(
@@ -863,16 +854,11 @@ function ProjectView({
       setBlocked((old) => (old[root] === value ? old : { ...old, [root]: value })),
     [],
   );
-  const sidebarId = "chats-" + encodeURIComponent(initial.project);
-  const selectCheckout = (root: string) => {
-    setRoots((old) => (old.includes(root) ? old : [...old, root]));
-    setCheckout(root);
-  };
+  const sidebarId = "chats-" + encodeURIComponent(checkout);
   useEffect(() => {
     const reveal = (event: Event) => {
       const detail = (event as CustomEvent).detail;
-      if (detail.project === initial.project) {
-        selectCheckout(detail.root);
+      if (detail.root === checkout) {
         setMode("Files");
       }
     };
@@ -880,7 +866,7 @@ function ProjectView({
     return () => window.removeEventListener("reveal-file", reveal);
   }, []);
   const [chatStore, { chats }] = useProjectChats(initial.project);
-  const [selectedChat, setSelectedChat] = useMemory(initial.project, "chat", "");
+  const [selectedChat, setSelectedChat] = useMemory(checkout, "chat", "");
   const chatNavigation = useRef(0);
   useEffect(() => {
     chatNavigation.current++;
@@ -888,23 +874,29 @@ function ProjectView({
   const selectChat = async (id: string) => {
     chatNavigation.current++;
     const chat = chats.find((c) => c.id === id);
-    if (chat && chat.phase !== "draft") selectCheckout(chat.checkout);
+    if (!chat || chat.checkout !== checkout || chat.phase === "draft" && chat.worktree) return;
     setSelectedChat(id);
     await chatStore.open(id);
   };
   const createChat = async (root: string) => {
     const generation = chatNavigation.current;
-    const chat =
-      root === checkout
-        ? await window.escode.chat("createDraft", initial.project)
-        : await window.escode.chat("create", initial.project, root);
+    memory.views[initial.project] = { ...memory.views[initial.project], checkout };
+    await persist();
+    const chat = await window.escode.chat("createDraft", initial.project);
+    await window.escode.chat("execution", initial.project, chat.id, "reuse", root, "");
     await chatStore.load();
     if (chatNavigation.current !== generation) return;
-    if (chat.phase !== "draft") selectCheckout(chat.checkout);
-    await selectChat(chat.id);
+    if (root !== checkout) {
+      memory.agentsChat = chat.id;
+      await persist();
+      window.dispatchEvent(new Event("draft-context-changed"));
+      return;
+    }
+    setSelectedChat(chat.id);
+    await chatStore.open(chat.id);
   };
   useEffect(() => {
-    const all = chats;
+    const all = chats.filter(c => c.checkout === checkout);
     const value = all.some((s) => s.needsInput)
       ? "Needs input"
       : all.some((s) => s.busy)
@@ -928,20 +920,18 @@ function ProjectView({
           </Button>
         ))}
         <span className="directory">
-          Checkout: {branches[checkout] ?? "Loading branch…"} · {checkout}
+          Checkout: {initial.branch} · {checkout}
         </span>
       </nav>
-      {roots.map((root) => (
         <CheckoutView
-          key={root}
-          root={root}
+          key={checkout}
+          root={checkout}
           project={initial.project}
           mode={mode}
-          active={active && root === checkout}
+          active={active}
           onBlocked={onBlocked}
           onStatus={onStatus}
         />
-      ))}
       <div className="workspace" hidden={mode !== "Chats"}>
         <aside id={sidebarId} />
         <section className="content">
@@ -983,15 +973,17 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
   const [error, setError] = useState(errors.join("\n"));
   const [closing, setClosing] = useState(false);
   const closeInFlight = useRef(false);
-  async function close(project?: string) {
+  async function close(root?: string) {
     if (closeInFlight.current) return;
     closeInFlight.current = true;
     setClosing(true);
     try {
+      const project = root ? projects.find(p => p.root === root)?.project : undefined;
+      if (root && !project) return;
       if (!(await window.escode.lifecycle("prepare", project))) return;
       const discards: (() => () => void)[] = [];
-      for (const entry of closers.values()) {
-        if ((!project || entry.project === project) && !(await entry.close(discards))) return;
+      for (const [checkout, entry] of closers) {
+        if ((!root || checkout === root) && !(await entry.close(discards))) return;
       }
       await flush();
       const previousProjects = memory.projects,
@@ -999,8 +991,8 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
         previousDrafts = memory.drafts;
       try {
         if (project) {
-          memory.projects = memory.projects.filter((p) => p.project !== project);
-          if (memory.selected === project) memory.selected = "agents";
+          memory.projects = memory.projects.filter((p) => p.root !== root);
+          if (memory.selected === root) memory.selected = "agents";
           await persist();
         }
         const resetDiscardedBuffers = discards.map((discard) => discard());
@@ -1015,7 +1007,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
         throw error;
       }
       if (project) {
-        setProjects((old) => old.filter((p) => p.project !== project));
+        setProjects((old) => old.filter((p) => p.root !== root));
         setSelected(memory.selected);
       }
     } catch (e) {
@@ -1027,7 +1019,7 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
   }
   useEffect(() => window.escode.onClose(() => void close()), [projects]);
   useEffect(() => {
-    const reveal = (event: Event) => setSelected((event as CustomEvent).detail.project);
+    const reveal = (event: Event) => setSelected((event as CustomEvent).detail.root);
     window.addEventListener("reveal-file", reveal);
     const listener = (event: Event) =>
       setError("Recovery draft could not be saved: " + (event as CustomEvent).detail);
@@ -1041,34 +1033,31 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
     memory.selected = selected;
     void persist();
   }, [selected]);
+  useEffect(() => {
+    const openCheckout = (event: Event) => { void open((event as CustomEvent).detail); };
+    window.addEventListener("open-checkout", openCheckout);
+    return () => window.removeEventListener("open-checkout", openCheckout);
+  }, []);
+  const updateStatus = React.useCallback((value: Status) => {
+    setProjects(old => old.map(p => p.root === value.root && p.branch !== value.branch ? value : p));
+  }, []);
   const callbacks = useRef(new Map<string, (value: string) => void>());
-  async function open() {
+  async function open(target?: { project: string; id: string }) {
     try {
-      const value = await window.escode.project("open");
+      const value = target
+        ? await window.escode.project("open-checkout", target.project, target.id)
+        : await window.escode.project("open");
       if (!value) return;
       setError("");
-      setProjects((old) =>
-        old.some((p) => p.project === value.project)
-          ? old.map((p) => (p.project === value.project && p.approvalRequired ? value : p))
-          : [
-              ...old,
-              {
-                ...value,
-                root:
-                  memory.savedProjects?.find((p) => p.project === value.project)?.root ??
-                  value.root,
-              },
-            ],
-      );
-      if (!memory.projects.some((p) => p.project === value.project)) {
-        const saved = memory.savedProjects?.find((p) => p.project === value.project);
-        memory.projects.push(saved ?? { project: value.project, root: value.root });
-      }
+      setProjects((old) => old.some(p => p.root === value.root)
+        ? old.map(p => p.root === value.root ? value : p) : [...old, value]);
+      if (!memory.projects.some(p => p.root === value.root))
+        memory.projects.push({ project: value.project, root: value.root });
       memory.savedProjects ??= [];
       if (!memory.savedProjects.some((p) => p.project === value.project))
         memory.savedProjects.push({ project: value.project, root: value.root });
       void persist();
-      setSelected(value.project);
+      setSelected(value.root);
     } catch (e) {
       setError(String(e));
     }
@@ -1085,28 +1074,29 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
           Agents
         </Button>
         {projects.map((p) => (
-          <div className="project-tab" key={p.project} data-active={selected === p.project}>
+          <div className="project-tab" key={p.root} data-active={selected === p.root}>
           <Button
-            key={p.project}
-            aria-label={p.project.split("/").at(-1) + (activity[p.project] ? " · " + activity[p.project] : "")}
-            aria-pressed={selected === p.project}
-            title={`${p.project} · Middle-click or press Delete to close editor`}
+            key={p.root}
+            aria-label={p.project.split("/").at(-1) + (projects.filter(other => other.project === p.project).length > 1 ? " · " + p.branch + " · " + p.root : "") + (activity[p.root] ? " · " + activity[p.root] : "")}
+            aria-description={`${p.branch} · ${p.root}`}
+            aria-pressed={selected === p.root}
+            title={`${p.project} · ${p.branch} · ${p.root} · Middle-click or press Delete to close editor`}
             onAuxClick={(event) => {
-              if (event.button === 1) void close(p.project);
+              if (event.button === 1) void close(p.root);
             }}
             onKeyDown={(event) => {
               if (event.key === "Delete" || event.key === "Backspace") {
                 event.preventDefault();
-                void close(p.project);
+                void close(p.root);
               }
             }}
-            onClick={() => setSelected(p.project)}
+            onClick={() => setSelected(p.root)}
           >
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m12 3 9 5v8l-9 5-9-5V8Z M3 8l9 5 9-5 M12 13v8" /></svg>
-            <span className="project-tab-name">{p.project.split("/").at(-1)}</span>
-            {activity[p.project] && <span className="project-tab-activity" title={activity[p.project]} aria-label={activity[p.project]} />}
+            <span className="project-tab-name">{p.project.split("/").at(-1)}{projects.filter(other => other.project === p.project).length > 1 ? ` · ${p.branch} · ${p.root.split("/").at(-1)}` : ""}</span>
+            {activity[p.root] && <span className="project-tab-activity" title={activity[p.root]} aria-label={activity[p.root]} />}
           </Button>
-          <Button className="project-tab-close" aria-label={`Close ${p.project.split("/").at(-1)} project`} title="Close project editor" onClick={() => void close(p.project)}>
+          <Button className="project-tab-close" aria-label={`Close ${p.project.split("/").at(-1)} project`} aria-description={`${p.branch} · ${p.root}`} title={`Close checkout editor · ${p.root}`} onClick={() => void close(p.root)}>
             <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m4 4 8 8 M12 4l-8 8" /></svg>
           </Button>
           </div>
@@ -1118,16 +1108,17 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
       {error && <p role="alert">{error}</p>}
       {selected === "agents" && <AgentsView />}
       {projects.map((p) => {
-        if (!callbacks.current.has(p.project))
-          callbacks.current.set(p.project, (value) =>
-            setActivity((old) => (old[p.project] === value ? old : { ...old, [p.project]: value })),
+        if (!callbacks.current.has(p.root))
+          callbacks.current.set(p.root, (value) =>
+            setActivity((old) => (old[p.root] === value ? old : { ...old, [p.root]: value })),
           );
         return (
           <ProjectView
-            key={p.project + (p.approvalRequired ? ":approval" : "")}
+            key={p.root + (p.approvalRequired ? ":approval" : "")}
             initial={p}
-            active={selected === p.project}
-            onActivity={callbacks.current.get(p.project)!}
+            active={selected === p.root}
+            onActivity={callbacks.current.get(p.root)!}
+            onStatus={updateStatus}
           />
         );
       })}

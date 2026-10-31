@@ -175,7 +175,8 @@ export function ChatView({
   useEffect(() => {
     void window.escode.chat("targets").then(setTargets);
   }, []);
-  const record = chats.find((c) => c.id === selected);
+  const scopedChats = global ? chats : chats.filter(c => c.checkout === checkout && (c.phase !== "draft" || !c.worktree));
+  const record = scopedChats.find((c) => c.id === selected);
   const unsent = record?.phase === "draft";
   const error = errors[selected] || errors[""] || "";
   const working = !!pending[selected];
@@ -197,7 +198,7 @@ export function ChatView({
     run(async () => {
       const moved = await window.escode.chat("context", project, selected, target);
       await store.load();
-      if (target !== project) {
+      if (target !== project || !global && moved.checkout !== checkout) {
         memory.agentsChat = moved.id;
         memory.selected = "agents";
         await persist();
@@ -221,7 +222,7 @@ export function ChatView({
               New chat on current checkout
             </Button>
             <ul>
-              {[...chats].sort(compareChats).map((c) => (
+              {[...scopedChats].sort(compareChats).map((c) => (
                 <li key={c.id}>
                   <Button aria-pressed={selected === c.id} onClick={() => void select(c.id)}>
                     Chat {chats.findIndex((chat) => chat.id === c.id) + 1}
@@ -238,7 +239,7 @@ export function ChatView({
           document.getElementById(sidebarId)!,
         )}
       <>
-        {!selected ? (
+        {!record ? (
           <p>Create or select a saved chat to begin. Choose the current checkout or a worktree.</p>
         ) : (
           <>
@@ -264,10 +265,15 @@ export function ChatView({
             )}
             {project !== null &&
               record?.checkout &&
-              (!record.worktree || record.worktree.reservation) && (
+              (record.phase !== "draft" || !record.worktree) && (
                 <CheckoutBranch root={record.checkout} />
               )}
             <div className="chat-actions">
+              {global && project && record?.checkout && !record.removed && (record.phase !== "draft" || !record.worktree) && (
+                <Button onClick={() => window.dispatchEvent(new CustomEvent("open-checkout", { detail: { project, id: record.id } }))}>
+                  Open checkout
+                </Button>
+              )}
               <Button
                 disabled={working}
                 onClick={() => void store.reconnect(selected)}
@@ -400,7 +406,12 @@ export function ChatView({
                   busy={working}
                   choose={(mode, value, commit) =>
                     run(async () => {
-                      await window.escode.chat("execution", project, selected, mode, value, commit);
+                      const moved = await window.escode.chat("execution", project, selected, mode, value, commit);
+                      if (!global && (moved.checkout !== checkout || moved.worktree)) {
+                        memory.agentsChat = moved.id;
+                        await persist();
+                        window.dispatchEvent(new Event("draft-context-changed"));
+                      }
                       await store.load();
                     })
                   }

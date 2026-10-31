@@ -346,7 +346,15 @@ createInterface({input:process.stdin}).on('line',line=>{
           dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
         }, root);
         await page.getByRole("button", { name: "Open project…" }).click();
+        await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toHaveCount(0);
+        await app.evaluate(({ dialog }, checkout) => {
+          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [checkout] });
+        }, managed!.root);
+        await page.getByRole("button", { name: "Open project…" }).click();
+        await expect(page.locator("header")).toContainText(managed!.root);
+        await page.getByRole("button", { name: "Chats", exact: true }).click();
         await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toBeVisible();
+        await page.getByRole("button", { name: "Chat 2", exact: true }).click();
       }
       await expect(page.getByRole("status")).toHaveText("Ready");
       expect(await readFile(join(root, "turns"), "utf8")).toBe("sent\n");

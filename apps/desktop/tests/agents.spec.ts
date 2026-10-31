@@ -98,6 +98,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
       }
     });
     expect(denied).toBe(true);
+    await expect(page.evaluate(() => window.escode.project("open-checkout", "/unapproved", "forged-chat"))).rejects.toThrow("approve");
     await rows.filter({ hasText: "alpha" }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("alpha text");
     await expect(page.locator(".transcript:visible")).toContainText("Saved history");
@@ -108,6 +109,11 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
       .click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("dirty alpha");
     await expect(page.locator(".view-nav:visible")).toContainText(a);
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Chat 1", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await rows.filter({ hasText: "alpha" }).click();
+    await page.getByRole("button", { name: "Open checkout", exact: true }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "Chat 1", exact: true }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
@@ -134,7 +140,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("beta text");
     await expect(
       page.getByRole("navigation", { name: "Projects" }).locator("button[aria-pressed]"),
-    ).toHaveCount(2);
+    ).toHaveCount(3);
     await expect(page.locator(".transcript:visible")).toContainText("Saved history line 149");
     await page.setViewportSize({ width: 1100, height: 768 });
     const panelGeometry = () =>
@@ -249,7 +255,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await page.getByRole("textbox", { name: "Message Codex" }).fill("beta retained");
     await page
       .getByRole("navigation", { name: "Projects" })
-      .getByRole("button", { name: "alpha", exact: true })
+      .getByRole("button", { name: /^alpha ·/ }).first()
       .click();
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await app.evaluate(({ dialog }) => {
@@ -283,7 +289,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await expect(page.getByRole("status")).toHaveText("Ready");
     expect(await readFile(join(dir, "events"), "utf8")).not.toContain("turn/start");
     const state = JSON.parse(await readFile(join(user, "client-workspace-v1.json"), "utf8"));
-    expect(state.views[a].checkout).toBe(worktree);
+    expect(state.projects).toEqual([{ project: a, root: a }, { project: a, root: worktree }]);
     expect(state.drafts[0].text).toBe("dirty alpha");
   } finally {
     await app

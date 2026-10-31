@@ -607,6 +607,7 @@ export interface ProjectBridge {
     checkout: string,
   ): Promise<ReturnType<Checkout["repositoryGit"]["managedWorktrees"]>>;
   (operation: "worktree-remove", checkout: string, root: string): Promise<boolean>;
+  (operation: "open-checkout", project: string, chat: string): Promise<Awaited<ReturnType<Checkout["status"]>>>;
   (operation: "open"): Promise<Awaited<ReturnType<Checkout["status"]>> | null>;
   (
     operation: "worktree-options",

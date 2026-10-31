@@ -393,6 +393,22 @@ app.whenReady().then(async () => {
       event.senderFrame.url !== documentURL
     )
       throw Error("Invalid sender");
+    if (operation === "open-checkout" && args.length === 2) {
+      const [identity, id] = args;
+      if (typeof identity !== "string" || typeof id !== "string") throw Error("Invalid checkout target");
+      if (!(await workspace.approved()).some(p => p.project === identity))
+        throw Error("Open and approve this project first.");
+      const chat = await store.get(identity, id);
+      if (!chat.checkout || chat.removed || chat.phase === "draft" && chat.worktree)
+        throw Error("This chat has no existing checkout to open.");
+      const directoryError = await store.validateDirectory(chat);
+      if (directoryError) throw Error(directoryError);
+      const target = await checkout(chat.checkout);
+      target.checkoutIdentity();
+      if (target.repositoryGit.repository() !== identity) throw Error("Checkout belongs to another project.");
+      await workspace.approve(identity, target.root);
+      return target.status();
+    }
     if (operation === "open" && args.length === 0) {
       const result = await dialog.showOpenDialog(window, { properties: ["openDirectory"] });
       if (result.canceled) return null;

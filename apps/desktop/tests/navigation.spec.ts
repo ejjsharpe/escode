@@ -35,7 +35,7 @@ test("projects and checkout selections retain buffers, drafts and mode without d
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
       }, root);
       await page.getByRole("button", { name: "Open project…" }).click();
-      await expect(page.locator("header")).toContainText(root === worktree ? a : root);
+      await expect(page.locator("header")).toContainText(root);
     };
     await open(a);
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
@@ -62,14 +62,16 @@ test("projects and checkout selections retain buffers, drafts and mode without d
         .locator("button[aria-pressed]")
         .filter({ hasNotText: "Agents" }),
     ).toHaveCount(2);
-    // A related checkout belongs to the existing repository tab. Seed saved chats without connecting to Codex.
+    // Each explicitly opened checkout has a fixed tab. Seed chats without connecting to Codex.
     await open(worktree);
     await expect(
       page
         .getByRole("navigation", { name: "Projects" })
         .locator("button[aria-pressed]")
         .filter({ hasNotText: "Agents" }),
-    ).toHaveCount(2);
+    ).toHaveCount(3);
+    await expect(page.getByRole("navigation", { name: "Projects" })).toContainText("alpha · other · worktree");
+    await expect(page.locator('.project-tab[data-active="true"] > button[aria-pressed]')).toHaveAttribute("aria-description", `other · ${worktree}`);
     const ids = await page.evaluate(
       async ({ a, worktree }) => {
         const first = await window.escode.chat("create", a, a);
@@ -98,20 +100,24 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await page.reload();
     await open(a);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Chat 2", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Chat 1", exact: true }).click();
+    await expect(page.getByLabel("Message Codex")).toHaveValue("original message draft");
+    await open(worktree);
+    await expect(page.locator(".view-nav:visible")).toContainText(worktree);
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Chat 1", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Chat 2", exact: true }).click();
     await expect(page.getByLabel("Message Codex")).toHaveValue("worktree message draft");
     await page.getByRole("button", { name: "Files", exact: true }).click();
-    await expect(page.locator(".view-nav:visible")).toContainText(worktree);
-    await expect(
-      page.getByRole("button", { name: "Hide Git-ignored files", exact: true }),
-    ).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByRole("button", { name: "Hide Git-ignored files", exact: true })).toHaveAttribute("aria-pressed", "false");
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText(a);
     await expect(page.getByRole("tree", { name: "Files", exact: true })).toHaveAttribute(
       "aria-activedescendant",
       worktree + ":a.txt",
     );
+    await open(a);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "Chat 1", exact: true }).click();
     await page.getByRole("button", { name: "Files", exact: true }).click();
@@ -133,10 +139,23 @@ test("projects and checkout selections retain buffers, drafts and mode without d
     await open(b);
     await page
       .getByRole("navigation", { name: "Projects" })
-      .getByRole("button", { name: "alpha", exact: true })
+      .locator("button[aria-pressed]").filter({ hasText: "changed-branch" })
       .focus();
     await page.keyboard.press("Enter");
     await expect(page.getByLabel("Message Codex")).toHaveValue("original message draft");
+    await page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "Agents", exact: true }).click();
+    await page.locator(".agent-row").filter({ hasText: "Chat 2" }).click();
+    await expect(page.getByLabel("Message Codex")).toHaveValue("worktree message draft");
+    await expect(page.locator("header")).toContainText("agents");
+    await page.getByRole("button", { name: "Open checkout", exact: true }).click();
+    await expect(page.locator("header")).toContainText(worktree);
+    await expect(page.getByRole("navigation", { name: "Projects" }).locator("button[aria-pressed]").filter({ hasNotText: "Agents" })).toHaveCount(3);
+    await expect(page.locator(".view-nav:visible")).toContainText(worktree);
+    await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
+    await expect(page.getByRole("navigation", { name: "Projects" }).locator("button[aria-pressed]").filter({ hasNotText: "Agents" })).toHaveCount(2);
+    await open(a);
+    await page.getByRole("button", { name: "Files", exact: true }).click();
+    await expect(page.locator(".monaco-editor:visible")).toContainText("alpha draft");
     await page.screenshot({ path: "test-results/navigation.png" });
   } finally {
     await app.evaluate(({ dialog }) => {

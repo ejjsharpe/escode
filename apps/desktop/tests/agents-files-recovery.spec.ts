@@ -238,6 +238,12 @@ test("closed editor retains recovered move mappings and drafts through restart a
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [linked] });
     }, linked);
     await page.getByRole("button", { name: "Open project…" }).click();
+    await expect(page.locator(".view-nav:visible")).toContainText(linked);
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, root);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await expect(page.locator("header")).toContainText(root);
     await expect(page.locator(".view-nav:visible")).toContainText(root);
     await expect(page.locator(".toolbar:visible")).toContainText("moved/a.ts");
     await expect(page.locator(".monaco-editor:visible")).toContainText("retained closed edits");
