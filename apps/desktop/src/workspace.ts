@@ -74,7 +74,7 @@ export function useMemory<K extends keyof ViewMemory>(
   };
   return [value, update] as const;
 }
-export const closers = new Map<string, { project: string; close: (discards: (() => () => void)[]) => Promise<boolean> }>();
+export const closers = new Map<string, { project: string; capture: () => import("./close-preservation").CloseCapture | null }>();
 
 // One exact checkout target; lookup must validate scope before calling this client path.
 export type FileOpenRequest = {
