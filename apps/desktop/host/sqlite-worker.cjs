@@ -69,6 +69,7 @@ try {
   db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA checkpoint_fullfsync=ON');
   const settings = { journalMode: db.prepare('PRAGMA journal_mode').get().journal_mode, synchronous: db.prepare('PRAGMA synchronous').get().synchronous, checkpointFullfsync: db.prepare('PRAGMA checkpoint_fullfsync').get().checkpoint_fullfsync };
   if (settings.journalMode !== 'wal' || settings.synchronous !== 1 || settings.checkpointFullfsync !== 1) throw Error('SQLite durability settings unavailable');
+  db.exec('CREATE TABLE IF NOT EXISTS checkpoint_activity (chatId TEXT PRIMARY KEY, touched INTEGER NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS rewinds (id TEXT PRIMARY KEY, body TEXT NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS client_recovery (clientId TEXT NOT NULL, kind TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(clientId, kind))');
   db.prepare('SELECT id, chatId, body FROM checkpoints LIMIT 1').all();
@@ -90,7 +91,43 @@ try {
 if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body }) => {
   try {
     let value;
-    if (operation === 'rewindRead') {
+    if (operation === 'checkpointActivity') {
+      if (!Number.isSafeInteger(body.now) || body.now < 0) throw Error('Invalid activity time');
+      db.prepare('INSERT INTO checkpoint_activity VALUES (?, ?) ON CONFLICT(chatId) DO UPDATE SET touched=max(touched,excluded.touched)').run(commandId, body.now);
+    } else if (operation === 'expireCheckpoints') {
+      if (!Number.isSafeInteger(body.now) || body.now < 0 || !Array.isArray(body.active)) throw Error('Invalid cleanup request');
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        // Recovery/uncertain evidence is deliberately conservative: never infer safety from missing metadata.
+        const recovery = db.prepare('SELECT kind, body FROM client_recovery').all().some(row => {
+          const saved = JSON.parse(row.body);
+          if (row.kind === 'approvals') return false; // Checkout authority does not depend on historical file contents.
+          return row.kind === 'workspace' ? !!saved?.drafts?.length : saved != null && JSON.stringify(saved) !== '{}' && JSON.stringify(saved) !== '[]';
+        });
+        const uncertain = db.prepare("SELECT 1 FROM rewinds WHERE json_extract(body,'$.result.status')='uncertain' LIMIT 1").get();
+        value = 0;
+        if (!recovery && !uncertain && !db.prepare('SELECT 1 FROM preparation_results LIMIT 1').get()) {
+          const rows = db.prepare(`SELECT c.id, c.chatId, c.body FROM checkpoints c
+            WHERE json_extract(c.body,'$.availability')='available' AND (? IS NULL OR c.id=?)
+            AND coalesce((SELECT touched FROM checkpoint_activity WHERE chatId=c.chatId),
+              (SELECT max(json_extract(body,'$.createdAt')) FROM checkpoints WHERE chatId=c.chatId)) <= ?
+            AND NOT EXISTS (SELECT 1 FROM checkpoints pending WHERE pending.chatId=c.chatId AND json_extract(pending.body,'$.completion')='pending')
+            AND c.chatId NOT IN (SELECT value FROM json_each(?))
+            AND NOT EXISTS (SELECT 1 FROM submissions WHERE json_extract(body,'$.command.id')=c.chatId
+              AND json_extract(body,'$.status') NOT IN ('accepted','rejected'))
+            ORDER BY c.rowid LIMIT 100`).all(body.boundary ?? null, body.boundary ?? null, body.now - 30 * 86400000, JSON.stringify(body.active));
+          for (const row of rows) {
+            const point = JSON.parse(row.body);
+            delete point.files;
+            point.availability = 'unavailable';
+            point.reason = 'File checkpoint expired after 30 days of chat inactivity';
+            db.prepare('UPDATE checkpoints SET body=? WHERE id=?').run(JSON.stringify(point), row.id);
+            value++;
+          }
+        }
+        db.exec('COMMIT');
+      } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
+    } else if (operation === 'rewindRead') {
       const row = db.prepare('SELECT body FROM rewinds WHERE id=?').get(commandId);
       value = row ? JSON.parse(row.body) : null;
     } else if (operation === 'rewindWrite') {
@@ -121,6 +158,7 @@ if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, r
         const prior = row && JSON.parse(row.body);
         if (!prior || prior.completion !== 'pending' || prior.chatId !== body.chatId || prior.threadId !== body.threadId || prior.checkout !== body.checkout || prior.commandId !== body.commandId) throw Error('Completion boundary mismatch or already finalized');
       }
+      db.prepare('INSERT INTO checkpoint_activity VALUES (?, ?) ON CONFLICT(chatId) DO UPDATE SET touched=max(touched,excluded.touched)').run(body.chatId, body.createdAt ?? Date.now());
       const encoded = JSON.stringify(body);
       const used = db.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))),0) AS n FROM checkpoints').get().n;
       if (used + Buffer.byteLength(encoded) > (body.availability === 'available' ? 50331648 : 67108864)) throw Error('Checkpoint storage capacity exhausted');

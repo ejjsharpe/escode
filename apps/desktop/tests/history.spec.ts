@@ -3,11 +3,12 @@ import { mkdtemp, mkdir, writeFile, rm, realpath, stat, readFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
 import { Chats } from "../host/chat";
 import { captureTurnCheckpoint } from "../host/checkpoints";
 import { launchDesktop } from "./desktop";
 
-for (const mode of ["navigation", "streaming", "files", "branch", "branch-after", "restoration"] as const) test(`saved new-format history: ${mode}`, async () => {
+for (const mode of ["navigation", "streaming", "files", "branch", "branch-after", "restoration", "expiry"] as const) test(`saved new-format history: ${mode}`, async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-history-ui-")));
   const user = join(dir, "user"), root = join(dir, "project"), tools = join(dir, "tools");
   await mkdir(user); await mkdir(tools); execFileSync("git", ["init", root]);
@@ -29,7 +30,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='thread/turns/list' && m.params.cursor==='second')setTimeout(reply,1000);else reply();
  if(m.method==='turn/start')for(const method of ['turn/started','turn/completed'])process.stdout.write(JSON.stringify({method,params:{threadId:'saved-provider',turn:{id:'sent',status:'completed'}}})+'\\n');
 });`, { mode: 0o700 });
-  if ((mode === "files" || mode === "branch" || mode === "branch-after" || mode === "restoration")) {
+  if ((mode === "files" || mode === "expiry" || mode === "branch" || mode === "branch-after" || mode === "restoration")) {
     await writeFile(join(root, "saved.txt"), "base saved text");
     execFileSync("git", ["-C", root, "add", "saved.txt"]);
     execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "base"]);
@@ -56,7 +57,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
     await page.getByRole("button", { name: "Open project…" }).click();
     await expect(page.getByRole("navigation", { name: "Projects" }).getByRole("button", { name: "project", exact: true })).toHaveAttribute("aria-pressed", "true");
-    const context = (mode === "files" || mode === "branch" || mode === "branch-after") ? root : null;
+    const context = (mode === "files" || mode === "expiry" || mode === "branch" || mode === "branch-after") ? root : null;
     const chatId = restoredChat ?? await page.evaluate(async ({ context, branching }) => {
       const draft = await window.escode.chat("createDraft", context);
       await window.escode.chat("send", context, draft.id, "fixture first send");
@@ -82,6 +83,22 @@ createInterface({input:process.stdin}).on('line',line=>{
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await page.locator(".agent-row").click();
     await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
+    if (mode === "expiry") {
+      const db = new DatabaseSync(join(user, "durable-chats-v1.sqlite-state-v1/state.sqlite"));
+      try { db.prepare("UPDATE checkpoint_activity SET touched=? WHERE chatId=?").run(Date.now() - 31 * 86400000, chatId); } finally { db.close(); }
+      await page.getByRole("textbox", { name: "Message Codex" }).fill("retained expiry draft");
+      await page.getByText("Historical boundaries", { exact: true }).click();
+      await page.getByRole("button", { name: "Load boundaries", exact: true }).click();
+      await page.getByRole("button", { name: /^After turn/ }).first().click();
+      const inspection = page.getByRole("region", { name: "Boundary inspection", exact: true });
+      await expect(inspection.getByText(/Saved files: unavailable.*expired/)).toBeVisible();
+      await expect(inspection.getByText("first saved page", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Inspect saved files", exact: true }).click();
+      await expect(page.getByRole("region", { name: "Saved-file inspection", exact: true })).toContainText("expired after 30 days");
+      await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("retained expiry draft");
+      await page.screenshot({ path: "test-results/checkpoint-expiry.png" });
+      return;
+    }
     if (mode === "branch" || mode === "branch-after") {
       await page.getByRole("textbox", { name: "Message Codex" }).fill("retained branch draft");
       await page.getByText("Historical boundaries", { exact: true }).click();
