@@ -126,7 +126,7 @@ send({id:m.id,result});});`,
     await page.screenshot({ path: "test-results/escode-35-draft.png" });
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: beta }).click();
+    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(beta);
     await expect(page.locator(".agent-row").filter({ hasText: "Chat 2" })).toHaveAttribute(
       "aria-pressed",
       "true",

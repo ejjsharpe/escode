@@ -83,7 +83,7 @@ send({id:m.id,result});});`,
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option", { name: "No project", exact: true }).click();
+
     await expect(page.locator(".agent-row").filter({ hasText: "Chat 2" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -102,7 +102,7 @@ send({id:m.id,result});});`,
     expect(await readdir(a.checkout)).not.toContain(".git");
     await page.getByRole("button", { name: "Allow once", exact: true }).click();
     await page.getByRole("button", { name: "Stop", exact: true }).click();
-    await page.locator(".agent-row").filter({ hasText: "Chat 1" }).click();
+    await page.locator(".agent-row").filter({ hasText: "first scratch" }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Allow once", exact: true }).click();
     await message().fill("unsent followup");
@@ -196,9 +196,9 @@ test("one repository offers No project and text-bearing local drafts move throug
     await expect(page.getByRole("button", { name: "New chat", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     await expect(
-      page.getByRole("combobox", { name: "New chat project", exact: true }),
+      page.getByRole("combobox", { name: "Project context", exact: true }),
     ).toBeVisible();
-    await page.getByRole("dialog", { name: "Choose project" }).getByRole("option").filter({ hasText: repo }).click();
+    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(repo);
     await expect(
       page.locator(".agent-row").filter({ hasText: "Chat 1" }).filter({ hasText: "Alpha" }),
     ).toHaveAttribute("aria-pressed", "true");
