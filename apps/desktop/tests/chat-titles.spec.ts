@@ -105,6 +105,8 @@ createInterface({input:process.stdin}).on('line',line=>{
       await expect(page.locator('.agent-row strong')).toHaveText('Fix sidebar chat titles');
       await rm(join(dir, 'release'));
     }
+    const sentRecency = (await page.evaluate(readChats, null))[0].latestUserMessageAt;
+    expect(sentRecency).toBeGreaterThan(0);
     await writeFile(join(dir, 'mode'), 'delay');
     await page.evaluate(() => window.escode.chat('regenerateTitle', null, 'generation'));
     await expect.poll(async () => (await events()).filter(e => e.title && e.method === 'turn/start').length).toBe(2);
@@ -125,7 +127,9 @@ createInterface({input:process.stdin}).on('line',line=>{
       await expect.poll(async () => (await events()).filter(e => e.title && e.method === 'turn/start').length).toBe(mode === 'failure' ? 5 : 6);
       await expect(page.locator('.agent-row strong')).toHaveText('Improve checkout navigation');
     }
-    expect((await page.evaluate(readChats, null))[0].createdAt).toBe(123);
+    const saved = (await page.evaluate(readChats, null))[0];
+    expect(saved.createdAt).toBe(123);
+    expect(saved.latestUserMessageAt).toBe(sentRecency);
     expect((await events()).filter(e => !e.title && e.method === 'turn/start')).toHaveLength(1);
     await page.screenshot({ path: 'test-results/chat-titles.png' });
   } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }

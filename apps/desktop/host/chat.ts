@@ -5,7 +5,6 @@ import { dirname, join } from "node:path";
 import type { Checkout } from "./project";
 import { randomUUID } from "node:crypto";
 export type SavedChat = {
-  title?: string;
   titleSource?: string;
   titleRequest?: string;
   id: string;

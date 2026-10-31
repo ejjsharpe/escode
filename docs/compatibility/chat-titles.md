@@ -26,7 +26,7 @@ bounded initial provider-history page; absent history reports unavailability.
   late results after Rename and after a newer Regenerate; unchanged creation recency;
   exactly one task `turn/start`; shared project/Agents labels and long manual titles
   surviving restart. Fixtures use isolated directories and user data.
-- Full host suite with two workers: 382 passed, six skipped (44 files passed,
+- Full host suite before the final recency merge, with two workers: 382 passed, six skipped (44 files passed,
   two skipped). Targeted chat, project-draft, scratch, SQLite-control and command
   admission regressions also passed: 47 passed, two skipped.
 - Typecheck, lint and desktop build pass. Screenshot reviewed from the actual
@@ -47,6 +47,11 @@ first-message fallback. A completely passing Agents regression suite is not clai
 Other #144 frame/composer/menu work remains with its owning tickets.
 
 Integration handoff: implementation began at `237ff32` in a clean isolated worktree.
-The latest local integration tip `769633c` was merged; the CSS append conflict was
-resolved by retaining both the shared sidebar rules and compact title actions.
+Local integration tips `769633c` and then `18df68f` were merged. The CSS append
+conflict retained both the shared sidebar rules and compact title actions. The
+recency merge retains the shared ChatRow, new timestamp fields and user-message
+promotion behavior, while displaying the shared title. Title operations leave the
+sent-chat recency timestamp unchanged (asserted through public summaries). All six
+title Electron scenarios, typecheck, lint and build pass after the final merge.
+Post-merge host Agents/chat regression checks: ten passed, one skipped.
 The integration branch and issue states were not modified by this ticket.
