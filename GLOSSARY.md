@@ -49,6 +49,15 @@ A saved local Git repository whose files, source changes, and project-backed cha
 **Project tab**:
 An open editor view of a project, containing Files, Source Control and Chats. Closing this view leaves the saved project and its chats available in Agents.
 
+**File tab**:
+The planned editor header for one file inside a checkout-specific project tab. Its normal editor and comparisons share that tab and the client's working-file buffer. Tabs, order, active file, selected view and editor positions are remembered independently per checkout. The [file-tab specification](docs/specifications/file-editor-tabs.md) was accepted by the user on 2026-10-31. This is separate from the parent map's ongoing checkout-tab amendment and is not implemented behavior.
+
+**Preview tab**:
+A file tab eligible for replacement by another successfully opened preview in the same checkout workspace. At most one exists in that workspace. Editing, double-clicking, Keep Open, explicit keyboard opening or reordering it makes it kept open.
+
+**Kept-open tab**:
+A file tab retained when another preview opens. New files and recovered unsaved buffers are kept open. Save does not make the tab replaceable. This is distinct from VS Code's separate sticky Pin Editor feature, deferred from the planned iteration.
+
 **Agents**:
 The permanent app-wide view of chats and chat drafts across all saved projects, including projects with closed editor tabs, and No project contexts.
 
