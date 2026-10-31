@@ -66,6 +66,30 @@ const permissionPolicy = (choice: SavedChat["nextPermission"]) => {
       : { type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false } };
 };
 export class ChatService {
+  private async configured(project: string | null): Promise<import("@escode/contracts").ChatDefaults> {
+    const app = await this.store.database.command("chatDefaults", { scope: "app" });
+    const local = project === null ? {} : await this.store.database.command("chatDefaults", { scope: "project:" + project });
+    return { ...app, ...local };
+  }
+  async defaults(project: string | null, id: string, scope: "app" | "project", value?: import("@escode/contracts").ChatDefaults) {
+    await this.environment?.authorize(project);
+    await this.store.get(project, id);
+    if (scope === "project" && project === null) throw Error("Choose a project before configuring overrides");
+    if (value) {
+      if (value.model) {
+        const catalog = await this.models(project, id);
+        const model = catalog.models.find(m => m.model === value.model);
+        if (!model || !model.efforts.includes(value.effort!)) throw Error("Choose an available model and supported effort");
+      } else if (value.effort) throw Error("Choose a model for this effort");
+      if (value.permission) {
+        const policy = await this.permissions(project, id);
+        if (policy.blocked) throw Error(policy.message);
+        permissionPolicy(value.permission);
+      }
+    }
+    return this.store.database.command("chatDefaults", { scope: scope === "app" ? "app" : "project:" + project, ...(value === undefined ? {} : { body: value }) });
+  }
+
   async permissions(project: string | null, id: string, choice?: string) {
     await this.environment?.authorize(project);
     const chat = await this.store.get(project, id);
@@ -78,15 +102,20 @@ export class ChatService {
       // Custom profiles, roots and managed policy require resolution in Codex configuration first.
       const effective = this.sessions.get(id)?.settings as { sandbox?: Record<string, unknown>; approval?: unknown } | undefined;
       const sandbox = effective?.sandbox;
-      const customSession = sandbox && (!["readOnly", "workspaceWrite", "dangerFullAccess"].includes(sandbox.type as string) || sandbox.networkAccess === true ||
+      const customSession = sandbox && (typeof sandbox === "string" ? !["read-only", "workspace-write", "danger-full-access"].includes(sandbox) : (!["readOnly", "workspaceWrite", "dangerFullAccess"].includes(sandbox.type as string) || sandbox.networkAccess === true ||
         sandbox.excludeTmpdirEnvVar === true || sandbox.excludeSlashTmp === true ||
         Object.keys(sandbox).some(key => !["type", "networkAccess", "writableRoots", "excludeTmpdirEnvVar", "excludeSlashTmp"].includes(key)) ||
         (Array.isArray(sandbox.writableRoots) && sandbox.writableRoots.length > 0) ||
-        (effective?.approval != null && !["on-request", "never"].includes(effective.approval as string)));
+        (effective?.approval != null && !["on-request", "never"].includes(effective.approval as string))));
       const blocked = !!customSession || requirements.requirements != null ||
         (c.sandbox_mode != null && !["read-only", "workspace-write", "danger-full-access"].includes(c.sandbox_mode as string)) || ["permissions", "default_permissions", "sandbox_workspace_write", "network"].some(k => c[k] != null)
         || (c.approval_policy != null && !["on-request", "never"].includes(c.approval_policy as string));
       const message = blocked ? "Custom or managed Codex policy retained. Resolve it in Codex configuration before choosing a preset." : "";
+      if (!chat.nextPermission && !chat.hasSent && !chat.threadId && !blocked) {
+        const defaults = await this.configured(project);
+        chat.nextPermission = defaults.permission ?? "full";
+        await this.store.update(project, id, { nextPermission: chat.nextPermission });
+      }
       if (choice !== undefined) {
         if (blocked) throw Error(message);
         permissionPolicy(choice as SavedChat["nextPermission"]);
@@ -101,24 +130,39 @@ export class ChatService {
     const rpc = await this.connect(chat.worktree?.source || chat.checkout || process.cwd(), () => {}, () => {});
     try {
       const models: import("@escode/contracts").ModelChoices["models"][number][] = [];
+      let providerDefault: string | undefined;
       let cursor: string | null = null;
       for (let page = 0; page < 20; page++) {
         const result = await rpc.request("model/list", { cursor, limit: 100 }) as import("./vendor/codex/src/schema").V2ModelListResponse;
         if (!Array.isArray(result.data)) throw Error("Invalid Codex model catalog");
+        providerDefault ??= result.data.find(m => m.isDefault && !m.hidden)?.model;
         models.push(...result.data.filter(m => !m.hidden).map(m => ({ model: m.model, name: m.displayName, efforts: m.supportedReasoningEfforts.map((e: { reasoningEffort: string }) => e.reasoningEffort), defaultEffort: m.defaultReasoningEffort })));
         cursor = result.nextCursor ?? null;
         if (!cursor) break;
       }
       if (cursor) throw Error("Model catalog exceeds page limit");
       let choice = chat.nextModel;
+      const memory = await this.store.database.command("chatDefaults", { scope: "remembered" }) as { model?: string; efforts?: Record<string, string> };
+      if (!choice && !chat.hasSent && !chat.threadId) {
+        const defaults = await this.configured(project);
+        const current = await this.store.database.command("chatDefaults", { scope: "current" }) as { model?: string; effort?: string };
+        const selected = defaults.model ?? current.model ?? memory.model ?? providerDefault;
+        const entry = models.find(m => m.model === selected);
+        if (selected) {
+          choice = { model: selected, effort: defaults.effort ?? (current.model === selected ? current.effort : undefined) ?? memory.efforts?.[selected] ?? entry?.defaultEffort ?? "unavailable", remembered: {} };
+          await this.store.update(project, id, { nextModel: choice });
+        }
+      }
       if (model !== undefined) {
         const selected = models.find(m => m.model === model);
         if (!selected) throw Error("Unavailable model; choose another model explicitly.");
-        const chosen = effort ?? choice?.remembered[model] ?? selected.defaultEffort;
+        const chosen = effort ?? memory.efforts?.[model] ?? choice?.remembered[model] ?? selected.defaultEffort;
         if (!selected.efforts.includes(chosen)) throw Error("Unsupported effort; choose a supported effort explicitly.");
         choice = { model, effort: chosen, remembered: { ...choice?.remembered, [model]: chosen } };
         await this.store.update(project, id, { nextModel: choice });
+        await this.store.database.command("chatDefaults", { scope: "remembered", body: { model, efforts: { ...memory.efforts, [model]: chosen } } });
       }
+      if (choice) await this.store.database.command("chatDefaults", { scope: "current", body: { model: choice.model, effort: choice.effort } });
       return { models, choice: choice ? { model: choice.model, effort: choice.effort } : null };
     } finally { rpc.close(); }
   }
@@ -262,7 +306,11 @@ export class ChatService {
         target = checkout.root;
       }
       check();
-      return this.store.createDraft(project, target, true);
+      const defaults = await this.configured(project);
+      check();
+      const draft = await this.store.createDraft(project, target, true);
+      await this.store.update(project, draft.id, { nextPermission: defaults.permission ?? "full" });
+      return this.store.get(project, draft.id);
     }
     return this.inContext(project, action.id, async () => {
       await this.expectState(project, action.id, action.expected, "Draft changed. Inspect and retry.");

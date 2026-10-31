@@ -284,7 +284,7 @@ so Rename or a newer request supersedes delayed output. Titles never alter trans
 or sent-chat recency.
 **Next-message model and effort**:
 A chat's explicit Codex model and supported reasoning effort, stored in host SQLite.
-Each model remembers its selected effort within the chat. Send captures these choices
+Each Codex model remembers its selected effort across chats. Send captures these choices
 before preparation; editing them during preparation or execution affects only a later
 explicit Send. Catalog changes require an explicit supported selection, never substitution.
 
@@ -295,3 +295,11 @@ edits permits workspace and temporary-directory writes with network disabled and
 user-reviewed approval for broader access; Full access disables the sandbox and
 command approval. Custom or managed restrictions require resolution in Codex
 configuration before presets can replace them. Editing a choice never sends work.
+
+**New chat defaults**:
+Host-owned app settings and per-project overrides for model, effort and permissions.
+New drafts use project overrides before app defaults, current chat model, remembered
+Codex model/effort and the catalog default. Explicit draft choices survive changes.
+Effort memory is shared per Codex model. Permissions reset from project/app settings,
+with factory Full access; another chat's permission edit never becomes a default.
+Custom or managed Codex policy remains subject to explicit resolution.

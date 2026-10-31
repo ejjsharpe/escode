@@ -74,6 +74,7 @@ try {
   db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA checkpoint_fullfsync=ON');
   const settings = { journalMode: db.prepare('PRAGMA journal_mode').get().journal_mode, synchronous: db.prepare('PRAGMA synchronous').get().synchronous, checkpointFullfsync: db.prepare('PRAGMA checkpoint_fullfsync').get().checkpoint_fullfsync };
   if (settings.journalMode !== 'wal' || settings.synchronous !== 1 || settings.checkpointFullfsync !== 1) throw Error('SQLite durability settings unavailable');
+  db.exec('CREATE TABLE IF NOT EXISTS chat_defaults (scope TEXT PRIMARY KEY, body TEXT NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS checkpoint_activity (chatId TEXT PRIMARY KEY, touched INTEGER NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS rewinds (id TEXT PRIMARY KEY, body TEXT NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS client_recovery (clientId TEXT NOT NULL, kind TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(clientId, kind))');
@@ -82,8 +83,8 @@ try {
   const storageBytes = `(SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM chats) +
     (SELECT coalesce(sum(length(CAST(body AS BLOB))+length(CAST(association AS BLOB))),0) FROM submissions) +
     (SELECT coalesce(sum(length(CAST(previous AS BLOB))+length(CAST(result AS BLOB))),0) FROM preparation_results) +
-    (SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM client_recovery)`;
-  for (const table of ['chats', 'submissions', 'preparation_results', 'client_recovery']) {
+    (SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM client_recovery) + (SELECT coalesce(sum(length(CAST(body AS BLOB))),0) FROM chat_defaults)`;
+  for (const table of ['chats', 'submissions', 'preparation_results', 'client_recovery', 'chat_defaults']) {
     for (const event of ['INSERT', 'UPDATE']) db.exec(`CREATE TEMP TRIGGER bound_${table}_${event} AFTER ${event} ON ${table}
       BEGIN SELECT CASE WHEN ${storageBytes} > 67108864 OR
       (SELECT count(DISTINCT clientId) FROM client_recovery) > 256 OR
@@ -93,10 +94,19 @@ try {
   db.exec(`UPDATE submissions SET body=json_set(body, '$.status', 'uncertain', '$.message', 'Host restarted; inspect provider history. Work was not resent.') WHERE json_extract(body, '$.status') IN ('admitted', 'dispatching')`);
   parentPort.postMessage({ id: 0, value: { ...identity[0], settings } });
 } catch (e) { parentPort.postMessage({ id: 0, error: String(e) }); db?.close(); process.exitCode = 1; }
-if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body }) => {
+if (db && !process.exitCode) parentPort.on('message', ({ id, operation, chats, revision, commandId, command, epoch, hostId, clientId, receipt, previous, result, kind, body, scope }) => {
   try {
     let value;
-    if (operation === 'archive') {
+    if (operation === 'chatDefaults') {
+      if (typeof scope !== 'string' || scope.length > 4096) throw Error('Invalid defaults scope');
+      if (body !== undefined) {
+        const encoded = JSON.stringify(body);
+        if (Buffer.byteLength(encoded) > 65536) throw Error('Defaults capacity exhausted');
+        if (!db.prepare('SELECT 1 FROM chat_defaults WHERE scope=?').get(scope) && db.prepare('SELECT count(*) AS count FROM chat_defaults').get().count >= 256) throw Error('Defaults scope capacity exhausted');
+        db.prepare('INSERT INTO chat_defaults VALUES (?,?) ON CONFLICT(scope) DO UPDATE SET body=excluded.body').run(scope, encoded);
+      }
+      value = JSON.parse(db.prepare('SELECT body FROM chat_defaults WHERE scope=?').get(scope)?.body || '{}');
+    } else if (operation === 'archive') {
       db.exec('BEGIN IMMEDIATE');
       try {
         const row = db.prepare('SELECT body FROM chats WHERE id=?').get(body.id);

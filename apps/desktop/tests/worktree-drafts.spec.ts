@@ -75,7 +75,9 @@ createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line)
 fs.appendFileSync(${JSON.stringify(join(dir, "calls"))},m.method+'\\n');
 let result={}; if(m.method==='initialize')result={userAgent:'codex/0.165.0'};
 if(m.method==='account/read')result={account:{}};
-if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:'draft-thread'},cwd:process.cwd(),model:'fixture',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
+if(m.method==='config/read')result={config:{}};
+if(m.method==='configRequirements/read')result={requirements:null};
+if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:'draft-thread'},cwd:process.cwd(),model:'fixture',approvalPolicy:m.params.approvalPolicy||'on-request',approvalsReviewer:'user',sandbox:m.params.sandbox==='danger-full-access'?{type:'dangerFullAccess'}:{type:'readOnly',networkAccess:false}};
 if(m.method==='thread/turns/list')result={data:[],nextCursor:null};
 if(m.method==='turn/start') { result={turn:{id:'turn'}}; send({method:'turn/started',params:{threadId:'draft-thread',turn:{id:'turn'}}}); }
 if(m.method==='turn/interrupt')send({method:'turn/completed',params:{threadId:'draft-thread',turn:{id:'turn'}}});

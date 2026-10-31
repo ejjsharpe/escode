@@ -12,6 +12,7 @@ import { Button } from "@base-ui/react/button";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
+  (operation: "defaults", project: string | null, id: string, scope: "app" | "project", value?: import("@escode/contracts").ChatDefaults): Promise<import("@escode/contracts").ChatDefaults>;
   (operation: "permissions", project: string | null, id: string, choice?: "supervised" | "edits" | "full"): Promise<import("@escode/contracts").PermissionChoices>;
   (operation: "archive", project: string | null, id: string, archived: boolean): Promise<unknown>;
   (operation: "renameTitle", project: string | null, id: string, title: string): Promise<void>;
@@ -49,6 +50,48 @@ export interface ChatBridge {
     answer: unknown,
   ): Promise<void>;
 }
+function DefaultControls({ project, id, catalog, blocked }: { project: string | null; id: string; catalog: import("@escode/contracts").ModelChoices; blocked: boolean }) {
+  const [values, setValues] = useState<Record<string, import("@escode/contracts").ChatDefaults>>({});
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let current = true;
+    for (const scope of project === null ? ["app" as const] : ["app" as const, "project" as const]) {
+      void window.escode.chat("defaults", project, id, scope).then(value => { if (current) setValues(old => ({ ...old, [scope]: value })); }).catch(e => { if (current) setError(String(e)); });
+    }
+    return () => { current = false; };
+  }, [project, id]);
+  const save = async (scope: "app" | "project", value: import("@escode/contracts").ChatDefaults) => {
+    setSaving(true);
+    try { const result = await window.escode.chat("defaults", project, id, scope, value); setValues(old => ({ ...old, [scope]: result })); setError(""); }
+    catch (e) { setError(String(e)); } finally { setSaving(false); }
+  };
+  return <details><summary>New chat defaults</summary><p>Applies to new drafts. Existing chats retain their choices. Project overrides take precedence over app defaults.</p>
+    {(["app", "project"] as const).filter(scope => scope === "app" || project !== null).map(scope => {
+      const value = values[scope];
+      const label = scope === "app" ? "App default" : "Project override";
+      const model = catalog.models.find(m => m.model === value?.model);
+      return <fieldset key={scope} disabled={saving || !value}><legend>{label}</legend>
+        <label>Model <select aria-label={label + " model"} value={value?.model ?? ""} onChange={e => {
+          const selected = catalog.models.find(m => m.model === e.target.value);
+          const { model: _model, effort: _effort, ...rest } = value!;
+          void save(scope, selected ? { ...rest, model: selected.model, effort: selected.defaultEffort } : rest);
+        }}><option value="">{scope === "app" ? "Current / remembered / Codex default" : "Use app default"}</option>
+          {value?.model && !model && <option value={value.model}>{value.model} (unavailable)</option>}
+          {catalog.models.map(m => <option key={m.model} value={m.model}>{m.name}</option>)}
+        </select></label>
+        {value?.model && <label>Effort <select aria-label={label + " effort"} disabled={!model} value={value.effort} onChange={e => void save(scope, { ...value, effort: e.target.value })}>
+          {!model?.efforts.includes(value.effort!) && <option value={value.effort}>{value.effort} (unavailable)</option>}
+          {model?.efforts.map(e => <option key={e}>{e}</option>)}
+        </select></label>}
+        <label>Permissions <select aria-label={label + " permissions"} disabled={blocked} value={value?.permission ?? ""} onChange={e => {
+          const { permission: _permission, ...rest } = value!;
+          void save(scope, e.target.value ? { ...rest, permission: e.target.value as "full" | "edits" | "supervised" } : rest);
+        }}><option value="">{scope === "app" ? "Factory: Full access" : "Use app default"}</option><option value="supervised">Supervised</option><option value="edits">Auto-accept edits</option><option value="full">Full access</option></select></label>
+      </fieldset>;
+    })}{error && <p role="alert">{error}</p>}
+  </details>;
+}
 function ModelControls({ project, id, onSaving, existingError }: { project: string | null; id: string; onSaving: (saving: boolean) => void; existingError?: string | null }) {
   const [permissions, setPermissions] = useState<import("@escode/contracts").PermissionChoices | null>(null);
   const [catalog, setCatalog] = useState<import("@escode/contracts").ModelChoices | null>(null);
@@ -84,6 +127,7 @@ function ModelControls({ project, id, onSaving, existingError }: { project: stri
       catch (e) { setError(String(e)); } finally { setSaving(false); onSaving(false); }
     }}><option value="" disabled>{permissions?.blocked ? "Custom / managed Codex policy" : "Inherited Codex policy"}</option><option value="supervised">Supervised</option><option value="edits">Auto-accept edits</option><option value="full">Full access</option></select></label>
     {permissions?.message && <span role="status">{permissions.message}</span>}
+    {catalog && <DefaultControls project={project} id={id} catalog={catalog} blocked={!permissions || permissions.blocked} />}
     {error && !existingError && <span role="alert">{error}</span>}
   </div>;
 }

@@ -22,7 +22,7 @@ test("custom and managed policy cannot be replaced by a preset", async () => {
     config = {};
     await expect(service.permissions(dir, chat.id, "invalid")).rejects.toThrow("Unsupported");
     await expect(service.permissions(dir, chat.id, "")).rejects.toThrow("Unsupported");
-    expect((await service.permissions(dir, chat.id)).choice).toBeNull();
+    expect((await service.permissions(dir, chat.id)).choice).toBe("full");
     await service.permissions(dir, chat.id, "supervised");
     expect((await new ChatService(new Chats(join(dir, "chats")), connect as never).permissions(dir, chat.id)).choice).toBe("supervised");
   } finally { await store.database.close(); await rm(dir, { recursive: true, force: true }); }
