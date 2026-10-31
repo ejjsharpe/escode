@@ -34,5 +34,6 @@ export class DurableState {
   }
   read(): Promise<{ chats: SavedChat[]; revision: number }> { return this.request("read"); }
   write(chats: SavedChat[], revision: number): Promise<void> { return this.request("write", { chats, revision }); }
+  command(operation: string, fields: object): Promise<any> { return this.request(operation, fields); }
   async close() { await this.worker.terminate(); }
 }
