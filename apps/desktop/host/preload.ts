@@ -13,6 +13,7 @@ type ProjectArguments =
   | ["save", string, string, string, string]
   | ["diff", string, string, "staged" | "unstaged" | "untracked"];
 type ChatArguments =
+  | ["permissions", string | null, string, ("supervised" | "edits" | "full")?]
   | [operation: "renameTitle", project: string | null, id: string, title: string]
   | [operation: "regenerateTitle", project: string | null, id: string]
   | ["models", string | null, string, string?, string?]
@@ -132,6 +133,7 @@ contextBridge.exposeInMainWorld(
       if (call[0] === "renameTitle" || call[0] === "regenerateTitle") return hostClient.titleAction({
         project: call[1], id: call[2], ...(call[0] === "renameTitle" ? { title: call[3] } : {}) });
       const [operation, ...args] = call;
+      if (call[0] === "permissions") return hostClient.chatPermissions(call[1], call[2], call[3]);
       if (call[0] === "models") return hostClient.chatModels(call[1], call[2], call[3], call[4]);
       return ["createDraft", "context", "execution"].includes(operation)
       ? (async () => {

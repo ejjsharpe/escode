@@ -10,6 +10,7 @@ import { Button } from "@base-ui/react/button";
 import type { SavedChat } from "../host/chat";
 import type { ChatSnapshot, LiveRequest } from "../host/chat-service";
 export interface ChatBridge {
+  (operation: "permissions", project: string | null, id: string, choice?: "supervised" | "edits" | "full"): Promise<import("@escode/contracts").PermissionChoices>;
   (operation: "renameTitle", project: string | null, id: string, title: string): Promise<void>;
   (operation: "regenerateTitle", project: string | null, id: string): Promise<void>;
   (operation: "models", project: string | null, id: string, model?: string, effort?: string): Promise<import("@escode/contracts").ModelChoices>;
@@ -46,11 +47,13 @@ export interface ChatBridge {
   ): Promise<void>;
 }
 function ModelControls({ project, id, onSaving }: { project: string | null; id: string; onSaving: (saving: boolean) => void }) {
+  const [permissions, setPermissions] = useState<import("@escode/contracts").PermissionChoices | null>(null);
   const [catalog, setCatalog] = useState<import("@escode/contracts").ModelChoices | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     let current = true;
+    void window.escode.chat("permissions", project, id).then(value => { if (current) setPermissions(value); }).catch(e => { if (current) setError(String(e)); });
     void window.escode.chat("models", project, id).then(value => { if (current) setCatalog(value); }).catch(e => { if (current) setError(String(e)); });
     return () => { current = false; };
   }, [project, id]);
@@ -72,6 +75,12 @@ function ModelControls({ project, id, onSaving }: { project: string | null; id: 
       {!model?.efforts.includes(catalog.choice.effort) && <option value={catalog.choice.effort}>{catalog.choice.effort} (unavailable)</option>}
       {model?.efforts.map(e => <option key={e} value={e}>{e}</option>)}
     </select></label>}
+    <label title="Supervised: read-only with approval. Auto-accept edits: workspace and temporary-directory writes, network blocked; broader access needs approval. Full access: no sandbox or command approval.">Permissions <select aria-label="Next message permissions" disabled={saving || !permissions || permissions.blocked} value={permissions?.blocked ? "" : permissions?.choice ?? ""} onChange={async e => {
+      setSaving(true); onSaving(true);
+      try { setPermissions(await window.escode.chat("permissions", project, id, e.target.value as "supervised" | "edits" | "full")); setError(""); }
+      catch (e) { setError(String(e)); } finally { setSaving(false); onSaving(false); }
+    }}><option value="" disabled>{permissions?.blocked ? "Custom / managed Codex policy" : "Inherited Codex policy"}</option><option value="supervised">Supervised</option><option value="edits">Auto-accept edits</option><option value="full">Full access</option></select></label>
+    {permissions?.message && <span role="status">{permissions.message}</span>}
     {error && <span role="alert">{error}</span>}
   </div>;
 }

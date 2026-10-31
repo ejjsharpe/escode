@@ -285,3 +285,11 @@ A chat's explicit Codex model and supported reasoning effort, stored in host SQL
 Each model remembers its selected effort within the chat. Send captures these choices
 before preparation; editing them during preparation or execution affects only a later
 explicit Send. Catalog changes require an explicit supported selection, never substitution.
+
+**Next-message permissions**:
+A per-chat explicit Codex approval and sandbox choice captured before Send preparation.
+Supervised uses read-only access and user-reviewed on-request approvals; Auto-accept
+edits permits workspace and temporary-directory writes with network disabled and
+user-reviewed approval for broader access; Full access disables the sandbox and
+command approval. Custom or managed restrictions require resolution in Codex
+configuration before presets can replace them. Editing a choice never sends work.
