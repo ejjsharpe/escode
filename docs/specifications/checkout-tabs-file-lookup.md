@@ -2,7 +2,7 @@
 
 Status: **draft for final shared-understanding confirmation**, 2026-10-31. Individual interview decisions are recorded; this synthesis and its small integration defaults await confirmation. This describes subsequent implementation, not current application behavior.
 
-Decision owner: [How should checkout tabs and fuzzy file lookup work?](https://github.com/ejjsharpe/escode/issues/89). Destination: [Specify checkout tabs and fuzzy file lookup](https://github.com/ejjsharpe/escode/issues/87). The separate [file-tab interview](https://github.com/ejjsharpe/escode/issues/91) owns file tabs, previews, comparison views, ordering and file-close/reopen behavior; its confirmation remains separate.
+Decision owner: [How should checkout tabs and fuzzy file lookup work?](https://github.com/ejjsharpe/escode/issues/89). Destination: [Specify checkout tabs and fuzzy file lookup](https://github.com/ejjsharpe/escode/issues/87). The separately [accepted file-tab specification](https://github.com/ejjsharpe/escode/issues/91#issuecomment-6536410741) owns file tabs, previews, comparison views, ordering and file-close/reopen behavior. This draft complements that accepted handoff.
 
 ## Evidence and amendment
 
@@ -72,7 +72,7 @@ Escode retains its existing no-follow boundary even though VS Code follows symbo
 
 ## Activation, cancellation and failure
 
-Up/Down selects a row without opening files, changing tabs or creating file previews. Enter or clicking a result explicitly opens/reuses the exact file in its checkout tab's Files view and focuses the editor. Existing unsaved buffers and loaded disk baselines win over replacing them with new disk reads. Opening never saves or stages a file.
+Up/Down selects a row without opening files, changing tabs or creating file previews. Enter or clicking a result explicitly opens/reuses the exact file in its checkout tab's Files view and focuses the editor. Under the accepted file-tab specification, this keeps the target file tab open through the shared file-opening path. Existing unsaved buffers and loaded disk baselines win over replacing them with new disk reads. Opening never saves or stages a file.
 
 Escape dismisses lookup and restores its originating focus without changing the active file, view or project tab. Lookup is an accessible keyboard-operated popup, with an announced search scope, loading/partial/empty state, result labels and selected row. It must work from a chat composer without submitting a prompt or losing unsent text. Active dialogs and text-entry controls retain their own editing/confirmation scope.
 
@@ -89,7 +89,6 @@ These complete the interaction without adding another feature:
 - Top-level tab labels show project plus branch/worktree identification, with exact directory available for disambiguation. Detached/duplicate labels still expose enough path information to choose the correct checkout.
 - Closing the active checkout tab selects an adjacent surviving checkout tab, or Agents when none remains. This is separate from the file-tab interview's MRU rule for closing an active **file** tab.
 - The clickable lookup action is available in both Agents and checkout views and shows its scope in the popup. Each new invocation starts with blank input/recent files; a failed open retains the current query.
-- When combined with the file-tab design, explicit lookup activation keeps the target file open through the shared file-opening path. Moving through lookup rows never creates/replaces its preview. The file-tab interview retains its own final confirmation; this document does not ratify its full draft.
 
 ## Subsequent implementation handoff
 
@@ -122,4 +121,4 @@ Measure cold and warm lookup, rapid typing/cancellation, external changes and mi
 
 New project-wide code-content search is explicitly reserved for a later iteration; ordinary editor Find remains available. Chat transcript search, fuzzy command/symbol search, semantic retrieval, full VS Code settings compatibility, split editors and broader remote/multi-machine UI are not added here. Existing editor limits, save guarantees, recovery limits and filesystem/provider preservation constraints remain applicable.
 
-The parent map also includes the separate file-tab specification. Complete this checkout/search confirmation and that file-tab confirmation before treating the combined navigation plan as ready for a subsequent implementation effort.
+The parent map also includes the accepted file-tab specification. Complete this checkout/search confirmation before treating the combined navigation plan as ready for a subsequent implementation effort. Integrate both documentation handoffs before application work; the accepted file-tab resolution preserves its full text independently of its separate local documentation commit.
