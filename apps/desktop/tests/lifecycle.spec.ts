@@ -128,6 +128,17 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       "true",
     );
     await expect(page.locator(".monaco-diff-editor:visible")).toContainText("secondary project");
+    // Keyboard close selects the adjacent checkout; explicit reopen retains the view.
+    await page.getByRole("navigation", { name: "Projects", exact: true }).getByRole("button", { name: "other", exact: true }).focus();
+    await page.keyboard.press("Delete");
+    await expect(page.locator("header")).toContainText(root);
+    await expect(page.locator(".monaco-diff-editor:visible")).toContainText("external");
+    await app.evaluate(({ dialog }, other) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [other] });
+    }, other);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await expect(page.getByRole("button", { name: "Source Control", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".monaco-diff-editor:visible")).toContainText("secondary project");
   } finally {
     app.process().kill("SIGKILL");
     await rm(dir, { recursive: true, force: true });

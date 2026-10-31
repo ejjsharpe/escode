@@ -436,6 +436,8 @@ function CheckoutView({
           return false;
         }
       }
+      // Workspace closure publishes its captured choices before releasing models.
+      if (discards) return true;
       // Remove the durable draft before disposing the only in-memory copy.
       const drafts = memory.drafts;
       memory.drafts = drafts.filter((d) => d.root !== root || d.path !== file);
@@ -649,7 +651,7 @@ function CheckoutView({
     project,
     close: async (discards) => {
       if (closeInFlight.current) return false;
-      for (const file of buffers.current.keys()) if (!(await closeFile(file, false, discards))) return false;
+      for (const file of [...buffers.current.keys()]) if (!(await closeFile(file, false, discards))) return false;
       return true;
     },
   });
@@ -991,8 +993,10 @@ function App({ restored, errors }: { restored: Status[]; errors: string[] }) {
       try {
         if (project) {
           memory.projects = memory.projects.filter((p) => p.root !== root);
-          if (memory.selected === root) memory.selected = "agents";
-          await persist();
+          if (memory.selected === root) {
+            const index = previousProjects.findIndex((p) => p.root === root);
+            memory.selected = memory.projects[Math.min(index, memory.projects.length - 1)]?.root ?? "agents";
+          }
         }
         const resetDiscardedBuffers = discards.map((discard) => discard());
         await persist();
