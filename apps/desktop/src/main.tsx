@@ -17,7 +17,7 @@ import { useProjectChats } from "./chat-state";
 import { WorktreeChoices } from "./worktrees";
 import type { ChatBridge } from "./chat";
 import "./style.css";
-import { memory, initialize, persist, flush, useMemory, closers, fileOpeners, fileKeepers, openFile } from "./workspace";
+import { memory, initialize, persist, flush, useMemory, closers, fileOpeners, fileKeepers, openFile, recentlyClosedFiles, fileCloseHistoryLimit } from "./workspace";
 type Status = {
   project: string;
   root: string;
@@ -421,7 +421,7 @@ function CheckoutView({
     const scroll = instance.onDidScrollChange(recordPosition);
     return () => { recordPosition(); cursor.dispose(); scroll.dispose(); };
   }
-  async function restoreView(file: string) {
+  async function restoreView(file: string, reuseBuffer = false) {
     const selected = memory.views[root]?.fileViews?.[file] ?? "file";
     if (selected === "conflict") {
       const generation = ++presentation.current;
@@ -443,7 +443,7 @@ function CheckoutView({
         return false;
       }
     }
-    return selected === "file" ? select(file, true, undefined, true) : showDiff({ path: file, area: selected }, true);
+    return selected === "file" ? select(file, true, undefined, true, reuseBuffer) : showDiff({ path: file, area: selected }, true, undefined, reuseBuffer);
   }
   function compareConflict(file: string, disk: Document) {
     presentation.current++;
@@ -451,11 +451,11 @@ function CheckoutView({
     setDiff({ original: disk.text, modified: buffers.current.get(file)!.model.getValue(),
       title: "Disk versus your edits", file });
   }
-  async function select(file: string, present = true, intent?: "preview" | "keep", retain = false) {
+  async function select(file: string, present = true, intent?: "preview" | "keep", retain = false, reuseBuffer = false) {
     opening.current++;
     const generation = present ? ++presentation.current : presentation.current;
     try {
-      if (retain || !buffers.current.has(file)) {
+      if ((retain && !reuseBuffer) || !buffers.current.has(file)) {
         const disk: Document = await projectCall("read", root, file);
         if (generation !== presentation.current) return false;
         const buffer = buffers.current.get(file);
@@ -552,7 +552,7 @@ function CheckoutView({
       report(e);
     }
   }
-  async function showDiff(change: Change, retain = false, intent?: "preview" | "keep") {
+  async function showDiff(change: Change, retain = false, intent?: "preview" | "keep", reuseBuffer = false) {
     opening.current++;
     const generation = ++presentation.current;
     try {
@@ -562,7 +562,7 @@ function CheckoutView({
       let unavailable = "";
       try {
         const buffer = buffers.current.get(change.path);
-        if (!buffer || buffer.model.getValue() === buffer.disk.text) {
+        if (!buffer || (!reuseBuffer && buffer.model.getValue() === buffer.disk.text)) {
           const disk = await projectCall("read", root, change.path);
           if (generation !== presentation.current) return;
           if (!buffers.current.has(change.path)) addBuffer(change.path, disk);
@@ -652,6 +652,14 @@ function CheckoutView({
         void persist();
         throw error;
       }
+      const history = recentlyClosedFiles.get(root) ?? [];
+      history.push({ active: targets.has(activeFile) ? activeFile : [...targets].at(-1)!,
+        files: (previous?.openFiles ?? []).flatMap((file, index) => targets.has(file) ? [{
+          path: file, index, view: previous?.fileViews?.[file] ?? "file",
+          positions: structuredClone(previous?.editorPositions?.[file]),
+        }] : []),
+      });
+      recentlyClosedFiles.set(root, history.slice(-fileCloseHistoryLimit));
       setOpenFiles(remaining);
       setPreview(memory.views[root]?.preview ?? "");
       recentFiles.current = recentFiles.current.filter(file => !targets.has(file));
@@ -678,15 +686,53 @@ function CheckoutView({
       focusAfterClose.current = true;
     }
   }
+  async function reopenClosedFiles() {
+    const history = recentlyClosedFiles.get(root);
+    const action = history?.at(-1);
+    if (!action || closeInFlight.current || saveInFlight.current || conflict) return;
+    closeInFlight.current = true;
+    setFileClosing(true);
+    try {
+      const current = memory.views[root];
+      const order = [...(current?.openFiles ?? [])];
+      const existing = new Set(order);
+      const views = { ...current?.fileViews };
+      const positions = { ...current?.editorPositions };
+      for (const file of action.files) {
+        if (existing.has(file.path)) continue;
+        order.splice(Math.min(file.index, order.length), 0, file.path);
+        views[file.path] = file.view;
+        if (file.positions) positions[file.path] = structuredClone(file.positions);
+      }
+      memory.views[root] = { ...current, editorPositions: positions };
+      setFileViews(views);
+      setOpenFiles(order);
+      setDiff(null);
+      await restoreView(action.active, existing.has(action.active));
+      await persist();
+      history!.pop();
+    } catch (error) { report(error); }
+    finally {
+      closeInFlight.current = false;
+      setFileClosing(false);
+      editor.current?.updateOptions({ readOnly: false });
+      focusAfterClose.current = true;
+    }
+  }
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if (!active || !editorVisible || !event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.key.toLowerCase() !== "w") return;
+      const reopen = event.shiftKey && event.key.toLowerCase() === "t";
+      const close = !event.shiftKey && event.key.toLowerCase() === "w";
+      if (!active || !editorVisible || !event.metaKey || event.ctrlKey || event.altKey || (!close && !reopen)) return;
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest("[role=dialog], [role=alertdialog], [role=menu]") ||
         (target?.closest("input, textarea, select, [contenteditable=true]") && !target.closest(".monaco-editor"))) return;
       event.preventDefault();
       event.stopPropagation();
-      if (!closeInFlight.current && !saveInFlight.current && !conflict) void closeFiles(path ? [path] : []);
+      if (!closeInFlight.current && !saveInFlight.current && !conflict) {
+        if (reopen) void reopenClosedFiles();
+        else void closeFiles(path ? [path] : []);
+      }
     };
     window.addEventListener("keydown", key, true);
     return () => window.removeEventListener("keydown", key, true);

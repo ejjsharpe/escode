@@ -75,3 +75,14 @@ export async function openFile(request: FileOpenRequest) {
   if (!open) throw Error("The exact checkout editor is not open.");
   return open(request);
 }
+
+// Session-only navigation references; operation reconciliation may update paths in place.
+export type ClosedFile = {
+  path: string;
+  index: number;
+  view: NonNullable<ViewMemory["fileViews"]>[string];
+  positions?: NonNullable<ViewMemory["editorPositions"]>[string];
+};
+export type FileCloseAction = { files: ClosedFile[]; active: string };
+export const recentlyClosedFiles = new Map<string, FileCloseAction[]>();
+export const fileCloseHistoryLimit = 20;

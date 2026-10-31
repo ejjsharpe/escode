@@ -135,6 +135,7 @@ test("navigation respects empty rows, inputs, inline editing, menus, conflicts a
     await commands();
     await expect(tabs.getByRole("tab")).toHaveCount(0);
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).dblclick();
+    await expect(page.getByRole("textbox", { name: "a.txt editor", exact: true })).toBeFocused();
     await page.getByRole("tree").focus();
     await page.keyboard.down("Control");
     await page.keyboard.press("Tab");
