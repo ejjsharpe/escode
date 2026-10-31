@@ -67,6 +67,18 @@ createInterface({input:process.stdin}).on('line',line=>{
       await window.escode.chat("disconnect", context, draft.id);
       return draft.id;
     }, { context, branching: (mode === "branch" || mode === "branch-after" || mode === "summary") });
+    if (mode === "restoration") {
+      await app.evaluate(({ dialog }, isolated) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [isolated] }); }, join(dir, "isolated"));
+      await page.getByRole("button", { name: "Open project…" }).click();
+      await expect(page.locator('.project-tab[data-active="true"] > button[aria-pressed]')).toHaveAttribute("aria-description", "isolated · " + join(dir, "isolated"));
+      await page.getByRole("button", { name: "Files", exact: true }).filter({ visible: true }).click();
+      await page.getByRole("treeitem", { name: "saved.txt", exact: true }).filter({ visible: true }).click();
+      await expect(page.locator(".monaco-editor:visible")).toContainText("today saved text");
+      await page.locator(".monaco-editor:visible").click();
+      await page.keyboard.press("Meta+a");
+      await page.keyboard.type("unsaved editor text");
+      await expect(page.getByText("saved.txt • Unsaved", { exact: true })).toBeVisible();
+    }
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await page.locator(".agent-row").click();
     await expect(page.getByText("first saved page", { exact: true })).toBeVisible();
@@ -106,6 +118,7 @@ createInterface({input:process.stdin}).on('line',line=>{
       await expect(choice).toContainText("untracked files may be removed");
       await choice.getByRole("button", { name: "Cancel rewind" }).click();
       await expect(button).toBeFocused();
+      expect(await readFile(join(dir, "isolated", "saved.txt"), "utf8")).toBe("today saved text");
       await button.click();
       await choice.getByRole("button", { name: "Confirm restoration and retain unsaved edits" }).click();
       await expect(choice).toContainText("Conversation and saved files restored");
@@ -113,6 +126,30 @@ createInterface({input:process.stdin}).on('line',line=>{
       expect(await readFile(join(dir, "isolated", "saved.txt"), "utf8")).toBe("captured saved text");
       await expect(composer).toHaveValue("retained unsent text");
       await page.screenshot({ path: "test-results/protected-restoration.png" });
+      await page.getByRole("button", { name: "Open checkout", exact: true }).click();
+      const editor = page.locator(".monaco-editor:visible");
+      await expect(editor).toContainText("unsaved editor text");
+      await expect(page.getByText("saved.txt • Unsaved", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
+      await expect(page.locator(".conflict")).toBeVisible();
+      expect(await readFile(join(dir, "isolated", "saved.txt"), "utf8")).toBe("captured saved text");
+      await page.getByRole("button", { name: "Compare", exact: true }).click();
+      await expect(page.locator(".monaco-diff-editor")).toContainText("captured saved text");
+      await expect(page.locator(".monaco-diff-editor")).toContainText("unsaved editor text");
+      await page.screenshot({ path: "test-results/protected-restoration-dirty-conflict.png" });
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(editor).toContainText("unsaved editor text");
+      await writeFile(join(dir, "isolated", "saved.txt"), "external after restoration");
+      await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
+      await expect(page.locator(".conflict")).toBeVisible();
+      expect(await readFile(join(dir, "isolated", "saved.txt"), "utf8")).toBe("external after restoration");
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      // Only the originally loaded bytes permit an ordinary Save: restoration must not rebase the buffer.
+      await writeFile(join(dir, "isolated", "saved.txt"), "today saved text");
+      await page.getByRole("button", { name: "Save ⌘S", exact: true }).click();
+      await expect(page.locator(".content:visible > [role=status][tabindex]")).toContainText("Saved saved.txt");
+      await expect(page.locator(".conflict")).toHaveCount(0);
+      expect(await readFile(join(dir, "isolated", "saved.txt"), "utf8")).toBe("unsaved editor text");
       return;
     }
     if (mode === "files") {
@@ -220,5 +257,8 @@ createInterface({input:process.stdin}).on('line',line=>{
         return handler({ sender: contents, senderFrame: contents.mainFrame }, operation, null, id);
       }, { operation, id: chatId })).rejects.toThrow("Invalid chat request");
     }
-  } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });
+    await app.close(); await rm(dir, { recursive: true, force: true });
+  }
 });
