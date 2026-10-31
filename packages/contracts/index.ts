@@ -129,6 +129,7 @@ export const FileSaveResult = Schema.Struct({ kind: Schema.Literals(["saved", "c
 export const maximumRecentFiles = 200;
 export const maximumRecentUnits = 32768;
 export const WorkspaceState = Schema.Struct({
+  sidebarWidth: Schema.optionalKey(Schema.Number.check(Schema.isBetween({ minimum: 190, maximum: 380 }))),
   projects: Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String })),
   savedProjects: Schema.optionalKey(Schema.Array(Schema.Struct({ project: Schema.String, root: Schema.String }))),
   projectUse: Schema.optionalKey(Schema.Array(Schema.Struct({ project: Schema.String, checkout: Schema.optionalKey(Schema.String) }))),

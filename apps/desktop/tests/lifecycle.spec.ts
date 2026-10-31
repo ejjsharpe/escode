@@ -44,7 +44,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     }, other);
     await page.getByRole("button", { name: "Open project…" }).click();
     await page.getByRole("treeitem", { name: "b.txt", exact: true }).click();
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "b.txt", exact: true }).click();
     await expect(page.locator(".monaco-diff-editor:visible")).toContainText("secondary project");
     const tabs = page
@@ -106,13 +106,13 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
     await expect(page.getByRole("treeitem", { name: "a.txt", exact: true })).toBeVisible();
     await page.getByRole("treeitem", { name: "a.txt", exact: true }).click();
     await expect(page.locator(".monaco-editor:visible")).toContainText("external");
-    await page.getByRole("button", { name: "Source Control", exact: true }).click();
+    await page.getByRole("button", { name: "Diff", exact: true }).click();
     await page.getByRole("button", { name: "a.txt", exact: true }).click();
     await expect(page.locator(".monaco-diff-editor:visible")).toContainText("external");
     await app.close();
     app = await launch();
     page = await app.firstWindow();
-    await expect(page.getByRole("button", { name: "Source Control", exact: true })).toHaveAttribute(
+    await expect(page.getByRole("button", { name: "Diff", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -124,7 +124,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       .getByRole("navigation", { name: "Projects", exact: true })
       .getByRole("button", { name: "other", exact: true })
       .click();
-    await expect(page.getByRole("button", { name: "Source Control", exact: true })).toHaveAttribute(
+    await expect(page.getByRole("button", { name: "Diff", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -138,7 +138,7 @@ test("crash recovery preserves baseline; cancel and failed save retain edits; di
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [other] });
     }, other);
     await page.getByRole("button", { name: "Open project…" }).click();
-    await expect(page.getByRole("button", { name: "Source Control", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Diff", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".monaco-diff-editor:visible")).toContainText("secondary project");
   } finally {
     app.process().kill("SIGKILL");

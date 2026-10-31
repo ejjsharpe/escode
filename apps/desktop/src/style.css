@@ -755,3 +755,18 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .title-actions[open] { padding: 8px; max-width: min(340px, 100%); background: var(--background, #202126); border: 1px solid var(--border); }
 .title-actions form { display: grid; gap: 8px; }
 .title-actions input { width: 100%; box-sizing: border-box; }
+/* One window-owned width, shared by the existing checkout and chat sidebars. */
+.sidebar-layout { display: contents; }
+.workspace, .agents .workspace { position: relative; grid-template-columns: var(--sidebar-width, 270px) minmax(0, 1fr); }
+.sidebar-resize { position: absolute; z-index: 4; left: calc(var(--sidebar-width, 270px) - 3px); top: 0; bottom: 0; width: 6px; cursor: col-resize; touch-action: none; }
+.sidebar-resize:hover, .sidebar-resize:focus-visible { background: var(--accent); outline: none; }
+.view-nav { flex-wrap: wrap; overflow: visible; padding: 0; gap: 4px; margin-bottom: 14px; flex-shrink: 0; }
+.view-nav button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 1; padding: 7px 4px; }
+.view-nav .directory { flex-basis: 100%; max-width: 100%; margin: 4px 0; }
+.project-tabs > header { margin-left: auto; padding: 0 4px 4px; min-height: 0; border: 0; background: transparent; -webkit-app-region: no-drag; }
+.workspace-context { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.agents-heading { display: none; }
+
+.project-tabs > header { flex-shrink: 0; }
+.project-tabs .retention-settings summary { white-space: nowrap; }
+.project-tabs .retention-settings form { position: fixed; top: 48px; right: 14px; }

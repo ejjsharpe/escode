@@ -1,3 +1,4 @@
+import { SidebarResize } from "./sidebar";
 import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@base-ui/react/button";
 import type { ChatSummary } from "@escode/contracts";
@@ -165,6 +166,7 @@ export function AgentsView() {
         <span>Conversations across saved projects</span>
       </div>
       <div className="workspace">
+        <SidebarResize />
         <aside aria-label="Agents chats">
           <Button onClick={() => { setError(""); setPicking(true); }}>New chat</Button>
           <Button onClick={() => void create(null)}>No project</Button>
