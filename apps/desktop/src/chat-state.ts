@@ -33,6 +33,7 @@ class ProjectChats {
     history: {} as Record<string, import("@escode/contracts").HistoryPage>,
     snapshots: {} as Record<string, ChatSnapshot>,
     pending: {} as Record<string, boolean>,
+    emergencyTargets: {} as Record<string, string>,
     responding: {} as Record<string, boolean>,
     errors: {} as Record<string, string>,
   };
@@ -186,10 +187,20 @@ class ProjectChats {
       void this.refresh();
     }
   }
+  async emergencyStop(id: string) {
+    const target = this.state.emergencyTargets[id];
+    this.update({ emergencyTargets: { ...this.state.emergencyTargets, [id]: "" } });
+    try { await window.escode.chat("emergencyStop", this.project, id, target); }
+    catch (error) { this.report(id, error); }
+    finally { void this.refresh(); }
+  }
   async stop(id: string) {
+    const target = this.state.snapshots[id]?.controlTarget;
     try {
-      await window.escode.chat("stop", this.project, id, this.state.snapshots[id]?.controlTarget);
+      await window.escode.chat("stop", this.project, id, target);
     } catch (e) {
+      if (target && String(e).includes("Emergency Stop is available"))
+        this.update({ emergencyTargets: { ...this.state.emergencyTargets, [id]: target } });
       this.report(id, e);
     } finally {
       void this.refresh();
