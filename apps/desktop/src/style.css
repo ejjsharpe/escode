@@ -749,6 +749,12 @@ input::placeholder, textarea::placeholder { color: #a4a3b0; }
 .retention-settings input[type=number] { width: 90px; }
 .retention-settings :focus-visible { outline: 2px solid #b7aaf5; outline-offset: 3px; }
 
+.conversation-heading { position: relative; }
+.conversation-heading h2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 100px; }
+.title-actions { position: absolute; right: 0; top: 0; z-index: 1; }
+.title-actions[open] { padding: 8px; max-width: min(340px, 100%); background: var(--background, #202126); border: 1px solid var(--border); }
+.title-actions form { display: grid; gap: 8px; }
+.title-actions input { width: 100%; box-sizing: border-box; }
 /* One window-owned width, shared by the existing checkout and chat sidebars. */
 .sidebar-layout { display: contents; }
 .workspace, .agents .workspace { position: relative; grid-template-columns: var(--sidebar-width, 270px) minmax(0, 1fr); }

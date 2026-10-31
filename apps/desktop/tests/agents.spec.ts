@@ -106,7 +106,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("alpha text");
     await expect(page.locator(".transcript:visible")).toContainText("Saved history");
     await page.getByRole("textbox", { name: "Message Codex" }).fill("shared text");
-    await page.getByText("Conversation actions", { exact: true }).click();
+    await page.getByText("Chat actions", { exact: true }).click();
     await page.getByRole("button", { name: "Archive chat", exact: true }).click();
     await expect(rows.filter({ hasText: "alpha" })).toHaveCount(0);
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
@@ -133,7 +133,7 @@ process.stdout.write(JSON.stringify({id:m.id,result})+'\\n');});`,
     await page.getByRole("button", { name: /^Chat 1 ·/ }).click();
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("shared text");
     await expect(page.locator(".view-nav:visible")).toContainText(worktree);
-    await page.getByText("Conversation actions", { exact: true }).click();
+    await page.getByText("Chat actions", { exact: true }).click();
     await page.getByRole("button", { name: "Archive chat", exact: true }).click();
     await expect(page.locator(".chat-list:visible .agent-row")).toHaveCount(0);
     await page.getByRole("button", { name: "Show archived chats", exact: true }).click();
@@ -473,14 +473,14 @@ send({id:m.id,result});});`,
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("older prompt");
     await expect(localRows.locator("strong")).toHaveText(labels);
     await page.getByRole("button", { name: "Send message", exact: true }).click();
-    await expect(localRows.locator("strong")).toHaveText(["Chat 2", "Chat 3", "Chat 1"]);
+    await expect(localRows.locator("strong")).toHaveText(["older prompt", "Chat 3", "Chat 1"]);
     await expect(localRows.first()).toHaveAttribute("aria-label", /Needs input/);
     await page.getByRole("button", { name: "Agents", exact: true }).click();
-    await expect(globalRows).toHaveText(["Chat 2", "Chat 3", "Chat 1"]);
-    await page.locator(".agent-row").filter({ hasText: "Chat 2" }).click();
+    await expect(globalRows).toHaveText(["older prompt", "Chat 3", "Chat 1"]);
+    await page.locator(".agent-row").filter({ hasText: "older prompt" }).click();
     await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeVisible();
     await expect(page.locator(".agent-row").first()).toHaveAttribute("aria-label", /Needs input/);
-    await expect(globalRows).toHaveText(["Chat 2", "Chat 3", "Chat 1"]);
+    await expect(globalRows).toHaveText(["older prompt", "Chat 3", "Chat 1"]);
     await page.setViewportSize({ width: 1100, height: 768 });
     await page.getByText("Requested information format", { exact: true }).click();
     const mcpResponse = page.getByRole("textbox", { name: "MCP response" });
@@ -527,12 +527,12 @@ send({id:m.id,result});});`,
       await page.locator(".transcript:visible").evaluate((history) => history.clientHeight),
     ).toBeGreaterThanOrEqual(80);
     await page.screenshot({ path: "test-results/agents-short-window-error.png" });
-    await expect(globalRows).toHaveText(["Chat 2", "Chat 3", "Chat 1"]);
+    await expect(globalRows).toHaveText(["older prompt", "Chat 3", "Chat 1"]);
     await page
       .getByRole("navigation", { name: "Projects" })
       .getByRole("button", { name: "repo", exact: true })
       .click();
-    await expect(localRows.locator("strong")).toHaveText(["Chat 2", "Chat 3", "Chat 1"]);
+    await expect(localRows.locator("strong")).toHaveText(["older prompt", "Chat 3", "Chat 1"]);
     await expect(localRows.first()).toHaveAttribute("aria-pressed", "true");
   } finally {
     await app.evaluate(({ dialog }) => {

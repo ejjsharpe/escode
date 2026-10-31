@@ -274,3 +274,10 @@ main database. These checkpoints store file bytes in SQLite, create no Git snaps
 objects, and grant no authority to prune project Git objects or retained worktrees.
 
 - **Archived chat**: A shared conversation hidden from recent lists by host-owned metadata. Archive requires idle work without unresolved requests or uncertain operations; Restore retains its identity, draft, resources and recency.
+**Chat title**:
+Shared host-owned conversation metadata displayed in Agents and checkout-local Chats.
+First Send starts one independent ephemeral title request, with bounded first-message
+text as its fallback. Rename accepts a single line up to 256 characters. Regenerate
+uses the retained first message; results match the current persisted request identity
+so Rename or a newer request supersedes delayed output. Titles never alter transcripts
+or sent-chat recency.
