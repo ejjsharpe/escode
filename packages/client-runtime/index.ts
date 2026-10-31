@@ -114,7 +114,7 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
         epoch = undefined; revision = 0; items = [];
         const client = yield* Effect.tryPromise(connect);
         const warning = reconcile ? yield* Effect.tryPromise(reconcile) : undefined;
-        yield* client.chatLive({ project, id }).pipe(Stream.timeout("3 seconds"), Stream.runForEach(batch => Effect.sync(() => {
+        yield* client.chatLive({ project, id }).pipe(Stream.timeoutOrElse({ duration: "3 seconds", orElse: () => Stream.fail(new Cause.TimeoutError()) }), Stream.runForEach(batch => Effect.sync(() => {
           if (!active) return;
           if (batch.epoch === epoch && batch.revision <= revision) return;
           if (batch.revision !== revision + 1 || (epoch && epoch !== batch.epoch)) throw Error("Live coverage reset required. Reopen the view.");
@@ -139,7 +139,10 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
           if (!active) return;
           const domainError = Exit.isFailure(result) && domainFailure(result.cause) !== undefined;
           // A moved chat invalidates its old subscription, not the shared connection.
-          if (!domainError && session?.client === current) yield* Effect.tryPromise(close);
+          // An idle subscription is local; keep admitted commands on the shared socket.
+          const failure = Exit.isFailure(result) ? Cause.findError(result.cause) : undefined;
+          const idle = failure !== undefined && Result.isSuccess(failure) && Cause.isTimeoutError(failure.success);
+          if (!domainError && !idle && session?.client === current) yield* Effect.tryPromise(close);
           if (retry >= 3) {
             error(`Live output unavailable; Retry to reload status/history. ${Exit.isFailure(result) ? String(result.cause) : "Stream ended"}`);
             return;
