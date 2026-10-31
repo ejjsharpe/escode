@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { launchDesktop } from "./desktop";
 test("next message model persists and changing a running turn never queues work", async () => {
   const dir = await mkdtemp(join(tmpdir(), "escode-model-ui-"));
@@ -9,22 +10,28 @@ test("next message model persists and changing a running turn never queues work"
   await writeFile(join(dir, "codex"), `#!/usr/bin/env node
 const {createInterface}=require('node:readline'); const {appendFileSync}=require('node:fs');
 if(process.argv.includes('--version')) { console.log('codex-cli 0.165.0'); process.exit(0); }
-const send=x=>console.log(JSON.stringify(x));
+const send=x=>console.log(JSON.stringify(x)); let turnId;
 createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);if(!m.method||!m.id)return;
 let result={};
 if(m.method==='initialize')result={userAgent:'fixture'};
 if(m.method==='model/list')result={data:[{id:'a',hidden:false,isDefault:true,description:'Alpha model',model:'a',displayName:'Alpha',supportedReasoningEfforts:[{description:'Effort',reasoningEffort:'low'},{description:'Effort',reasoningEffort:'high'}],defaultReasoningEffort:'low'},{id:'b',hidden:false,isDefault:false,description:'Beta model',model:'b',displayName:'Beta',supportedReasoningEfforts:[{description:'Effort',reasoningEffort:'medium'}],defaultReasoningEffort:'medium'}],nextCursor:null};
+if(m.method==='config/read')result={config:{}};
+if(m.method==='configRequirements/read')result={requirements:require('node:fs').existsSync(${JSON.stringify(join(dir, 'managed'))})?{}:null};
 if(m.method==='account/read')result={account:{}};
-if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:'thread'},cwd:process.cwd(),model:'a',approvalPolicy:'on-request',sandbox:{type:'readOnly'}};
+if(m.method==='thread/start'||m.method==='thread/resume')result={thread:{id:'thread'},cwd:process.cwd(),model:'a',approvalPolicy:m.params.approvalPolicy||'on-request',approvalsReviewer:'user',sandbox:m.params.sandbox==='danger-full-access'?{type:'dangerFullAccess'}:m.params.sandbox==='workspace-write'?{type:'workspaceWrite',writableRoots:[],networkAccess:false,excludeTmpdirEnvVar:false,excludeSlashTmp:false}:{type:'readOnly',networkAccess:false}};
 if(m.method==='thread/turns/list')result={data:[],nextCursor:null};
-if(m.method==='turn/start'){appendFileSync(${JSON.stringify(log)},JSON.stringify(m.params)+'\\n');result={turn:{id:'turn'}};send({method:'turn/started',params:{threadId:'thread',turn:{id:'turn'}}});}
-if(m.method==='turn/interrupt')send({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn'}}});
+if(m.method==='turn/start'){turnId=require('node:crypto').randomUUID();appendFileSync(${JSON.stringify(log)},JSON.stringify(m.params)+'\\n');result={turn:{id:turnId}};send({method:'turn/started',params:{threadId:'thread',turn:{id:turnId}}});}
+if(m.method==='turn/interrupt')send({method:'turn/completed',params:{threadId:'thread',turn:{id:m.params.turnId}}});
 if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else send({id:m.id,result});});`, { mode: 0o700 });
   let app = await launchDesktop(join(dir, "user"), dir);
   try {
     let page = await app.firstWindow();
     await page.getByRole("button", { name: "No project", exact: true }).click();
     await page.getByLabel("Message Codex").fill("retain my text");
+    await expect(page.getByLabel("Next message permissions")).toHaveValue("full");
+    await page.getByText("New chat defaults", { exact: true }).click();
+    await page.getByLabel("App default model").selectOption("b");
+    await expect(page.getByLabel("Next message model")).toHaveValue("a");
     await page.getByLabel("Next message model").selectOption("a");
     await page.getByLabel("Next message effort").selectOption("high");
     await page.getByLabel("Next message model").selectOption("b");
@@ -43,7 +50,8 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     await expect(page.getByLabel("Message Codex")).toHaveValue("");
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.locator("span[role=status]")).toHaveText("Ready");
-    await app.close();
+    await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); });
+    app.process().kill("SIGKILL");
     app = await launchDesktop(join(dir, "user"), dir);
     page = await app.firstWindow();
     await expect(page.getByLabel("Next message model")).toHaveValue("b");
@@ -55,8 +63,56 @@ if(m.method==='thread/start')setTimeout(()=>send({id:m.id,result}),1200);else se
     const turns = (await readFile(log, "utf8")).trim().split("\n").map(x => JSON.parse(x));
     expect(turns).toHaveLength(2);
     expect(turns[1]).toMatchObject({ model: "b", effort: "medium" });
+    await expect(page.locator("span[role=status]")).toHaveText("Running");
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.locator("span[role=status]")).toHaveText("Ready");
+    await page.getByText("New chat defaults", { exact: true }).click();
+    await expect(page.getByLabel("App default model")).toHaveValue("b");
     await page.screenshot({ path: "test-results/models.png" });
-  } finally { await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); }); await app.close(); await rm(dir, { recursive: true, force: true }); }
+    const next = await page.evaluate(async () => {
+      const draft = await window.escode.chat("createDraft", null);
+      const model = await window.escode.chat("models", null, draft.id);
+      const permission = await window.escode.chat("permissions", null, draft.id);
+      await window.escode.chat("permissions", null, draft.id, "supervised");
+      return { id: draft.id, model: model.choice, permission: permission.choice };
+    });
+    expect(next).toMatchObject({ model: { model: "b", effort: "medium" }, permission: "full" });
+    await page.evaluate(async id => {
+      await window.escode.chat("defaults", null, id, "app", {});
+      await window.escode.chat("models", null, id, "a");
+    }, next.id);
+    const remembered = await page.evaluate(async () => {
+      const draft = await window.escode.chat("createDraft", null);
+      await window.escode.chat("draft", null, draft.id, "preserved new draft");
+      return { id: draft.id, models: await window.escode.chat("models", null, draft.id), permissions: await window.escode.chat("permissions", null, draft.id) };
+    });
+    expect(remembered.models.choice).toEqual({ model: "a", effort: "high" });
+    expect(remembered.permissions.choice).toBe("full");
+    const root = join(dir, "project");
+    execFileSync("git", ["init", root]);
+    await app.evaluate(({ dialog }, root) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] }); }, root);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    const projectResult = await page.evaluate(async () => {
+      const target = (await window.escode.chat("targets")).find(t => t.project !== null)!;
+      const draft = await window.escode.chat("createDraft", target.project);
+      await window.escode.chat("defaults", target.project, draft.id, "app", { model: "b", effort: "medium", permission: "supervised" });
+      await window.escode.chat("defaults", target.project, draft.id, "project", { model: "a", effort: "low", permission: "edits" });
+      const fresh = await window.escode.chat("createDraft", target.project);
+      return { project: target.project, id: fresh.id, models: await window.escode.chat("models", target.project, fresh.id), permissions: await window.escode.chat("permissions", target.project, fresh.id) };
+    });
+    expect(projectResult.models.choice).toEqual({ model: "a", effort: "low" });
+    expect(projectResult.permissions.choice).toBe("edits");
+    await expect(page.evaluate(async ({ project, id }) => window.escode.chat("defaults", project, id, "project", { model: "missing", effort: "max" }), projectResult)).rejects.toThrow();
+    await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false }); });
+    app.process().kill("SIGKILL");
+    app = await launchDesktop(join(dir, "user"), dir);
+    page = await app.firstWindow();
+    expect(await page.evaluate(async ({ project, id }) => window.escode.chat("defaults", project, id, "project"), projectResult)).toEqual({ model: "a", effort: "low", permission: "edits" });
+    expect(await page.evaluate(async id => window.escode.chat("models", null, id), remembered.id)).toMatchObject({ choice: { model: "a", effort: "high" } });
+    expect(await page.evaluate(async id => window.escode.chat("composer", null, id), remembered.id)).toBe("preserved new draft");
+    await writeFile(join(dir, "managed"), "managed policy");
+    expect(await page.evaluate(async id => window.escode.chat("permissions", null, id), remembered.id)).toMatchObject({ blocked: true });
+    await expect(page.evaluate(async id => window.escode.chat("defaults", null, id, "app", { permission: "full" }), remembered.id)).rejects.toThrow();
+    expect(await page.evaluate(async id => window.escode.chat("composer", null, id), remembered.id)).toBe("preserved new draft");
+  } finally { app.process().kill("SIGKILL"); await rm(dir, { recursive: true, force: true }); }
 });
