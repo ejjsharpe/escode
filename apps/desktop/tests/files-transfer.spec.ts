@@ -54,6 +54,7 @@ test("tree clipboard copy, dirty duplicate, collision and cut partial results us
     await page.getByRole("treeitem", { name: /^a.ts, unsaved/ }).click();
     await page.getByRole("treeitem", { name: "b.ts", exact: true }).click({ modifiers: ["Meta"] });
     await page.keyboard.press("Meta+x");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Cut 2");
     await rm(join(root, "b.ts"));
     await page.getByRole("treeitem", { name: "target", exact: true }).click();
     await page.keyboard.press("Meta+v");
@@ -220,6 +221,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     await page.getByRole("treeitem", { name: "bulk", exact: true }).locator(":scope > .tree-row").click();
     await page.getByRole("treeitem", { name: "vanishing.txt", exact: true }).click();
     await page.keyboard.press("Meta+x");
+    await expect(page.locator(".content:visible > [role=status]")).toContainText("Cut 1");
     await rm(join(root, "vanishing.txt"));
     await page.getByRole("treeitem", { name: "target", exact: true }).click();
     await page.keyboard.press("Meta+v");
@@ -227,6 +229,8 @@ createInterface({input:process.stdin}).on('line',line=>{
     await expect(readFile(join(root, "target/vanishing.txt"))).rejects.toThrow();
     expect(await page.evaluate(({ root, chat }) =>
       ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( root, chat).then((s) => s.busy), { root, chat })).toBe(true);
+    await expect(page.getByText("Transferring captured files… Navigation and chat Stop remain available.", { exact: true })).toHaveCount(0);
+    await page.getByRole("treeitem", { name: "target", exact: true }).click();
     await page.getByRole("treeitem", { name: "bulk", exact: true }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
     await expect.poll(() => app.evaluate(() => (globalThis as any).copyRunning)).toBe(true);
