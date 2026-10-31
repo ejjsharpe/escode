@@ -26,7 +26,7 @@ The [agreed multi-client planning decision](https://github.com/ejjsharpe/escode/
 
 The platform, editor, reuse boundary, and local-service architecture are recorded in [Choose the desktop foundation](https://github.com/ejjsharpe/escode/issues/4#issuecomment-6484074577). The completed maps index the supporting research, behaviour, interaction and specification decisions.
 
-The [draft checkout-tab and file-lookup specification](docs/specifications/checkout-tabs-file-lookup.md) records the [ongoing navigation plan](https://github.com/ejjsharpe/escode/issues/87): one tab per checkout, checkout-scoped Chats, contextual Cmd+P and an Agents project picker. Its final shared-understanding confirmation remains pending; the separate [file-tab specification](https://github.com/ejjsharpe/escode/issues/91#issuecomment-6536410741) is accepted. These are planning changes, not implemented behavior.
+The [accepted checkout-tab and file-lookup specification](docs/specifications/checkout-tabs-file-lookup.md) and [accepted file-tab specification](docs/specifications/file-editor-tabs.md) complete the [navigation decision map](https://github.com/ejjsharpe/escode/issues/87): one project tab per checkout, file tabs with shared editor/comparison buffers, checkout-scoped Chats, contextual Cmd+P and an Agents project picker. The user confirmed the complete behavior on 2026-10-31. These are planning changes; application implementation and new runtime/accessibility qualification follow in a subsequent effort.
 
 See [GLOSSARY.md](GLOSSARY.md) for product terminology and [the tracker conventions](docs/agents/issue-tracker.md) for the planning workflow.
 

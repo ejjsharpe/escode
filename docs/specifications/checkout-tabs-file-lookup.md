@@ -1,8 +1,8 @@
 # Checkout tabs and fuzzy file lookup
 
-Status: **draft for final shared-understanding confirmation**, 2026-10-31. Individual interview decisions are recorded; this synthesis and its small integration defaults await confirmation. This describes subsequent implementation, not current application behavior.
+Status: **accepted by the user**, 2026-10-31, including the complete synthesis, integration defaults and acceptance cases. The user explicitly confirmed shared understanding. This describes subsequent implementation, not current application behavior.
 
-Decision owner: [How should checkout tabs and fuzzy file lookup work?](https://github.com/ejjsharpe/escode/issues/89). Destination: [Specify checkout tabs and fuzzy file lookup](https://github.com/ejjsharpe/escode/issues/87). The separately [accepted file-tab specification](https://github.com/ejjsharpe/escode/issues/91#issuecomment-6536410741) owns file tabs, previews, comparison views, ordering and file-close/reopen behavior. This draft complements that accepted handoff.
+Decision owner: [How should checkout tabs and fuzzy file lookup work?](https://github.com/ejjsharpe/escode/issues/89). Destination: [Specify checkout tabs and fuzzy file lookup](https://github.com/ejjsharpe/escode/issues/87). The separately [accepted file-tab specification](https://github.com/ejjsharpe/escode/issues/91#issuecomment-6536410741) owns file tabs, previews, comparison views, ordering and file-close/reopen behavior. This specification complements that accepted handoff, integrated as [File tabs inside checkout tabs](file-editor-tabs.md).
 
 ## Evidence and amendment
 
@@ -82,9 +82,9 @@ An unavailable checkout retains its tab and workspace with **Unavailable**, **Re
 
 Discovery must converge with external create/rename/delete and changed ignore rules. Refresh/reopen must retry unavailable enumeration and reconcile the current scope. Earlier cached results do not authorize file access. Worktree removal remains its separate existing operation and preservation gate; removed checkouts retain an unavailable workspace until closed or validly resolved, with their chat associations intact.
 
-## Small defaults included in final review
+## Interaction defaults
 
-These complete the interaction without adding another feature:
+The confirmed synthesis includes these interaction defaults:
 
 - Top-level tab labels show project plus branch/worktree identification, with exact directory available for disambiguation. Detached/duplicate labels still expose enough path information to choose the correct checkout.
 - Closing the active checkout tab selects an adjacent surviving checkout tab, or Agents when none remains. This is separate from the file-tab interview's MRU rule for closing an active **file** tab.
@@ -100,7 +100,7 @@ The execution host owns authorized filesystem enumeration and revalidation. Clie
 
 Implementation must set and document explicit limits for enumeration/candidate retention, concurrent roots, result count, request/response size, caches/history and watcher lifetime. Bound work before allocation, keep filesystem work off the interactive renderer path, cancel obsolete queries and release resources when the popup/scope/client closes. Preserve host chat control responsiveness. Limits must produce explicit partial/capped states; they are not permission to silently search only loaded tree rows.
 
-Measure cold and warm lookup, rapid typing/cancellation, external changes and missing/large scopes in the actual local development and packaged app. Record dataset sizes, observed latency, memory/event-loop behavior and cleanup; no performance, capacity or native-binary equivalence is claimed by this draft. Changed keyboard and focus behavior requires fresh VoiceOver evidence; prior acceptance records cannot certify the new controls.
+Measure cold and warm lookup, rapid typing/cancellation, external changes and missing/large scopes in the actual local development and packaged app. Record dataset sizes, observed latency, memory/event-loop behavior and cleanup; no performance, capacity or native-binary equivalence is claimed by this specification. Changed keyboard and focus behavior requires fresh VoiceOver evidence; prior acceptance records cannot certify the new controls.
 
 ## Acceptance examples
 
@@ -121,4 +121,4 @@ Measure cold and warm lookup, rapid typing/cancellation, external changes and mi
 
 New project-wide code-content search is explicitly reserved for a later iteration; ordinary editor Find remains available. Chat transcript search, fuzzy command/symbol search, semantic retrieval, full VS Code settings compatibility, split editors and broader remote/multi-machine UI are not added here. Existing editor limits, save guarantees, recovery limits and filesystem/provider preservation constraints remain applicable.
 
-The parent map also includes the accepted file-tab specification. Complete this checkout/search confirmation before treating the combined navigation plan as ready for a subsequent implementation effort. Integrate both documentation handoffs before application work; the accepted file-tab resolution preserves its full text independently of its separate local documentation commit.
+The parent map also includes the accepted [file-tab specification](file-editor-tabs.md), whose documentation handoff is integrated with this one. Shared understanding of the complete checkout/search synthesis is confirmed. Application implementation and runtime qualification remain a subsequent effort.

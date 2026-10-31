@@ -6,7 +6,7 @@ The Agents and No project concepts below describe the [agreed Agents specificati
 
 Integrated behavior and acceptance boundaries are recorded in [Agents acceptance evidence](docs/compatibility/agents-acceptance.md). The Agents workflow is accepted, including user-confirmed manual VoiceOver validation on 2026-10-29 at `0347eaf4abe355a598752dff63bb72320e425570`; this is separate from the earlier v1 confirmation.
 
-The checkout-specific tab, file lookup and project picker terms reflect the direction agreed in the [ongoing file-search interview](https://github.com/ejjsharpe/escode/issues/89). The complete navigation amendment is still being specified; README.md describes the current application behavior.
+The checkout-specific tab, file lookup and project picker terms reflect the [accepted navigation specification](docs/specifications/checkout-tabs-file-lookup.md) and [accepted file-tab specification](docs/specifications/file-editor-tabs.md), confirmed on 2026-10-31. These are planning definitions; README.md describes the current application behavior.
 
 ## Language
 
@@ -53,6 +53,15 @@ A working directory of a project's repository, such as its original working copy
 
 **Project tab**:
 An editor view of one checkout of a project, with its own Files, Source Control and checkout-scoped Chats views. Different checkouts of the same project can have separate tabs; reopening an open checkout focuses its existing tab.
+
+**File tab**:
+The editor header for one file inside a checkout-specific project tab. Its normal editor and comparisons share that tab and the client's working-file buffer.
+
+**Preview tab**:
+A file tab eligible for replacement by another successfully opened preview in the same checkout workspace. At most one exists in that workspace.
+
+**Kept-open tab**:
+A file tab retained when another preview opens. This is distinct from VS Code's separate sticky Pin Editor feature, deferred from this iteration.
 
 **Open project**:
 A project with at least one project tab open in the current desktop window.
