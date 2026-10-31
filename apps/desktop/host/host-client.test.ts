@@ -156,3 +156,12 @@ test("watch setup rejection preserves concurrent workspace persistence and the s
     expect(fixture.sockets).toHaveLength(1);
   } finally { held.release(); await settled; off(); await client.close(); await host.close(); fixture.restore(); }
 });
+
+test("bootstrap rejection retains its diagnostic and releases the failed session for retry", async () => {
+  let attempts=0;
+  const client=createHostClient(async()=>{throw Error(`Invalid local bootstrap request ${++attempts}`);});
+  try {
+    await expect(client.sendState(null,'chat')).rejects.toThrow('Invalid local bootstrap request 1');
+    await expect(client.sendState(null,'chat')).rejects.toThrow('Invalid local bootstrap request 2');
+  } finally {await client.close();}
+});

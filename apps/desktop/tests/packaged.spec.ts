@@ -18,7 +18,7 @@ test("packaged app loads CSS, Monaco and tools without a development PATH", asyn
     await expect(page.locator("main")).toHaveCSS("background-color", "rgb(19, 20, 22)");
     expect(await page.evaluate(() => typeof (window as any).require)).toBe("undefined");
     expect(await page.evaluate(() => Object.keys((window as any).escode))).toEqual([
-      "sendState", "sendMessage", "sendStatus", "chatLive", "chatHistory", "chatSummaries", "listDirectory",
+      "sendState", "sendMessage", "sendStatus", "chatLive", "chatHistory", "chatSummaries", "observeFiles", "searchFiles", "lookupFile", "listDirectory",
       "watchFiles",
       "nativeFiles",
       "lifecycle",

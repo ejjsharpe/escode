@@ -121,3 +121,8 @@ Typecheck, lint, desktop build, macOS directory package and whitespace checks pa
 Failures are retained here rather than erased by reruns: before consuming #111, one delayed-activation barrier timed out in a combined navigation run and passed alone; one Vite activation retained its popup during invalidation. After consuming #111 both navigation regressions passed together. The combined nine-root cap journey then failed with repeated partial snapshots before the Git metadata event filter; it passed after the filter as recorded above. No unrelated operation, scorer, history or global-scope implementation was changed to address these failures. Notifications remain best effort; native policy preflight is bounded and non-atomic, and large/inaccessible ignored subtrees can disclose incomplete coverage. Full-scale responsiveness/memory qualification and manual VoiceOver were not performed.
 
 Final built rerun after the last test-only merge: all three owning lookup/navigation journeys passed (46.2 s, 10.6 s and 4.2 s; 1.0 minute total). Final typecheck and whitespace check passed. The integrated multi-root popup capture was inspected; the current popup detector returned no findings.
+
+
+## Integrated responsiveness qualification (#115)
+
+[Lookup responsiveness evidence](lookup-responsiveness.md) records the real Vite and restricted-PATH packaged measurements, generated datasets, runtime/binary identity, scheduling gaps, memory, native cleanup, chat control under search churn, concrete caps and the twelve-example ownership index. Earlier failures and fixes above remain part of the history; individual latency measurements do not replace functional owners or claim exhaustive capacity.

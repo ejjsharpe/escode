@@ -616,6 +616,8 @@ test("Agents picker retains deliberate project recency and checkout defaults acr
     await expect(page.locator(".chat-conversation")).toContainText(roots[3]);
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     await page.keyboard.press("Enter");
+    await expect(picker).not.toBeVisible();
+    await expect(rows).toHaveCount(5);
     await expect(page.locator(".chat-conversation")).toContainText(linked);
     await composer.fill("captured alternate prompt");
     // Use another project deliberately, without opening an editor or changing checkout defaults.

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mkdtemp, writeFile, readFile, rm, realpath, rename } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm, realpath, rename, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -10,6 +10,11 @@ test("background requests keep focus; replies, stop and connection loss stay wit
   const a = join(dir, "alpha"),
     b = join(dir, "beta");
   for (const root of [a, b]) execFileSync("git", ["init", root]);
+  const lookupFiles=Number(process.env.ESCODE_LOOKUP_FILES ?? 0);
+  for(let folder=0;folder<Math.ceil(lookupFiles/100);folder++) {
+    const path=join(a,'dataset',String(folder));await mkdir(path,{recursive:true});
+    await Promise.all(Array.from({length:Math.min(100,lookupFiles-folder*100)},(_,i)=>writeFile(join(path,`candidate-${i}.txt`),'fixture')));
+  }
   await writeFile(
     join(dir, "codex"),
     `#!/usr/bin/env node
@@ -132,6 +137,8 @@ createInterface({input:process.stdin}).on('line', line => {
     // Close the editor while first Send still awaits acknowledgement. Requests and
     // shared pending state must remain usable through Agents without another connection.
     await page.locator('.project-tab[data-active="true"] .project-tab-close').click();
+    await expect(page.locator('header')).toContainText(b);
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
     await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -154,6 +161,13 @@ createInterface({input:process.stdin}).on('line', line => {
         return readFile(...args);
       };
     });
+    if(process.env.ESCODE_LOOKUP_MEASURE) await page.evaluate(root=>{
+      let cancel=()=>{};
+      const scan=()=>{cancel();cancel=window.escode.searchFiles(root,'candidate',()=>{},()=>{},[]);};
+      scan();const timer=setInterval(scan,150);
+      (window as any).stopLookupLoad=()=>{clearInterval(timer);cancel();};
+    },a);
+    const approvalStart=performance.now();
     await approval.click();
     await expect(approval).toBeDisabled();
     await page.getByRole("button", { name: "Files", exact: true }).click();
@@ -194,6 +208,7 @@ createInterface({input:process.stdin}).on('line', line => {
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("delayed");
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toBeDisabled();
     await expect(page.locator(".transcript:visible")).toContainText("Answered by");
+    if(process.env.ESCODE_LOOKUP_MEASURE) console.log('LOOKUP_CHAT_MEASUREMENT '+JSON.stringify({mode:process.env.ESCODE_PACKAGED?'packaged':'built',lookupFiles,approvalAndReplyJourneyMs:performance.now()-approvalStart}));
     await writeFile(join(dir, "release-send"), "release");
     await expect(page.getByRole("textbox", { name: "Message Codex" })).toHaveValue("");
     const after = await page.evaluate(({ a, ids }) => ((project: string | null, id: string) => new Promise<import("../host/chat-service").ChatSnapshot>((resolve, reject) => { const off = window.escode.chatLive(project, id, value => { off(); resolve({ ...value, items: [...value.items], requests: [...value.requests] }); }, message => { off(); reject(Error(message)); }); }))( a, ids[1]), {
@@ -206,8 +221,13 @@ createInterface({input:process.stdin}).on('line', line => {
     expect(
       (await events()).filter((e) => e.method === "turn/start" && e.threadId === before.threadId),
     ).toHaveLength(1);
+    const stopStart=performance.now();
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.getByRole("status")).toHaveText("Ready");
+    if(process.env.ESCODE_LOOKUP_MEASURE) {
+      console.log('LOOKUP_CHAT_MEASUREMENT '+JSON.stringify({mode:process.env.ESCODE_PACKAGED?'packaged':'built',lookupFiles,stopToReadyMs:performance.now()-stopStart}));
+      await page.evaluate(()=>(window as any).stopLookupLoad());
+    }
     await page.getByRole("textbox", { name: "Message Codex" }).fill("second draft");
     await page.getByRole("button", { name: "Files", exact: true }).click();
     await page.getByRole("button", { name: /Chats/ }).click();

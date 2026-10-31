@@ -48,7 +48,8 @@ export function createHostClient(bootstrap: () => Promise<unknown>) {
     const domain = domainFailure(result.cause);
     if (domain !== undefined) throw Error(domain);
     if (session?.client === current) await close();
-    throw Cause.squash(result.cause);
+    const failure = Cause.squash(result.cause);
+    throw Cause.isUnknownError(failure) ? failure.cause : failure;
   }
   async function chatQuery<A>(request: (client: Client) => Effect.Effect<A, unknown>, waitsForConsent = false): Promise<A> {
     if (queued >= 16) throw Error("Chat query admission exhausted. Retry explicitly.");

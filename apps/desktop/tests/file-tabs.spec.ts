@@ -232,6 +232,7 @@ test("normal and comparison cursor and scroll positions survive switching and re
     lines[29] += "DIFF";
     lines[79] += "NORMALRESTORED";
     await expect.poll(() => readFile(join(root, "a.txt"), "utf8")).toBe(lines.join("\n") + "\nworking");
+    await expect(page.getByRole("button", { name: "Save ⌘S", exact: true })).toBeEnabled();
     expect(git("show", ":a.txt")).not.toContain("NORMAL");
   } finally {
     await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });

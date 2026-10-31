@@ -8,13 +8,19 @@ import { Workspace } from '../host/workspace';
 import { launchDesktop } from './desktop';
 import { createServer } from 'vite-plus';
 import electron from 'electron';
+import { lookupMeasurement } from './lookup-measurement';
 
 test('lookup ranks and highlights unloaded files, file and policy changes converge and activation keeps the file', async () => {
- test.setTimeout(90000);
+ test.setTimeout(process.env.ESCODE_LOOKUP_MEASURE ? 180000 : 90000);
  const dir=await realpath(await mkdtemp(join(tmpdir(),'escode-lookup-'))), root=join(dir,'repo'), repository=join(dir,'repository');
  execFileSync('git',['init',repository]);
  execFileSync('git',['-C',repository,'-c','user.name=Test','-c','user.email=test@example.com','commit','--allow-empty','-m','fixture']);
  execFileSync('git',['-C',repository,'worktree','add',root]); await mkdir(join(root,'deep')); await writeFile(join(root,'deep/workbench.ts'),'unloaded editor target');
+ const dataset=Number(process.env.ESCODE_LOOKUP_FILES ?? 0);
+ for(let folder=0;folder<Math.ceil(dataset/100);folder++) {
+   const path=join(root,'dataset',String(folder));await mkdir(path,{recursive:true});
+   await Promise.all(Array.from({length:Math.min(100,dataset-folder*100)},(_,i)=>writeFile(join(path,`candidate-${folder*100+i}.txt`),'fixture')));
+ }
  // Static metadata fixture: full retained history, including a closed root and default-glob targets.
  await mkdir(join(dir,'user'),{recursive:true});
  const foundation=FoundationState.open(join(dir,'user/foundation'));
@@ -31,26 +37,61 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  const launch=()=>server ? _electron.launch({executablePath:electron as unknown as string,args:['.',`--user-data-dir=${join(dir,'user')}`],env}) : launchDesktop(join(dir,'user'));
  let app=await launch();
  try { let page=await app.firstWindow();
+ const measured=await lookupMeasurement(app,page,{dataset});
  await app.evaluate(({dialog},root)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[root]});},root);
  await page.getByRole('button',{name:'Open project…',exact:true}).click();
  await page.getByRole('button',{name:'Hide Git-ignored files',exact:true}).click();
 
  await expect(page.getByRole('treeitem',{name:'deep',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Find file',exact:true}).click();
+ await measured.time('first discovery after launch',async()=>{
  await page.getByLabel('Exact file path').fill('closed-only');
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('No eligible matches');
+ });
  await page.getByLabel('Exact file path').fill('DS_Store');
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('No eligible matches');
  await page.getByLabel('Exact file path').fill('known');
  await expect(page.getByRole('group',{name:'Recent files'}).getByRole('option')).toHaveText(['node_modules/known.txt']);
+ await measured.time('warm wkb discovery',async()=>{
  await page.getByLabel('Exact file path').fill('wkb');
+ await expect(page.getByRole('option',{name:'deep/workbench.ts',exact:true})).toBeVisible();
+ });
  const result=page.getByRole('option',{name:'deep/workbench.ts',exact:true}); await expect(result).toBeVisible();
  await expect(result.locator('mark')).toHaveText(['w','k','b']);
+ if(process.env.ESCODE_LOOKUP_MEASURE) {
+   await measured.time('warm discovery',async()=>{
+     await page.getByLabel('Exact file path').fill('workbench');await expect(result).toBeVisible();
+   });
+   await measured.time('typing and cancellation',async()=>{
+     for(const query of ['w','wo','wor','work','wrok','workb','wkb']) {
+       await page.getByLabel('Exact file path').fill(query);
+       await page.waitForTimeout(140);
+     }
+     await expect(result).toBeVisible();
+   });
+ }
+ if(process.env.ESCODE_LOOKUP_MEASURE) {
+   await page.keyboard.press('Escape');await page.waitForTimeout(750);measured.resources('one root popup closed baseline');
+   await measured.time('ten popup cancel cycles',async()=>{
+     for(let i=0;i<10;i++) {
+       await page.getByRole('button',{name:'Find file',exact:true}).click();
+       await page.getByLabel('Exact file path').fill('candidate');await page.waitForTimeout(140);
+       await page.keyboard.press('Escape');
+     }
+   });
+   await page.waitForTimeout(750);measured.resources('one root after ten popup cancellations');
+   await page.getByRole('button',{name:'Find file',exact:true}).click();
+   await page.getByLabel('Exact file path').fill('wkb');await expect(result).toBeVisible();
+ }
+ const freshness=performance.now();
  // Policy freshness belongs here alongside the ordinary file-change journey.
  for (const folder of ['', 'deep']) for (const name of ['.gitignore','.ignore','.rgignore']) {
    const policy=join(root,folder,name);
+   await measured.time(`policy ${folder || 'root'}/${name} hide`,async()=>{
    await writeFile(policy,'workbench.ts\n');
    await expect(result).toHaveCount(0);
+   await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('No eligible matches');
+   });
    await writeFile(policy+'.replacement','other.ts\n'); await rename(policy+'.replacement',policy);
    await expect(result).toBeVisible();
    await writeFile(policy,'workbench.ts\n'); await expect(result).toHaveCount(0);
@@ -75,8 +116,10 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await page.keyboard.press('Escape'); await rm(join(root,'deep/.ignore'));
  await page.getByRole('button',{name:'Find file',exact:true}).click();
  await page.getByLabel('Exact file path').fill('wkb'); await expect(result).toBeVisible();
+ await measured.time('external create to result',async()=>{
  await writeFile(join(root,'workbench.ts'),'basename wins');
  await expect(page.getByRole('option',{name:'workbench.ts',exact:true})).toBeVisible();
+ });
  await rename(join(root,'workbench.ts'),join(root,'deep/workbench-new.ts'));
  await expect(page.getByRole('option',{name:'workbench.ts',exact:true})).toHaveCount(0);
  await expect(page.getByRole('option',{name:'deep/workbench-new.ts',exact:true})).toBeVisible();
@@ -89,6 +132,7 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await expect(page.getByRole('status').filter({hasText:'Live updates unavailable'})).toHaveCount(0);
  await page.evaluate(async root=>{ await window.escode.project('create-entry',root,'','workbench.ts','file'); },root);
  await expect(page.getByRole('option').first()).toHaveText('workbench.ts');
+ measured.record('policy and file convergence journey',performance.now()-freshness);
  await page.screenshot({path:'test-results/recursive-lookup.png'});
  await page.getByLabel('Exact file path').focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
  await expect(page.getByRole('dialog',{name:'Find file',exact:true})).toHaveCount(0);
@@ -115,11 +159,15 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('retry');
  await expect(page.getByLabel('Exact file path')).toHaveValue('node_modules/missing.txt');
  await page.keyboard.press('Escape');
+ await measured.finish('before restart');
  await app.close();app=await launch();
  const restarted=await app.firstWindow();
+ const restoredMeasurement=await lookupMeasurement(app,restarted,{dataset});
+ const recentStart=performance.now();
  await restarted.getByRole('button',{name:'Find file',exact:true}).click();
  await expect(restarted.getByLabel('Exact file path')).toHaveValue('');
  await expect(restarted.getByRole('group',{name:'Recent files'}).getByRole('option').first()).toHaveText('node_modules/known.txt');
+ restoredMeasurement.record('restart blank recents',performance.now()-recentStart);
  await restarted.screenshot({path:'test-results/recent-lookup.png'});
  await restarted.getByLabel('Exact file path').press('Enter');
  await expect(restarted.locator('.monaco-editor:visible')).toContainText('ignored familiar file');
@@ -170,10 +218,12 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
  await open(linked); await open(missing);
  await rm(missing,{recursive:true});
  const agents=page.getByRole('button',{name:'Agents',exact:true});
+ const multiStart=performance.now();
  await agents.click(); await page.keyboard.press('Meta+p');
  await page.getByLabel('Exact file path').fill('wkb');
  await expect(page.getByRole('option')).toHaveCount(4);
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('Unavailable');
+ restoredMeasurement.record('four roots including missing',performance.now()-multiStart);
  const linkedRow=page.getByRole('option').filter({hasText:linked}).filter({hasText:'deep/workbench.ts'});
  await expect(linkedRow).toContainText('repo');
  await page.screenshot({path:'test-results/agents-lookup.png'});
@@ -208,15 +258,32 @@ test('lookup ranks and highlights unloaded files, file and policy changes conver
    await open(bounded);
  }
  await agents.click(); await page.getByRole('button',{name:'Find file',exact:true}).click();
+ const boundedStart=performance.now();
  await page.getByLabel('Exact file path').fill('cap');
  await expect(page.getByRole('option')).toHaveCount(100);
+ restoredMeasurement.record('nine roots capped to eight',performance.now()-boundedStart);
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('Partial coverage');
  await expect(page.getByRole('option').filter({hasText:join(dir,'bounded-8')})).toHaveCount(0);
  await page.getByRole('button',{name:'Open file',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('capped at 8 checkouts');
  await page.keyboard.press('Escape');
 
-
+ if(process.env.ESCODE_LOOKUP_MEASURE) {
+   const overflow=join(dir,'bounded-0/overflow');await mkdir(overflow);
+   for(let folder=0;folder<210;folder++) {
+     const path=join(overflow,String(folder));await mkdir(path);
+     await Promise.all(Array.from({length:100},(_,i)=>writeFile(join(path,`over-${i}.txt`),'fixture')));
+   }
+   await page.getByRole('navigation',{name:'Projects'}).locator('button[aria-pressed]').filter({hasText:'bounded-0'}).click();
+   await restoredMeasurement.time('21000-file preflight exhaustion',async()=>{
+     await page.getByRole('button',{name:'Find file',exact:true}).click();
+     await page.getByLabel('Exact file path').fill('over');
+     await expect(page.getByRole('dialog',{name:'Find file',exact:true}).getByRole('status')).toContainText('Incomplete');
+     await expect(page.getByRole('option')).toHaveCount(0);
+   });
+   await page.keyboard.press('Escape');
+ }
+ await restoredMeasurement.finish('after popup closure');
 
  } finally {await app.close();await server?.close();await rm(dir,{recursive:true,force:true});}
 });

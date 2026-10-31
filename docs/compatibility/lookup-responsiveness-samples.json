@@ -1,0 +1,2065 @@
+[
+  {
+    "run": "vite",
+    "deliveryRuntime": false,
+    "measurements": [
+      {
+        "label": "before restart",
+        "mode": "vite",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "cold discovery",
+            "ms": 292.0193330000002
+          },
+          {
+            "name": "warm discovery",
+            "ms": 804.9844590000012
+          },
+          {
+            "name": "typing and cancellation",
+            "ms": 1771.6317080000008
+          },
+          {
+            "name": "policy and file convergence journey",
+            "ms": 29459.869875000004
+          }
+        ],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 204.734463,
+          "p99DelayMs": 55.640063,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 182400
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 68512
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 48816
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 146208
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 254928
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 95456
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 47472
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 353376
+            }
+          ],
+          "peakWorkingSetKiB": 751232
+        },
+        "renderer": {
+          "maxGapMs": 60.70000000298023,
+          "p99GapMs": 22.599999994039536,
+          "samples": 1897
+        },
+        "before": {
+          "files": 73,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 75,
+          "nativeChildren": []
+        }
+      },
+      {
+        "label": "after popup closure",
+        "mode": "vite",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "restart blank recents",
+            "ms": 702.6401669999977
+          },
+          {
+            "name": "four roots including missing",
+            "ms": 903.8608750000058
+          },
+          {
+            "name": "nine roots capped to eight",
+            "ms": 794.132583999999
+          }
+        ],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 190.971903,
+          "p99DelayMs": 107.020287,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 182848
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 69008
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 47984
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 144880
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 201376
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 82368
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 45664
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 341792
+            }
+          ],
+          "peakWorkingSetKiB": 678752
+        },
+        "renderer": {
+          "maxGapMs": 59.29999999701977,
+          "p99GapMs": 26.200000002980232,
+          "samples": 875
+        },
+        "before": {
+          "files": 72,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 86,
+          "nativeChildren": []
+        }
+      }
+    ],
+    "result": [
+      "1 passed (1.1m)"
+    ]
+  },
+  {
+    "run": "packaged-lookup",
+    "deliveryRuntime": false,
+    "measurements": [
+      {
+        "label": "before restart",
+        "mode": "packaged",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "cold discovery",
+            "ms": 295.5478750000002
+          },
+          {
+            "name": "warm discovery",
+            "ms": 804.6963750000004
+          },
+          {
+            "name": "typing and cancellation",
+            "ms": 1573.9376249999996
+          },
+          {
+            "name": "policy and file convergence journey",
+            "ms": 31498.479124999998
+          }
+        ],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 124.452863,
+          "p99DelayMs": 66.584575,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 187952
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 68656
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 48800
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 146272
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 245072
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 94896
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 46000
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 353712
+            }
+          ],
+          "peakWorkingSetKiB": 739984
+        },
+        "renderer": {
+          "maxGapMs": 70.40000000596046,
+          "p99GapMs": 22.400000005960464,
+          "samples": 1951
+        },
+        "before": {
+          "files": 73,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 75,
+          "nativeChildren": []
+        }
+      },
+      {
+        "label": "after popup closure",
+        "mode": "packaged",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "restart blank recents",
+            "ms": 664.7981660000005
+          },
+          {
+            "name": "four roots including missing",
+            "ms": 912.4067910000012
+          },
+          {
+            "name": "nine roots capped to eight",
+            "ms": 898.947666
+          }
+        ],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 299.892735,
+          "p99DelayMs": 87.425023,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 187904
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 68896
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 47952
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 145168
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 198656
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 82656
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 46080
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 342992
+            }
+          ],
+          "peakWorkingSetKiB": 680928
+        },
+        "renderer": {
+          "maxGapMs": 59.1000000089407,
+          "p99GapMs": 26.30000001192093,
+          "samples": 861
+        },
+        "before": {
+          "files": 72,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 86,
+          "nativeChildren": []
+        }
+      }
+    ],
+    "result": [
+      "1 passed (1.1m)"
+    ]
+  },
+  {
+    "run": "vite-final",
+    "deliveryRuntime": false,
+    "measurements": [
+      {
+        "label": "before restart",
+        "mode": "vite",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "first discovery after launch",
+            "ms": 798.3574159999998
+          },
+          {
+            "name": "warm wkb discovery",
+            "ms": 815.6469999999999
+          },
+          {
+            "name": "warm discovery",
+            "ms": 296.21991699999944
+          },
+          {
+            "name": "typing and cancellation",
+            "ms": 1373.2070000000003
+          },
+          {
+            "name": "ten popup cancel cycles",
+            "ms": 1931.3022089999995
+          },
+          {
+            "name": "policy and file convergence journey",
+            "ms": 29175.611792000003
+          }
+        ],
+        "checkpoints": [
+          {
+            "label": "one root popup closed baseline",
+            "files": 75,
+            "nativeChildren": []
+          },
+          {
+            "label": "one root after ten popup cancellations",
+            "files": 75,
+            "nativeChildren": []
+          }
+        ],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 121.241599,
+          "p99DelayMs": 52.101119,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 182768
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 68864
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 48768
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 141600
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 277296
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 113744
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 52720
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 371008
+            }
+          ],
+          "peakWorkingSetKiB": 814768
+        },
+        "renderer": {
+          "maxGapMs": 116.40000000596046,
+          "p99GapMs": 24.5,
+          "samples": 2048
+        },
+        "before": {
+          "files": 73,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 75,
+          "nativeChildren": []
+        }
+      },
+      {
+        "label": "after popup closure",
+        "mode": "vite",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "restart blank recents",
+            "ms": 612.3977079999968
+          },
+          {
+            "name": "four roots including missing",
+            "ms": 857.9172500000059
+          },
+          {
+            "name": "nine roots capped to eight",
+            "ms": 811.931500000006
+          },
+          {
+            "name": "21000-file preflight exhaustion",
+            "ms": 334.89050000000134
+          }
+        ],
+        "checkpoints": [],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 158.072831,
+          "p99DelayMs": 79.626239,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 182592
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 69200
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 47936
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 144720
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 236528
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 98688
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 52064
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 383568
+            }
+          ],
+          "peakWorkingSetKiB": 770848
+        },
+        "renderer": {
+          "maxGapMs": 51.20000000298023,
+          "p99GapMs": 27.700000002980232,
+          "samples": 857
+        },
+        "before": {
+          "files": 72,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 86,
+          "nativeChildren": []
+        }
+      }
+    ],
+    "result": [
+      "1 passed (1.1m)"
+    ]
+  },
+  {
+    "run": "packaged-final",
+    "deliveryRuntime": false,
+    "measurements": [
+      {
+        "label": "before restart",
+        "mode": "packaged",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "first discovery after launch",
+            "ms": 801.8855840000001
+          },
+          {
+            "name": "warm wkb discovery",
+            "ms": 316.5677919999998
+          },
+          {
+            "name": "warm discovery",
+            "ms": 842.1968750000005
+          },
+          {
+            "name": "typing and cancellation",
+            "ms": 1302.8298750000004
+          },
+          {
+            "name": "ten popup cancel cycles",
+            "ms": 2157.1672910000007
+          },
+          {
+            "name": "policy root/.gitignore hide",
+            "ms": 792.8017920000002
+          },
+          {
+            "name": "policy root/.ignore hide",
+            "ms": 786.9628329999996
+          },
+          {
+            "name": "policy root/.rgignore hide",
+            "ms": 787.1707499999975
+          },
+          {
+            "name": "policy deep/.gitignore hide",
+            "ms": 787.9335410000022
+          },
+          {
+            "name": "policy deep/.ignore hide",
+            "ms": 820.2507499999992
+          },
+          {
+            "name": "policy deep/.rgignore hide",
+            "ms": 784.8860000000022
+          },
+          {
+            "name": "external create to result",
+            "ms": 793.2348340000026
+          },
+          {
+            "name": "policy and file convergence journey",
+            "ms": 28638.123832999998
+          }
+        ],
+        "checkpoints": [
+          {
+            "label": "one root popup closed baseline",
+            "files": 75,
+            "nativeChildren": []
+          },
+          {
+            "label": "one root after ten popup cancellations",
+            "files": 75,
+            "nativeChildren": []
+          }
+        ],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 103.481343,
+          "p99DelayMs": 60.194815,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 187840
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 68720
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 48784
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 145920
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 247360
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 99536
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 45360
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 353600
+            }
+          ],
+          "peakWorkingSetKiB": 745856
+        },
+        "renderer": {
+          "maxGapMs": 73.79999999701977,
+          "p99GapMs": 23.400000005960464,
+          "samples": 2000
+        },
+        "before": {
+          "files": 73,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 75,
+          "nativeChildren": []
+        }
+      },
+      {
+        "label": "after popup closure",
+        "mode": "packaged",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "restart blank recents",
+            "ms": 602.614459000004
+          },
+          {
+            "name": "four roots including missing",
+            "ms": 850.5742079999982
+          },
+          {
+            "name": "nine roots capped to eight",
+            "ms": 885.0819999999949
+          },
+          {
+            "name": "21000-file preflight exhaustion",
+            "ms": 374.9435830000002
+          }
+        ],
+        "checkpoints": [],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 139.722751,
+          "p99DelayMs": 84.344831,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 188000
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 68896
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 47920
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 144880
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 239744
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 98304
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 52032
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 361904
+            }
+          ],
+          "peakWorkingSetKiB": 761920
+        },
+        "renderer": {
+          "maxGapMs": 60.1000000089407,
+          "p99GapMs": 26.400000005960464,
+          "samples": 849
+        },
+        "before": {
+          "files": 72,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 86,
+          "nativeChildren": []
+        }
+      }
+    ],
+    "result": [
+      "1 passed (1.1m)"
+    ]
+  },
+  {
+    "run": "vite-verified",
+    "deliveryRuntime": false,
+    "measurements": [
+      {
+        "label": "before restart",
+        "mode": "vite",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "first discovery after launch",
+            "ms": 809.350167
+          },
+          {
+            "name": "warm wkb discovery",
+            "ms": 298.8810000000003
+          },
+          {
+            "name": "warm discovery",
+            "ms": 292.77429200000006
+          },
+          {
+            "name": "typing and cancellation",
+            "ms": 1440.6661250000006
+          },
+          {
+            "name": "ten popup cancel cycles",
+            "ms": 2085.1394999999993
+          },
+          {
+            "name": "policy root/.gitignore hide",
+            "ms": 870.2125419999993
+          },
+          {
+            "name": "policy root/.ignore hide",
+            "ms": 788.1965000000018
+          },
+          {
+            "name": "policy root/.rgignore hide",
+            "ms": 784.5459999999985
+          },
+          {
+            "name": "policy deep/.gitignore hide",
+            "ms": 788.8322090000001
+          },
+          {
+            "name": "policy deep/.ignore hide",
+            "ms": 787.6430419999997
+          },
+          {
+            "name": "policy deep/.rgignore hide",
+            "ms": 809.5777500000004
+          },
+          {
+            "name": "external create to result",
+            "ms": 797.2620840000018
+          },
+          {
+            "name": "policy and file convergence journey",
+            "ms": 29814.655584
+          }
+        ],
+        "checkpoints": [
+          {
+            "label": "one root popup closed baseline",
+            "files": 75,
+            "nativeChildren": []
+          },
+          {
+            "label": "one root after ten popup cancellations",
+            "files": 75,
+            "nativeChildren": []
+          }
+        ],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 769.130495,
+          "p99DelayMs": 63.635455,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 182992
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 69136
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 49376
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 165152
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 238736
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 93424
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 44752
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 346208
+            }
+          ],
+          "peakWorkingSetKiB": 723168
+        },
+        "renderer": {
+          "maxGapMs": 67.5,
+          "p99GapMs": 22.5,
+          "samples": 2106
+        },
+        "before": {
+          "files": 73,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 75,
+          "nativeChildren": []
+        }
+      },
+      {
+        "label": "after popup closure",
+        "mode": "vite",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "restart blank recents",
+            "ms": 630.7164580000026
+          },
+          {
+            "name": "four roots including missing",
+            "ms": 843.9565409999996
+          },
+          {
+            "name": "nine roots capped to eight",
+            "ms": 925.6599170000045
+          },
+          {
+            "name": "21000-file preflight exhaustion",
+            "ms": 334.53583300000173
+          }
+        ],
+        "checkpoints": [],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 217.055231,
+          "p99DelayMs": 86.900735,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 182816
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 69328
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 48048
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 144784
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 207344
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 83568
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 46640
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 354672
+            }
+          ],
+          "peakWorkingSetKiB": 692224
+        },
+        "renderer": {
+          "maxGapMs": 63.8999999910593,
+          "p99GapMs": 26.19999998807907,
+          "samples": 934
+        },
+        "before": {
+          "files": 72,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 86,
+          "nativeChildren": []
+        }
+      }
+    ],
+    "result": [
+      "1 passed (1.1m)"
+    ]
+  },
+  {
+    "run": "packaged-verified",
+    "deliveryRuntime": false,
+    "measurements": [
+      {
+        "label": "before restart",
+        "mode": "packaged",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "first discovery after launch",
+            "ms": 800.0109160000002
+          },
+          {
+            "name": "warm wkb discovery",
+            "ms": 294.5216250000003
+          },
+          {
+            "name": "warm discovery",
+            "ms": 365.3607499999998
+          },
+          {
+            "name": "typing and cancellation",
+            "ms": 1441.2573750000001
+          },
+          {
+            "name": "ten popup cancel cycles",
+            "ms": 2028.6207919999997
+          },
+          {
+            "name": "policy root/.gitignore hide",
+            "ms": 783.346207999999
+          },
+          {
+            "name": "policy root/.ignore hide",
+            "ms": 786.7177080000001
+          },
+          {
+            "name": "policy root/.rgignore hide",
+            "ms": 802.0244579999999
+          },
+          {
+            "name": "policy deep/.gitignore hide",
+            "ms": 800.4692079999986
+          },
+          {
+            "name": "policy deep/.ignore hide",
+            "ms": 792.9327919999996
+          },
+          {
+            "name": "policy deep/.rgignore hide",
+            "ms": 796.5064170000005
+          },
+          {
+            "name": "external create to result",
+            "ms": 1298.7358329999988
+          },
+          {
+            "name": "policy and file convergence journey",
+            "ms": 29675.441916999996
+          }
+        ],
+        "checkpoints": [
+          {
+            "label": "one root popup closed baseline",
+            "files": 75,
+            "nativeChildren": []
+          },
+          {
+            "label": "one root after ten popup cancellations",
+            "files": 75,
+            "nativeChildren": []
+          }
+        ],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 214.302719,
+          "p99DelayMs": 56.098815,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 187792
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 68752
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 48704
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 146112
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 248752
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 97776
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 44784
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 353632
+            }
+          ],
+          "peakWorkingSetKiB": 744944
+        },
+        "renderer": {
+          "maxGapMs": 66.09999999403954,
+          "p99GapMs": 22.899999991059303,
+          "samples": 2032
+        },
+        "before": {
+          "files": 73,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 75,
+          "nativeChildren": []
+        }
+      }
+    ],
+    "result": [
+      "1 failed"
+    ]
+  },
+  {
+    "run": "vite-delivery",
+    "deliveryRuntime": true,
+    "measurements": [
+      {
+        "label": "before restart",
+        "mode": "vite",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "first discovery after launch",
+            "ms": 796.521459
+          },
+          {
+            "name": "warm wkb discovery",
+            "ms": 297.5478750000002
+          },
+          {
+            "name": "warm discovery",
+            "ms": 807.1741250000005
+          },
+          {
+            "name": "typing and cancellation",
+            "ms": 1295.4754999999996
+          },
+          {
+            "name": "ten popup cancel cycles",
+            "ms": 2022.9629590000004
+          },
+          {
+            "name": "policy root/.gitignore hide",
+            "ms": 819.9152080000003
+          },
+          {
+            "name": "policy root/.ignore hide",
+            "ms": 790.5484579999993
+          },
+          {
+            "name": "policy root/.rgignore hide",
+            "ms": 862.8373749999992
+          },
+          {
+            "name": "policy deep/.gitignore hide",
+            "ms": 826.114916999999
+          },
+          {
+            "name": "policy deep/.ignore hide",
+            "ms": 788.5214169999999
+          },
+          {
+            "name": "policy deep/.rgignore hide",
+            "ms": 788.375165999998
+          },
+          {
+            "name": "external create to result",
+            "ms": 819.5334579999981
+          },
+          {
+            "name": "policy and file convergence journey",
+            "ms": 27949.679834
+          }
+        ],
+        "checkpoints": [
+          {
+            "label": "one root popup closed baseline",
+            "files": 75,
+            "nativeChildren": []
+          },
+          {
+            "label": "one root after ten popup cancellations",
+            "files": 75,
+            "nativeChildren": []
+          }
+        ],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 188.743679,
+          "p99DelayMs": 65.535999,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 182752
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 69136
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 48784
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 146016
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 249888
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 98464
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 44784
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 350816
+            }
+          ],
+          "peakWorkingSetKiB": 743952
+        },
+        "renderer": {
+          "maxGapMs": 64.20000000298023,
+          "p99GapMs": 22.5,
+          "samples": 1936
+        },
+        "before": {
+          "files": 73,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 75,
+          "nativeChildren": []
+        }
+      },
+      {
+        "label": "after popup closure",
+        "mode": "vite",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "restart blank recents",
+            "ms": 598.3584999999948
+          },
+          {
+            "name": "four roots including missing",
+            "ms": 872.9341249999998
+          },
+          {
+            "name": "nine roots capped to eight",
+            "ms": 870.9331249999959
+          },
+          {
+            "name": "21000-file preflight exhaustion",
+            "ms": 336.20650000000023
+          }
+        ],
+        "checkpoints": [],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 221.118463,
+          "p99DelayMs": 85.327871,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 182800
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 69296
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 48016
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 144768
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 237376
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 98080
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 52160
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 376272
+            }
+          ],
+          "peakWorkingSetKiB": 763888
+        },
+        "renderer": {
+          "maxGapMs": 48,
+          "p99GapMs": 26.899999991059303,
+          "samples": 919
+        },
+        "before": {
+          "files": 72,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 86,
+          "nativeChildren": []
+        }
+      }
+    ],
+    "result": [
+      "1 passed (1.1m)"
+    ]
+  },
+  {
+    "run": "packaged-delivery",
+    "deliveryRuntime": true,
+    "measurements": [
+      {
+        "label": "before restart",
+        "mode": "packaged",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "first discovery after launch",
+            "ms": 821.9274169999999
+          },
+          {
+            "name": "warm wkb discovery",
+            "ms": 295.75
+          },
+          {
+            "name": "warm discovery",
+            "ms": 345.6904170000007
+          },
+          {
+            "name": "typing and cancellation",
+            "ms": 1272.1338750000004
+          },
+          {
+            "name": "ten popup cancel cycles",
+            "ms": 2030.5375829999994
+          },
+          {
+            "name": "policy root/.gitignore hide",
+            "ms": 787.6831250000014
+          },
+          {
+            "name": "policy root/.ignore hide",
+            "ms": 787.5305840000001
+          },
+          {
+            "name": "policy root/.rgignore hide",
+            "ms": 823.0653340000008
+          },
+          {
+            "name": "policy deep/.gitignore hide",
+            "ms": 788.5144580000015
+          },
+          {
+            "name": "policy deep/.ignore hide",
+            "ms": 787.520958000001
+          },
+          {
+            "name": "policy deep/.rgignore hide",
+            "ms": 842.1211669999975
+          },
+          {
+            "name": "external create to result",
+            "ms": 793.1409580000036
+          },
+          {
+            "name": "policy and file convergence journey",
+            "ms": 28544.509707999998
+          }
+        ],
+        "checkpoints": [
+          {
+            "label": "one root popup closed baseline",
+            "files": 75,
+            "nativeChildren": []
+          },
+          {
+            "label": "one root after ten popup cancellations",
+            "files": 75,
+            "nativeChildren": []
+          }
+        ],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 113.508351,
+          "p99DelayMs": 54.427647,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 187696
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 68768
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 48736
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 146224
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 265184
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 98976
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 45968
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 348832
+            }
+          ],
+          "peakWorkingSetKiB": 758960
+        },
+        "renderer": {
+          "maxGapMs": 62.8999999910593,
+          "p99GapMs": 22.599999994039536,
+          "samples": 1938
+        },
+        "before": {
+          "files": 73,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 75,
+          "nativeChildren": []
+        }
+      },
+      {
+        "label": "after popup closure",
+        "mode": "packaged",
+        "dataset": 12000,
+        "rows": [
+          {
+            "name": "restart blank recents",
+            "ms": 609.3279580000017
+          },
+          {
+            "name": "four roots including missing",
+            "ms": 934.2319160000043
+          },
+          {
+            "name": "nine roots capped to eight",
+            "ms": 847.9147920000032
+          },
+          {
+            "name": "21000-file preflight exhaustion",
+            "ms": 342.7872920000009
+          }
+        ],
+        "checkpoints": [],
+        "main": {
+          "versions": {
+            "node": "24.22.1",
+            "acorn": "8.18.0",
+            "ada": "4.0.0",
+            "amaro": "1.1.11",
+            "ares": "1.34.9",
+            "brotli": "1.2.0",
+            "cldr": "48.0",
+            "icu": "78.2",
+            "llhttp": "9.4.3",
+            "merve": "1.2.2",
+            "modules": "150",
+            "napi": "10",
+            "nbytes": "0.1.4",
+            "ncrypto": "0.0.1",
+            "nghttp2": "1.70.0",
+            "nghttp3": "",
+            "ngtcp2": "",
+            "openssl": "0.0.0",
+            "simdjson": "4.6.11",
+            "simdutf": "7.7.0",
+            "sqlite": "3.53.4",
+            "tz": "2026e",
+            "undici": "7.30.1",
+            "unicode": "17.0",
+            "uv": "1.52.1",
+            "uvwasi": "0.0.23",
+            "v8": "15.6.75.19-electron.0",
+            "zlib": "1.3.2.1-motley",
+            "zstd": "1.6.0",
+            "electron": "45.1.0",
+            "chrome": "156.0.8078.49"
+          },
+          "maxDelayMs": 258.473983,
+          "p99DelayMs": 81.199103,
+          "first": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 187888
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 68976
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 47984
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 144704
+            }
+          ],
+          "last": [
+            {
+              "type": "Browser",
+              "workingSetKiB": 196512
+            },
+            {
+              "type": "GPU",
+              "workingSetKiB": 86016
+            },
+            {
+              "type": "Utility",
+              "workingSetKiB": 45216
+            },
+            {
+              "type": "Tab",
+              "workingSetKiB": 299360
+            }
+          ],
+          "peakWorkingSetKiB": 663536
+        },
+        "renderer": {
+          "maxGapMs": 57.19999998807907,
+          "p99GapMs": 25.399999991059303,
+          "samples": 924
+        },
+        "before": {
+          "files": 72,
+          "nativeChildren": []
+        },
+        "after": {
+          "files": 86,
+          "nativeChildren": []
+        }
+      }
+    ],
+    "result": [
+      "1 passed (1.1m)"
+    ]
+  },
+  {
+    "run": "chat-built",
+    "deliveryRuntime": false,
+    "measurements": [],
+    "result": [
+      "1 failed"
+    ]
+  },
+  {
+    "run": "chat-built-final",
+    "deliveryRuntime": false,
+    "measurements": [
+      {
+        "mode": "built",
+        "lookupFiles": 12000,
+        "approvalAndReplyJourneyMs": 956.6398339999996
+      },
+      {
+        "mode": "built",
+        "lookupFiles": 12000,
+        "stopToReadyMs": 210.71650000000045
+      }
+    ],
+    "result": [
+      "1 passed (11.0s)"
+    ]
+  },
+  {
+    "run": "chat-packaged",
+    "deliveryRuntime": false,
+    "measurements": [
+      {
+        "mode": "packaged",
+        "lookupFiles": 12000,
+        "approvalAndReplyJourneyMs": 691.6412499999997
+      },
+      {
+        "mode": "packaged",
+        "lookupFiles": 12000,
+        "stopToReadyMs": 209.77337500000067
+      }
+    ],
+    "result": [
+      "1 passed (11.9s)"
+    ]
+  },
+  {
+    "run": "chat-built-delivery",
+    "deliveryRuntime": true,
+    "measurements": [
+      {
+        "mode": "built",
+        "lookupFiles": 12000,
+        "approvalAndReplyJourneyMs": 973.8967090000006
+      },
+      {
+        "mode": "built",
+        "lookupFiles": 12000,
+        "stopToReadyMs": 201.0963330000004
+      }
+    ],
+    "result": [
+      "1 passed (11.0s)"
+    ]
+  },
+  {
+    "run": "chat-packaged-delivery",
+    "deliveryRuntime": true,
+    "measurements": [
+      {
+        "mode": "packaged",
+        "lookupFiles": 12000,
+        "approvalAndReplyJourneyMs": 963.4616249999999
+      },
+      {
+        "mode": "packaged",
+        "lookupFiles": 12000,
+        "stopToReadyMs": 93.0644170000005
+      }
+    ],
+    "result": [
+      "1 passed (10.8s)"
+    ]
+  }
+]

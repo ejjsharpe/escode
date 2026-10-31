@@ -45,7 +45,7 @@ for (const packaged of [false, true]) {
       await page.getByRole("button", { name: "Compare", exact: true }).click();
       await expect(page.locator(".monaco-diff-editor")).toContainText("changed after comparison");
       await page.getByRole("button", { name: "Overwrite", exact: true }).click();
-      await expect(page.locator(".content:visible > [role=status]")).toContainText("Saved a.txt");
+      await expect(page.locator(".content:visible > [role=status][tabindex]")).toContainText("Saved a.txt");
       expect(await readFile(join(root, "a.txt"), "utf8")).toBe("my edits");
       await writeFile(join(root, "a.txt"), "reload this");
       await page.keyboard.press("Meta+s");
@@ -54,6 +54,7 @@ for (const packaged of [false, true]) {
         "aria-pressed",
         "true",
       );
+      await page.getByRole("combobox", { name: "File view", exact: true }).selectOption("file");
       await expect(page.locator(".monaco-diff-editor")).toHaveCount(0);
       await expect(page.locator(".monaco-editor")).toContainText("reload this");
       await expect(page.getByText("a.txt • Unsaved", { exact: true })).toHaveCount(0);
@@ -69,17 +70,21 @@ for (const packaged of [false, true]) {
         "aria-pressed",
         "true",
       );
+      await expect(page.locator(".monaco-diff-editor")).toContainText("new external");
+      await page.getByRole("combobox", { name: "File view", exact: true }).selectOption("file");
       await expect(page.locator(".monaco-diff-editor")).toHaveCount(0);
       await expect(page.locator(".monaco-editor")).toContainText("new external");
       await page.getByRole("button", { name: "Source Control", exact: true }).click();
+      await page.getByRole("combobox", { name: "File view", exact: true }).selectOption("untracked");
       await expect(page.locator(".monaco-diff-editor")).toContainText("new external");
       await page.getByRole("button", { name: "Files", exact: true }).click();
+      await page.getByRole("combobox", { name: "File view", exact: true }).selectOption("file");
       await page.locator(".monaco-editor").click();
       await page.keyboard.press("Meta+a");
       await page.keyboard.type("retained after error");
       await rm(join(root, "a.txt"));
       await page.keyboard.press("Meta+s");
-      await expect(page.locator(".content:visible > [role=status]")).toContainText("ENOENT");
+      await expect(page.locator(".content:visible > [role=status][tabindex]")).toContainText("ENOENT");
       await expect(page.locator(".monaco-editor")).toContainText("retained after error");
       await page.screenshot({
         path: `test-results/project-${packaged ? "packaged" : "unpackaged"}.png`,

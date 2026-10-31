@@ -26,7 +26,7 @@ test('pinned filename/path scorer contract and positions', () => {
   expect(scorePath('src/workbench.ts', 'work')!.score).toBeGreaterThan(scorePath('work/other.ts', 'work')!.score);
 });
 
-import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, rmSync, symlinkSync, renameSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, rmSync, symlinkSync, renameSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -118,4 +118,20 @@ test('linked checkout observes repository excludes and rejects replaced policy m
    rmSync(join(root,'.git/info'));renameSync(join(root,'.git/info-old'),join(root,'.git/info'));
    const retry=project.observeFiles(()=>{});retry();
  } finally {release();project.close();rmSync(base,{recursive:true,force:true});}
+});
+
+// Missing bundled tools are a runtime fault, separate from scorer/ignore semantics.
+test('missing bundled ripgrep discloses incomplete discovery and leaves exact reads available', async () => {
+ const base=realpathSync(mkdtempSync(join(tmpdir(),'lookup-tool-'))), root=join(base,'repo');
+ execFileSync('git',['init',root]);writeFileSync(join(root,'known.txt'),'retained file');
+ const helper=join(base,'filesystem');copyFileSync('dist/host/filesystem',helper);
+ const checkout=await Checkout.open(root,helper);
+ try {
+   const result=await checkout.discover('known',new AbortController().signal);
+   expect(result.partial).toBe(true);expect(result.message).toMatch(/unavailable/i);
+   expect(result.results).toEqual([]);
+   expect((await checkout.read('known.txt')).text).toBe('retained file');
+   copyFileSync('dist/host/ripgrep',join(base,'ripgrep'));
+   expect((await checkout.discover('known',new AbortController().signal)).results.map(r=>r.path)).toEqual(['known.txt']);
+ } finally {checkout.close();rmSync(base,{recursive:true,force:true});}
 });
