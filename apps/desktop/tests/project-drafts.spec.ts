@@ -146,13 +146,35 @@ send({id:m.id,result});});`,
       page.getByRole("combobox", { name: "Project context", exact: true }),
     ).toBeVisible();
     await message().fill("Move from local Chats");
-    await page.getByRole("combobox", { name: "Project context", exact: true }).selectOption(alpha);
+    const local = (await records()).at(-1);
+    expect(local.checkout).toBe(beta);
+    await app.evaluate(({ dialog }, root) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+    }, worktree);
+    await page.getByRole("button", { name: "Open project…" }).click();
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: "New chat on current checkout" }).click();
+    await message().fill("Independent linked draft");
+    expect((await records()).at(-1).checkout).toBe(worktree);
+    await page.locator('.project-tab button').filter({ hasText: "Beta" }).first().click();
+    await expect(message()).toHaveValue("Move from local Chats");
+    await page.getByText("Execution checkout choices", { exact: true }).click();
+    await page.getByRole("combobox", { name: "Draft existing worktree" }).selectOption(worktree);
+    await page.getByRole("button", { name: "Use discovered worktree" }).click();
     await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
     await expect(message()).toHaveValue("Move from local Chats");
-    await expect(page.locator(".agents .directory")).toContainText(alpha);
+    await expect(page.locator(".agents .directory")).toContainText(worktree);
+    expect((await records()).find((chat: { id: string }) => chat.id === local.id)).toMatchObject({
+      id: local.id, createdAt: local.createdAt, checkout: worktree, draft: "Move from local Chats",
+    });
+    await app.close();
+    app = await launchDesktop(user, dir);
+    page = await app.firstWindow();
+    await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(message()).toHaveValue("Move from local Chats");
     expect((await records())[1].draft).toBe("Another nonempty draft");
   } finally {
     await app.evaluate(({ dialog }) => {

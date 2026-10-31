@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { DraftAction } from "@escode/contracts";
 import { test, expect } from "vite-plus/test";
-import { mkdtemp, rm, rename } from "node:fs/promises";
+import { mkdtemp, rm, rename, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Chats } from "./chat";
@@ -317,20 +317,57 @@ test("draft actions retain valid payloads and require operation-specific fields"
   const decode = Schema.decodeUnknownSync(DraftAction);
   const actions = [
     { operation: "createDraft", project: null },
+    { operation: "createDraft", project: "/project", checkout: "/checkout" },
     { operation: "context", project: null, id: "draft", expected: "revision", target: null },
     { operation: "execution", project: "/project", id: "draft", expected: "revision", mode: "new", value: "main", commit: "sha" },
     { operation: "execution", project: "/project", id: "draft", expected: "revision", mode: "reuse", value: "/checkout", commit: "" },
   ] satisfies DraftAction[];
   for (const action of actions) expect(decode(action)).toEqual(action);
-  for (const action of actions.slice(1)) {
+  for (const action of actions.filter(action => action.operation !== "createDraft")) {
     for (const key of ["id", "expected", ...(action.operation === "context" ? ["target"] : ["mode", "value", "commit"])]) {
       const incomplete = { ...action };
       Reflect.deleteProperty(incomplete, key);
       expect(() => decode(incomplete)).toThrow();
     }
   }
-  expect(() => decode({ ...actions[2], project: null })).toThrow();
+  expect(() => decode({ ...actions[3], project: null })).toThrow();
   // @ts-expect-error Context changes require both the target and expected revision.
   const incomplete: DraftAction = { operation: "context", project: null, id: "draft" };
   expect(() => decode(incomplete)).toThrow();
+});
+
+test("checkout-local draft creation validates the captured checkout before publishing, independently of defaults", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const { Checkout } = await import("./project");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "escode-captured-draft-")));
+  const root = join(dir, "repo"), linked = join(dir, "linked"), other = join(dir, "other");
+  const opened: Awaited<ReturnType<typeof Checkout.open>>[] = [];
+  const store = new Chats(join(dir, "chats.json"));
+  for (const path of [root, other]) {
+    execFileSync("git", ["init", path]);
+    execFileSync("git", ["-C", path, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial"]);
+  }
+  execFileSync("git", ["-C", root, "worktree", "add", "-b", "linked", linked]);
+  const project = await Checkout.open(root);
+  opened.push(project);
+  const identity = project.repositoryGit.repository();
+  const service = new ChatService(store, undefined, undefined, undefined, {
+    guard: () => () => {}, authorize: async () => {}, currentTarget: async () => { throw Error("Unavailable remembered default"); },
+    managedRoot: join(dir, "managed"), checkout: async path => {
+      const checkout = await Checkout.open(path); opened.push(checkout); return checkout;
+    },
+  });
+  try {
+    const draft = await service.draftAction({ operation: "createDraft", project: identity, checkout: linked });
+    expect(draft.checkout).toBe(linked);
+    await expect(service.draftAction({ operation: "createDraft", project: identity, checkout: other })).rejects.toThrow("Wrong project checkout");
+    await expect(service.draftAction({ operation: "createDraft", project: identity, checkout: join(dir, "missing") })).rejects.toThrow();
+    await expect(service.draftAction({ operation: "createDraft", project: null, checkout: linked })).rejects.toThrow("requires a project");
+    expect(await store.list(identity)).toHaveLength(1);
+    expect(await store.list(null)).toHaveLength(0);
+  } finally {
+    service.close();
+    for (const checkout of opened) checkout.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });

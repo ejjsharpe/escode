@@ -882,8 +882,7 @@ function ProjectView({
     const generation = chatNavigation.current;
     memory.views[initial.project] = { ...memory.views[initial.project], checkout };
     await persist();
-    const chat = await window.escode.chat("createDraft", initial.project);
-    await window.escode.chat("execution", initial.project, chat.id, "reuse", root, "");
+    const chat = await window.escode.chat("createDraft", initial.project, root);
     await chatStore.load();
     if (chatNavigation.current !== generation) return;
     if (root !== checkout) {

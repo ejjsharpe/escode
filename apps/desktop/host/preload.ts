@@ -13,7 +13,7 @@ type ProjectArguments =
   | ["save", string, string, string, string]
   | ["diff", string, string, "staged" | "unstaged" | "untracked"];
 type ChatArguments =
-  | [operation: "createDraft", project: string | null]
+  | [operation: "createDraft", project: string | null, checkout?: string]
   | [operation: "context", project: string | null, id: string, target: string | null]
   | [operation: "execution", project: string, id: string, mode: "new" | "reuse", value: string, commit: string]
   | [operation: "targets"]
@@ -87,7 +87,7 @@ contextBridge.exposeInMainWorld(
       const [operation, ...args] = call;
       return ["createDraft", "context", "execution"].includes(operation)
       ? (async () => {
-        if (call[0] === "createDraft") return hostClient.draftAction({ operation: call[0], project: call[1] });
+        if (call[0] === "createDraft") return hostClient.draftAction({ operation: call[0], project: call[1], ...(call[2] === undefined ? {} : { checkout: call[2] }) });
         if (call[0] === "context") {
           const [, project, id, target] = call;
           const { expected } = await hostClient.sendState(project, id);
