@@ -31,7 +31,7 @@ export function reconcile(state: WorkspaceState, intent: Intent) {
   );
   const view = state.views[root];
   if (view) {
-    for (const field of ["path", "directory"] as const) {
+    for (const field of ["path", "directory", "preview"] as const) {
       if (view[field] && affected(view[field], source))
         view[field] = kind === "trash" ? "" : moved(view[field], source, destination);
     }

@@ -117,6 +117,7 @@ export const WorkspaceState = Schema.Struct({
     fileViews: Schema.optionalKey(Schema.Record(Schema.String, Schema.Literals(["file", "staged", "unstaged", "untracked", "conflict"]))),
     editorPositions: Schema.optionalKey(Schema.Record(Schema.String, Schema.Record(Schema.String,
       Schema.Struct({ line: Schema.Number, column: Schema.Number, top: Schema.Number, left: Schema.Number })))),
+    preview: Schema.optionalKey(Schema.String),
     openFiles: Schema.optionalKey(Schema.Array(Schema.String)),
     path: Schema.optionalKey(Schema.String), directory: Schema.optionalKey(Schema.String), chat: Schema.optionalKey(Schema.String),
     change: Schema.optionalKey(Schema.Struct({ path: Schema.String, area: Schema.Literals(["staged", "unstaged", "untracked"]) })),

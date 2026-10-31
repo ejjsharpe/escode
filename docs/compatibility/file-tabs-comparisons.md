@@ -28,3 +28,5 @@ Final results on 2026-10-31:
 - Final packaged Electron run (`ESCODE_PACKAGED=1`): six passed across `file-tabs`, `editable-diff` and `navigation`, using the harness's restricted packaged PATH.
 
 No live provider turn, manual VoiceOver session, exhaustive desktop suite or complete parent-spec qualification was run. The package is a local development artifact, not a release. Recovery remains best effort; the broader mock-provider regression's intermittent Send failure remains a testing limitation.
+
+Subsequent [preview and Keep Open evidence](file-tabs-previews.md) records preview replacement and promotion; the results and limitations above remain historical evidence for this slice.

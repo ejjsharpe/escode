@@ -17,7 +17,7 @@ import { useProjectChats } from "./chat-state";
 import { WorktreeChoices } from "./worktrees";
 import type { ChatBridge } from "./chat";
 import "./style.css";
-import { memory, initialize, persist, flush, useMemory, closers, fileOpeners, openFile } from "./workspace";
+import { memory, initialize, persist, flush, useMemory, closers, fileOpeners, fileKeepers, openFile } from "./workspace";
 type Status = {
   project: string;
   root: string;
@@ -114,12 +114,32 @@ function CheckoutView({
     ...new Set([...(memory.views[root]?.path ? [memory.views[root].path!] : []),
       ...memory.drafts.filter(d => d.root === root).map(d => d.path)]),
   ]);
-  function activateFile(file: string) {
+  const [tabMenu, setTabMenu] = useState("");
+  const replacedPreviews = useRef<string[]>([]);
+  const [preview, setPreview] = useMemory(root, "preview", "");
+  function keepOpen(file: string) {
+    if (memory.views[root]?.preview === file) setPreview("");
+  }
+  function activateFile(file: string, intent?: "preview" | "keep") {
+    const existing = memory.views[root]?.openFiles?.includes(file);
+    const previous = memory.views[root]?.preview;
+    if (intent === "keep") keepOpen(file);
+    let replaced = "";
+    if (!existing && intent === "preview") {
+      if (previous && previous !== file) {
+        const buffer = buffers.current.get(previous);
+        if (!buffer || buffer.model.getValue() === buffer.disk.text) {
+          replaced = previous;
+          replacedPreviews.current.push(previous);
+        }
+      }
+      setPreview(file);
+    }
     setOpenFiles(old => {
       if (old.includes(file)) return old;
       const next = [...old];
       next.splice(next.indexOf(memory.views[root]?.path ?? "") + 1, 0, file);
-      return next;
+      return next.filter(p => p !== replaced);
     });
     setPath(file);
   }
@@ -140,6 +160,7 @@ function CheckoutView({
   );
   const presentation = useRef(0);
   const opening = useRef(0);
+  const [focusRequest, setFocusRequest] = useState<{ file: string; generation: number } | null>(null);
   const [diff, setDiff] = useState<{ original: string; modified: string; title: string; file?: string } | null>(
     null,
   );
@@ -209,18 +230,23 @@ function CheckoutView({
     };
     buffers.current.set(file, b);
     b.model.onDidChangeContent(() => {
+      if (b.model.getValue() !== b.disk.text) keepOpen(file);
       void record(file, b);
       updateText(old => old + 1);
     });
     return b;
   }
   useEffect(() => {
-    for (const d of memory.drafts.filter((d) => d.root === root)) addBuffer(d.path, d.disk, d.text);
+    for (const d of memory.drafts.filter((d) => d.root === root)) {
+      keepOpen(d.path);
+      addBuffer(d.path, d.disk, d.text);
+    }
     setOpenFiles(old => [...new Set([...old, ...memory.drafts.filter(d => d.root === root).map(d => d.path)])]);
     if (path) void restoreView(path);
     return () => {
       presentation.current++;
       fileOpeners.delete(root);
+      fileKeepers.delete(root);
       closers.delete(root);
     };
   }, []);
@@ -320,6 +346,19 @@ function CheckoutView({
       if (!buffer) modified.dispose();
     };
   }, [diff, path, view, editorVisible]);
+  // These effects run after the editors above detach from replaced models.
+  useEffect(() => {
+    for (const file of replacedPreviews.current.splice(0)) {
+      if (memory.views[root]?.openFiles?.includes(file)) continue;
+      buffers.current.get(file)?.model.dispose();
+      buffers.current.delete(file);
+    }
+  }, [openFiles]);
+  useEffect(() => {
+    if (focusRequest && focusRequest.generation === presentation.current &&
+      memory.views[root]?.path === focusRequest.file && container.current?.getClientRects().length)
+      editor.current?.focus();
+  }, [focusRequest]);
   function trackPosition(instance: monaco.editor.ICodeEditor, file: string, selected: string) {
     const stored = memory.views[root]?.editorPositions?.[file]?.[selected];
     if (stored) {
@@ -370,7 +409,7 @@ function CheckoutView({
     setDiff({ original: disk.text, modified: buffers.current.get(file)!.model.getValue(),
       title: "Disk versus your edits", file });
   }
-  async function select(file: string, present = true) {
+  async function select(file: string, present = true, intent?: "preview" | "keep") {
     opening.current++;
     const generation = present ? ++presentation.current : presentation.current;
     try {
@@ -384,7 +423,7 @@ function CheckoutView({
         return true;
       }
       if (generation !== presentation.current) return false;
-      activateFile(file);
+      activateFile(file, intent);
       rememberView(file, "file");
       setDiff(null);
       setBufferRevision((old) => old + 1);
@@ -452,7 +491,7 @@ function CheckoutView({
       report(e);
     }
   }
-  async function showDiff(change: Change, retain = false) {
+  async function showDiff(change: Change, retain = false, intent?: "preview" | "keep") {
     opening.current++;
     const generation = ++presentation.current;
     try {
@@ -478,7 +517,7 @@ function CheckoutView({
       if (generation !== presentation.current) return;
       rememberView(change.path, change.area);
       memory.views[root] = { ...memory.views[root], change };
-      activateFile(change.path);
+      activateFile(change.path, intent);
       const title =
         change.area + " · " + change.path +
         (file && change.area === "staged" ? " · working copy" : "");
@@ -544,6 +583,7 @@ function CheckoutView({
         b.model.setValue(b.disk.text);
         return true;
       }
+      keepOpen(file);
       setOpenFiles(old => old.filter(p => p !== file));
       buffers.current.delete(file);
       b.model.dispose();
@@ -690,6 +730,7 @@ function CheckoutView({
               ? ""
               : nextPath;
       }
+      setPreview(memory.views[root]?.preview ?? "");
       setOpenFiles(memory.views[root]?.openFiles ?? []);
       setPath(nextPath);
       setDiff(null);
@@ -740,12 +781,15 @@ function CheckoutView({
       editor.current?.updateOptions({ readOnly: false });
     }
   }
+  fileKeepers.set(root, keepOpen);
   fileOpeners.set(root, async request => {
     if (request.root !== root) return false;
-    // shortcut: both intents retain tabs in this foundation slice; preview replacement belongs to the preview slice.
-    return request.view === "file"
-      ? select(request.path)
-      : !!(await showDiff({ path: request.path, area: request.view }));
+    const opened = request.view === "file"
+      ? await select(request.path, true, request.intent)
+      : !!(await showDiff({ path: request.path, area: request.view }, false, request.intent));
+    if (opened && request.intent === "keep")
+      setFocusRequest({ file: request.path, generation: presentation.current });
+    return opened;
   });
   const open = (file: string, view: import("./workspace").FileOpenRequest["view"] = "file",
     intent: "preview" | "keep" = "keep") => openFile({ root, path: file, view, intent });
@@ -802,15 +846,7 @@ function CheckoutView({
                 return !!b && b.model.getValue() !== b.disk.text;
               }}
               open={async (file, focusEditor) => {
-                const opened = await open(file, "file", focusEditor ? "keep" : "preview");
-                if (opened && focusEditor)
-                  requestAnimationFrame(() => {
-                    if (
-                      container.current?.getClientRects().length &&
-                      editor.current?.getModel() === buffers.current.get(file)?.model
-                    )
-                      editor.current?.focus();
-                  });
+                await open(file, "file", focusEditor ? "keep" : "preview");
               }}
               rename={(source, destination) => fileOperation("move", source, destination, true)}
               create={async (parent, name, kind) => {
@@ -855,6 +891,7 @@ function CheckoutView({
                             selectedChange.current.area === area
                           }
                           onClick={() => void open(c.path, c.area, "preview")}
+                          onDoubleClick={() => void open(c.path, c.area, "keep")}
                         >
                           {c.path}
                         </Button>
@@ -872,10 +909,24 @@ function CheckoutView({
             <div className="file-tabs" role="tablist" aria-label="Open files">
               {openFiles.map(file => (
                 <button key={file} role="tab" aria-selected={path === file}
+                  aria-description={preview === file ? "Preview" : undefined}
+                  style={{ fontStyle: preview === file ? "italic" : undefined }}
+                  onDoubleClick={() => keepOpen(file)}
+                  onContextMenu={event => { event.preventDefault(); setTabMenu(file); }}
+                  onKeyDown={event => {
+                    if (event.shiftKey && event.key === "F10") { event.preventDefault(); setTabMenu(file); }
+                  }}
                   title={root + "/" + file} disabled={saving || fileClosing || !!conflict}
                   onClick={() => void restoreView(file)}>{file}</button>
               ))}
             </div>
+            {tabMenu && <div role="menu" aria-label={"Tab actions for " + tabMenu} className="files-menu"
+              onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setTabMenu(""); }}
+              onKeyDown={event => { if (event.key === "Escape") { setTabMenu("");
+                container.current?.parentElement?.querySelector<HTMLButtonElement>('.file-tabs [aria-selected="true"]')?.focus(); } }}>
+              <button role="menuitem" autoFocus onClick={() => { keepOpen(tabMenu); setTabMenu("");
+                container.current?.parentElement?.querySelector<HTMLButtonElement>('.file-tabs [aria-selected="true"]')?.focus(); }}>Keep Open</button>
+            </div>}
             <div className="toolbar">
               <span>
                 {diff?.title || (path && view !== "file" ? view + " · " + path : path) || "No file selected"}
@@ -895,6 +946,7 @@ function CheckoutView({
                 ).map(area => <option key={area} value={area}>{area}</option>)}
                 {(conflict || view === "conflict") && <option value="conflict">Save conflict</option>}
               </select></label>}
+              {path && preview === path && <Button onClick={() => { keepOpen(path); editor.current?.focus(); }}>Keep Open</Button>}
               {path && buffers.current.has(path) && (
                 <Button disabled={saving} onClick={() => void save(undefined, diff?.file ?? path)}>
                   Save ⌘S

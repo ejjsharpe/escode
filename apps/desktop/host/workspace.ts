@@ -73,6 +73,8 @@ function validate(value: unknown): asserts value is WorkspaceState {
       !p.split("/").some(c => !c || c === "." || c === ".." || c.toLowerCase() === ".git");
     const views = ["file", "staged", "unstaged", "untracked", "conflict"];
     const record = (x: unknown) => !!x && typeof x === "object" && !Array.isArray(x);
+    if (v?.preview !== undefined && v.preview !== "" &&
+      (!validFile(v.preview) || !v.openFiles?.includes(v.preview))) throw Error("Invalid preview");
     if (v?.fileViews !== undefined && (!record(v.fileViews) ||
       Object.entries(v.fileViews).some(([p, selected]) => !validFile(p) || !views.includes(selected))))
       throw Error("Invalid file views");
