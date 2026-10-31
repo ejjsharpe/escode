@@ -10,6 +10,7 @@ const bundle = await build({
   metafile: true,
   platform: "node",
   format: "cjs",
+  define: { "import.meta.dirname": "__dirname" },
   outExtension: { ".js": ".cjs" },
   external: ["electron"],
 });
